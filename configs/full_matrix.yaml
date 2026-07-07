@@ -1,0 +1,33 @@
+run:
+  name: full_matrix
+  description: "Main PeerJ diagnostic matrix; fill sample counts after pilot"
+  task_order_seed: 1
+  sample_order_seed: 1
+  retry_policy_version: retry_v0
+
+models:
+  - frontier_reasoning
+  - gpt4o
+
+tasks:
+  - name: game24
+    sample_path: data/tasks/game24.jsonl
+    limit: TODO
+  - name: math_equation_balancer
+    sample_path: data/tasks/math_equation_balancer.jsonl
+    limit: TODO
+  - name: word_sorting
+    sample_path: data/tasks/word_sorting.jsonl
+    limit: TODO
+
+baselines:
+  - no_memory
+  - full_history
+  - retrieval_rag
+  - reflexion_style
+  - bot_style
+
+arms:
+  - clean
+  - contaminated
+  - contaminated_filter

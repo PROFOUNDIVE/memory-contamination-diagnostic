@@ -1,0 +1,26 @@
+models:
+  gpt4o:
+    provider: openai
+    model_id: "TODO-confirm-snapshot"
+    base_url: null
+    api_key_env: OPENAI_API_KEY
+    temperature: 0
+    top_p: 1
+    max_tokens: 2048
+  frontier_reasoning:
+    provider: openai_compatible
+    model_id: "TODO-confirm-gpt-5.5-or-provider-snapshot"
+    base_url: null
+    api_key_env: OPENAI_API_KEY
+    temperature: 0
+    top_p: 1
+    max_tokens: 2048
+  vllm_local:
+    provider: openai_compatible
+    model_id: "TODO-served-model-name"
+    base_url: "http://localhost:8000/v1"
+    api_key_env: VLLM_API_KEY
+    api_key_default: EMPTY
+    temperature: 0
+    top_p: 1
+    max_tokens: 2048

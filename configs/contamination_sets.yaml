@@ -1,0 +1,10 @@
+version: contamination_v0
+types:
+  wrong_rule:
+    description: "Incorrect textual rule or heuristic stored as memory"
+  wrong_code_or_solver:
+    description: "Invalid or misleading code/solver snippet stored as memory"
+  over_general_template:
+    description: "Template that works for one instance but is falsely generalized"
+  misleading_reflection:
+    description: "Wrong failure explanation or lesson stored as reflection"
