@@ -1,0 +1,266 @@
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+from memcontam.cli import run_config
+from memcontam.logging.schema import ContaminationExposure, TrialLog, VerifierResult
+
+
+def _trial_row(**overrides):
+    base = {
+        "trial_id": "run1:game24:s1:no_memory:clean:replay",
+        "run_id": "run1",
+        "task_name": "game24",
+        "sample_id": "s1",
+        "baseline": "no_memory",
+        "arm": "clean",
+        "backbone": "replay",
+        "input": {"numbers": [1, 3, 4, 6], "target": 24},
+        "gold_or_verifier_spec": {"target": 24},
+        "prompt_messages": [{"role": "user", "content": "solve"}],
+        "raw_response": "final: 24",
+        "verifier_result": VerifierResult(is_correct=True),
+        "contamination_exposure": ContaminationExposure(),
+        "bad_memory_uptake_label": "not_applicable",
+        "repeated_failure_label": "not_applicable",
+        "recovery_after_filter_label": "not_applicable",
+        "latency_ms": 12,
+        "token_usage": {"prompt_tokens": 2, "completion_tokens": 3, "total_tokens": 5},
+    }
+    base.update(overrides)
+    return TrialLog(**base).model_dump(mode="json")
+
+
+def _write_trials_jsonl(run_dir: Path, rows: list[dict]) -> Path:
+    trials_path = run_dir / "trials.jsonl"
+    trials_path.write_text("".join(json.dumps(row) + chr(10) for row in rows), encoding="utf-8")
+    return trials_path
+
+
+def _cli_aggregate(run_dir: Path) -> subprocess.CompletedProcess[str]:
+    repo_root = Path(__file__).resolve().parents[1]
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(repo_root / "src")
+    return subprocess.run(
+        [sys.executable, "-m", "memcontam.cli", "aggregate", str(run_dir)],
+        cwd=repo_root,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_aggregate_run_computes_shallow_metrics_and_cli_prints_json(tmp_path) -> None:
+    run_dir = tmp_path / "runs" / "aggregate_run"
+    run_dir.mkdir(parents=True)
+
+    clean_row = _trial_row(
+        trial_id="run1:game24:s1:no_memory:clean:replay",
+        arm="clean",
+        verifier_result=VerifierResult(is_correct=True),
+        raw_response="final: 24",
+        parsed_answer="24",
+        latency_ms=12,
+        token_usage={"prompt_tokens": 2, "completion_tokens": 3, "total_tokens": 5},
+    )
+    contaminated_row = _trial_row(
+        trial_id="run1:game24:s1:no_memory:contaminated:replay",
+        arm="contaminated",
+        verifier_result=VerifierResult(is_correct=False, reason="incorrect"),
+        raw_response="final: wrong",
+        parsed_answer="wrong",
+        contamination_exposure=ContaminationExposure(
+            condition="contaminated",
+            is_exposed=True,
+            source_entry_ids=["m1"],
+            contamination_types=["wrong_solution"],
+            memory_before_entry_ids=["m1"],
+            retrieved_entry_ids=["m1"],
+            exposure_mode="retrieved_memory",
+            reason="retrieved contaminated memory source",
+        ),
+        bad_memory_uptake_label="uptake_detected",
+        repeated_failure_label="repeated_failure",
+        memory_write_event={"parent_trial_id": "run1:game24:s1:no_memory:clean:replay", "source_entry_ids": ["m1"]},
+        latency_ms=18,
+        token_usage={"prompt_tokens": 4, "completion_tokens": 3, "total_tokens": 7},
+    )
+    _write_trials_jsonl(run_dir, [clean_row, contaminated_row])
+
+    from memcontam.evaluation.aggregate import aggregate_run
+
+    result = aggregate_run(run_dir)
+    assert result["run_dir"] == str(run_dir)
+    assert result["n_trials"] == 2
+    assert result["groups"] == [
+        {
+            "task_name": "game24",
+            "baseline": "no_memory",
+            "arm": "clean",
+            "backbone": "replay",
+            "n_trials": 1,
+            "verified_success_count": 1,
+            "verified_success_rate": 1.0,
+            "contaminated_condition_count": 0,
+            "contaminated_condition_rate": 0.0,
+            "controlled_exposure_count": 0,
+            "controlled_exposure_rate": 0.0,
+            "contamination_exposure_rate": 0.0,
+            "trial_level_uptake_count": "not_computed",
+            "trial_level_uptake_rate": "not_computed",
+            "contamination_uptake_rate": "not_computed",
+            "contaminated_descendant_count": "not_computed",
+            "contaminated_descendant_rate": "not_computed",
+            "filter_drop_count": 0,
+            "token_usage_total": 5,
+            "latency_ms_min": 12,
+            "latency_ms_mean": 12.0,
+            "latency_ms_max": 12,
+            "repeated_failure_count": "not_computed",
+            "repeated_failure_rate": "not_computed",
+            "vanilla_to_contamination_degradation_rate": 1.0,
+        },
+        {
+            "task_name": "game24",
+            "baseline": "no_memory",
+            "arm": "contaminated",
+            "backbone": "replay",
+            "n_trials": 1,
+            "verified_success_count": 0,
+            "verified_success_rate": 0.0,
+            "contaminated_condition_count": 1,
+            "contaminated_condition_rate": 1.0,
+            "controlled_exposure_count": 1,
+            "controlled_exposure_rate": 1.0,
+            "contamination_exposure_rate": 1.0,
+            "trial_level_uptake_count": 1,
+            "trial_level_uptake_rate": 1.0,
+            "contamination_uptake_rate": 1.0,
+            "contaminated_descendant_count": 1,
+            "contaminated_descendant_rate": 1.0,
+            "filter_drop_count": 0,
+            "token_usage_total": 7,
+            "latency_ms_min": 18,
+            "latency_ms_mean": 18.0,
+            "latency_ms_max": 18,
+            "repeated_failure_count": 1,
+            "repeated_failure_rate": 1.0,
+            "vanilla_to_contamination_degradation_rate": 1.0,
+        },
+    ]
+
+    cli_result = _cli_aggregate(run_dir)
+    assert cli_result.returncode == 0
+    assert json.loads(cli_result.stdout) == result
+
+
+def test_aggregate_run_handles_empty_trials_jsonl(tmp_path) -> None:
+    run_dir = tmp_path / "runs" / "empty"
+    run_dir.mkdir(parents=True)
+    (run_dir / "trials.jsonl").write_text("", encoding="utf-8")
+
+    from memcontam.evaluation.aggregate import aggregate_run
+
+    result = aggregate_run(run_dir)
+    assert result == {"run_dir": str(run_dir), "n_trials": 0, "groups": []}
+
+    cli_result = _cli_aggregate(run_dir)
+    assert cli_result.returncode == 0
+    assert json.loads(cli_result.stdout) == result
+
+
+def test_aggregate_run_sums_numeric_filter_drops(tmp_path) -> None:
+    run_dir = tmp_path / "runs" / "filter_drop"
+    run_dir.mkdir(parents=True)
+    _write_trials_jsonl(
+        run_dir,
+        [
+            _trial_row(
+                trial_id="run1:game24:s1:no_memory:contaminated_filter:replay",
+                arm="contaminated_filter",
+                filter_decision={"filter": "drop_known_contaminated", "dropped": 3},
+            )
+        ],
+    )
+
+    from memcontam.evaluation.aggregate import aggregate_run
+
+    result = aggregate_run(run_dir)
+    assert result["groups"][0]["filter_drop_count"] == 3
+
+
+@pytest.mark.parametrize(
+    "memory_write_event",
+    [
+        {"parent_trial_id": "parent-1"},
+        {"source_entry_ids": ["source-1"]},
+    ],
+)
+def test_aggregate_run_requires_both_parent_and_source_for_descendants(
+    tmp_path, memory_write_event: dict
+) -> None:
+    run_dir = tmp_path / "runs" / "descendant"
+    run_dir.mkdir(parents=True)
+    _write_trials_jsonl(
+        run_dir,
+        [
+            _trial_row(
+                trial_id="run1:game24:s1:no_memory:contaminated:replay",
+                arm="contaminated",
+                memory_write_event=memory_write_event,
+            )
+        ],
+    )
+
+    from memcontam.evaluation.aggregate import aggregate_run
+
+    result = aggregate_run(run_dir)
+    assert result["groups"][0]["contaminated_descendant_count"] == "not_computed"
+    assert result["groups"][0]["contaminated_descendant_rate"] == "not_computed"
+
+
+@pytest.mark.parametrize(
+    ("fixture_name", "write_fixture"),
+    [
+        ("missing", False),
+        ("malformed", True),
+        ("invalid", True),
+    ],
+)
+def test_aggregate_run_rejects_bad_trials_jsonl(tmp_path, fixture_name: str, write_fixture: bool) -> None:
+    run_dir = tmp_path / "runs" / fixture_name
+    run_dir.mkdir(parents=True)
+    trials_path = run_dir / "trials.jsonl"
+    if write_fixture and fixture_name == "malformed":
+        trials_path.write_text("{" + chr(10), encoding="utf-8")
+    if write_fixture and fixture_name == "invalid":
+        trials_path.write_text(
+            json.dumps(
+                {
+                    "trial_id": "bad",
+                    "run_id": "run1",
+                    "task_name": "game24",
+                    "sample_id": "s1",
+                    "baseline": "no_memory",
+                    "arm": "clean",
+                    "backbone": "replay",
+                }
+            )
+            + chr(10),
+            encoding="utf-8",
+        )
+
+    from memcontam.evaluation.aggregate import aggregate_run
+
+    with pytest.raises(SystemExit):
+        aggregate_run(run_dir)
+
+    cli_result = _cli_aggregate(run_dir)
+    assert cli_result.returncode != 0
