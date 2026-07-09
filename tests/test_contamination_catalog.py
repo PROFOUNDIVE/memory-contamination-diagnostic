@@ -23,7 +23,6 @@ def test_catalog_baseline_filtering_keeps_only_targeted_entries() -> None:
     for baseline in ["retrieval_rag", "bot_style", "no_memory"]:
         filtered = [entry for entry in catalog if baseline in entry.get("target_baselines", [])]
 
-        assert all(baseline in entry.get("target_baselines", []) for entry in filtered)
         if baseline == "no_memory":
             assert filtered == []
 

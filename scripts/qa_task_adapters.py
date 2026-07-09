@@ -11,7 +11,6 @@ def main() -> None:
     assert game24.task_name == "game24"
     assert game24.input == {"numbers": [1, 3, 4, 6]}
     assert game24.verifier_spec == {"target": 24}
-    print("game24 ok")
 
     word_sorting = build_word_sorting_instance(
         {
@@ -24,7 +23,6 @@ def main() -> None:
     assert word_sorting.task_name == "word_sorting"
     assert word_sorting.input == {"words": ["pear", "apple", "banana"]}
     assert word_sorting.verifier_spec == {"sorted_words": ["apple", "banana", "pear"]}
-    print("word_sorting ok")
 
     meb = build_meb_instance(
         {
@@ -37,7 +35,6 @@ def main() -> None:
     assert meb.task_name == "math_equation_balancer"
     assert meb.input == {"input": "2 + 5 = ?"}
     assert meb.verifier_spec == {"target": "2 + 5 = 7", "target_value": 7}
-    print("math_equation_balancer ok")
 
 
 if __name__ == "__main__":
