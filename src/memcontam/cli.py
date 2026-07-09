@@ -27,7 +27,7 @@ from memcontam.logging.schema import (
     TrialLog,
 )
 from memcontam.memory.filters import drop_known_contaminated
-from memcontam.memory.retrieval import lexical_retrieve
+from memcontam.memory.retrieval import retrieve_records
 from memcontam.memory.stores import MemoryEntry, MemoryState
 from memcontam.tasks.game24 import build_instance as build_game24_instance
 from memcontam.tasks.math_equation_balancer import build_instance as build_meb_instance
@@ -151,8 +151,8 @@ def _memory_entries_for_arm(arm: str, baseline: str) -> tuple[list[MemoryEntry],
 def _retrieved_memory(baseline: str, task_input: dict[str, Any], memory: MemoryState) -> tuple[list[dict[str, Any]], list[float]]:
     if baseline not in {"retrieval_rag", "bot_style"}:
         return [], []
-    retrieved = lexical_retrieve(str(task_input), memory.entries, k=1 if baseline == "bot_style" else 3)
-    return [entry.model_dump() for entry, _score in retrieved], [score for _entry, score in retrieved]
+    retrieved = retrieve_records(str(task_input), memory.entries, k=1 if baseline == "bot_style" else 3)
+    return [record["memory_entry"].model_dump() for record in retrieved], [record["score"] for record in retrieved]
 
 
 def _config_hash(config: dict[str, Any]) -> str:

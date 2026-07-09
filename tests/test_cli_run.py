@@ -371,9 +371,16 @@ def test_retrieval_rag_logs_lexical_retrieved_memory_and_scores(tmp_path, monkey
     )
 
     assert row["retrieved_memory"]
+    assert row["retrieved_memory"][0]["entry_id"] == "retrieval_rag_memory_1"
     assert row["retrieved_memory"][0]["content"].startswith("For numbers 1 3 4 6")
+    assert row["retrieved_memory"][0]["memory_type"] == "proxy_memory"
     assert row["retrieved_scores"]
     assert row["retrieved_scores"][0] > 0
+    prompt_text = "\n".join(message["content"] for message in row["prompt_messages"])
+    assert "entry_id=retrieval_rag_memory_1" in prompt_text
+    assert "score=" in prompt_text
+    assert row["memory_write_event"] is None
+    assert row["memory_before"] == row["memory_after"]
 
 
 def test_bot_style_logs_at_most_one_retrieved_template(tmp_path, monkeypatch) -> None:

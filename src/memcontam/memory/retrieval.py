@@ -58,6 +58,21 @@ def _record(entry: MemoryEntry, score: float, rank: int) -> RetrievedRecord:
     }
 
 
+def render_retrieved_record(record: RetrievedRecord) -> str:
+    provenance = ", ".join(
+        [
+            f"memory_type={record['memory_type']}",
+            f"clean_or_contaminated={record['clean_or_contaminated']}",
+            f"source_trial_id={record['source_trial_id']}",
+            f"metadata={record['metadata']}",
+        ]
+    )
+    return (
+        f"#{record['rank']} entry_id={record['entry_id']} score={record['score']:.6f} "
+        f"{provenance}\n{record['content']}"
+    )
+
+
 def retrieve_records(query: str, entries: list[MemoryEntry], k: int = 3) -> list[RetrievedRecord]:
     if k <= 0 or not entries:
         return []
