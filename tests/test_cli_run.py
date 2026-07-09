@@ -394,6 +394,14 @@ def test_bot_style_logs_at_most_one_retrieved_template(tmp_path, monkeypatch) ->
     assert len(row["retrieved_memory"]) <= 1
     assert len(row["retrieved_scores"]) <= 1
     assert row["retrieved_memory"][0]["content"].startswith("Template for 1 3 4 6")
+    prompt_text = "\n".join(message["content"] for message in row["prompt_messages"])
+    assert "Distilled problem" in prompt_text
+    assert "Retrieved thought template" in prompt_text
+    assert "1. Key information:" in prompt_text
+    assert "2. Restriction:" in prompt_text
+    assert "3. Distilled task:" in prompt_text
+    assert "4. Python transformation:" in prompt_text
+    assert "5. Answer form:" in prompt_text
 
 
 def test_reflexion_style_includes_recent_reflection_in_prompt_messages(tmp_path, monkeypatch) -> None:
