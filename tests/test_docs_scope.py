@@ -1,7 +1,5 @@
 from pathlib import Path
 
-import pytest
-
 ROOT = Path(__file__).resolve().parent.parent
 G0_DOC = ROOT / "docs" / "g0-baseline-fidelity-gate-v0.2.md"
 README = ROOT / "README.md"

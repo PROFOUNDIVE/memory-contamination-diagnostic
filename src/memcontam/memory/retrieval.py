@@ -41,7 +41,7 @@ def _embed(text: str) -> list[float]:
 
 
 def _cosine(left: list[float], right: list[float]) -> float:
-    return sum(l * r for l, r in zip(left, right))
+    return sum(a * b for a, b in zip(left, right))
 
 
 def _record(entry: MemoryEntry, score: float, rank: int) -> RetrievedRecord:
