@@ -36,6 +36,19 @@ def _trial_row(**overrides):
     return TrialLog(**base).model_dump(mode="json")
 
 
+def _bot_write_event(**overrides):
+    base = {
+        "event_type": "bot_write",
+        "baseline": "bot_style",
+        "parent_trial_id": "run1:game24:s1:bot_style:contaminated:replay",
+        "source_entry_ids": ["bot_style_memory_1"],
+        "new_entry_id": "bot_template:1",
+        "update_reason": "distilled_thought_template_from_problem_solution_pair",
+    }
+    base.update(overrides)
+    return base
+
+
 def _write_trials_jsonl(run_dir: Path, rows: list[dict]) -> Path:
     trials_path = run_dir / "trials.jsonl"
     trials_path.write_text("".join(json.dumps(row) + chr(10) for row in rows), encoding="utf-8")
@@ -87,7 +100,11 @@ def test_aggregate_run_computes_shallow_metrics_and_cli_prints_json(tmp_path) ->
         ),
         bad_memory_uptake_label="uptake_detected",
         repeated_failure_label="repeated_failure",
-        memory_write_event={"parent_trial_id": "run1:game24:s1:no_memory:clean:replay", "source_entry_ids": ["m1"]},
+        memory_write_event=_bot_write_event(
+            parent_trial_id="run1:game24:s1:no_memory:clean:replay",
+            source_entry_ids=["m1"],
+            new_entry_id="bot_template:trial1",
+        ),
         latency_ms=18,
         token_usage={"prompt_tokens": 4, "completion_tokens": 3, "total_tokens": 7},
     )
@@ -219,8 +236,8 @@ def test_aggregate_run_keeps_legacy_null_memory_write_event_rows(tmp_path) -> No
 @pytest.mark.parametrize(
     "memory_write_event",
     [
-        {"parent_trial_id": "parent-1"},
-        {"source_entry_ids": ["source-1"]},
+        _bot_write_event(source_entry_ids=[]),
+        _bot_write_event(parent_trial_id=None),
     ],
 )
 def test_aggregate_run_requires_both_parent_and_source_for_descendants(
@@ -234,6 +251,61 @@ def test_aggregate_run_requires_both_parent_and_source_for_descendants(
             _trial_row(
                 trial_id="run1:game24:s1:no_memory:contaminated:replay",
                 arm="contaminated",
+                memory_write_event=memory_write_event,
+            )
+        ],
+    )
+
+    from memcontam.evaluation.aggregate import aggregate_run
+
+    result = aggregate_run(run_dir)
+    assert result["groups"][0]["contaminated_descendant_count"] == "not_computed"
+    assert result["groups"][0]["contaminated_descendant_rate"] == "not_computed"
+
+
+def test_aggregate_run_counts_complete_bot_write_lineage(tmp_path) -> None:
+    run_dir = tmp_path / "runs" / "bot_lineage_complete"
+    run_dir.mkdir(parents=True)
+    _write_trials_jsonl(
+        run_dir,
+        [
+            _trial_row(
+                trial_id="run1:game24:s1:bot_style:contaminated:replay",
+                baseline="bot_style",
+                arm="contaminated",
+                verifier_result=VerifierResult(is_correct=False, reason="incorrect"),
+                memory_write_event=_bot_write_event(),
+            )
+        ],
+    )
+
+    from memcontam.evaluation.aggregate import aggregate_run
+
+    result = aggregate_run(run_dir)
+    assert result["groups"][0]["contaminated_descendant_count"] == 1
+    assert result["groups"][0]["contaminated_descendant_rate"] == 1.0
+
+
+@pytest.mark.parametrize(
+    "memory_write_event",
+    [
+        _bot_write_event(parent_trial_id=None),
+        _bot_write_event(source_entry_ids=[]),
+    ],
+)
+def test_aggregate_run_ignores_incomplete_bot_write_lineage(
+    tmp_path, memory_write_event: dict
+) -> None:
+    run_dir = tmp_path / "runs" / "bot_lineage_incomplete"
+    run_dir.mkdir(parents=True)
+    _write_trials_jsonl(
+        run_dir,
+        [
+            _trial_row(
+                trial_id="run1:game24:s1:bot_style:contaminated:replay",
+                baseline="bot_style",
+                arm="contaminated",
+                verifier_result=VerifierResult(is_correct=False, reason="incorrect"),
                 memory_write_event=memory_write_event,
             )
         ],
