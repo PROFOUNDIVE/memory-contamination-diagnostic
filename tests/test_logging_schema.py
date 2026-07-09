@@ -105,6 +105,60 @@ def test_trial_log_metadata_and_metric_fields_are_explicit() -> None:
     assert set(log.contamination_exposure.model_dump()) == EXPOSURE_KEYS
 
 
+def test_bot_template_entry_and_write_event_contract_are_supported() -> None:
+    template_entry = MemoryEntry(
+        entry_id="bot-template-1",
+        content="Distilled problem: 1 3 4 6 -> 24.",
+        memory_type="thought_template",
+        clean_or_contaminated="clean",
+        source_trial_id="trial-source-1",
+        metadata={
+            "distilled_problem": "Use 6 / (1 - 3 / 4)",
+            "template_description": "A reusable BoT template for the sample",
+            "instantiation_source": "trial-source-1",
+        },
+    )
+    log = TrialLog(
+        trial_id="t_bot",
+        run_id="r1",
+        task_name="game24",
+        sample_id="s_bot",
+        baseline="bot_style",
+        arm="contaminated",
+        backbone="gpt4o",
+        input={"numbers": [1, 3, 4, 6]},
+        gold_or_verifier_spec={"target": 24},
+        prompt_messages=[{"role": "user", "content": "solve"}],
+        raw_response="final: wrong",
+        verifier_result=VerifierResult(is_correct=False),
+        memory_before=[template_entry.model_dump()],
+        memory_write_event={
+            "event_type": "bot_write",
+            "baseline": "bot_style",
+            "parent_trial_id": "trial-parent-1",
+            "source_entry_ids": [template_entry.entry_id],
+            "new_entry_id": "bot-template-2",
+            "update_reason": "distilled from the successful solve",
+        },
+    )
+
+    assert template_entry.memory_type == "thought_template"
+    assert template_entry.source_trial_id == "trial-source-1"
+    assert template_entry.metadata == {
+        "distilled_problem": "Use 6 / (1 - 3 / 4)",
+        "template_description": "A reusable BoT template for the sample",
+        "instantiation_source": "trial-source-1",
+    }
+    assert log.memory_write_event == {
+        "event_type": "bot_write",
+        "baseline": "bot_style",
+        "parent_trial_id": "trial-parent-1",
+        "source_entry_ids": ["bot-template-1"],
+        "new_entry_id": "bot-template-2",
+        "update_reason": "distilled from the successful solve",
+    }
+
+
 @pytest.mark.parametrize(
     ("field", "bad_value"),
     [
@@ -153,6 +207,28 @@ def test_trial_log_rejects_incomplete_contamination_exposure() -> None:
                 "contamination_exposure": {"is_exposed": True, "source_entry_ids": ["m1"]},
             }
         )
+
+
+def test_trial_log_accepts_legacy_null_memory_write_event_rows() -> None:
+    log = TrialLog.model_validate(
+        {
+            "trial_id": "t_legacy",
+            "run_id": "r1",
+            "task_name": "game24",
+            "sample_id": "s1",
+            "baseline": "no_memory",
+            "arm": "clean",
+            "backbone": "gpt4o",
+            "input": {"numbers": [1, 3, 4, 6]},
+            "gold_or_verifier_spec": {"target": 24},
+            "prompt_messages": [{"role": "user", "content": "solve"}],
+            "raw_response": "final: 24",
+            "verifier_result": {"is_correct": True},
+            "memory_write_event": None,
+        }
+    )
+
+    assert log.memory_write_event is None
 
 
 @pytest.mark.parametrize("latency_ms", [-1, "7", 1.5])

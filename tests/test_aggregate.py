@@ -195,6 +195,27 @@ def test_aggregate_run_sums_numeric_filter_drops(tmp_path) -> None:
     assert result["groups"][0]["filter_drop_count"] == 3
 
 
+def test_aggregate_run_keeps_legacy_null_memory_write_event_rows(tmp_path) -> None:
+    run_dir = tmp_path / "runs" / "legacy_null_write_event"
+    run_dir.mkdir(parents=True)
+    _write_trials_jsonl(
+        run_dir,
+        [
+            _trial_row(
+                trial_id="run1:game24:s1:no_memory:clean:replay",
+                arm="clean",
+                memory_write_event=None,
+            )
+        ],
+    )
+
+    from memcontam.evaluation.aggregate import aggregate_run
+
+    result = aggregate_run(run_dir)
+    assert result["groups"][0]["contaminated_descendant_count"] == "not_computed"
+    assert result["groups"][0]["contaminated_descendant_rate"] == "not_computed"
+
+
 @pytest.mark.parametrize(
     "memory_write_event",
     [
