@@ -5,6 +5,8 @@ from pydantic import ValidationError
 
 from memcontam.clients.replay import ReplayClient
 from memcontam.logging.schema import ContaminationExposure, TrialLog, VerifierResult
+from memcontam.memory.retrieval import retrieve_records
+from memcontam.memory.stores import MemoryEntry
 
 
 EXPOSURE_KEYS = {
@@ -178,3 +180,50 @@ def test_replay_client_normalizes_token_usage_and_latency() -> None:
 
     assert response.token_usage == {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
     assert response.latency_ms == 0
+
+
+def test_retrieve_records_returns_deterministic_ordered_provenance_records() -> None:
+    entries = [
+        MemoryEntry(
+            entry_id="m1",
+            content="alpha beta gamma",
+            memory_type="template",
+            clean_or_contaminated="clean",
+            source_trial_id="trial-1",
+            metadata={"topic": "alpha"},
+        ),
+        MemoryEntry(
+            entry_id="m2",
+            content="alpha beta",
+            memory_type="template",
+            clean_or_contaminated="contaminated",
+            source_trial_id="trial-2",
+            metadata={"topic": "beta"},
+        ),
+        MemoryEntry(
+            entry_id="m3",
+            content="completely unrelated",
+            memory_type="note",
+            clean_or_contaminated="clean",
+            source_trial_id=None,
+            metadata={"topic": "gamma"},
+        ),
+    ]
+
+    records = retrieve_records("alpha beta gamma", entries, k=2)
+
+    assert [record["rank"] for record in records] == [1, 2]
+    assert records[0]["entry_id"] == "m1"
+    assert records[0]["content"] == "alpha beta gamma"
+    assert records[0]["memory_type"] == "template"
+    assert records[0]["clean_or_contaminated"] == "clean"
+    assert records[0]["source_trial_id"] == "trial-1"
+    assert records[0]["metadata"] == {"topic": "alpha"}
+    assert isinstance(records[0]["memory_entry"], MemoryEntry)
+    assert records[0]["memory_entry"].entry_id == "m1"
+    assert records[0]["score"] >= records[1]["score"]
+    assert records == retrieve_records("alpha beta gamma", entries, k=2)
+
+
+def test_retrieve_records_handles_empty_memory_safely() -> None:
+    assert retrieve_records("anything", [], k=3) == []
