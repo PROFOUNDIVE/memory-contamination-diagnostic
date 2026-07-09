@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 
-from memcontam.cli import run_config
 from memcontam.logging.schema import ContaminationExposure, TrialLog, VerifierResult
 
 
