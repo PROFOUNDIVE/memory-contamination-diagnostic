@@ -362,7 +362,9 @@ def test_run_config_rejects_run_id_path_traversal(tmp_path) -> None:
         run_config(config, run_id="../outside")
 
 
-def test_retrieval_rag_logs_lexical_retrieved_memory_and_scores(tmp_path, monkeypatch) -> None:
+def test_retrieval_rag_row_contains_provenance_and_stays_read_only(
+    tmp_path, monkeypatch
+) -> None:
     row = _run_single_baseline(
         tmp_path,
         monkeypatch,
@@ -370,20 +372,30 @@ def test_retrieval_rag_logs_lexical_retrieved_memory_and_scores(tmp_path, monkey
         "For numbers 1 3 4 6 use the expression 6 / (1 - 3 / 4).",
     )
 
-    assert row["retrieved_memory"]
-    assert row["retrieved_memory"][0]["entry_id"] == "retrieval_rag_memory_1"
-    assert row["retrieved_memory"][0]["content"].startswith("For numbers 1 3 4 6")
-    assert row["retrieved_memory"][0]["memory_type"] == "proxy_memory"
-    assert row["retrieved_scores"]
-    assert row["retrieved_scores"][0] > 0
+    retrieved = row["retrieved_memory"][0]
+    assert retrieved["entry_id"] == "retrieval_rag_memory_1"
+    assert retrieved["content"].startswith("For numbers 1 3 4 6")
+    assert retrieved["memory_type"] == "proxy_memory"
+    assert retrieved["source_trial_id"] is None
+    assert retrieved["metadata"] == {
+        "task": "game24",
+        "arm": "contaminated",
+        "contamination_type": "proxy_memory",
+    }
+    assert 0 < row["retrieved_scores"][0] <= 1
     prompt_text = "\n".join(message["content"] for message in row["prompt_messages"])
     assert "entry_id=retrieval_rag_memory_1" in prompt_text
     assert "score=" in prompt_text
+    assert "memory_type=proxy_memory" in prompt_text
+    assert "source_trial_id=None" in prompt_text
+    assert "metadata={'task': 'game24', 'arm': 'contaminated', 'contamination_type': 'proxy_memory'}" in prompt_text
     assert row["memory_write_event"] is None
     assert row["memory_before"] == row["memory_after"]
 
 
-def test_bot_style_logs_at_most_one_retrieved_template(tmp_path, monkeypatch) -> None:
+def test_bot_style_row_contains_prompt_sections_and_writeback_lineage(
+    tmp_path, monkeypatch
+) -> None:
     row = _run_single_baseline(
         tmp_path,
         monkeypatch,
@@ -391,9 +403,18 @@ def test_bot_style_logs_at_most_one_retrieved_template(tmp_path, monkeypatch) ->
         "Template for 1 3 4 6: first create 1 - 3 / 4, then divide 6.",
     )
 
-    assert len(row["retrieved_memory"]) <= 1
-    assert len(row["retrieved_scores"]) <= 1
-    assert row["retrieved_memory"][0]["content"].startswith("Template for 1 3 4 6")
+    retrieved = row["retrieved_memory"][0]
+    assert len(row["retrieved_memory"]) == 1
+    assert len(row["retrieved_scores"]) == 1
+    assert retrieved["entry_id"] == "bot_style_memory_1"
+    assert retrieved["content"].startswith("Template for 1 3 4 6")
+    assert retrieved["memory_type"] == "proxy_memory"
+    assert retrieved["source_trial_id"] is None
+    assert retrieved["metadata"] == {
+        "task": "game24",
+        "arm": "contaminated",
+        "contamination_type": "proxy_memory",
+    }
     prompt_text = "\n".join(message["content"] for message in row["prompt_messages"])
     assert "Distilled problem" in prompt_text
     assert "Retrieved thought template" in prompt_text
@@ -402,15 +423,7 @@ def test_bot_style_logs_at_most_one_retrieved_template(tmp_path, monkeypatch) ->
     assert "3. Distilled task:" in prompt_text
     assert "4. Python transformation:" in prompt_text
     assert "5. Answer form:" in prompt_text
-
-
-def test_bot_style_appends_distilled_template_write_event(tmp_path, monkeypatch) -> None:
-    row = _run_single_baseline(
-        tmp_path,
-        monkeypatch,
-        "bot_style",
-        "Template for 1 3 4 6: first create 1 - 3 / 4, then divide 6.",
-    )
+    assert "Apply the retrieved thought template" in prompt_text
 
     trial_id = row["trial_id"]
     assert len(row["memory_after"]) == len(row["memory_before"]) + 1
@@ -425,7 +438,7 @@ def test_bot_style_appends_distilled_template_write_event(tmp_path, monkeypatch)
         "event_type": "bot_write",
         "baseline": "bot_style",
         "parent_trial_id": trial_id,
-        "source_entry_ids": ["bot_style_memory_1"],
+        "source_entry_ids": [retrieved["entry_id"]],
         "new_entry_id": new_entry["entry_id"],
         "update_reason": "distilled_thought_template_from_problem_solution_pair",
     }
