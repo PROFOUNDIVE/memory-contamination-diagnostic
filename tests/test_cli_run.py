@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
 from memcontam.cli import run_config
+from memcontam.cli import load_config
+from memcontam.clients.base import LLMResponse
 from memcontam.logging.schema import TrialLog
 
 
@@ -101,6 +104,64 @@ def test_run_config_writes_replay_trial_log_jsonl(tmp_path) -> None:
     assert row["recovery_after_filter_label"] == "not_applicable"
 
 
+def test_run_config_clean_multitask_replay_emits_all_three_tasks(tmp_path, monkeypatch) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(repo_root)
+    output_dir = tmp_path / "runs"
+    config = {
+        "run": {"name": "smoke"},
+        "models": ["replay"],
+        "tasks": [
+            {"name": "game24", "sample_path": str((repo_root / "data/tasks/game24_pilot.jsonl").resolve()), "limit": 1},
+            {
+                "name": "math_equation_balancer",
+                "sample_path": str((repo_root / "data/tasks/math_equation_balancer_pilot.jsonl").resolve()),
+                "limit": 1,
+            },
+            {
+                "name": "word_sorting",
+                "sample_path": str((repo_root / "data/tasks/word_sorting_pilot.jsonl").resolve()),
+                "limit": 1,
+            },
+        ],
+        "baselines": ["no_memory"],
+        "arms": ["clean"],
+        "logging": {"output_dir": str(output_dir)},
+        "replay": {
+            "responses_by_sample": {
+                "game24_pilot_001": "final: 6 / (1 - 3 / 4)",
+                "meb_pilot_001": "2 + 5 = 7",
+                "word_sorting_pilot_001": "apple banana pear",
+            }
+        },
+    }
+
+    run_dir = run_config(config, run_id="multitask_clean_run")
+    rows = [json.loads(line) for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()]
+
+    assert len(rows) == 3
+    assert {row["task_name"] for row in rows} == {"game24", "math_equation_balancer", "word_sorting"}
+    for row in rows:
+        TrialLog.model_validate(row)
+        assert row["verifier_result"]["is_correct"] is True
+        assert row["contamination_exposure"]["condition"] == "clean"
+
+
+def test_clean_multitask_replay_ignores_catalog(tmp_path, monkeypatch) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(repo_root)
+    config = load_config(repo_root / "configs/pilot_multitask_replay.yaml")
+    config["logging"]["output_dir"] = str(tmp_path / "runs")
+
+    run_dir = run_config(config, run_id="task_T9_clean_after_c")
+    rows = [json.loads(line) for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()]
+
+    assert rows
+    for row in rows:
+        assert row["contamination_exposure"]["condition"] == "clean"
+        assert row["contamination_exposure"]["source_entry_ids"] == []
+
+
 def test_run_config_replay_mode_ignores_missing_provider_env_vars(tmp_path, monkeypatch) -> None:
     sample_path = tmp_path / "game24_one.jsonl"
     sample_path.write_text(
@@ -122,6 +183,91 @@ def test_run_config_replay_mode_ignores_missing_provider_env_vars(tmp_path, monk
 
     run_dir = run_config(config, run_id="smoke_run")
     assert (run_dir / "trials.jsonl").exists()
+
+
+def test_run_config_live_smoke_flag_defaults_to_disabled(tmp_path, monkeypatch) -> None:
+    sample_path = tmp_path / "game24_one.jsonl"
+    sample_path.write_text(
+        '{"sample_id":"sample_1","numbers":[1,3,4,6],"target":24}' + chr(10),
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    config = {
+        "run": {"name": "smoke"},
+        "models": ["replay"],
+        "tasks": [{"name": "game24", "sample_path": str(sample_path), "limit": 1}],
+        "baselines": ["no_memory"],
+        "arms": ["clean"],
+        "logging": {"output_dir": str(tmp_path / "runs")},
+        "replay": {"responses": ["final: 6 / (1 - 3 / 4)"]},
+    }
+
+    run_dir = run_config(config, run_id="smoke_run")
+    assert (run_dir / "trials.jsonl").exists()
+
+
+def test_run_config_live_smoke_enabled_without_api_key_fails(tmp_path, monkeypatch) -> None:
+    sample_path = tmp_path / "game24_one.jsonl"
+    sample_path.write_text(
+        '{"sample_id":"sample_1","numbers":[1,3,4,6],"target":24}' + chr(10),
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    config = {
+        "run": {"name": "smoke"},
+        "models": ["replay"],
+        "tasks": [{"name": "game24", "sample_path": str(sample_path), "limit": 1}],
+        "baselines": ["no_memory"],
+        "arms": ["clean"],
+        "logging": {"output_dir": str(tmp_path / "runs")},
+        "replay": {"responses": ["final: 6 / (1 - 3 / 4)"]},
+        "live_smoke": {"enabled": True},
+    }
+
+    with pytest.raises(SystemExit, match="missing API key env var"):
+        run_config(config, run_id="smoke_run")
+
+
+def test_run_config_live_smoke_enabled_with_mocked_client_emits_trial_log(
+    tmp_path, monkeypatch
+) -> None:
+    sample_path = tmp_path / "game24_one.jsonl"
+    sample_path.write_text(
+        '{"sample_id":"sample_1","numbers":[1,3,4,6],"target":24}' + chr(10),
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    class FakeClient:
+        def chat(self, messages, model, config):
+            return LLMResponse(
+                content="final: 6 / (1 - 3 / 4)",
+                raw={"mock": True},
+                token_usage={"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3},
+                latency_ms=42,
+            )
+
+    config = {
+        "run": {"name": "smoke"},
+        "models": ["openai_compatible"],
+        "tasks": [{"name": "game24", "sample_path": str(sample_path), "limit": 1}],
+        "baselines": ["no_memory"],
+        "arms": ["clean"],
+        "logging": {"output_dir": str(tmp_path / "runs")},
+        "live_smoke": {"enabled": True},
+    }
+
+    run_dir = run_config(config, run_id="smoke_run", _client_override=FakeClient())
+    trials_path = run_dir / "trials.jsonl"
+    rows = [json.loads(line) for line in trials_path.read_text(encoding="utf-8").splitlines()]
+    assert len(rows) == 1
+    row = rows[0]
+    TrialLog.model_validate(row)
+    assert row["raw_response"] == "final: 6 / (1 - 3 / 4)"
+    assert row["latency_ms"] == 42
+    assert row["token_usage"] == {"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3}
+    assert row["verifier_result"]["is_correct"] is True
+    assert row["parsed_answer"] == "6 / (1 - 3 / 4)"
 
 
 def test_run_config_rejects_missing_replay_response_for_sample(tmp_path) -> None:
@@ -339,3 +485,80 @@ def test_failure_row_still_validates_with_provenance_labels(tmp_path, monkeypatc
     assert row["bad_memory_uptake_label"] == "not_evaluable"
     assert row["repeated_failure_label"] == "first_failure"
     TrialLog.model_validate(row)
+
+
+def test_repeated_failure_label_sequence(tmp_path, monkeypatch) -> None:
+    sample_path = tmp_path / "game24_repeat.jsonl"
+    sample_path.write_text(
+        json.dumps({"sample_id": "sample_1", "numbers": [1, 3, 4, 6], "target": 24})
+        + "\n"
+        + json.dumps({"sample_id": "sample_1", "numbers": [1, 3, 4, 6], "target": 24})
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    config = {
+        "run": {"name": "smoke"},
+        "models": ["replay"],
+        "tasks": [{"name": "game24", "sample_path": str(sample_path), "limit": 2}],
+        "baselines": ["no_memory"],
+        "arms": ["clean"],
+        "logging": {"output_dir": str(tmp_path / "runs")},
+        "replay": {"responses_by_sample": {"sample_1": "final: 1 + 3 + 4 + 6"}},
+    }
+
+    run_dir = run_config(config, run_id="repeat_run")
+    rows = [
+        json.loads(line)
+        for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+
+    assert len(rows) == 2
+    assert all(row["verifier_result"]["is_correct"] is False for row in rows)
+    assert rows[0]["repeated_failure_label"] == "first_failure"
+    assert rows[1]["repeated_failure_label"] == "repeated_failure"
+
+
+def test_repeated_failure_no_cross_task_repeat(tmp_path, monkeypatch) -> None:
+    game24_path = tmp_path / "game24_sample.jsonl"
+    game24_path.write_text(
+        json.dumps({"sample_id": "sample_1", "numbers": [1, 3, 4, 6], "target": 24}) + "\n",
+        encoding="utf-8",
+    )
+    word_sorting_path = tmp_path / "word_sorting_sample.jsonl"
+    word_sorting_path.write_text(
+        json.dumps(
+            {
+                "sample_id": "sample_1",
+                "words": ["apple", "banana"],
+                "sorted_words": ["apple", "banana"],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    config = {
+        "run": {"name": "smoke"},
+        "models": ["replay"],
+        "tasks": [
+            {"name": "game24", "sample_path": str(game24_path), "limit": 1},
+            {"name": "word_sorting", "sample_path": str(word_sorting_path), "limit": 1},
+        ],
+        "baselines": ["no_memory"],
+        "arms": ["clean"],
+        "logging": {"output_dir": str(tmp_path / "runs")},
+        "replay": {"responses_by_sample": {"sample_1": "final: 1 + 3 + 4 + 6"}},
+    }
+
+    run_dir = run_config(config, run_id="cross_task_run")
+    rows = [
+        json.loads(line)
+        for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+
+    assert len(rows) == 2
+    assert {row["task_name"] for row in rows} == {"game24", "word_sorting"}
+    assert all(row["verifier_result"]["is_correct"] is False for row in rows)
+    assert rows[0]["repeated_failure_label"] == "first_failure"
+    assert rows[1]["repeated_failure_label"] == "first_failure"

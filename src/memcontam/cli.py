@@ -15,6 +15,8 @@ from memcontam.baselines.full_history import FullHistoryPolicy
 from memcontam.baselines.no_memory import NoMemoryPolicy
 from memcontam.baselines.reflexion_style import ReflexionStylePolicy
 from memcontam.baselines.retrieval_rag import RetrievalRagPolicy
+from memcontam.clients.base import LLMClient
+from memcontam.clients.openai_compatible import OpenAICompatibleClient
 from memcontam.clients.replay import ReplayClient
 from memcontam.evaluation.aggregate import aggregate_run
 from memcontam.contamination.catalog import load_catalog
@@ -28,7 +30,44 @@ from memcontam.memory.filters import drop_known_contaminated
 from memcontam.memory.retrieval import lexical_retrieve
 from memcontam.memory.stores import MemoryEntry, MemoryState
 from memcontam.tasks.game24 import build_instance as build_game24_instance
+from memcontam.tasks.math_equation_balancer import build_instance as build_meb_instance
+from memcontam.tasks.word_sorting import build_instance as build_word_sorting_instance
 from memcontam.verifiers.game24 import verify_expression
+from memcontam.verifiers.math_equation_balancer import verify_answer as verify_meb_answer
+from memcontam.verifiers.word_sorting import verify_words
+
+
+def _verify_game24(parsed_answer: str, task: Any) -> Any:
+    return verify_expression(
+        parsed_answer,
+        task.input["numbers"],
+        task.verifier_spec.get("target", 24),
+    )
+
+
+def _verify_meb(parsed_answer: str, task: Any) -> Any:
+    return verify_meb_answer(parsed_answer, task.verifier_spec)
+
+
+def _verify_word_sorting(parsed_answer: str, task: Any) -> Any:
+    words = parsed_answer.split()
+    return verify_words(words, task.verifier_spec["sorted_words"])
+
+
+TASK_DISPATCH = {
+    "game24": {
+        "build": build_game24_instance,
+        "verify": _verify_game24,
+    },
+    "math_equation_balancer": {
+        "build": build_meb_instance,
+        "verify": _verify_meb,
+    },
+    "word_sorting": {
+        "build": build_word_sorting_instance,
+        "verify": _verify_word_sorting,
+    },
+}
 
 
 BASELINE_POLICIES = {
@@ -210,11 +249,31 @@ def _bad_memory_uptake_label(arm: str, exposure: ContaminationExposure) -> BadMe
     return "not_evaluable"
 
 
-def _repeated_failure_label(verifier_is_correct: bool) -> RepeatedFailureLabel:
-    return "not_applicable" if verifier_is_correct else "first_failure"
+class _RepeatedFailureTracker:
+    def __init__(self):
+        self._seen_incorrect: set[tuple[str, str, str, str, str]] = set()
+
+    def label(
+        self,
+        verifier_is_correct: bool,
+        task_name: str,
+        sample_id: str,
+        baseline: str,
+        arm: str,
+        backbone: str,
+    ) -> RepeatedFailureLabel:
+        if verifier_is_correct:
+            return "not_applicable"
+        key = (task_name, sample_id, baseline, arm, backbone)
+        if key in self._seen_incorrect:
+            return "repeated_failure"
+        self._seen_incorrect.add(key)
+        return "first_failure"
 
 
-def run_config(config: dict[str, Any], run_id: str) -> Path:
+def run_config(
+    config: dict[str, Any], run_id: str, _client_override: LLMClient | None = None
+) -> Path:
     _validate_run_id(run_id)
     output_dir = Path(config.get("logging", {}).get("output_dir", "runs"))
     run_dir = output_dir / run_id
@@ -223,19 +282,36 @@ def run_config(config: dict[str, Any], run_id: str) -> Path:
 
     replay_config = config.get("replay", {})
     replay_responses = replay_config.get("responses")
-    client = ReplayClient(replay_responses)
+    live_smoke_enabled = config.get("live_smoke", {}).get("enabled", False)
+    if live_smoke_enabled and _client_override is None:
+        live_smoke = config.get("live_smoke", {})
+        api_key_env = live_smoke.get("api_key_env", "OPENAI_API_KEY")
+        try:
+            client: LLMClient = OpenAICompatibleClient(
+                base_url=live_smoke.get("base_url"),
+                api_key_env=api_key_env,
+            )
+        except RuntimeError as exc:
+            raise SystemExit(str(exc)) from exc
+    elif _client_override is not None:
+        client = _client_override
+    else:
+        client = ReplayClient(replay_responses)
     responses_by_sample = replay_config.get("responses_by_sample", {})
     run_started_at = datetime.now(timezone.utc).isoformat()
+    repeated_failure_tracker = _RepeatedFailureTracker()
     with trials_path.open("w", encoding="utf-8") as f:
         trial_order = 0
         for task_config in config["tasks"]:
-            if task_config["name"] != "game24":
-                raise SystemExit(f"unsupported task for replay spine: {task_config['name']}")
+            task_name = task_config["name"]
+            if task_name not in TASK_DISPATCH:
+                raise SystemExit(f"unsupported task for replay spine: {task_name}")
+            task_handler = TASK_DISPATCH[task_name]
             rows = _load_jsonl(Path(task_config["sample_path"]), task_config.get("limit"))
             if not rows:
                 raise SystemExit(f'empty replay input: {task_config["sample_path"]}')
             for row in rows:
-                task = build_game24_instance(row)
+                task = task_handler["build"](row)
                 for baseline in config["baselines"]:
                     if baseline not in BASELINE_POLICIES:
                         raise SystemExit(f"unsupported baseline: {baseline}")
@@ -250,7 +326,7 @@ def run_config(config: dict[str, Any], run_id: str) -> Path:
                         )
                         prompt_messages = policy.build_prompt(task, memory)
                         for model in config["models"]:
-                            if task.sample_id not in responses_by_sample and not replay_responses:
+                            if isinstance(client, ReplayClient) and task.sample_id not in responses_by_sample and not replay_responses:
                                 raise SystemExit(
                                     f"missing replay response for sample: {task.sample_id}"
                                 )
@@ -261,11 +337,7 @@ def run_config(config: dict[str, Any], run_id: str) -> Path:
                             )
                             response = trial_client.chat(prompt_messages, model=model, config={})
                             parsed_answer = _parse_answer(response.content)
-                            verifier_result = verify_expression(
-                                parsed_answer,
-                                task.input["numbers"],
-                                task.verifier_spec.get("target", 24),
-                            )
+                            verifier_result = task_handler["verify"](parsed_answer, task)
                             trial = TrialLog(
                                 trial_id=":".join(
                                     [run_id, task.task_name, task.sample_id, baseline, arm, model]
@@ -291,8 +363,13 @@ def run_config(config: dict[str, Any], run_id: str) -> Path:
                                 bad_memory_uptake_label=_bad_memory_uptake_label(
                                     arm, contamination_exposure
                                 ),
-                                repeated_failure_label=_repeated_failure_label(
-                                    verifier_result.is_correct
+                                repeated_failure_label=repeated_failure_tracker.label(
+                                    verifier_result.is_correct,
+                                    task.task_name,
+                                    task.sample_id,
+                                    baseline,
+                                    arm,
+                                    model,
                                 ),
                                 recovery_after_filter_label="not_applicable",
                                 memory_write_event=None,
