@@ -371,3 +371,39 @@ For the **optional baselines**, G0 is satisfied by documenting them as `not_impl
 | `expel_optional` | Appendix-only / not implemented |
 
 E1 should wait until `retrieval_rag`, `reflexion_style`, and `bot_style` meet this G0 target. E2 should wait until all five main baselines meet the target.
+
+---
+
+## 13. Implementation result and verification evidence
+
+This implementation plan produced a **partial G0 pass for `retrieval_rag` and `bot_style` only**. The canonical replay evidence run uses:
+
+- Config: `configs/pilot_game24.yaml`
+- Run ID: `g0_rag_bot_gate_replay`
+- Inspection script: `.sisyphus/evidence/inspect_g0_replay.py`
+
+The inspection script validates that the replay artifact at `runs/g0_rag_bot_gate_replay/trials.jsonl` contains `TrialLog` rows with RAG retrieval provenance (`retrieved_memory` and `retrieved_scores`) and BoT writeback lineage (`memory_write_event` plus a changed `memory_after`).
+
+The following baselines remain **out of scope** for this G0 implementation slice and are not claimed to pass G0:
+
+- `no_memory`
+- `full_history`
+- `reflexion_style`
+- `Dynamic Cheatsheet`
+- `ExpeL`
+
+This is an adapted baseline gate, not an exact or full reproduction of any paper or official repository.
+
+### Exact verification commands
+
+Run from the repository root after any baseline or runner change:
+
+```bash
+python -m memcontam.cli validate-config configs/pilot_game24.yaml
+python -m pytest tests/test_cli_run.py tests/test_aggregate.py tests/test_logging_schema.py tests/test_docs_scope.py -q
+python -m memcontam.cli run configs/pilot_game24.yaml --run-id g0_rag_bot_gate_replay
+python -m memcontam.cli aggregate runs/g0_rag_bot_gate_replay
+python .sisyphus/evidence/inspect_g0_replay.py
+```
+
+The replay run emits Game24 pilot trial rows and requires no API keys or live model access. These rows are QA evidence for the G0 gate, not benchmark results.

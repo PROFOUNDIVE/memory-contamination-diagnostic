@@ -10,7 +10,7 @@ This release is not a benchmark result or full paper reproduction. The proxy bas
 
 > retrieval-only RAG lower-bound, Reflexion-style verbal memory proxy, BoT-style thought-template proxy; not full reproduction.
 
-The current G0 fidelity work is scoped to RAG + BoT only; `no_memory`, `full_history`, `reflexion_style`, Dynamic Cheatsheet, and ExpeL are not claimed to pass G0 in this plan. See `docs/g0-baseline-fidelity-gate-v0.2.md` for the full scope guardrails.
+The current G0 fidelity work is scoped to RAG + BoT only; `no_memory`, `full_history`, `reflexion_style`, Dynamic Cheatsheet, and ExpeL are not claimed to pass G0 in this plan. The canonical replay evidence run is `g0_rag_bot_gate_replay` (config `configs/pilot_game24.yaml`), inspected by `.sisyphus/evidence/inspect_g0_replay.py`. See `docs/g0-baseline-fidelity-gate-v0.2.md` for the full implementation result and verification commands.
 
 ## Quick Start
 
