@@ -10,7 +10,7 @@ from typing import Any, Literal, cast
 
 import yaml
 
-from memcontam.baselines.bot_style import BotStylePolicy
+from memcontam.baselines.bot_style import BotStylePolicy, distill_thought_template
 from memcontam.baselines.full_history import FullHistoryPolicy
 from memcontam.baselines.no_memory import NoMemoryPolicy
 from memcontam.baselines.reflexion_style import ReflexionStylePolicy
@@ -243,6 +243,41 @@ def _contamination_exposure(
     )
 
 
+def _bot_memory_writeback(
+    trial_id: str,
+    task: Any,
+    raw_response: str,
+    verifier_result: Any,
+    retrieved_memory: list[dict[str, Any]],
+    memory: MemoryState,
+) -> dict[str, Any]:
+    source_entry_ids = [entry_id for entry in retrieved_memory if (entry_id := _entry_id(entry))]
+    new_entry_id = f"bot_template:{hashlib.sha256(trial_id.encode('utf-8')).hexdigest()[:12]}"
+    memory.entries.append(
+        MemoryEntry(
+            entry_id=new_entry_id,
+            content=distill_thought_template(
+                task,
+                raw_response,
+                verifier_result,
+                retrieved_memory[0] if retrieved_memory else None,
+            ),
+            memory_type="thought_template",
+            clean_or_contaminated="clean",
+            source_trial_id=trial_id,
+            metadata={"distillation_source": "bot_writeback"},
+        )
+    )
+    return {
+        "event_type": "bot_write",
+        "baseline": "bot_style",
+        "parent_trial_id": trial_id,
+        "source_entry_ids": source_entry_ids,
+        "new_entry_id": new_entry_id,
+        "update_reason": "distilled_thought_template_from_problem_solution_pair",
+    }
+
+
 def _bad_memory_uptake_label(arm: str, exposure: ContaminationExposure) -> BadMemoryUptakeLabel:
     if arm == "clean" or not exposure.source_entry_ids:
         return "not_applicable"
@@ -338,10 +373,23 @@ def run_config(
                             response = trial_client.chat(prompt_messages, model=model, config={})
                             parsed_answer = _parse_answer(response.content)
                             verifier_result = task_handler["verify"](parsed_answer, task)
+                            trial_id = ":".join(
+                                [run_id, task.task_name, task.sample_id, baseline, arm, model]
+                            )
+                            memory_write_event = (
+                                _bot_memory_writeback(
+                                    trial_id,
+                                    task,
+                                    response.content,
+                                    verifier_result,
+                                    retrieved_memory,
+                                    memory,
+                                )
+                                if baseline == "bot_style"
+                                else None
+                            )
                             trial = TrialLog(
-                                trial_id=":".join(
-                                    [run_id, task.task_name, task.sample_id, baseline, arm, model]
-                                ),
+                                trial_id=trial_id,
                                 run_id=run_id,
                                 task_name=task.task_name,
                                 sample_id=task.sample_id,
@@ -372,7 +420,7 @@ def run_config(
                                     model,
                                 ),
                                 recovery_after_filter_label="not_applicable",
-                                memory_write_event=None,
+                                memory_write_event=memory_write_event,
                                 memory_after=[entry.model_dump() for entry in memory.entries],
                                 latency_ms=response.latency_ms,
                                 token_usage=response.token_usage,

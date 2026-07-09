@@ -404,6 +404,33 @@ def test_bot_style_logs_at_most_one_retrieved_template(tmp_path, monkeypatch) ->
     assert "5. Answer form:" in prompt_text
 
 
+def test_bot_style_appends_distilled_template_write_event(tmp_path, monkeypatch) -> None:
+    row = _run_single_baseline(
+        tmp_path,
+        monkeypatch,
+        "bot_style",
+        "Template for 1 3 4 6: first create 1 - 3 / 4, then divide 6.",
+    )
+
+    trial_id = row["trial_id"]
+    assert len(row["memory_after"]) == len(row["memory_before"]) + 1
+    new_entry = row["memory_after"][-1]
+    assert new_entry["memory_type"] == "thought_template"
+    assert new_entry["source_trial_id"] == trial_id
+    assert "Problem Type: game24" in new_entry["content"]
+    assert "Solution Strategy" in new_entry["content"]
+    assert "final: 6 / (1 - 3 / 4)" not in new_entry["content"]
+
+    assert row["memory_write_event"] == {
+        "event_type": "bot_write",
+        "baseline": "bot_style",
+        "parent_trial_id": trial_id,
+        "source_entry_ids": ["bot_style_memory_1"],
+        "new_entry_id": new_entry["entry_id"],
+        "update_reason": "distilled_thought_template_from_problem_solution_pair",
+    }
+
+
 def test_reflexion_style_includes_recent_reflection_in_prompt_messages(tmp_path, monkeypatch) -> None:
     row = _run_single_baseline(
         tmp_path,

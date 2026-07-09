@@ -1,8 +1,49 @@
 from __future__ import annotations
 
+from typing import Any
+
 from memcontam.memory.retrieval import RetrievedRecord, retrieve_records
 from memcontam.memory.stores import MemoryState
 from memcontam.tasks.base import TaskInstance
+
+
+def distill_thought_template(
+    task: TaskInstance,
+    raw_response: str,
+    verifier_result: Any,
+    retrieved_template: dict[str, Any] | None,
+) -> str:
+    outcome = "validated" if verifier_result.is_correct else "attempted"
+    prior = "with a retrieved prior template" if retrieved_template else "without a retrieved prior template"
+    if task.task_name == "game24":
+        definition = "Arithmetic target construction from a fixed multiset of numbers."
+        relationships = "Track the target value, required numbers, and inverse operations that create useful intermediate values."
+        strategy = "Build a compact expression by creating a denominator or subexpression that transforms one given number into the target."
+        example = "For similar inputs, inspect fractions, complements, and parenthesized subexpressions before combining all numbers exactly once."
+    elif task.task_name == "math_equation_balancer":
+        definition = "Direct arithmetic evaluation under standard operator precedence."
+        relationships = "Preserve the expression structure, reduce inner operations first, then combine terms in order."
+        strategy = "Translate the expression into a deterministic calculation and return only the final value."
+        example = "For similar inputs, identify precedence boundaries before simplifying the whole expression."
+    elif task.task_name == "word_sorting":
+        definition = "Lexicographic ordering of a fixed word list."
+        relationships = "Each input word appears exactly once in the output; ordering is alphabetical."
+        strategy = "Normalize the list as tokens, sort lexicographically, and emit the sorted sequence without adding commentary."
+        example = "For similar inputs, compare words from left to right and keep duplicates only if present in the source list."
+    else:
+        definition = "Structured reasoning over the task input."
+        relationships = "Identify the givens, constraints, and required output form before solving."
+        strategy = "Convert the problem into reusable steps, solve those steps, then format the answer exactly as requested."
+        example = "For similar inputs, reuse the constraint-first decomposition instead of copying a prior answer."
+
+    return (
+        f"### Problem Type: {task.task_name}\n\n"
+        f"**Definition**: {definition}\n\n"
+        f"**Quantitative Relationships**: {relationships}\n\n"
+        f"**Solution Strategy**: {strategy}\n\n"
+        f"**Example**: {example}\n\n"
+        f"**Update Context**: This {outcome} solve was distilled {prior}."
+    )
 
 
 class BotStylePolicy:
