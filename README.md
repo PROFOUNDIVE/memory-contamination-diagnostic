@@ -2,6 +2,27 @@
 
 Controlled memory-contamination diagnostic harness for reasoning-memory systems.
 
+## v0.3 Partial G0 Fidelity Gate
+
+`v0.3` tags the partial G0 baseline-fidelity pass for `retrieval_rag` and `bot_style`.
+
+- `retrieval_rag` now uses a deterministic sentence-embedding retriever with logged cosine scores and provenance.
+- `bot_style` now implements distill → retrieve → instantiate → update-buffer, with a `memory_write_event` recording lineage.
+
+These two baselines are raised from prompt-label proxies to faithful adapted baselines. The remaining baselines (`no_memory`, `full_history`, `reflexion_style`, `dynamic_cheatsheet_optional`, `expel_optional`) are explicitly out of scope for this slice and are not claimed to pass G0.
+
+This is not a benchmark result or a full paper reproduction. Verification commands:
+
+```bash
+python -m memcontam.cli validate-config configs/pilot_game24.yaml
+python -m pytest tests/test_cli_run.py tests/test_aggregate.py tests/test_logging_schema.py tests/test_docs_scope.py -q
+python -m memcontam.cli run configs/pilot_game24.yaml --run-id g0_rag_bot_gate_replay
+python -m memcontam.cli aggregate runs/g0_rag_bot_gate_replay
+python .sisyphus/evidence/inspect_g0_replay.py
+```
+
+See [`docs/g0-baseline-fidelity-gate-v0.3.md`](docs/g0-baseline-fidelity-gate-v0.3.md) for the full v0.3 report and [`docs/g0-baseline-fidelity-gate-v0.2.md`](docs/g0-baseline-fidelity-gate-v0.2.md) for the pre-implementation gap analysis.
+
 ## v0.2 Multitask Replay Gate
 
 `v0.2` is a replay-only QA demo across three locked pilot tasks: Game24, Math Equation Balancer, and WordSorting. It validates the logging contract, multitask builder/verifier dispatch, optional live-smoke wiring, repeated-failure tracking, local proxy baselines, contamination lineage fields, and shallow aggregate metrics without API keys or network access in replay mode.
@@ -42,5 +63,7 @@ The bundled config emits 90 replay trial rows:
 
 ## Documentation
 
+- v0.3 G0 partial pass report: `docs/g0-baseline-fidelity-gate-v0.3.md`
+- v0.2 G0 gap analysis: `docs/g0-baseline-fidelity-gate-v0.2.md`
 - v0.2 technical notes: `docs/replay-qa-demo-v0.2.md`
 - v0.1 technical notes: `docs/replay-qa-demo-v0.1.md`
