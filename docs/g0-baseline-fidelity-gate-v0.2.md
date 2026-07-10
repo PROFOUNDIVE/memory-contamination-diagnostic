@@ -1,5 +1,7 @@
 # G0 Baseline Fidelity Gate — v0.2 Analysis
 
+> For the v0.3 implementation result, see [`g0-baseline-fidelity-gate-v0.3.md`](g0-baseline-fidelity-gate-v0.3.md).
+
 **Repo:** `memory-contamination-diagnostic`  
 **Baseline date:** 2026-07-09  
 **Scope:** v0.2 multitask replay harness (`docs/replay-qa-demo-v0.2.md`)  

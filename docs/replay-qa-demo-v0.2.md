@@ -124,3 +124,4 @@ The release has been checked through the CLI surface:
 - Arms are still `clean` only in the bundled multitask config; contaminated arms for MEB/WordSorting are future work.
 - Live-smoke is a manual override, not a scheduled benchmark path.
 - Group-level research claims require later experimental runs beyond this replay QA demo.
+- v0.3 raises `retrieval_rag` and `bot_style` toward G0 fidelity; see `docs/g0-baseline-fidelity-gate-v0.3.md`.
