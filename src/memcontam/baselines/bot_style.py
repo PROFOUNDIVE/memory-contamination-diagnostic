@@ -372,13 +372,13 @@ class BotStylePolicy:
         client: Any,
         model: str,
         config: dict[str, Any],
+        retrieved: dict[str, Any] | None = None,
     ) -> str:
-        template = _retrieve_top1_template(str(task.input), memory.entries)
         messages = [
             {"role": "system", "content": _INSTANTIATION_INSTRUCTIONS},
             {
                 "role": "user",
-                "content": _build_instantiation_prompt(task, distilled, template),
+                "content": _build_instantiation_prompt(task, distilled, retrieved),
             },
         ]
         call_config = dict(config)

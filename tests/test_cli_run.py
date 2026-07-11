@@ -5,10 +5,12 @@ from pathlib import Path
 
 import pytest
 
+import memcontam.cli as cli
 from memcontam.cli import run_config
 from memcontam.cli import load_config
 from memcontam.clients.base import LLMResponse
 from memcontam.logging.schema import TrialLog
+from memcontam.memory.embeddings import FakeEmbeddingProvider
 
 
 def _write_game24_sample(tmp_path, numbers=None) -> str:
@@ -268,6 +270,20 @@ def test_run_config_live_smoke_enabled_with_mocked_client_emits_trial_log(
     assert row["token_usage"] == {"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3}
     assert row["verifier_result"]["is_correct"] is True
     assert row["parsed_answer"] == "6 / (1 - 3 / 4)"
+
+
+def test_embedding_provider_only_uses_fake_when_offline_fallback_enabled(monkeypatch) -> None:
+    class MissingPinnedProvider:
+        def __init__(self, **_kwargs):
+            raise RuntimeError("missing pinned checkpoint")
+
+    monkeypatch.setattr(cli, "SentenceTransformerProvider", MissingPinnedProvider)
+
+    with pytest.raises(RuntimeError, match="missing pinned checkpoint"):
+        cli._embedding_provider({"embedding": {}})
+
+    provider = cli._embedding_provider({"embedding": {"offline_fallback": True}})
+    assert isinstance(provider, FakeEmbeddingProvider)
 
 
 def test_run_config_rejects_missing_replay_response_for_sample(tmp_path) -> None:

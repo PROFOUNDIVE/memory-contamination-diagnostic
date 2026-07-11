@@ -14,7 +14,7 @@
 
 `v0.4` raises the same two baselines as v0.3 from prompt-label proxies to faithful *adapted* baselines, but now pins the retriever model, corpus, and BoT meta-buffer persistence so the gate is reproducible rather than relying on transient replay fixtures.
 
-- **`retrieval_rag`** — deterministic sentence-embedding retrieval with cosine scores, full provenance records, and a versioned legal corpus; the runner tries the pinned encoder first and falls back to deterministic fake embeddings only when the checkpoint is absent locally.
+- **`retrieval_rag`** — deterministic sentence-embedding retrieval with cosine scores, full provenance records, and a versioned legal corpus; the default production path uses the pinned learned encoder, while the canonical offline replay config explicitly sets `embedding.offline_fallback: true` to substitute deterministic fake embeddings for network-free QA.
 - **`bot_style`** — reference-aligned five-stage reasoning (`bot_problem_distill`, `bot_instantiate_solve`, `bot_thought_distill`, `bot_novelty_decide`) with the same configured provider for top-1 template retrieval and persistent meta-buffer updates keyed by `(run_id, task_name, baseline, arm, backbone)`.
 
 All other baselines remain explicitly out of scope for this G0 slice:
@@ -33,7 +33,7 @@ This is an **adapted baseline gate**, not a full paper reproduction or benchmark
 
 ### RAG mechanism
 
-- `src/memcontam/cli.py` first attempts to load the pinned learned encoder `sentence-transformers/all-MiniLM-L6-v2` at revision `1110a243fdf4706b3f48f1d95db1a4f5529b4d41` from the configured local cache; if it is absent, offline replay falls back to deterministic fake embeddings with a one-line stderr warning.
+- `src/memcontam/cli.py` loads the pinned learned encoder `sentence-transformers/all-MiniLM-L6-v2` at revision `1110a243fdf4706b3f48f1d95db1a4f5529b4d41` from the configured local cache by default and lets missing-checkpoint failures propagate; only configs with `embedding.offline_fallback: true` use deterministic fake embeddings.
 - `src/memcontam/memory/embeddings.py` defines the pinned encoder provider and deterministic fake fallback provider.
 - `src/memcontam/memory/corpus.py` reads the versioned legal corpus `data/memory/catalog_v1.jsonl` and hashes it for reproducibility.
 - `src/memcontam/memory/retrieval.py` performs exact top-k retrieval against the loaded corpus and returns records with `document_id`, `rank`, `score`, `text`, `title_or_type`, `clean_or_contaminated`, `source`, `corpus_hash`, `embedding_model_id`, `embedding_revision`, and `embedding_library_version`.
@@ -45,9 +45,10 @@ This is an **adapted baseline gate**, not a full paper reproduction or benchmark
 
 - `src/memcontam/baselines/bot_style.py` runs the five reference-aligned stages:
   1. `bot_problem_distill` — extract key information, constraints, and a distilled task description.
-  2. `bot_instantiate_solve` — retrieve a high-level thought template and instantiate it for the current problem.
-  3. `bot_thought_distill` — distill the solved trajectory into a new candidate thought template.
-  4. `bot_novelty_decide` — decide whether the candidate template is novel enough to insert into the meta-buffer.
+  2. buffer retrieve — retrieve one high-level thought template with the configured embedding provider.
+  3. `bot_instantiate_solve` — instantiate the retrieved template for the current problem.
+  4. `bot_thought_distill` — distill the solved trajectory into a new candidate thought template.
+  5. `bot_novelty_decide` — decide whether the candidate template is novel enough to insert into the meta-buffer.
 - `src/memcontam/memory/bot_buffer.py` maintains the meta-buffer; updates are accepted only after verifier success and are gated by the novelty decision.
 - `src/memcontam/memory/run_state.py` persists the meta-buffer on disk keyed by the identity tuple `(run_id, task_name, baseline, arm, backbone)`, so memory survives across trials and processes while staying isolated across identities.
 - The meta-buffer starts from scratch; no hand-written seed templates are injected. The optional `warm_up_path` in the config may be empty.

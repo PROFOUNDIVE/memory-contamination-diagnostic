@@ -240,6 +240,7 @@ embedding:
   model_id: sentence-transformers/all-MiniLM-L6-v2
   revision: 1110a243fdf4706b3f48f1d95db1a4f5529b4d41
   cache_path: data/embedding_cache
+  offline_fallback: true
   top_k: 3
   normalize: true
   corpus_path: data/memory/catalog_v1.jsonl

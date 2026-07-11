@@ -215,3 +215,70 @@ def test_bot_runtime_failed_verifier_stops_update() -> None:
         "bot_problem_distill",
         "bot_instantiate_solve",
     ]
+
+
+def test_bot_runtime_retrieves_after_distillation_and_reuses_template() -> None:
+    task = TaskInstance(
+        sample_id="game24_001",
+        task_name="game24",
+        input={"numbers": [1, 2, 3, 4], "target": 24},
+    )
+    identity = BotBufferIdentity("run_t12", "game24", "bot_style", "clean", "gpt-4o")
+    memory_before = [
+        MemoryEntry(
+            entry_id="tpl_001",
+            content="Look for factor pairs of 24 and build subexpressions that create them.",
+            memory_type="thought_template",
+            clean_or_contaminated="clean",
+            source_trial_id="prev_trial_1",
+        )
+    ]
+    client = ReplayClient(
+        responses_by_sample={
+            "game24_001": {
+                "bot_problem_distill": _DISTILLATION_OUTPUT,
+                "bot_instantiate_solve": _SOLUTION_OUTPUT,
+            }
+        }
+    )
+    events = []
+
+    class RecordingProvider:
+        def encode_query(self, text):
+            events.append(("retrieve", text))
+            return [1.0, 0.0]
+
+        def encode_document(self, _text):
+            return [1.0, 0.0]
+
+    class RecordingPolicy(BotStylePolicy):
+        def problem_distillation(self, *args, **kwargs):
+            events.append(("distill", None))
+            return super().problem_distillation(*args, **kwargs)
+
+        def template_instantiation_solve(self, *args, **kwargs):
+            events.append(("solve", kwargs["retrieved"]["entry_id"]))
+            return super().template_instantiation_solve(*args, **kwargs)
+
+    result = BotRuntime(policy=RecordingPolicy()).run(
+        identity=identity,
+        task=task,
+        buffer_snapshot=memory_before,
+        client=client,
+        model="gpt-4o",
+        config={
+            "sample_id": "game24_001",
+            "temperature": 0,
+            "embedding_provider": RecordingProvider(),
+        },
+        verifier=lambda response: VerifierResult(
+            is_correct=False, parsed_answer=response, reason="skip_update"
+        ),
+    )
+
+    assert result["retrieved_template"]["entry_id"] == "tpl_001"
+    assert events == [
+        ("distill", None),
+        ("retrieve", str(task.input)),
+        ("solve", "tpl_001"),
+    ]

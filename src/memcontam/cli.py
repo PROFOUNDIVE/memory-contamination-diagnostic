@@ -4,7 +4,6 @@ import argparse
 import json
 import hashlib
 import subprocess
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -167,19 +166,12 @@ def _config_hash(config: dict[str, Any]) -> str:
 
 def _embedding_provider(config: dict[str, Any]) -> EmbeddingProvider:
     embedding_config = config.get("embedding", {})
-    _model_id = embedding_config.get("model_id")
-    _revision = embedding_config.get("revision")
-    try:
-        return SentenceTransformerProvider(
-            cache_folder=embedding_config.get("cache_path"),
-            local_files_only=True,
-        )
-    except RuntimeError:
-        print(
-            "pinned encoder not cached locally, falling back to fake embeddings for offline replay",
-            file=sys.stderr,
-        )
+    if embedding_config.get("offline_fallback", False):
         return FakeEmbeddingProvider()
+    return SentenceTransformerProvider(
+        cache_folder=embedding_config.get("cache_path"),
+        local_files_only=True,
+    )
 
 
 def _git_commit() -> str:

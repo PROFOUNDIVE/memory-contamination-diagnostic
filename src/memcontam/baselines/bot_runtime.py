@@ -45,13 +45,13 @@ class BotRuntime:
         recorder = MethodCallRecorder(client)
         memory = MemoryState(entries=list(buffer_snapshot))
         embedding_provider = call_config.get("embedding_provider", FakeEmbeddingProvider())
+
+        distilled = self.policy.problem_distillation(task, recorder, model, call_config)
         retrieved = _retrieve_top1_template(
             str(task.input), memory.entries, provider=embedding_provider
         )
-
-        distilled = self.policy.problem_distillation(task, recorder, model, call_config)
         final_response = self.policy.template_instantiation_solve(
-            task, distilled, memory, recorder, model, call_config
+            task, distilled, memory, recorder, model, call_config, retrieved=retrieved
         )
         verifier_result = verifier(final_response)
         memory_before = [_memory_entry_dict(entry) for entry in buffer_snapshot]
