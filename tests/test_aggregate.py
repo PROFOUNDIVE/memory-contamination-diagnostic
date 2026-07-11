@@ -11,6 +11,27 @@ import pytest
 from memcontam.logging.schema import ContaminationExposure, TrialLog, VerifierResult
 
 
+NOT_COMPUTED = "not_computed"
+
+
+def _method_call(stage: str, **overrides):
+    base = {
+        "stage": stage,
+        "messages": [{"role": "user", "content": f"{stage} prompt"}],
+        "raw_response": f"{stage} response",
+        "model": "replay",
+        "temperature": 0.0,
+        "top_p": 1.0,
+        "max_tokens": 100,
+        "latency_ms": 10,
+        "token_usage": {"prompt_tokens": 5, "completion_tokens": 5, "total_tokens": 10},
+        "retry_count": 0,
+        "error_type": None,
+    }
+    base.update(overrides)
+    return base
+
+
 def _trial_row(**overrides):
     base = {
         "trial_id": "run1:game24:s1:no_memory:clean:replay",
@@ -141,6 +162,17 @@ def test_aggregate_run_computes_shallow_metrics_and_cli_prints_json(tmp_path) ->
             "latency_ms_max": 12,
             "repeated_failure_count": "not_computed",
             "repeated_failure_rate": "not_computed",
+            "method_call_count": "not_computed",
+            "method_call_error_count": "not_computed",
+            "prompt_token_total": "not_computed",
+            "completion_token_total": "not_computed",
+            "total_token_total": "not_computed",
+            "latency_ms_total": "not_computed",
+            "stage_histogram": "not_computed",
+            "bot_update_accepted_count": "not_computed",
+            "bot_update_rejected_count": "not_computed",
+            "bot_update_incomplete_count": "not_computed",
+            "bot_update_reused_count": "not_computed",
             "vanilla_to_contamination_degradation_rate": 1.0,
         },
         {
@@ -168,6 +200,17 @@ def test_aggregate_run_computes_shallow_metrics_and_cli_prints_json(tmp_path) ->
             "latency_ms_max": 18,
             "repeated_failure_count": 1,
             "repeated_failure_rate": 1.0,
+            "method_call_count": "not_computed",
+            "method_call_error_count": "not_computed",
+            "prompt_token_total": "not_computed",
+            "completion_token_total": "not_computed",
+            "total_token_total": "not_computed",
+            "latency_ms_total": "not_computed",
+            "stage_histogram": "not_computed",
+            "bot_update_accepted_count": "not_computed",
+            "bot_update_rejected_count": "not_computed",
+            "bot_update_incomplete_count": "not_computed",
+            "bot_update_reused_count": "not_computed",
             "vanilla_to_contamination_degradation_rate": 1.0,
         },
     ]
@@ -356,3 +399,138 @@ def test_aggregate_run_rejects_bad_trials_jsonl(tmp_path, fixture_name: str, wri
 
     cli_result = _cli_aggregate(run_dir)
     assert cli_result.returncode != 0
+
+
+def test_aggregate_reports_method_call_overhead(tmp_path) -> None:
+    run_dir = tmp_path / "runs" / "method_calls"
+    run_dir.mkdir(parents=True)
+
+    rag_row = _trial_row(
+        trial_id="run1:game24:s1:retrieval_rag:clean:replay",
+        baseline="retrieval_rag",
+        arm="clean",
+        method_calls=[_method_call("rag_generate")],
+    )
+    bot_row = _trial_row(
+        trial_id="run1:game24:s1:bot_style:clean:replay",
+        baseline="bot_style",
+        arm="clean",
+        method_calls=[
+            _method_call("bot_problem_distill"),
+            _method_call("bot_instantiate_solve"),
+            _method_call("bot_thought_distill"),
+            _method_call("bot_novelty_decide", token_usage={"prompt_tokens": 8, "completion_tokens": 2, "total_tokens": 10}),
+        ],
+        memory_write_event=_bot_write_event(status="accepted"),
+    )
+    _write_trials_jsonl(run_dir, [rag_row, bot_row])
+
+    from memcontam.evaluation.aggregate import aggregate_run
+
+    result = aggregate_run(run_dir)
+    groups = {(g["task_name"], g["baseline"], g["arm"], g["backbone"]): g for g in result["groups"]}
+
+    rag_group = groups[("game24", "retrieval_rag", "clean", "replay")]
+    assert rag_group["method_call_count"] == 1
+    assert rag_group["method_call_error_count"] == 0
+    assert rag_group["prompt_token_total"] == 5
+    assert rag_group["completion_token_total"] == 5
+    assert rag_group["total_token_total"] == 10
+    assert rag_group["latency_ms_total"] == 10
+    assert rag_group["stage_histogram"] == {"rag_generate": 1}
+    assert rag_group["bot_update_accepted_count"] == NOT_COMPUTED
+
+    bot_group = groups[("game24", "bot_style", "clean", "replay")]
+    assert bot_group["method_call_count"] == 4
+    assert bot_group["method_call_error_count"] == 0
+    assert bot_group["prompt_token_total"] == 23
+    assert bot_group["completion_token_total"] == 17
+    assert bot_group["total_token_total"] == 40
+    assert bot_group["latency_ms_total"] == 40
+    assert bot_group["stage_histogram"] == {
+        "bot_problem_distill": 1,
+        "bot_instantiate_solve": 1,
+        "bot_thought_distill": 1,
+        "bot_novelty_decide": 1,
+    }
+    assert bot_group["bot_update_accepted_count"] == 1
+    assert bot_group["bot_update_rejected_count"] == 0
+    assert bot_group["bot_update_incomplete_count"] == 0
+    assert bot_group["bot_update_reused_count"] == 0
+
+
+def test_aggregate_legacy_calls_not_computed(tmp_path) -> None:
+    run_dir = tmp_path / "runs" / "legacy_calls"
+    run_dir.mkdir(parents=True)
+    row = _trial_row(
+        trial_id="run1:game24:s1:no_memory:clean:replay",
+        baseline="no_memory",
+        arm="clean",
+    )
+    row.pop("method_calls", None)
+    _write_trials_jsonl(run_dir, [row])
+
+    from memcontam.evaluation.aggregate import aggregate_run
+
+    result = aggregate_run(run_dir)
+    group = result["groups"][0]
+    assert group["method_call_count"] == NOT_COMPUTED
+    assert group["method_call_error_count"] == NOT_COMPUTED
+    assert group["prompt_token_total"] == NOT_COMPUTED
+    assert group["completion_token_total"] == NOT_COMPUTED
+    assert group["total_token_total"] == NOT_COMPUTED
+    assert group["latency_ms_total"] == NOT_COMPUTED
+    assert group["stage_histogram"] == NOT_COMPUTED
+
+
+def test_aggregate_marks_incomplete_bot_lineage(tmp_path) -> None:
+    run_dir = tmp_path / "runs" / "incomplete_lineage"
+    run_dir.mkdir(parents=True)
+    event = _bot_write_event()
+    event.pop("status", None)
+    _write_trials_jsonl(
+        run_dir,
+        [
+            _trial_row(
+                trial_id="run1:game24:s1:bot_style:contaminated:replay",
+                baseline="bot_style",
+                arm="contaminated",
+                memory_write_event=event,
+            )
+        ],
+    )
+
+    from memcontam.evaluation.aggregate import aggregate_run
+
+    result = aggregate_run(run_dir)
+    group = result["groups"][0]
+    assert group["bot_update_accepted_count"] == NOT_COMPUTED
+    assert group["bot_update_rejected_count"] == NOT_COMPUTED
+    assert group["bot_update_incomplete_count"] == NOT_COMPUTED
+    assert group["bot_update_reused_count"] == NOT_COMPUTED
+
+
+def test_aggregate_counts_bot_lineage_status_variants(tmp_path) -> None:
+    run_dir = tmp_path / "runs" / "lineage_variants"
+    run_dir.mkdir(parents=True)
+    _write_trials_jsonl(
+        run_dir,
+        [
+            _trial_row(
+                trial_id=f"run1:game24:s{i}:bot_style:contaminated:replay",
+                baseline="bot_style",
+                arm="contaminated",
+                memory_write_event=_bot_write_event(status=status),
+            )
+            for i, status in enumerate(["accepted", "rejected", "reused", "incomplete"])
+        ],
+    )
+
+    from memcontam.evaluation.aggregate import aggregate_run
+
+    result = aggregate_run(run_dir)
+    group = result["groups"][0]
+    assert group["bot_update_accepted_count"] == 1
+    assert group["bot_update_rejected_count"] == 1
+    assert group["bot_update_reused_count"] == 1
+    assert group["bot_update_incomplete_count"] == 1

@@ -1,10 +1,167 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
+from memcontam.memory.embeddings import FakeEmbeddingProvider, normalized_dot_top_k
 from memcontam.memory.retrieval import RetrievedRecord, retrieve_records
-from memcontam.memory.stores import MemoryState
+from memcontam.memory.stores import MemoryEntry, MemoryState
 from memcontam.tasks.base import TaskInstance
+
+
+_META_DISTILLER_INSTRUCTIONS = """\
+As a highly professional and intelligent expert in information distillation, extract the essential information required to solve the problem from the user input query.
+
+Please categorize and extract the crucial information required to solve the problem. The distilled information should include:
+
+1. Key information: values and information of key variables extracted from user input.
+2. Restriction: the objective of the problem and corresponding real-world constraints.
+3. Distilled task: extend the problem based on the key information and restriction, propose a meta problem that can address the user query, and use the user query input key information as input to solve the problem as an example.
+4. Python transformation: try to transform the problem into a Python algorithm problem and provide the input parameters.
+5. Answer form: describe the exact output format required.
+
+Important: your task is to distill the problem. Do not give the final result or a possible solution in your response.
+
+Please distill the information following the format below:
+
+Distilled Information:
+
+1. Key information:
+
+2. Restriction:
+
+3. Distilled task:
+
+4. Python transformation:
+
+5. Answer form:
+"""
+
+
+_INSTANTIATION_INSTRUCTIONS = """\
+You are an expert in problem analysis and can apply previous problem-solving approaches to new issues. The user will provide a specific task description and a thought template. Your goal is to analyze the user's task and generate a specific solution based on the thought template.
+
+If the instantiated solution involves Python code, provide the code in one fenced block and let the compiler handle it. Otherwise, provide a final answer that is easy to extract from the text.
+"""
+
+
+_SLOT_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    ("key_information", re.compile(r"1\.\s*Key information\s*:?", re.IGNORECASE)),
+    ("restriction", re.compile(r"2\.\s*Restriction\s*:?", re.IGNORECASE)),
+    ("distilled_task", re.compile(r"3\.\s*Distilled task\s*:?", re.IGNORECASE)),
+    ("python_transformation", re.compile(r"4\.\s*Python transformation\s*:?", re.IGNORECASE)),
+    ("answer_form", re.compile(r"5\.\s*Answer form\s*:?", re.IGNORECASE)),
+]
+
+
+_SLOT_DISPLAY_NAMES: dict[str, str] = {
+    "key_information": "Key information",
+    "restriction": "Restriction",
+    "distilled_task": "Distilled task",
+    "python_transformation": "Python transformation",
+    "answer_form": "Answer form",
+}
+
+
+def _build_meta_distiller_prompt(task: TaskInstance) -> str:
+    return (
+        _META_DISTILLER_INSTRUCTIONS
+        + "\n\nUser input:\n"
+        + str(task.input)
+        + "\n\nProvide the distilled information in the requested format."
+    )
+
+
+def _parse_distilled_slots(text: str) -> dict[str, str]:
+    positions: list[tuple[str, int, int]] = []
+    for key, pattern in _SLOT_PATTERNS:
+        match = pattern.search(text)
+        if match is None:
+            raise ValueError(
+                f"malformed problem distillation: missing slot {_SLOT_DISPLAY_NAMES[key]!r}"
+            )
+        positions.append((key, match.start(), match.end()))
+
+    positions.sort(key=lambda item: item[1])
+    slots: dict[str, str] = {}
+    for index, (key, _header_start, content_start) in enumerate(positions):
+        end = positions[index + 1][1] if index + 1 < len(positions) else len(text)
+        slots[key] = text[content_start:end].strip(": \n")
+    return slots
+
+
+def _retrieve_top1_template(
+    query_text: str, entries: list[MemoryEntry]
+) -> dict[str, Any] | None:
+    if not entries:
+        return None
+    provider = FakeEmbeddingProvider()
+    query_vector = provider.encode_query(query_text)
+    document_vectors = [provider.encode_document(entry.content) for entry in entries]
+    document_ids = [entry.entry_id for entry in entries]
+    top_k = normalized_dot_top_k(query_vector, document_vectors, document_ids, k=1)
+    if not top_k:
+        return None
+    top_id, score = top_k[0]
+    for entry in entries:
+        if entry.entry_id == top_id:
+            return {
+                "entry_id": entry.entry_id,
+                "content": entry.content,
+                "score": score,
+                "memory_entry": entry,
+            }
+    return None
+
+
+def _build_instantiation_prompt(
+    task: TaskInstance,
+    distilled: dict[str, str],
+    template: dict[str, Any] | None,
+) -> str:
+    if template is not None:
+        template_section = (
+            f"entry_id={template['entry_id']}\n{template['content']}"
+        )
+        instantiated = (
+            "Apply the retrieved thought template to the key information above "
+            "and derive the answer following the restriction and answer form."
+        )
+    else:
+        template_section = (
+            "No thought template has been retrieved. "
+            "Solve the problem from the distilled information alone."
+        )
+        instantiated = (
+            "No template is available; reason directly from the distilled problem."
+        )
+
+    return (
+        "Distilled information:\n"
+        "\n"
+        "1. Key information:\n"
+        f"{distilled['key_information']}\n"
+        "\n"
+        "2. Restriction:\n"
+        f"{distilled['restriction']}\n"
+        "\n"
+        "3. Distilled task:\n"
+        f"{distilled['distilled_task']}\n"
+        "\n"
+        "4. Python transformation:\n"
+        f"{distilled['python_transformation']}\n"
+        "\n"
+        "5. Answer form:\n"
+        f"{distilled['answer_form']}\n"
+        "\n"
+        "Retrieved thought template:\n"
+        f"{template_section}\n"
+        "\n"
+        "Instantiated guidance:\n"
+        f"{instantiated}\n"
+        "\n"
+        f"Solve: {task.input}"
+    )
 
 
 def distill_thought_template(
@@ -189,3 +346,43 @@ class BotStylePolicy:
             "\n"
             f"Solve: {task.input}"
         )
+
+    def problem_distillation(
+        self,
+        task: TaskInstance,
+        client: Any,
+        model: str,
+        config: dict[str, Any],
+    ) -> dict[str, str]:
+        messages = [
+            {"role": "system", "content": "You are an expert information distillation assistant."},
+            {"role": "user", "content": _build_meta_distiller_prompt(task)},
+        ]
+        call_config = dict(config)
+        call_config.setdefault("sample_id", task.sample_id)
+        call_config["method_stage"] = "bot_problem_distill"
+        response = client.chat(messages, model, call_config)
+        return _parse_distilled_slots(response.content)
+
+    def template_instantiation_solve(
+        self,
+        task: TaskInstance,
+        distilled: dict[str, str],
+        memory: MemoryState,
+        client: Any,
+        model: str,
+        config: dict[str, Any],
+    ) -> str:
+        template = _retrieve_top1_template(str(task.input), memory.entries)
+        messages = [
+            {"role": "system", "content": _INSTANTIATION_INSTRUCTIONS},
+            {
+                "role": "user",
+                "content": _build_instantiation_prompt(task, distilled, template),
+            },
+        ]
+        call_config = dict(config)
+        call_config.setdefault("sample_id", task.sample_id)
+        call_config["method_stage"] = "bot_instantiate_solve"
+        response = client.chat(messages, model, call_config)
+        return response.content

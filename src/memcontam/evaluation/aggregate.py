@@ -54,6 +54,101 @@ def _descendant_link_present(trial: TrialLog) -> bool:
     return bool(parent_trial_id) and bool(source_entry_ids)
 
 
+def _method_call_metrics(trials: list[TrialLog]) -> dict[str, Any]:
+    calls = [call for trial in trials for call in trial.method_calls]
+    if not calls:
+        return {
+            "method_call_count": NOT_COMPUTED,
+            "method_call_error_count": NOT_COMPUTED,
+            "prompt_token_total": NOT_COMPUTED,
+            "completion_token_total": NOT_COMPUTED,
+            "total_token_total": NOT_COMPUTED,
+            "latency_ms_total": NOT_COMPUTED,
+            "stage_histogram": NOT_COMPUTED,
+        }
+
+    histogram: dict[str, int] = defaultdict(int)
+    error_count = 0
+    prompt_tokens = 0
+    completion_tokens = 0
+    total_tokens = 0
+    latency_total = 0
+    for call in calls:
+        histogram[call.stage] += 1
+        if call.error_type is not None:
+            error_count += 1
+        usage = call.token_usage or {}
+        prompt_tokens += int(usage.get("prompt_tokens", 0))
+        completion_tokens += int(usage.get("completion_tokens", 0))
+        total_tokens += int(usage.get("total_tokens", 0))
+        if call.latency_ms is not None:
+            latency_total += call.latency_ms
+
+    return {
+        "method_call_count": len(calls),
+        "method_call_error_count": error_count,
+        "prompt_token_total": prompt_tokens,
+        "completion_token_total": completion_tokens,
+        "total_token_total": total_tokens,
+        "latency_ms_total": latency_total,
+        "stage_histogram": dict(histogram),
+    }
+
+
+def _bot_lineage_metrics(trials: list[TrialLog]) -> dict[str, int | str]:
+    events = [t.memory_write_event for t in trials if t.memory_write_event]
+    if not events:
+        return {
+            "bot_update_accepted_count": NOT_COMPUTED,
+            "bot_update_rejected_count": NOT_COMPUTED,
+            "bot_update_incomplete_count": NOT_COMPUTED,
+            "bot_update_reused_count": NOT_COMPUTED,
+        }
+
+    accepted = 0
+    rejected = 0
+    reused = 0
+    incomplete = 0
+    for event in events:
+        status = event.get("status")
+        if status in {"accepted", "rejected", "reused", "incomplete"}:
+            if status == "accepted":
+                accepted += 1
+            elif status == "rejected":
+                rejected += 1
+            elif status == "reused":
+                reused += 1
+            else:
+                incomplete += 1
+            continue
+
+        flags = {key: event.get(key) for key in ("accepted", "rejected", "reused", "incomplete") if key in event}
+        if flags and sum(bool(value) for value in flags.values()) == 1:
+            if flags.get("accepted"):
+                accepted += 1
+            elif flags.get("rejected"):
+                rejected += 1
+            elif flags.get("reused"):
+                reused += 1
+            elif flags.get("incomplete"):
+                incomplete += 1
+            continue
+
+        return {
+            "bot_update_accepted_count": NOT_COMPUTED,
+            "bot_update_rejected_count": NOT_COMPUTED,
+            "bot_update_incomplete_count": NOT_COMPUTED,
+            "bot_update_reused_count": NOT_COMPUTED,
+        }
+
+    return {
+        "bot_update_accepted_count": accepted,
+        "bot_update_rejected_count": rejected,
+        "bot_update_incomplete_count": incomplete,
+        "bot_update_reused_count": reused,
+    }
+
+
 def _metric_group(trials: list[TrialLog]) -> dict[str, Any]:
     n_trials = len(trials)
     verified_success_count = sum(1 for trial in trials if trial.verifier_result.is_correct)
@@ -107,7 +202,7 @@ def _metric_group(trials: list[TrialLog]) -> dict[str, Any]:
     )
     descendant_rate = _rate(len(descendant_evaluable), len(descendant_evaluable))
 
-    return {
+    metrics = {
         "n_trials": n_trials,
         "verified_success_count": verified_success_count,
         "verified_success_rate": verified_success_rate,
@@ -129,6 +224,9 @@ def _metric_group(trials: list[TrialLog]) -> dict[str, Any]:
         "repeated_failure_count": repeated_failure_count,
         "repeated_failure_rate": repeated_failure_rate,
     }
+    metrics.update(_method_call_metrics(trials))
+    metrics.update(_bot_lineage_metrics(trials))
+    return metrics
 
 
 def _paired_degradation(trials_by_combo: dict[tuple[str, str, str], dict[str, list[TrialLog]]]) -> dict[tuple[str, str, str], float | str]:
