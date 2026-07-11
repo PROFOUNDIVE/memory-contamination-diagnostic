@@ -18,7 +18,6 @@ from memcontam.baselines.reflexion_style import ReflexionStylePolicy
 from memcontam.baselines.retrieval_rag import RetrievalRagPolicy
 from memcontam.clients.base import LLMClient
 from memcontam.clients.openai_compatible import OpenAICompatibleClient
-from memcontam.clients.recording import MethodCallRecorder
 from memcontam.clients.replay import ReplayClient
 from memcontam.evaluation.aggregate import aggregate_run
 from memcontam.contamination.catalog import load_catalog
@@ -83,14 +82,6 @@ BASELINE_POLICIES = {
     "reflexion_style": ReflexionStylePolicy,
     "bot_style": BotStylePolicy,
 }
-
-BOT_AUDIT_STAGES = [
-    "bot_problem_distill",
-    "bot_instantiate_solve",
-    "bot_thought_distill",
-    "bot_novelty_decide",
-]
-
 
 def validate_config(path: Path) -> None:
     load_config(path)
@@ -368,57 +359,6 @@ def _method_call_messages(method_calls: list[Any]) -> list[dict[str, str]]:
     return [message for call in method_calls for message in call.messages]
 
 
-def _normalize_rag_corpus_hash(result: dict[str, Any], corpus_hash: str) -> None:
-    for record in result.get("retrieved_records", []):
-        record.corpus_hash = corpus_hash
-    for call in result.get("method_calls", []):
-        for record in call.retrieved_records:
-            record.corpus_hash = corpus_hash
-    result.setdefault("metadata", {})["corpus_hash"] = corpus_hash
-
-
-def _complete_bot_audit_stages(
-    result: dict[str, Any],
-    *,
-    client: LLMClient,
-    task: Any,
-    model: str,
-    config: dict[str, Any],
-) -> None:
-    existing = {call.stage for call in result.get("method_calls", [])}
-    missing = [stage for stage in BOT_AUDIT_STAGES if stage not in existing]
-    if not missing:
-        return
-    recorder = MethodCallRecorder(client)
-    for stage in missing:
-        recorder.chat(
-            [{"role": "user", "content": f"Replay audit stage for {stage}."}],
-            model=model,
-            config={**config, "sample_id": task.sample_id, "method_stage": stage},
-        )
-    result.setdefault("method_calls", []).extend(recorder.get_records())
-    if result.get("memory_write_event") is None:
-        result["memory_write_event"] = {
-            "event_type": "bot_write_rejected",
-            "baseline": "bot_style",
-            "status": "rejected",
-            "accepted": False,
-            "parent_trial_id": f"{task.task_name}:{task.sample_id}",
-            "source_trial_id": f"{task.task_name}:{task.sample_id}",
-            "source_entry_ids": [],
-            "candidate_entry_id": None,
-            "candidate_content": None,
-            "top_existing_entry_id": None,
-            "top_existing_content": None,
-            "top_similarity": None,
-            "novelty_decision_response": None,
-            "distilled_content": None,
-            "distill_response": None,
-            "new_entry_id": None,
-            "reject_reason": "verifier_failed",
-        }
-
-
 def _faithful_result_trial(
     *,
     config: dict[str, Any],
@@ -586,10 +526,6 @@ def _run_faithful_config(
                                     embedding_provider=embedding_provider,
                                     cache_dir=rag_cache_dir,
                                 )
-                                _normalize_rag_corpus_hash(
-                                    result,
-                                    str(config["embedding"].get("corpus_version", "memory_catalog")),
-                                )
                                 verifier_result = task_handler["verify"](result["parsed_answer"], task)
                             else:
                                 identity = BotBufferIdentity(
@@ -625,13 +561,6 @@ def _run_faithful_config(
                                     verifier=lambda response, task=task: task_handler["verify"](
                                         _parse_answer(response), task
                                     ),
-                                )
-                                _complete_bot_audit_stages(
-                                    result,
-                                    client=trial_client,
-                                    task=task,
-                                    model=model,
-                                    config={**config.get("replay", {}), "sample_id": task.sample_id},
                                 )
                                 verifier_result = result["verifier_result"]
                                 event = result.get("memory_write_event")

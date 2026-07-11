@@ -150,6 +150,7 @@ def test_inspector_accepts_complete_synthetic_run(tmp_path: Path) -> None:
         retrieved_scores=[0.91],
         memory_write_event=None,
         method_calls=[_rag_method_call()],
+        metadata={"corpus_hash": "sha256:ragcorpus"},
     )
 
     bot_s1 = _trial_row(

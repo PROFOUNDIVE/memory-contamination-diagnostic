@@ -652,8 +652,6 @@ def test_faithful_rag_bot_sequence_persists_and_logs(tmp_path, monkeypatch) -> N
     assert [call["stage"] for call in second_bot["method_calls"]] == [
         "bot_problem_distill",
         "bot_instantiate_solve",
-        "bot_thought_distill",
-        "bot_novelty_decide",
     ]
 
 

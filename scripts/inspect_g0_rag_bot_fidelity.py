@@ -18,6 +18,8 @@ BOT_EXPECTED_STAGES = [
     "bot_thought_distill",
     "bot_novelty_decide",
 ]
+BOT_UPDATE_STAGES = ["bot_problem_distill", "bot_instantiate_solve", "bot_thought_distill"]
+BOT_PRE_VERIFIER_STAGES = ["bot_problem_distill", "bot_instantiate_solve"]
 RETRIEVAL_RECORD_FIELDS = [
     "document_id",
     "rank",
@@ -98,6 +100,21 @@ def _check_rag(trials: list[TrialLog]) -> dict[str, Any]:
         call_records = [
             record for call in generate_calls for record in call.retrieved_records
         ]
+        trial_corpus_hashes = {record.corpus_hash for record in call_records}
+        metadata_corpus_hash = trial.metadata.get("corpus_hash")
+        if len(trial_corpus_hashes) != 1:
+            reasons.append(
+                f"{trial.trial_id}: retrieved records have multiple corpus_hash values "
+                f"{sorted(trial_corpus_hashes)}"
+            )
+            continue
+        trial_corpus_hash = next(iter(trial_corpus_hashes))
+        if trial_corpus_hash != metadata_corpus_hash:
+            reasons.append(
+                f"{trial.trial_id}: retrieved corpus_hash {trial_corpus_hash!r} "
+                f"does not match metadata.corpus_hash {metadata_corpus_hash!r}"
+            )
+            continue
         call_ids = {record.document_id for record in call_records}
         memory_ids = _entry_ids(trial.retrieved_memory)
         if call_ids != memory_ids:
@@ -127,7 +144,6 @@ def _check_rag(trials: list[TrialLog]) -> dict[str, Any]:
         revisions = {record.embedding_revision for record in records}
         library_versions = {record.embedding_library_version for record in records}
         for name, values in [
-            ("corpus_hash", corpus_hashes),
             ("embedding_model_id", model_ids),
             ("embedding_revision", revisions),
             ("embedding_library_version", library_versions),
@@ -170,21 +186,33 @@ def _check_bot(trials: list[TrialLog]) -> dict[str, Any]:
 
     for trial in bot_trials:
         stages = [call.stage for call in trial.method_calls]
-        missing = [stage for stage in BOT_EXPECTED_STAGES if stage not in stages]
+        event = trial.memory_write_event
+        status = event.get("status") if event else None
+        if status in {"accepted", "rejected"}:
+            expected_stages = (
+                BOT_EXPECTED_STAGES
+                if event and event.get("novelty_decision_response") is not None
+                else BOT_UPDATE_STAGES
+            )
+        else:
+            expected_stages = BOT_PRE_VERIFIER_STAGES
+        missing = [stage for stage in expected_stages if stage not in stages]
         if missing:
             reasons.append(f"{trial.trial_id}: missing BoT stages {missing}")
             continue
-        positions = [stages.index(stage) for stage in BOT_EXPECTED_STAGES]
+        positions = [stages.index(stage) for stage in expected_stages]
         if positions != sorted(positions):
             reasons.append(f"{trial.trial_id}: BoT stages are out of order")
             continue
-        full_stage_trials += 1
+        if expected_stages == BOT_EXPECTED_STAGES:
+            full_stage_trials += 1
 
-        event = trial.memory_write_event
         if not event or "status" not in event:
+            if not trial.verifier_result.is_correct:
+                failed_without_accept += 1
+                continue
             reasons.append(f"{trial.trial_id}: missing complete write event with status")
             continue
-        status = event.get("status")
         if status in {"accepted", "reused"}:
             accepted_events += 1
         elif status == "rejected":
