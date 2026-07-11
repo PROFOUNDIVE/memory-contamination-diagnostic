@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from memcontam.memory.embeddings import FakeEmbeddingProvider, normalized_dot_top_k
+from memcontam.memory.embeddings import EmbeddingProvider, FakeEmbeddingProvider, normalized_dot_top_k
 from memcontam.memory.retrieval import RetrievedRecord, retrieve_records
 from memcontam.memory.stores import MemoryEntry, MemoryState
 from memcontam.tasks.base import TaskInstance
@@ -91,11 +91,11 @@ def _parse_distilled_slots(text: str) -> dict[str, str]:
 
 
 def _retrieve_top1_template(
-    query_text: str, entries: list[MemoryEntry]
+    query_text: str, entries: list[MemoryEntry], provider: EmbeddingProvider | None = None
 ) -> dict[str, Any] | None:
     if not entries:
         return None
-    provider = FakeEmbeddingProvider()
+    provider = provider or FakeEmbeddingProvider()
     query_vector = provider.encode_query(query_text)
     document_vectors = [provider.encode_document(entry.content) for entry in entries]
     document_ids = [entry.entry_id for entry in entries]

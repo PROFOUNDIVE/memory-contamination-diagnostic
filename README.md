@@ -6,8 +6,8 @@ Controlled memory-contamination diagnostic harness for reasoning-memory systems.
 
 `v0.4` is the current partial G0 baseline-fidelity pass for `retrieval_rag` and `bot_style`.
 
-- `retrieval_rag` uses the pinned learned encoder `sentence-transformers/all-MiniLM-L6-v2` at revision `1110a243fdf4706b3f48f1d95db1a4f5529b4d41`, the versioned corpus `data/memory/catalog_v1.jsonl`, exact top-k retrieval, and full provenance records that are aligned with the prompt and trial metadata. RAG is read-only and emits no memory write events.
-- `bot_style` runs the five reference-aligned stages (`bot_problem_distill`, `bot_instantiate_solve`, `bot_thought_distill`, `bot_novelty_decide`) and persists the meta-buffer keyed by `(run_id, task_name, baseline, arm, backbone)`, accepting verified-success templates only with novelty-gated insertion.
+- `retrieval_rag` is wired to the pinned learned encoder `sentence-transformers/all-MiniLM-L6-v2` at revision `1110a243fdf4706b3f48f1d95db1a4f5529b4d41`, the versioned corpus `data/memory/catalog_v1.jsonl`, exact top-k retrieval, and full provenance records that are aligned with the prompt and trial metadata. If the pinned checkpoint is absent locally, offline replay falls back to deterministic fake embeddings with a stderr warning. RAG is read-only and emits no memory write events.
+- `bot_style` runs the five reference-aligned stages (`bot_problem_distill`, `bot_instantiate_solve`, `bot_thought_distill`, `bot_novelty_decide`) and uses the same configured embedding provider for top-1 template retrieval, then persists the meta-buffer keyed by `(run_id, task_name, baseline, arm, backbone)`, accepting verified-success templates only with novelty-gated insertion.
 
 External LLM responses are replay fixtures in this gate, so the verification requires no API keys or live model access. Live runs must keep the same stage structure.
 

@@ -4,6 +4,7 @@ import argparse
 import json
 import hashlib
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -29,7 +30,7 @@ from memcontam.logging.schema import (
 )
 from memcontam.memory.bot_buffer import BotBufferIdentity, ThoughtTemplate
 from memcontam.memory.corpus import CorpusRecord, build_arm_corpus, load_corpus
-from memcontam.memory.embeddings import FakeEmbeddingProvider
+from memcontam.memory.embeddings import EmbeddingProvider, FakeEmbeddingProvider, SentenceTransformerProvider
 from memcontam.memory.filters import drop_known_contaminated
 from memcontam.memory.retrieval import retrieve_records
 from memcontam.memory.run_state import RunState
@@ -162,6 +163,23 @@ def _retrieved_memory(baseline: str, task_input: dict[str, Any], memory: MemoryS
 def _config_hash(config: dict[str, Any]) -> str:
     payload = json.dumps(config, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
+
+
+def _embedding_provider(config: dict[str, Any]) -> EmbeddingProvider:
+    embedding_config = config.get("embedding", {})
+    _model_id = embedding_config.get("model_id")
+    _revision = embedding_config.get("revision")
+    try:
+        return SentenceTransformerProvider(
+            cache_folder=embedding_config.get("cache_path"),
+            local_files_only=True,
+        )
+    except RuntimeError:
+        print(
+            "pinned encoder not cached locally, falling back to fake embeddings for offline replay",
+            file=sys.stderr,
+        )
+        return FakeEmbeddingProvider()
 
 
 def _git_commit() -> str:
@@ -465,7 +483,7 @@ def _run_faithful_config(
     repeated_failure_tracker: _RepeatedFailureTracker,
 ) -> None:
     corpus_records = load_corpus(Path(config["embedding"]["corpus_path"]))
-    embedding_provider = FakeEmbeddingProvider()
+    embedding_provider = _embedding_provider(config)
     cache_dir = Path(config["embedding"].get("cache_path", "data/embedding_cache")) / run_id
     run_state = RunState(
         run_id,

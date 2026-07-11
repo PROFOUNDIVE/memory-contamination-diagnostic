@@ -14,8 +14,8 @@
 
 `v0.4` raises the same two baselines as v0.3 from prompt-label proxies to faithful *adapted* baselines, but now pins the retriever model, corpus, and BoT meta-buffer persistence so the gate is reproducible rather than relying on transient replay fixtures.
 
-- **`retrieval_rag`** — deterministic sentence-embedding retrieval with cosine scores, full provenance records, and a versioned legal corpus.
-- **`bot_style`** — reference-aligned five-stage reasoning (`bot_problem_distill`, `bot_instantiate_solve`, `bot_thought_distill`, `bot_novelty_decide`) with persistent meta-buffer updates keyed by `(run_id, task_name, baseline, arm, backbone)`.
+- **`retrieval_rag`** — deterministic sentence-embedding retrieval with cosine scores, full provenance records, and a versioned legal corpus; the runner tries the pinned encoder first and falls back to deterministic fake embeddings only when the checkpoint is absent locally.
+- **`bot_style`** — reference-aligned five-stage reasoning (`bot_problem_distill`, `bot_instantiate_solve`, `bot_thought_distill`, `bot_novelty_decide`) with the same configured provider for top-1 template retrieval and persistent meta-buffer updates keyed by `(run_id, task_name, baseline, arm, backbone)`.
 
 All other baselines remain explicitly out of scope for this G0 slice:
 
@@ -33,7 +33,8 @@ This is an **adapted baseline gate**, not a full paper reproduction or benchmark
 
 ### RAG mechanism
 
-- `src/memcontam/memory/embeddings.py` loads the pinned learned encoder `sentence-transformers/all-MiniLM-L6-v2` at revision `1110a243fdf4706b3f48f1d95db1a4f5529b4d41`.
+- `src/memcontam/cli.py` first attempts to load the pinned learned encoder `sentence-transformers/all-MiniLM-L6-v2` at revision `1110a243fdf4706b3f48f1d95db1a4f5529b4d41` from the configured local cache; if it is absent, offline replay falls back to deterministic fake embeddings with a one-line stderr warning.
+- `src/memcontam/memory/embeddings.py` defines the pinned encoder provider and deterministic fake fallback provider.
 - `src/memcontam/memory/corpus.py` reads the versioned legal corpus `data/memory/catalog_v1.jsonl` and hashes it for reproducibility.
 - `src/memcontam/memory/retrieval.py` performs exact top-k retrieval against the loaded corpus and returns records with `document_id`, `rank`, `score`, `text`, `title_or_type`, `clean_or_contaminated`, `source`, `corpus_hash`, `embedding_model_id`, `embedding_revision`, and `embedding_library_version`.
 - `src/memcontam/baselines/retrieval_rag.py` issues a single `rag_generate` stage, includes the retrieved IDs, text, and scores in the prompt, and logs the full provenance in `retrieved_memory` and trial metadata.
