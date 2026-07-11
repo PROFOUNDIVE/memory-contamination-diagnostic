@@ -43,6 +43,35 @@ class VerifierResult(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class RetrievalRecord(BaseModel):
+    document_id: str
+    rank: int
+    score: float
+    text: str
+    title_or_type: str
+    clean_or_contaminated: str
+    source: str
+    corpus_hash: str
+    embedding_model_id: str
+    embedding_revision: str
+    embedding_library_version: str
+
+
+class MethodCall(BaseModel):
+    stage: str
+    messages: list[dict[str, str]] = Field(default_factory=list)
+    raw_response: str
+    model: str
+    temperature: float | None = None
+    top_p: float | None = None
+    max_tokens: int | None = None
+    latency_ms: int | None = Field(default=None, strict=True, ge=0)
+    token_usage: dict[str, int] = Field(default_factory=dict)
+    retry_count: int = 0
+    error_type: str | None = None
+    retrieved_records: list[RetrievalRecord] = Field(default_factory=list)
+
+
 class TrialLog(BaseModel):
     trial_id: str
     run_id: str
@@ -64,6 +93,7 @@ class TrialLog(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
     memory_write_event: dict[str, Any] | None = None
     memory_after: list[dict[str, Any]] = Field(default_factory=list)
+    method_calls: list[MethodCall] = Field(default_factory=list)
     contamination_exposure: ContaminationExposure = Field(default_factory=ContaminationExposure)
     bad_memory_uptake_label: BadMemoryUptakeLabel | None = None
     repeated_failure_label: RepeatedFailureLabel | None = None

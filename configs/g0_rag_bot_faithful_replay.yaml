@@ -1,0 +1,63 @@
+run:
+  name: g0_rag_bot_faithful_replay
+  description: "Faithful RAG/BoT replay skeleton for the locked 3-task pilot set"
+  task_order_seed: 1
+  sample_order_seed: 1
+  retry_policy_version: retry_v0
+
+models:
+  - gpt4o
+  - frontier_reasoning
+
+tasks:
+  - name: game24
+    sample_path: data/tasks/game24_pilot.jsonl
+    limit: 3
+  - name: math_equation_balancer
+    sample_path: data/tasks/math_equation_balancer_pilot.jsonl
+    limit: 3
+  - name: word_sorting
+    sample_path: data/tasks/word_sorting_pilot.jsonl
+    limit: 3
+
+baselines:
+  - retrieval_rag
+  - bot_style
+
+arms:
+  - clean
+  - contaminated
+  - contaminated_filter
+
+logging:
+  output_dir: runs
+  prompt_version: prompt_v0
+  memory_policy_version: memory_policy_v0
+  contamination_catalog_version: contamination_v0
+
+replay:
+  responses_by_sample: {}
+
+embedding:
+  model_id: sentence-transformers/all-MiniLM-L6-v2
+  revision: 1110a243fdf4706b3f48f1d95db1a4f5529b4d41
+  cache_path: data/embedding_cache
+  top_k: 3
+  normalize: true
+  corpus_path: data/memory/catalog_v1.jsonl
+  corpus_version: memory_catalog_v1
+
+bot_state:
+  identity_fields:
+    - run_id
+    - task_name
+    - baseline
+    - arm
+    - backbone
+  warm_up_path: data/bot/warm_up_v1.jsonl
+  novelty_decision_parsable_values:
+    accept: "True"
+    reject: "False"
+
+live_smoke:
+  enabled: false

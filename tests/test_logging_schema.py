@@ -4,7 +4,13 @@ import pytest
 from pydantic import ValidationError
 
 from memcontam.clients.replay import ReplayClient
-from memcontam.logging.schema import ContaminationExposure, TrialLog, VerifierResult
+from memcontam.logging.schema import (
+    ContaminationExposure,
+    MethodCall,
+    RetrievalRecord,
+    TrialLog,
+    VerifierResult,
+)
 from memcontam.memory.retrieval import retrieve_records
 from memcontam.memory.stores import MemoryEntry
 
@@ -303,3 +309,153 @@ def test_retrieve_records_returns_deterministic_ordered_provenance_records() -> 
 
 def test_retrieve_records_handles_empty_memory_safely() -> None:
     assert retrieve_records("anything", [], k=3) == []
+
+
+def test_trial_log_accepts_faithful_method_calls() -> None:
+    rag_retrieval = RetrievalRecord(
+        document_id="rag-doc-1",
+        rank=1,
+        score=0.91,
+        text="Useful strategy for 24 game.",
+        title_or_type="game24_strategy",
+        clean_or_contaminated="clean",
+        source="memory_catalog_v1",
+        corpus_hash="sha256:abc123",
+        embedding_model_id="sentence-transformers/all-MiniLM-L6-v2",
+        embedding_revision="1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+        embedding_library_version="sentence-transformers-3.0.0",
+    )
+    bot_calls = [
+        MethodCall(
+            stage="bot_problem_distill",
+            messages=[{"role": "user", "content": "distill"}],
+            raw_response="Key info...",
+            model="gpt4o",
+            temperature=0.0,
+            top_p=1.0,
+            max_tokens=1024,
+            latency_ms=100,
+            token_usage={"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            retry_count=0,
+            error_type=None,
+        ),
+        MethodCall(
+            stage="bot_instantiate_solve",
+            messages=[{"role": "user", "content": "solve"}],
+            raw_response="final: 6 / (1 - 3/4)",
+            model="gpt4o",
+            temperature=0.0,
+            top_p=1.0,
+            max_tokens=1024,
+            latency_ms=200,
+            token_usage={"prompt_tokens": 20, "completion_tokens": 10, "total_tokens": 30},
+            retry_count=0,
+            error_type=None,
+        ),
+        MethodCall(
+            stage="bot_thought_distill",
+            messages=[{"role": "user", "content": "distill thought"}],
+            raw_response="High-level template...",
+            model="gpt4o",
+            temperature=0.0,
+            top_p=1.0,
+            max_tokens=1024,
+            latency_ms=150,
+            token_usage={"prompt_tokens": 15, "completion_tokens": 8, "total_tokens": 23},
+            retry_count=0,
+            error_type=None,
+        ),
+        MethodCall(
+            stage="bot_novelty_decide",
+            messages=[{"role": "user", "content": "decide"}],
+            raw_response="True",
+            model="gpt4o",
+            temperature=0.0,
+            top_p=1.0,
+            max_tokens=256,
+            latency_ms=50,
+            token_usage={"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6},
+            retry_count=0,
+            error_type=None,
+        ),
+    ]
+
+    log = TrialLog(
+        trial_id="t_faithful",
+        run_id="r1",
+        task_name="game24",
+        sample_id="s_faithful",
+        baseline="bot_style",
+        arm="contaminated_filter",
+        backbone="gpt4o",
+        input={"numbers": [1, 3, 4, 6]},
+        gold_or_verifier_spec={"target": 24},
+        prompt_messages=[{"role": "user", "content": "solve"}],
+        raw_response="final: 6 / (1 - 3/4)",
+        verifier_result=VerifierResult(is_correct=True),
+        method_calls=[
+            MethodCall(
+                stage="rag_generate",
+                messages=[{"role": "user", "content": "generate with retrieved memory"}],
+                raw_response="final: 6 / (1 - 3/4)",
+                model="gpt4o",
+                temperature=0.0,
+                top_p=1.0,
+                max_tokens=1024,
+                latency_ms=120,
+                token_usage={"prompt_tokens": 25, "completion_tokens": 10, "total_tokens": 35},
+                retry_count=0,
+                error_type=None,
+                retrieved_records=[rag_retrieval],
+            ),
+            *bot_calls,
+        ],
+    )
+
+    assert len(log.method_calls) == 5
+    assert [call.stage for call in log.method_calls] == [
+        "rag_generate",
+        "bot_problem_distill",
+        "bot_instantiate_solve",
+        "bot_thought_distill",
+        "bot_novelty_decide",
+    ]
+    assert log.method_calls[0].retrieved_records == [rag_retrieval]
+    assert log.method_calls[0].retrieved_records[0].embedding_revision == (
+        "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
+    )
+    serialized = log.model_dump()
+    assert len(serialized["method_calls"]) == 5
+    assert serialized["method_calls"][0]["stage"] == "rag_generate"
+
+
+def test_trial_log_legacy_method_calls_default() -> None:
+    log = TrialLog.model_validate(
+        {
+            "trial_id": "t_legacy_methods",
+            "run_id": "r1",
+            "task_name": "game24",
+            "sample_id": "s_legacy",
+            "baseline": "retrieval_rag",
+            "arm": "clean",
+            "backbone": "gpt4o",
+            "input": {"numbers": [1, 3, 4, 6]},
+            "gold_or_verifier_spec": {"target": 24},
+            "prompt_messages": [{"role": "user", "content": "solve"}],
+            "raw_response": "final: 24",
+            "verifier_result": {"is_correct": True},
+        }
+    )
+
+    assert log.method_calls == []
+    serialized = log.model_dump()
+    assert serialized["method_calls"] == []
+
+
+def test_method_call_rejects_missing_stage() -> None:
+    with pytest.raises(ValidationError):
+        MethodCall(
+            messages=[{"role": "user", "content": "solve"}],
+            raw_response="final: 24",
+            model="gpt4o",
+        )
