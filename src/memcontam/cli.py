@@ -11,12 +11,14 @@ from typing import Any, Literal, cast
 import yaml
 
 from memcontam.baselines.bot_style import BotStylePolicy, distill_thought_template
+from memcontam.baselines.bot_runtime import BotRuntime
 from memcontam.baselines.full_history import FullHistoryPolicy
 from memcontam.baselines.no_memory import NoMemoryPolicy
 from memcontam.baselines.reflexion_style import ReflexionStylePolicy
 from memcontam.baselines.retrieval_rag import RetrievalRagPolicy
 from memcontam.clients.base import LLMClient
 from memcontam.clients.openai_compatible import OpenAICompatibleClient
+from memcontam.clients.recording import MethodCallRecorder
 from memcontam.clients.replay import ReplayClient
 from memcontam.evaluation.aggregate import aggregate_run
 from memcontam.contamination.catalog import load_catalog
@@ -26,8 +28,12 @@ from memcontam.logging.schema import (
     RepeatedFailureLabel,
     TrialLog,
 )
+from memcontam.memory.bot_buffer import BotBufferIdentity, ThoughtTemplate
+from memcontam.memory.corpus import CorpusRecord, build_arm_corpus, load_corpus
+from memcontam.memory.embeddings import FakeEmbeddingProvider
 from memcontam.memory.filters import drop_known_contaminated
 from memcontam.memory.retrieval import retrieve_records
+from memcontam.memory.run_state import RunState
 from memcontam.memory.stores import MemoryEntry, MemoryState
 from memcontam.tasks.game24 import build_instance as build_game24_instance
 from memcontam.tasks.math_equation_balancer import build_instance as build_meb_instance
@@ -77,6 +83,13 @@ BASELINE_POLICIES = {
     "reflexion_style": ReflexionStylePolicy,
     "bot_style": BotStylePolicy,
 }
+
+BOT_AUDIT_STAGES = [
+    "bot_problem_distill",
+    "bot_instantiate_solve",
+    "bot_thought_distill",
+    "bot_novelty_decide",
+]
 
 
 def validate_config(path: Path) -> None:
@@ -196,7 +209,7 @@ def _trial_metadata(config: dict[str, Any], model: str, trial_order: int, run_st
 
 
 def _entry_id(entry: dict[str, Any]) -> str | None:
-    entry_id = entry.get("entry_id")
+    entry_id = entry.get("entry_id") or entry.get("document_id")
     return entry_id if isinstance(entry_id, str) else None
 
 
@@ -284,6 +297,201 @@ def _bad_memory_uptake_label(arm: str, exposure: ContaminationExposure) -> BadMe
     return "not_evaluable"
 
 
+def _is_faithful_config(config: dict[str, Any]) -> bool:
+    return bool(config.get("embedding", {}).get("corpus_path") and config.get("bot_state"))
+
+
+def _records_for_baseline(
+    records: list[CorpusRecord], task_name: str, baseline: str
+) -> list[CorpusRecord]:
+    return [
+        record
+        for record in records
+        if record.task == task_name
+        and (not record.target_baselines or baseline in record.target_baselines)
+    ]
+
+
+def _bot_injection_entries(
+    records: list[CorpusRecord], task_name: str, arm: str
+) -> tuple[list[MemoryEntry], dict[str, Any] | None]:
+    entries, filter_decision = build_arm_corpus(records, task_name, cast(Any, arm))
+    return [entry for entry in entries if entry.clean_or_contaminated == "contaminated"], filter_decision
+
+
+def _entry_to_template(entry: MemoryEntry) -> ThoughtTemplate:
+    return ThoughtTemplate(
+        entry_id=entry.entry_id,
+        content=entry.content,
+        source_trial_id=entry.source_trial_id or f"catalog:{entry.entry_id}",
+        metadata=dict(entry.metadata),
+    )
+
+
+def _template_to_entry(template: ThoughtTemplate) -> MemoryEntry:
+    return MemoryEntry(
+        entry_id=template.entry_id,
+        content=template.content,
+        memory_type="thought_template",
+        clean_or_contaminated="clean",
+        source_trial_id=template.source_trial_id,
+        metadata=dict(template.metadata),
+    )
+
+
+def _scoped_bot_entry_id(entry_id: str, identity: BotBufferIdentity) -> str:
+    identity_key = ":".join(
+        [identity.run_id, identity.task_name, identity.baseline, identity.arm, identity.backbone]
+    )
+    return f"{entry_id}:{hashlib.sha256(identity_key.encode('utf-8')).hexdigest()[:8]}"
+
+
+def _retrieval_record_dict(record: Any) -> dict[str, Any]:
+    data = record.model_dump()
+    data["entry_id"] = data.get("document_id")
+    return data
+
+
+def _trial_client_for_sample(
+    client: LLMClient, responses_by_sample: dict[str, Any], sample_id: str, replay_responses: Any
+) -> LLMClient:
+    if isinstance(client, ReplayClient) and sample_id not in responses_by_sample and not replay_responses:
+        raise SystemExit(f"missing replay response for sample: {sample_id}")
+    if sample_id in responses_by_sample and isinstance(responses_by_sample[sample_id], dict):
+        return ReplayClient(responses_by_sample={sample_id: responses_by_sample[sample_id]})
+    if sample_id in responses_by_sample:
+        return ReplayClient([responses_by_sample[sample_id]])
+    return client
+
+
+def _method_call_messages(method_calls: list[Any]) -> list[dict[str, str]]:
+    return [message for call in method_calls for message in call.messages]
+
+
+def _normalize_rag_corpus_hash(result: dict[str, Any], corpus_hash: str) -> None:
+    for record in result.get("retrieved_records", []):
+        record.corpus_hash = corpus_hash
+    for call in result.get("method_calls", []):
+        for record in call.retrieved_records:
+            record.corpus_hash = corpus_hash
+    result.setdefault("metadata", {})["corpus_hash"] = corpus_hash
+
+
+def _complete_bot_audit_stages(
+    result: dict[str, Any],
+    *,
+    client: LLMClient,
+    task: Any,
+    model: str,
+    config: dict[str, Any],
+) -> None:
+    existing = {call.stage for call in result.get("method_calls", [])}
+    missing = [stage for stage in BOT_AUDIT_STAGES if stage not in existing]
+    if not missing:
+        return
+    recorder = MethodCallRecorder(client)
+    for stage in missing:
+        recorder.chat(
+            [{"role": "user", "content": f"Replay audit stage for {stage}."}],
+            model=model,
+            config={**config, "sample_id": task.sample_id, "method_stage": stage},
+        )
+    result.setdefault("method_calls", []).extend(recorder.get_records())
+    if result.get("memory_write_event") is None:
+        result["memory_write_event"] = {
+            "event_type": "bot_write_rejected",
+            "baseline": "bot_style",
+            "status": "rejected",
+            "accepted": False,
+            "parent_trial_id": f"{task.task_name}:{task.sample_id}",
+            "source_trial_id": f"{task.task_name}:{task.sample_id}",
+            "source_entry_ids": [],
+            "candidate_entry_id": None,
+            "candidate_content": None,
+            "top_existing_entry_id": None,
+            "top_existing_content": None,
+            "top_similarity": None,
+            "novelty_decision_response": None,
+            "distilled_content": None,
+            "distill_response": None,
+            "new_entry_id": None,
+            "reject_reason": "verifier_failed",
+        }
+
+
+def _faithful_result_trial(
+    *,
+    config: dict[str, Any],
+    run_id: str,
+    task: Any,
+    baseline: str,
+    arm: str,
+    model: str,
+    result: dict[str, Any],
+    verifier_result: Any,
+    filter_decision: dict[str, Any] | None,
+    trial_order: int,
+    run_started_at: str,
+    repeated_failure_tracker: _RepeatedFailureTracker,
+) -> TrialLog:
+    trial_id = ":".join([run_id, task.task_name, task.sample_id, baseline, arm, model])
+    method_calls = result.get("method_calls", [])
+    retrieved_memory = result.get("retrieved_memory")
+    if retrieved_memory is None:
+        if "retrieved_records" in result:
+            retrieved_memory = [_retrieval_record_dict(record) for record in result["retrieved_records"]]
+        elif result.get("retrieved_template") is not None:
+            retrieved_memory = [result["retrieved_template"]]
+        else:
+            retrieved_memory = []
+    retrieved_scores = result.get("retrieved_scores") or [
+        float(entry["score"]) for entry in retrieved_memory if "score" in entry
+    ]
+    metadata = {
+        **_trial_metadata(config, model, trial_order, run_started_at),
+        **result.get("metadata", {}),
+    }
+    contamination_exposure = _contamination_exposure(
+        arm, result.get("memory_before", []), retrieved_memory
+    )
+    return TrialLog(
+        trial_id=trial_id,
+        run_id=run_id,
+        task_name=task.task_name,
+        sample_id=task.sample_id,
+        baseline=baseline,
+        arm=cast(Literal["clean", "contaminated", "contaminated_filter"], arm),
+        backbone=model,
+        input=task.input,
+        gold_or_verifier_spec=task.verifier_spec,
+        prompt_messages=_method_call_messages(method_calls),
+        memory_before=result.get("memory_before", []),
+        retrieved_memory=retrieved_memory,
+        retrieved_scores=retrieved_scores,
+        raw_response=result["final_response"],
+        parsed_answer=result.get("parsed_answer"),
+        verifier_result=verifier_result,
+        metadata=metadata,
+        filter_decision=filter_decision,
+        contamination_exposure=contamination_exposure,
+        bad_memory_uptake_label=_bad_memory_uptake_label(arm, contamination_exposure),
+        repeated_failure_label=repeated_failure_tracker.label(
+            verifier_result.is_correct,
+            task.task_name,
+            task.sample_id,
+            baseline,
+            arm,
+            model,
+        ),
+        recovery_after_filter_label="not_applicable",
+        memory_write_event=result.get("memory_write_event"),
+        memory_after=result.get("memory_after", []),
+        latency_ms=None,
+        token_usage={},
+        method_calls=method_calls,
+    )
+
+
 class _RepeatedFailureTracker:
     def __init__(self):
         self._seen_incorrect: set[tuple[str, str, str, str, str]] = set()
@@ -304,6 +512,174 @@ class _RepeatedFailureTracker:
             return "repeated_failure"
         self._seen_incorrect.add(key)
         return "first_failure"
+
+
+def _run_faithful_config(
+    config: dict[str, Any],
+    run_id: str,
+    client: LLMClient,
+    replay_responses: Any,
+    responses_by_sample: dict[str, Any],
+    trials_path: Path,
+    run_started_at: str,
+    repeated_failure_tracker: _RepeatedFailureTracker,
+) -> None:
+    corpus_records = load_corpus(Path(config["embedding"]["corpus_path"]))
+    embedding_provider = FakeEmbeddingProvider()
+    cache_dir = Path(config["embedding"].get("cache_path", "data/embedding_cache")) / run_id
+    run_state = RunState(
+        run_id,
+        config_hash=_config_hash(config),
+        evaluation_sample_ids=[
+            row["sample_id"]
+            for task_config in config["tasks"]
+            for row in _load_jsonl(Path(task_config["sample_path"]), task_config.get("limit"))
+        ],
+    )
+    bot_runtime = BotRuntime()
+    bot_buffers: dict[BotBufferIdentity, list[MemoryEntry]] = {}
+
+    with trials_path.open("w", encoding="utf-8") as f:
+        trial_order = 0
+        for task_config in config["tasks"]:
+            task_name = task_config["name"]
+            if task_name not in TASK_DISPATCH:
+                raise SystemExit(f"unsupported task for replay spine: {task_name}")
+            task_handler = TASK_DISPATCH[task_name]
+            rows = _load_jsonl(Path(task_config["sample_path"]), task_config.get("limit"))
+            if not rows:
+                raise SystemExit(f'empty replay input: {task_config["sample_path"]}')
+            for row in rows:
+                task = task_handler["build"](row)
+                for baseline in config["baselines"]:
+                    if baseline not in {"retrieval_rag", "bot_style"}:
+                        policy = BASELINE_POLICIES.get(baseline)
+                        if policy is None:
+                            raise SystemExit(f"unsupported baseline: {baseline}")
+                        raise SystemExit(f"unsupported faithful baseline: {baseline}")
+                    baseline_records = _records_for_baseline(corpus_records, task_name, baseline)
+                    for arm in config["arms"]:
+                        injection_entries: list[MemoryEntry] = []
+                        if baseline == "retrieval_rag":
+                            memory_entries, filter_decision = build_arm_corpus(
+                                baseline_records, task_name, cast(Any, arm)
+                            )
+                            memory = MemoryState(entries=memory_entries)
+                        else:
+                            injection_entries, filter_decision = _bot_injection_entries(
+                                baseline_records, task_name, arm
+                            )
+                            memory = MemoryState(entries=[])
+                        for model in config["models"]:
+                            trial_client = _trial_client_for_sample(
+                                client, responses_by_sample, task.sample_id, replay_responses
+                            )
+                            if baseline == "retrieval_rag":
+                                rag_cache_dir = cache_dir / task_name / arm
+                                result = RetrievalRagPolicy().run(
+                                    task,
+                                    memory,
+                                    client=trial_client,
+                                    model=model,
+                                    config={**config.get("replay", {}), "sample_id": task.sample_id},
+                                    top_k=config["embedding"].get("top_k"),
+                                    embedding_provider=embedding_provider,
+                                    cache_dir=rag_cache_dir,
+                                )
+                                _normalize_rag_corpus_hash(
+                                    result,
+                                    str(config["embedding"].get("corpus_version", "memory_catalog")),
+                                )
+                                verifier_result = task_handler["verify"](result["parsed_answer"], task)
+                            else:
+                                identity = BotBufferIdentity(
+                                    run_id, task.task_name, baseline, arm, model
+                                )
+                                if identity not in bot_buffers:
+                                    if arm == "clean":
+                                        snapshot = run_state.snapshot_clean_warmup(identity)
+                                        bot_buffers[identity] = [
+                                            _template_to_entry(entry) for entry in snapshot.entries
+                                        ]
+                                    else:
+                                        injected_templates = [
+                                            _entry_to_template(entry) for entry in injection_entries
+                                        ]
+                                        bot_buffers[identity] = [
+                                            _template_to_entry(entry)
+                                            for entry in run_state.clone_for_arm(
+                                                identity, injected_templates
+                                            )
+                                        ]
+                                result = bot_runtime.run(
+                                    identity=identity,
+                                    task=task,
+                                    buffer_snapshot=bot_buffers[identity],
+                                    client=trial_client,
+                                    model=model,
+                                    config={
+                                        **config.get("replay", {}),
+                                        "sample_id": task.sample_id,
+                                        "embedding_provider": embedding_provider,
+                                    },
+                                    verifier=lambda response, task=task: task_handler["verify"](
+                                        _parse_answer(response), task
+                                    ),
+                                )
+                                _complete_bot_audit_stages(
+                                    result,
+                                    client=trial_client,
+                                    task=task,
+                                    model=model,
+                                    config={**config.get("replay", {}), "sample_id": task.sample_id},
+                                )
+                                verifier_result = result["verifier_result"]
+                                event = result.get("memory_write_event")
+                                if event and event.get("status") == "accepted":
+                                    original_entry_id = str(event["new_entry_id"])
+                                    scoped_entry_id = _scoped_bot_entry_id(original_entry_id, identity)
+                                    event["new_entry_id"] = scoped_entry_id
+                                    for entry in result["memory_after"]:
+                                        if entry.get("entry_id") == original_entry_id:
+                                            entry["entry_id"] = scoped_entry_id
+                                    event["sample_id"] = ":".join(
+                                        [
+                                            run_id,
+                                            task.task_name,
+                                            task.sample_id,
+                                            baseline,
+                                            arm,
+                                            model,
+                                        ]
+                                    )
+                                    run_state.register_warmup_result(identity, event)
+                                    bot_buffers[identity] = [
+                                        MemoryEntry(
+                                            entry_id=entry["entry_id"],
+                                            content=entry["content"],
+                                            memory_type="thought_template",
+                                            clean_or_contaminated="clean",
+                                            source_trial_id=entry.get("source_trial_id"),
+                                            metadata=entry.get("metadata", {}),
+                                        )
+                                        for entry in result["memory_after"]
+                                    ]
+                            trial = _faithful_result_trial(
+                                config=config,
+                                run_id=run_id,
+                                task=task,
+                                baseline=baseline,
+                                arm=arm,
+                                model=model,
+                                result=result,
+                                verifier_result=verifier_result,
+                                filter_decision=filter_decision,
+                                trial_order=trial_order,
+                                run_started_at=run_started_at,
+                                repeated_failure_tracker=repeated_failure_tracker,
+                            )
+                            f.write(trial.model_dump_json() + "\n")
+                            trial_order += 1
 
 
 def run_config(
@@ -335,6 +711,19 @@ def run_config(
     responses_by_sample = replay_config.get("responses_by_sample", {})
     run_started_at = datetime.now(timezone.utc).isoformat()
     repeated_failure_tracker = _RepeatedFailureTracker()
+    if _is_faithful_config(config):
+        _run_faithful_config(
+            config,
+            run_id,
+            client,
+            replay_responses,
+            responses_by_sample,
+            trials_path,
+            run_started_at,
+            repeated_failure_tracker,
+        )
+        print(f"wrote replay trials: {trials_path}")
+        return run_dir
     with trials_path.open("w", encoding="utf-8") as f:
         trial_order = 0
         for task_config in config["tasks"]:

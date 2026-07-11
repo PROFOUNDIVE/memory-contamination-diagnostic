@@ -617,3 +617,81 @@ def test_repeated_failure_no_cross_task_repeat(tmp_path, monkeypatch) -> None:
     assert all(row["verifier_result"]["is_correct"] is False for row in rows)
     assert rows[0]["repeated_failure_label"] == "first_failure"
     assert rows[1]["repeated_failure_label"] == "first_failure"
+
+
+def test_faithful_rag_bot_sequence_persists_and_logs(tmp_path, monkeypatch) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(repo_root)
+    config = load_config(repo_root / "configs/g0_rag_bot_faithful_replay.yaml")
+    config["logging"]["output_dir"] = str(tmp_path / "runs")
+    config["models"] = ["gpt4o"]
+    config["tasks"] = [{"name": "game24", "sample_path": "data/tasks/game24_pilot.jsonl", "limit": 2}]
+    config["arms"] = ["clean"]
+
+    run_dir = run_config(config, run_id="faithful_sequence")
+    rows = [json.loads(line) for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()]
+
+    assert len(rows) == 4
+    for row in rows:
+        TrialLog.model_validate(row)
+        assert row["method_calls"]
+
+    rag_rows = [row for row in rows if row["baseline"] == "retrieval_rag"]
+    assert rag_rows
+    assert all(row["memory_write_event"] is None for row in rag_rows)
+    assert all(row["memory_before"] == row["memory_after"] for row in rag_rows)
+    assert rag_rows[0]["method_calls"][0]["stage"] == "rag_generate"
+    assert rag_rows[0]["method_calls"][0]["retrieved_records"]
+
+    bot_rows = [row for row in rows if row["baseline"] == "bot_style"]
+    first_bot, second_bot = bot_rows
+    accepted_id = first_bot["memory_write_event"]["new_entry_id"]
+    assert first_bot["memory_write_event"]["status"] == "accepted"
+    assert accepted_id in {entry["entry_id"] for entry in second_bot["memory_before"]}
+    assert accepted_id in {entry["entry_id"] for entry in second_bot["retrieved_memory"]}
+    assert [call["stage"] for call in second_bot["method_calls"]] == [
+        "bot_problem_distill",
+        "bot_instantiate_solve",
+        "bot_thought_distill",
+        "bot_novelty_decide",
+    ]
+
+
+def test_faithful_bot_state_isolated_across_conditions(tmp_path, monkeypatch) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(repo_root)
+    config = load_config(repo_root / "configs/g0_rag_bot_faithful_replay.yaml")
+    config["logging"]["output_dir"] = str(tmp_path / "runs")
+    config["models"] = ["gpt4o", "frontier_reasoning"]
+    config["tasks"] = [{"name": "game24", "sample_path": "data/tasks/game24_pilot.jsonl", "limit": 2}]
+    config["baselines"] = ["bot_style"]
+    config["arms"] = ["clean", "contaminated"]
+
+    run_dir = run_config(config, run_id="faithful_isolation")
+    rows = [json.loads(line) for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()]
+
+    assert len(rows) == 8
+    first_clean_gpt4o = next(
+        row
+        for row in rows
+        if row["sample_id"] == "game24_pilot_001" and row["arm"] == "clean" and row["backbone"] == "gpt4o"
+    )
+    second_contaminated_gpt4o = next(
+        row
+        for row in rows
+        if row["sample_id"] == "game24_pilot_002"
+        and row["arm"] == "contaminated"
+        and row["backbone"] == "gpt4o"
+    )
+    second_clean_frontier = next(
+        row
+        for row in rows
+        if row["sample_id"] == "game24_pilot_002"
+        and row["arm"] == "clean"
+        and row["backbone"] == "frontier_reasoning"
+    )
+
+    clean_gpt4o_id = first_clean_gpt4o["memory_write_event"]["new_entry_id"]
+    assert clean_gpt4o_id in {entry["entry_id"] for entry in rows[4]["memory_before"]}
+    assert clean_gpt4o_id not in {entry["entry_id"] for entry in second_contaminated_gpt4o["memory_before"]}
+    assert clean_gpt4o_id not in {entry["entry_id"] for entry in second_clean_frontier["memory_before"]}
