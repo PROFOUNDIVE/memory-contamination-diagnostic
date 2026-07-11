@@ -235,6 +235,29 @@ def test_aggregate_run_handles_empty_trials_jsonl(tmp_path) -> None:
     assert json.loads(cli_result.stdout) == result
 
 
+def test_aggregate_run_excludes_warmup_rows(tmp_path) -> None:
+    run_dir = tmp_path / "runs" / "warmup_excluded"
+    run_dir.mkdir(parents=True)
+    _write_trials_jsonl(
+        run_dir,
+        [
+            _trial_row(
+                trial_id="run1:game24:warmup-1:no_memory:clean:replay",
+                sample_id="warmup-1",
+                metadata={"phase": "warmup", "exclude_from_aggregate": True},
+            ),
+            _trial_row(trial_id="run1:game24:s1:no_memory:clean:replay", sample_id="s1"),
+        ],
+    )
+
+    from memcontam.evaluation.aggregate import aggregate_run
+
+    result = aggregate_run(run_dir)
+
+    assert result["n_trials"] == 2
+    assert result["groups"][0]["n_trials"] == 1
+
+
 def test_aggregate_run_sums_numeric_filter_drops(tmp_path) -> None:
     run_dir = tmp_path / "runs" / "filter_drop"
     run_dir.mkdir(parents=True)

@@ -261,6 +261,8 @@ def aggregate_run(run_dir: Path) -> dict:
     grouped: dict[tuple[str, str, str, str], list[TrialLog]] = defaultdict(list)
     combos: dict[tuple[str, str, str], dict[str, list[TrialLog]]] = defaultdict(lambda: defaultdict(list))
     for trial in trials:
+        if trial.metadata.get("exclude_from_aggregate") or trial.metadata.get("phase") == "warmup":
+            continue
         key = (trial.task_name, trial.baseline, trial.arm, trial.backbone)
         grouped[key].append(trial)
         combos[(trial.task_name, trial.baseline, trial.backbone)][trial.arm].append(trial)
