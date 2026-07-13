@@ -156,7 +156,7 @@ def _check_stages(trials: list[TrialLog]) -> dict[str, Any]:
     expected_counts = {
         "full_history_generate": 54,
         "reflexion_generate": 54,
-        "reflexion_reflect": 18,
+        "reflexion_reflect": 6,
         "dynamic_cheatsheet_generate": 54,
         "dynamic_cheatsheet_curate": 54,
     }
@@ -246,15 +246,16 @@ def _check_reflexion(trials: list[TrialLog]) -> dict[str, Any]:
         stages = [call.stage for call in trial.method_calls]
         has_reflect = "reflexion_reflect" in stages
         is_correct = trial.verifier_result.is_correct
+        should_reflect = trial.sample_id == "game24_pilot_001"
 
-        if is_correct and has_reflect:
-            reasons.append(f"{trial.trial_id}: successful trial has reflexion_reflect call")
-            continue
-        if not is_correct and not has_reflect:
-            reasons.append(f"{trial.trial_id}: failed trial missing reflexion_reflect call")
-            continue
+        if is_correct == should_reflect:
+            expected = "fail" if should_reflect else "succeed"
+            reasons.append(f"{trial.trial_id}: expected Reflexion trial to {expected}")
+        if has_reflect != should_reflect:
+            expected = "reflexion_reflect" if should_reflect else "no reflexion_reflect"
+            reasons.append(f"{trial.trial_id}: expected {expected} call")
 
-        if has_reflect:
+        if should_reflect and has_reflect:
             event = trial.memory_write_event
             if event is None or event.get("status") != "accepted":
                 reasons.append(f"{trial.trial_id}: failed trial missing accepted reflection append")
@@ -286,7 +287,7 @@ def _check_dynamic_cheatsheet(trials: list[TrialLog]) -> dict[str, Any]:
     preserved = 0
     accepted = 0
 
-    grouped: dict[tuple[str, str, str, str], list[TrialLog]] = {}
+    grouped: dict[tuple[str, str, str], list[TrialLog]] = {}
     for trial in dc_trials:
         grouped.setdefault((trial.task_name, trial.arm, trial.backbone), []).append(trial)
 

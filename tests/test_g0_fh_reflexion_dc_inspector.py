@@ -168,8 +168,8 @@ CATALOG_SEEDS: dict[str, dict[str, dict[str, Any]]] = {
 VERIFIER_RESULTS: dict[str, dict[str, dict[str, Any]]] = {
     "game24": {
         "game24_pilot_001": {"is_correct": False, "reason": "value_does_not_match_target"},
-        "game24_pilot_002": {"is_correct": False, "reason": "value_does_not_match_target"},
-        "game24_pilot_003": {"is_correct": False, "reason": "value_does_not_match_target"},
+        "game24_pilot_002": {"is_correct": True, "reason": "ok"},
+        "game24_pilot_003": {"is_correct": True, "reason": "ok"},
     },
     "math_equation_balancer": {
         "meb_pilot_001": {"is_correct": True, "reason": "ok"},
@@ -671,6 +671,8 @@ def test_inspector_accepts_complete_synthetic_run(tmp_path: Path) -> None:
     assert report["no_bot_warmup"] == "pass"
     assert report["leakage"] == "pass"
     assert report["logging"] == "pass"
+    assert report["stage_counts"]["reflexion_reflect"] == 6
+    assert report["refl_counts"]["reflected_trials"] == 6
 
 
 def test_inspector_rejects_cross_arm_entry_copy(tmp_path: Path) -> None:
@@ -701,6 +703,45 @@ def test_inspector_rejects_extra_reflection_on_success(tmp_path: Path) -> None:
     report = json.loads(result.stdout)
     assert report["reflexion"] == "fail" or report["stages"] == "fail"
     assert any("reflect" in reason.lower() for reason in report.get("reasons", []))
+
+
+def test_inspector_requires_reflection_only_for_game24_pilot_001(tmp_path: Path) -> None:
+    run_dir = tmp_path / "bad_run"
+    rows = _make_synthetic_rows()
+    expected = next(
+        row
+        for row in rows
+        if row["baseline"] == "reflexion_style"
+        and row["sample_id"] == "game24_pilot_001"
+        and row["arm"] == "clean"
+        and row["backbone"] == "gpt4o"
+    )
+    misplaced = next(
+        row
+        for row in rows
+        if row["baseline"] == "reflexion_style"
+        and row["sample_id"] == "game24_pilot_002"
+        and row["arm"] == "clean"
+        and row["backbone"] == "gpt4o"
+    )
+    expected["verifier_result"]["is_correct"] = True
+    expected["verifier_result"]["reason"] = "ok"
+    expected["method_calls"] = [call for call in expected["method_calls"] if call["stage"] != "reflexion_reflect"]
+    expected["memory_write_event"] = None
+    expected["memory_after"] = expected["memory_before"]
+    misplaced["verifier_result"]["is_correct"] = False
+    misplaced["verifier_result"]["reason"] = "value_does_not_match_target"
+    misplaced["method_calls"].append(
+        _method_call("reflexion_reflect", [{"role": "user", "content": "reflect"}], "reflect", "gpt4o")
+    )
+    misplaced["memory_write_event"] = {"type": "reflexion_append", "status": "accepted"}
+    _write_trials_jsonl(run_dir, rows)
+
+    result = _run_inspector(run_dir)
+    assert result.returncode != 0
+    report = json.loads(result.stdout)
+    assert report["reflexion"] == "fail"
+    assert any("game24_pilot_001" in reason for reason in report.get("reasons", []))
 
 
 def test_inspector_rejects_wrong_stage_count(tmp_path: Path) -> None:
