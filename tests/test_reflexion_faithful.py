@@ -80,6 +80,7 @@ def test_run_success_generates_once_without_writing_and_uses_last_three_reflecti
     assert result["memory_write_event"] is None
     assert result["retrieved_records"] == []
     assert result["retrieved_memory"] == []
+    assert result["retrieved_scores"] == []
     actor_prompt = result["method_calls"][0].messages[1]["content"]
     assert "Reflection: middle\nReflection: newer\nReflection: latest" in actor_prompt
     assert "oldest" not in actor_prompt
@@ -133,6 +134,8 @@ def test_run_failure_reflects_once_and_appends_lineaged_reflection() -> None:
     ]
     assert result["verifier_result"].is_correct is False
     assert result["parsed_answer"] == "incorrect"
+    assert result["retrieved_records"] == []
+    assert result["retrieved_scores"] == []
     appended = memory.entries[-1]
     assert appended.entry_id.startswith("reflexion:math_equation_balancer:sample_001:")
     assert appended.content == "Reflection: Re-check operator precedence."
@@ -140,7 +143,7 @@ def test_run_failure_reflects_once_and_appends_lineaged_reflection() -> None:
     assert appended.clean_or_contaminated == "contaminated"
     assert appended.source_trial_id == "run_001:math_equation_balancer:sample_001:reflexion_style:clean:replay"
     assert appended.metadata["parent_entry_ids"] == ["one", "two", "three"]
-    assert appended.metadata["source_entry_ids"] == ["one", "two", "three"]
+    assert appended.metadata["source_entry_ids"] == ["two"]
     assert appended.metadata["reflection_lineage"]["stage"] == "reflexion_reflect"
     assert result["memory_after"][-1] == appended.model_dump()
     assert result["memory_write_event"]["type"] == "reflexion_append"
@@ -186,9 +189,11 @@ def test_run_rejects_empty_failure_reflection_without_mutating_memory() -> None:
         "reflexion_reflect",
     ]
     assert result["memory_after"] == result["memory_before"]
+    assert result["retrieved_records"] == []
+    assert result["retrieved_scores"] == []
     assert result["memory_write_event"] == {
         "type": "reflexion_append",
         "status": "rejected_empty",
         "parent_entry_ids": ["one"],
-        "source_entry_ids": ["one"],
+        "source_entry_ids": [],
     }

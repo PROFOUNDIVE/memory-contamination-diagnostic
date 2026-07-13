@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Callable, cast
+from typing import Any, Callable
 from uuid import uuid4
 
 from memcontam.clients.base import LLMClient
@@ -36,6 +36,20 @@ def _reflection_context(entries: list[MemoryEntry]) -> str:
     return "\n".join(_render_reflection(entry) for entry in entries) or "(none)"
 
 
+def _contaminated_source_entry_ids(entries: list[MemoryEntry]) -> list[str]:
+    source_entry_ids: list[str] = []
+    for entry in entries:
+        if entry.clean_or_contaminated != "contaminated":
+            continue
+        sources = entry.metadata.get("source_entry_ids", [entry.entry_id])
+        if not isinstance(sources, list):
+            sources = [entry.entry_id]
+        for source_entry_id in sources:
+            if isinstance(source_entry_id, str) and source_entry_id not in source_entry_ids:
+                source_entry_ids.append(source_entry_id)
+    return source_entry_ids
+
+
 def _trial_id(task: TaskInstance, config: dict[str, Any], model: str) -> str:
     return ":".join(
         [
@@ -62,7 +76,7 @@ class ReflexionStylePolicy:
         client: LLMClient,
         model: str,
         config: dict[str, Any] | None = None,
-        verifier: Callable[[str], VerifierResult] | None = None,
+        verifier: Callable[[str, TaskInstance], VerifierResult] | None = None,
     ) -> dict[str, Any]:
         call_config = {**(config or {}), "sample_id": (config or {}).get("sample_id", task.sample_id)}
         memory_before = [entry.model_dump() for entry in memory.entries]
@@ -88,7 +102,7 @@ class ReflexionStylePolicy:
         )
         parsed_answer = _parse_answer(response.content)
         verifier_result = (
-            cast(Callable[[str, TaskInstance], VerifierResult], verifier)(parsed_answer, task)
+            verifier(parsed_answer, task)
             if verifier is not None
             else VerifierResult(is_correct=True)
         )
@@ -122,11 +136,12 @@ class ReflexionStylePolicy:
             config={**call_config, "method_stage": "reflexion_reflect"},
         )
         parent_entry_ids = [entry.entry_id for entry in reflection_entries]
+        source_entry_ids = _contaminated_source_entry_ids(reflection_entries)
         event = {
             "type": "reflexion_append",
             "status": "rejected_empty",
             "parent_entry_ids": parent_entry_ids,
-            "source_entry_ids": parent_entry_ids,
+            "source_entry_ids": source_entry_ids,
         }
         reflection = reflection_response.content.strip()
         if reflection:
@@ -135,15 +150,11 @@ class ReflexionStylePolicy:
                 entry_id=f"reflexion:{task.task_name}:{task.sample_id}:{uuid4().hex}",
                 content=f"Reflection: {reflection}",
                 memory_type="verbal_reflection",
-                clean_or_contaminated=(
-                    "contaminated"
-                    if any(entry.clean_or_contaminated == "contaminated" for entry in reflection_entries)
-                    else "clean"
-                ),
+                clean_or_contaminated="contaminated" if source_entry_ids else "clean",
                 source_trial_id=source_trial_id,
                 metadata={
                     "parent_entry_ids": parent_entry_ids,
-                    "source_entry_ids": parent_entry_ids,
+                    "source_entry_ids": source_entry_ids,
                     "reflection_lineage": {
                         "stage": "reflexion_reflect",
                         "parent_entry_ids": parent_entry_ids,
@@ -157,7 +168,7 @@ class ReflexionStylePolicy:
                 "status": "accepted",
                 "new_entry_id": entry.entry_id,
                 "parent_entry_ids": parent_entry_ids,
-                "source_entry_ids": parent_entry_ids,
+                "source_entry_ids": source_entry_ids,
             }
         return _result(
             response.content,
