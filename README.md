@@ -2,6 +2,34 @@
 
 Controlled memory-contamination diagnostic harness for reasoning-memory systems.
 
+## v0.5 Faithful Full-History, Reflexion, and Dynamic Cheatsheet Baselines
+
+`v0.5` is the current full G0 baseline-fidelity pass for `full_history`, `reflexion_style`, and `dynamic_cheatsheet_optional` over the locked 3-task pilot set.
+
+- `full_history` is a faithful append-only full-history baseline. Each trial makes one `full_history_generate` call and appends one sanitized transcript entry. Prior memory is rendered verbatim; no retrieval, summarization, or truncation is used in this gate.
+- `reflexion_style` is a Reflexion-style verbal memory proxy / faithful adapted control flow. It calls `reflexion_generate` on every trial and `reflexion_reflect` only after verifier failure, then appends a non-empty reflection. The actor reads the latest three ordered reflections from the current identity. This is not a full reproduction of the official Reflexion agent.
+- `dynamic_cheatsheet_optional` is a faithful adapted DC-Cu optional appendix comparator. Each trial calls `dynamic_cheatsheet_generate` then `dynamic_cheatsheet_curate`. A parsed non-empty `<cheatsheet>` block replaces the cheatsheet; missing or empty tags preserve prior state. Code-execution, provider-tool, and retrieval paths are removed. DC is not a new main baseline.
+
+The matrix is `3 tasks × 3 baselines × 3 arms × 2 models = 162 trials`. The canonical replay evidence run is `g0_fh_reflexion_dc_faithful_replay` using `configs/g0_fh_reflexion_dc_faithful_replay.yaml` and inspected by `scripts/inspect_g0_fh_reflexion_dc_fidelity.py`.
+
+External LLM responses are replay fixtures in this gate, so the verification requires no API keys or live model access. The replay output is a fidelity/QA artifact, not benchmark/manuscript evidence. Live runs must keep the same stage structure.
+
+`v0.5` is the intended repository research-artifact Git tag; `pyproject.toml` remains at version `0.1.0` and no package is published.
+
+Verification commands:
+
+```bash
+python -m memcontam.cli validate-config configs/g0_fh_reflexion_dc_faithful_replay.yaml
+python -m pytest tests/test_full_history_faithful.py tests/test_reflexion_faithful.py tests/test_dynamic_cheatsheet_faithful.py tests/test_cli_run.py tests/test_contamination_catalog.py tests/test_logging_schema.py tests/test_replay_client.py tests/test_replay_fixtures.py tests/test_aggregate.py tests/test_docs_scope.py -q
+python -m pytest tests/test_task_verifiers.py tests/test_cli_run.py tests/test_contamination_catalog.py tests/test_openai_compatible_client.py tests/test_aggregate.py tests/test_docs_scope.py -q
+python -m ruff check src tests scripts
+python -m memcontam.cli run configs/g0_fh_reflexion_dc_faithful_replay.yaml --run-id g0_fh_reflexion_dc_faithful_replay
+python -m memcontam.cli aggregate runs/g0_fh_reflexion_dc_faithful_replay
+python scripts/inspect_g0_fh_reflexion_dc_fidelity.py runs/g0_fh_reflexion_dc_faithful_replay
+```
+
+See [`docs/g0-baseline-fidelity-gate-v0.5.md`](docs/g0-baseline-fidelity-gate-v0.5.md) for the full v0.5 report and [`docs/g0-baseline-fidelity-gate-v0.4.md`](docs/g0-baseline-fidelity-gate-v0.4.md) for the prior RAG/BoT report.
+
 ## v0.4 Faithful Adapted RAG/BoT Baselines
 
 `v0.4` is the current partial G0 baseline-fidelity pass for `retrieval_rag` and `bot_style`.
@@ -84,6 +112,7 @@ The bundled config emits 90 replay trial rows:
 
 ## Documentation
 
+- v0.5 G0 full pass report: `docs/g0-baseline-fidelity-gate-v0.5.md`
 - v0.4 G0 partial pass report: `docs/g0-baseline-fidelity-gate-v0.4.md`
 - v0.3 G0 partial pass report: `docs/g0-baseline-fidelity-gate-v0.3.md`
 - v0.2 G0 gap analysis: `docs/g0-baseline-fidelity-gate-v0.2.md`
