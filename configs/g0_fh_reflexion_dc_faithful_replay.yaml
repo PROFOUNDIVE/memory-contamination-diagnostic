@@ -1,0 +1,102 @@
+run:
+  name: g0_fh_reflexion_dc_faithful_replay
+  description: "Faithful full-history, Reflexion, and Dynamic Cheatsheet replay skeleton for the locked 3-task pilot set"
+  mode: faithful
+  task_order_seed: 1
+  sample_order_seed: 1
+  retry_policy_version: retry_v0
+
+models:
+  - gpt4o
+  - frontier_reasoning
+
+tasks:
+  - name: game24
+    sample_path: data/tasks/game24_pilot.jsonl
+    limit: 3
+  - name: math_equation_balancer
+    sample_path: data/tasks/math_equation_balancer_pilot.jsonl
+    limit: 3
+  - name: word_sorting
+    sample_path: data/tasks/word_sorting_pilot.jsonl
+    limit: 3
+
+baselines:
+  - full_history
+  - reflexion_style
+  - dynamic_cheatsheet_optional
+
+arms:
+  - clean
+  - contaminated
+  - contaminated_filter
+
+logging:
+  output_dir: runs
+  prompt_version: prompt_v0
+  memory_policy_version: memory_policy_v0
+  contamination_catalog_version: contamination_v0
+
+memory:
+  corpus_path: data/memory/catalog_v2.jsonl
+  corpus_version: memory_catalog_v2
+
+replay:
+  responses_by_sample:
+    game24_pilot_001:
+      full_history_generate: "final: 6 / (1 - (3 / 4))"
+      reflexion_generate: "final: 1 + 1 + 1 + 1"
+      reflexion_reflect: "I should have tried forming a fraction like 1 - 3/4 to create a useful denominator."
+      dynamic_cheatsheet_generate: "final: 6 / (1 - (3 / 4))"
+      dynamic_cheatsheet_curate: "The fraction shortcut using the denominator 1 - 3/4 is useful for numbers 1, 3, 4, 6."
+    game24_pilot_002:
+      full_history_generate: "final: 7 + 7 + 3 + 2"
+      reflexion_generate: "final: 7 + 7 + 3 + 2"
+      reflexion_reflect: "The straightforward sum of all four numbers reached the target."
+      dynamic_cheatsheet_generate: "final: 7 + 7 + 3 + 2"
+      dynamic_cheatsheet_curate: "<cheatsheet>When the numbers sum directly to the target, prefer simple addition.</cheatsheet>"
+    game24_pilot_003:
+      full_history_generate: "final: (8 / 3) + (8 / 3) + 3"
+      reflexion_generate: "final: (8 / 3) + (8 / 3) + 3"
+      reflexion_reflect: "Using repeated fractions with a common denominator kept every number in play."
+      dynamic_cheatsheet_generate: "final: (8 / 3) + (8 / 3) + 3"
+      dynamic_cheatsheet_curate: "<cheatsheet>Fractions like 8/3 can be added in pairs when the remaining number completes the target.</cheatsheet>"
+    meb_pilot_001:
+      full_history_generate: "final: 2 + 5 = 7"
+      reflexion_generate: "final: 2 + 5 = 7"
+      reflexion_reflect: "The left side evaluates directly to the missing right-hand value."
+      dynamic_cheatsheet_generate: "final: 2 + 5 = 7"
+      dynamic_cheatsheet_curate: "<cheatsheet>Evaluate addition left-to-right after parentheses and multiplication/division.</cheatsheet>"
+    meb_pilot_002:
+      full_history_generate: "final: 9 - 4 = 5"
+      reflexion_generate: "final: 9 - 4 = 5"
+      reflexion_reflect: "Subtraction followed by equality checking gives the missing value."
+      dynamic_cheatsheet_generate: "final: 9 - 4 = 5"
+      dynamic_cheatsheet_curate: "<cheatsheet>For simple subtraction equations, compute the left side and match it.</cheatsheet>"
+    meb_pilot_003:
+      full_history_generate: "final: 3 * 6 = 18"
+      reflexion_generate: "final: 3 * 6 = 18"
+      reflexion_reflect: "Multiplication takes precedence and the product fills the right-hand side."
+      dynamic_cheatsheet_generate: "final: 3 * 6 = 18"
+      dynamic_cheatsheet_curate: "<cheatsheet>Apply multiplication before addition/subtraction when balancing equations.</cheatsheet>"
+    word_sorting_pilot_001:
+      full_history_generate: "final: apple banana pear"
+      reflexion_generate: "final: apple banana pear"
+      reflexion_reflect: "Lexicographic comparison from the first letter produced the correct order."
+      dynamic_cheatsheet_generate: "final: apple banana pear"
+      dynamic_cheatsheet_curate: "<cheatsheet>Sort words alphabetically using Python's default string comparison.</cheatsheet>"
+    word_sorting_pilot_002:
+      full_history_generate: "final: alpha bravo charlie delta"
+      reflexion_generate: "final: alpha bravo charlie delta"
+      reflexion_reflect: "A simple sorted call preserves each word and emits alphabetical order."
+      dynamic_cheatsheet_generate: "final: alpha bravo charlie delta"
+      dynamic_cheatsheet_curate: "<cheatsheet>Preserve every input word exactly once and output a space-separated sorted list.</cheatsheet>"
+    word_sorting_pilot_003:
+      full_history_generate: "final: ant yak zebra"
+      reflexion_generate: "final: ant yak zebra"
+      reflexion_reflect: "Short words and long words both sort by lexicographic order, not length."
+      dynamic_cheatsheet_generate: "final: ant yak zebra"
+      dynamic_cheatsheet_curate: "<cheatsheet>Do not sort by length; use lexicographic order for every WordSorting case.</cheatsheet>"
+
+live_smoke:
+  enabled: false
