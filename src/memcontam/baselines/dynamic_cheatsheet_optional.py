@@ -12,7 +12,7 @@ from memcontam.memory.stores import MemoryEntry, MemoryState
 from memcontam.tasks.base import TaskInstance
 
 
-Verifier = Callable[[str], VerifierResult]
+Verifier = Callable[[str, TaskInstance], VerifierResult]
 
 
 class DynamicCheatsheetOptionalPolicy:
@@ -37,7 +37,11 @@ class DynamicCheatsheetOptionalPolicy:
             config={**call_config, "method_stage": "dynamic_cheatsheet_generate"},
         )
         parsed_answer = _parse_answer(generated.content)
-        verifier_result = (verifier or _default_verifier)(parsed_answer)
+        verifier_result = (
+            verifier(parsed_answer, task)
+            if verifier is not None
+            else _default_verifier(parsed_answer)
+        )
         curated = recorder.chat(
             [_curation_message(task, cheatsheet, generated.content, parsed_answer, verifier_result.is_correct)],
             model=model,
@@ -51,7 +55,7 @@ class DynamicCheatsheetOptionalPolicy:
             "previous_entry_ids": [entry.entry_id for entry in memory.entries],
         }
         if status == "accepted":
-            trial_id = str(call_config.get("trial_id", f"{task.task_name}:{task.sample_id}"))
+            trial_id = _trial_id(task, call_config, model)
             entry = MemoryEntry(
                 entry_id=f"dc_cheatsheet:{task.task_name}:{uuid4().hex}",
                 content=updated_cheatsheet,
@@ -66,6 +70,7 @@ class DynamicCheatsheetOptionalPolicy:
             event.update(
                 {
                     "new_entry_id": entry.entry_id,
+                    "parent_entry_ids": lineage["parent_entry_ids"],
                     "source_entry_ids": lineage["source_entry_ids"],
                     "source_contaminated_entry_ids": lineage["source_contaminated_entry_ids"],
                 }
@@ -77,6 +82,7 @@ class DynamicCheatsheetOptionalPolicy:
             "final_response": generated.content,
             "parsed_answer": parsed_answer,
             "verifier_result": verifier_result,
+            "retrieved_records": [],
             "retrieved_memory": [],
             "retrieved_scores": [],
             "method_calls": recorder.get_records(),
@@ -102,29 +108,35 @@ def _is_cheatsheet(entry: MemoryEntry) -> bool:
 def _lineage(entries: list[MemoryEntry]) -> dict[str, list[str]]:
     parent_entry_ids: list[str] = []
     source_entry_ids: list[str] = []
-    source_contaminated_entry_ids: list[str] = []
     source_trial_ids: list[str] = []
     for entry in entries:
         metadata = entry.metadata
         _extend_unique(parent_entry_ids, metadata.get("parent_entry_ids", []))
         _extend_unique(parent_entry_ids, [entry.entry_id])
         sources = metadata.get("source_entry_ids", [entry.entry_id])
-        _extend_unique(source_entry_ids, sources)
         _extend_unique(
-            source_contaminated_entry_ids,
+            source_entry_ids,
             metadata.get("source_contaminated_entry_ids", []),
         )
         if entry.clean_or_contaminated == "contaminated":
-            _extend_unique(source_contaminated_entry_ids, sources)
+            _extend_unique(source_entry_ids, sources)
         _extend_unique(source_trial_ids, metadata.get("source_trial_ids", []))
         if entry.source_trial_id:
             _extend_unique(source_trial_ids, [entry.source_trial_id])
     return {
         "parent_entry_ids": parent_entry_ids,
         "source_entry_ids": source_entry_ids,
-        "source_contaminated_entry_ids": source_contaminated_entry_ids,
+        "source_contaminated_entry_ids": source_entry_ids,
         "source_trial_ids": source_trial_ids,
     }
+
+
+def _trial_id(task: TaskInstance, config: dict[str, Any], model: str) -> str:
+    return (
+        f"{config.get('run_id', 'unknown_run')}:{task.task_name}:{task.sample_id}:"
+        f"{config.get('baseline', 'dynamic_cheatsheet_optional')}:"
+        f"{config.get('arm', 'clean')}:{config.get('model', model)}"
+    )
 
 
 def _extend_unique(target: list[str], values: object) -> None:

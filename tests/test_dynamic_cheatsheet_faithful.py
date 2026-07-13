@@ -36,7 +36,8 @@ def _task() -> TaskInstance:
     )
 
 
-def _verifier(answer: str) -> VerifierResult:
+def _verifier(answer: str, task: TaskInstance) -> VerifierResult:
+    assert task == _task()
     return VerifierResult(
         is_correct=True,
         parsed_answer=answer,
@@ -71,7 +72,13 @@ def test_dc_cumulative_replaces_and_reuses_tagged_cheatsheet() -> None:
             "<cheatsheet>Keep only verified factor-pair guidance.</cheatsheet>",
         ]
     )
-    config = {"sample_id": "game24_001", "trial_id": "run:game24:game24_001"}
+    config = {
+        "sample_id": "game24_001",
+        "run_id": "run_001",
+        "baseline": "dynamic_cheatsheet_optional",
+        "arm": "clean",
+        "model": "replay",
+    }
     policy = DynamicCheatsheetOptionalPolicy()
 
     first = policy.run(
@@ -86,6 +93,7 @@ def test_dc_cumulative_replaces_and_reuses_tagged_cheatsheet() -> None:
         "dynamic_cheatsheet_curate",
     ]
     assert first["memory_before"] == [entry.model_dump() for entry in seed_memory.entries]
+    assert first["retrieved_records"] == []
     assert first["retrieved_memory"] == []
     assert first["retrieved_scores"] == []
 
@@ -104,13 +112,21 @@ def test_dc_cumulative_replaces_and_reuses_tagged_cheatsheet() -> None:
     assert updated["content"] == "Use factor pairs, then check arithmetic."
     assert updated["memory_type"] == "dynamic_cheatsheet"
     assert updated["clean_or_contaminated"] == "contaminated"
-    assert updated["source_trial_id"] == "run:game24:game24_001"
+    assert (
+        updated["source_trial_id"]
+        == "run_001:game24:game24_001:dynamic_cheatsheet_optional:clean:replay"
+    )
     assert updated["metadata"]["parent_entry_ids"] == ["clean_seed", "contaminated_seed"]
-    assert updated["metadata"]["source_entry_ids"] == ["clean_origin", "contaminated_origin"]
+    assert updated["metadata"]["source_entry_ids"] == ["contaminated_origin"]
     assert updated["metadata"]["source_contaminated_entry_ids"] == ["contaminated_origin"]
     assert first["memory_write_event"]["type"] == "dynamic_cheatsheet_update"
     assert first["memory_write_event"]["status"] == "accepted"
     assert first["memory_write_event"]["new_entry_id"] == updated["entry_id"]
+    assert first["memory_write_event"]["parent_entry_ids"] == [
+        "clean_seed",
+        "contaminated_seed",
+    ]
+    assert first["memory_write_event"]["source_entry_ids"] == ["contaminated_origin"]
 
     second = policy.run(
         _task(),
@@ -131,9 +147,10 @@ def test_dc_cumulative_replaces_and_reuses_tagged_cheatsheet() -> None:
         updated["entry_id"],
     ]
     assert second["memory_after"][0]["metadata"]["source_entry_ids"] == [
-        "clean_origin",
         "contaminated_origin",
     ]
+    assert second["retrieved_memory"] == []
+    assert second["retrieved_scores"] == []
 
 
 @pytest.mark.parametrize(
@@ -170,6 +187,8 @@ def test_dc_missing_or_empty_tag_preserves_prior_cheatsheet(
         "dynamic_cheatsheet_curate",
     ]
     assert result["memory_after"] == [entry.model_dump() for entry in memory.entries]
+    assert result["retrieved_memory"] == []
+    assert result["retrieved_scores"] == []
     assert result["memory_write_event"]["type"] == "dynamic_cheatsheet_update"
     assert result["memory_write_event"]["status"] == status
     assert "new_entry_id" not in result["memory_write_event"]
