@@ -709,3 +709,97 @@ def test_faithful_bot_state_isolated_across_conditions(tmp_path, monkeypatch) ->
     assert clean_gpt4o_id in {entry["entry_id"] for entry in rows[4]["memory_before"]}
     assert clean_gpt4o_id not in {entry["entry_id"] for entry in second_contaminated_gpt4o["memory_before"]}
     assert clean_gpt4o_id not in {entry["entry_id"] for entry in second_clean_frontier["memory_before"]}
+
+
+def test_is_faithful_config_accepts_explicit_mode_and_rejects_unknown_mode() -> None:
+    assert cli._is_faithful_config({"run": {"mode": "faithful"}})
+
+    with pytest.raises(SystemExit, match="unsupported run.mode: unsupported"):
+        cli._is_faithful_config({"run": {"mode": "unsupported"}})
+
+
+def test_faithful_native_memory_config_dispatches_without_embedding_or_bot_resources(
+    tmp_path, monkeypatch
+) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(repo_root)
+    config = load_config(repo_root / "configs/g0_fh_reflexion_dc_faithful_replay.yaml")
+    config["logging"]["output_dir"] = str(tmp_path / "runs")
+
+    def unexpected_resource(*_args, **_kwargs):
+        raise AssertionError("native-memory faithful run initialized a legacy resource")
+
+    monkeypatch.setattr(cli, "SentenceTransformerProvider", unexpected_resource)
+    monkeypatch.setattr(cli, "RunState", unexpected_resource)
+    monkeypatch.setattr(cli, "BotRuntime", unexpected_resource)
+
+    run_dir = run_config(config, run_id="native_memory_resource_free")
+    rows = [json.loads(line) for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()]
+
+    assert len(rows) == 162
+    assert {row["baseline"] for row in rows} == {
+        "full_history",
+        "reflexion_style",
+        "dynamic_cheatsheet_optional",
+    }
+    assert all(row["retrieved_memory"] == [] for row in rows)
+    assert all(row["retrieved_scores"] == [] for row in rows)
+
+
+def test_faithful_native_memory_state_isolated_by_identity(tmp_path, monkeypatch) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(repo_root)
+    config = load_config(repo_root / "configs/g0_fh_reflexion_dc_faithful_replay.yaml")
+    config["logging"]["output_dir"] = str(tmp_path / "runs")
+    config["models"] = ["gpt4o", "frontier_reasoning"]
+    config["tasks"] = [{"name": "game24", "sample_path": "data/tasks/game24_pilot.jsonl", "limit": 2}]
+    config["baselines"] = ["full_history"]
+    config["arms"] = ["clean", "contaminated"]
+
+    run_dir = run_config(config, run_id="native_memory_isolation")
+    rows = [json.loads(line) for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()]
+
+    first_clean_gpt4o = next(
+        row
+        for row in rows
+        if row["sample_id"] == "game24_pilot_001" and row["arm"] == "clean" and row["backbone"] == "gpt4o"
+    )
+    second_clean_gpt4o = next(
+        row
+        for row in rows
+        if row["sample_id"] == "game24_pilot_002" and row["arm"] == "clean" and row["backbone"] == "gpt4o"
+    )
+    second_contaminated_gpt4o = next(
+        row
+        for row in rows
+        if row["sample_id"] == "game24_pilot_002" and row["arm"] == "contaminated" and row["backbone"] == "gpt4o"
+    )
+    second_clean_frontier = next(
+        row
+        for row in rows
+        if row["sample_id"] == "game24_pilot_002" and row["arm"] == "clean" and row["backbone"] == "frontier_reasoning"
+    )
+
+    first_entry_id = first_clean_gpt4o["memory_after"][-1]["entry_id"]
+    assert first_entry_id in {entry["entry_id"] for entry in second_clean_gpt4o["memory_before"]}
+    assert first_entry_id not in {entry["entry_id"] for entry in second_contaminated_gpt4o["memory_before"]}
+    assert first_entry_id not in {entry["entry_id"] for entry in second_clean_frontier["memory_before"]}
+
+
+def test_faithful_config_rejects_unknown_baseline(tmp_path, monkeypatch) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    sample_path = _write_game24_sample(tmp_path)
+    monkeypatch.chdir(repo_root)
+    config = {
+        "run": {"name": "smoke", "mode": "faithful"},
+        "models": ["replay"],
+        "tasks": [{"name": "game24", "sample_path": sample_path, "limit": 1}],
+        "baselines": ["expel_optional"],
+        "arms": ["clean"],
+        "memory": {"corpus_path": str(repo_root / "data/memory/catalog_v2.jsonl")},
+        "logging": {"output_dir": str(tmp_path / "runs")},
+        "replay": {"responses": ["final: 6 / (1 - 3 / 4)"]},
+    }
+
+    with pytest.raises(SystemExit, match="unsupported faithful baseline: expel_optional"):
+        run_config(config, run_id="unknown_faithful_baseline")

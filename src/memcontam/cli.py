@@ -12,6 +12,7 @@ import yaml
 
 from memcontam.baselines.bot_style import BotStylePolicy, distill_thought_template
 from memcontam.baselines.bot_runtime import BotRuntime
+from memcontam.baselines.dynamic_cheatsheet_optional import DynamicCheatsheetOptionalPolicy
 from memcontam.baselines.full_history import FullHistoryPolicy
 from memcontam.baselines.no_memory import NoMemoryPolicy
 from memcontam.baselines.reflexion_style import ReflexionStylePolicy
@@ -83,8 +84,16 @@ BASELINE_POLICIES = {
     "bot_style": BotStylePolicy,
 }
 
+FAITHFUL_BASELINES = {
+    "retrieval_rag",
+    "bot_style",
+    "full_history",
+    "reflexion_style",
+    "dynamic_cheatsheet_optional",
+}
+
 def validate_config(path: Path) -> None:
-    load_config(path)
+    _is_faithful_config(load_config(path))
     print(f"valid config: {path}")
 
 
@@ -299,7 +308,20 @@ def _bad_memory_uptake_label(arm: str, exposure: ContaminationExposure) -> BadMe
 
 
 def _is_faithful_config(config: dict[str, Any]) -> bool:
+    run_mode = config.get("run", {}).get("mode")
+    if run_mode == "faithful":
+        return True
+    if run_mode is not None and run_mode != "legacy":
+        raise SystemExit(f"unsupported run.mode: {run_mode}")
     return bool(config.get("embedding", {}).get("corpus_path") and config.get("bot_state"))
+
+
+def _corpus_path(config: dict[str, Any]) -> str:
+    if "corpus_path" in config.get("memory", {}):
+        return config["memory"]["corpus_path"]
+    if "corpus_path" in config.get("embedding", {}):
+        return config["embedding"]["corpus_path"]
+    raise SystemExit("faithful config requires memory.corpus_path or embedding.corpus_path")
 
 
 def _records_for_baseline(
@@ -474,20 +496,35 @@ def _run_faithful_config(
     run_started_at: str,
     repeated_failure_tracker: _RepeatedFailureTracker,
 ) -> None:
-    corpus_records = load_corpus(Path(config["embedding"]["corpus_path"]))
-    embedding_provider = _embedding_provider(config)
-    cache_dir = Path(config["embedding"].get("cache_path", "data/embedding_cache")) / run_id
-    run_state = RunState(
-        run_id,
-        config_hash=_config_hash(config),
-        evaluation_sample_ids=[
-            row["sample_id"]
-            for task_config in config["tasks"]
-            for row in _load_jsonl(Path(task_config["sample_path"]), task_config.get("limit"))
-        ],
-    )
-    bot_runtime = BotRuntime()
-    bot_buffers: dict[BotBufferIdentity, list[MemoryEntry]] = {}
+    corpus_records = load_corpus(Path(_corpus_path(config)))
+    needs_embedding = any(baseline in {"retrieval_rag", "bot_style"} for baseline in config["baselines"])
+    needs_bot = "bot_style" in config["baselines"]
+    embedding_provider: EmbeddingProvider | None = None
+    cache_dir: Path | None = None
+    if needs_embedding:
+        embedding_provider = _embedding_provider(config)
+        cache_dir = Path(config["embedding"].get("cache_path", "data/embedding_cache")) / run_id
+
+    run_state: RunState | None = None
+    bot_runtime: BotRuntime | None = None
+    bot_buffers: dict[BotBufferIdentity, list[MemoryEntry]] | None = None
+    if needs_bot:
+        run_state = RunState(
+            run_id,
+            config_hash=_config_hash(config),
+            evaluation_sample_ids=[
+                row["sample_id"]
+                for task_config in config["tasks"]
+                for row in _load_jsonl(Path(task_config["sample_path"]), task_config.get("limit"))
+            ],
+        )
+        bot_runtime = BotRuntime()
+        bot_buffers = {}
+
+    transcript_states: dict[tuple[str, ...], list[MemoryEntry]] = {}
+    reflection_states: dict[tuple[str, ...], list[MemoryEntry]] = {}
+    cheatsheet_states: dict[tuple[str, ...], list[MemoryEntry]] = {}
+    filter_decisions: dict[tuple[str, ...], dict[str, Any] | None] = {}
 
     with trials_path.open("w", encoding="utf-8") as f:
         trial_order = 0
@@ -502,10 +539,7 @@ def _run_faithful_config(
             for row in rows:
                 task = task_handler["build"](row)
                 for baseline in config["baselines"]:
-                    if baseline not in {"retrieval_rag", "bot_style"}:
-                        policy = BASELINE_POLICIES.get(baseline)
-                        if policy is None:
-                            raise SystemExit(f"unsupported baseline: {baseline}")
+                    if baseline not in FAITHFUL_BASELINES:
                         raise SystemExit(f"unsupported faithful baseline: {baseline}")
                     baseline_records = _records_for_baseline(corpus_records, task_name, baseline)
                     for arm in config["arms"]:
@@ -525,6 +559,8 @@ def _run_faithful_config(
                                 client, responses_by_sample, task.sample_id, replay_responses
                             )
                             if baseline == "retrieval_rag":
+                                assert embedding_provider is not None
+                                assert cache_dir is not None
                                 rag_cache_dir = cache_dir / task_name / arm
                                 result = RetrievalRagPolicy().run(
                                     task,
@@ -537,7 +573,10 @@ def _run_faithful_config(
                                     cache_dir=rag_cache_dir,
                                 )
                                 verifier_result = task_handler["verify"](result["parsed_answer"], task)
-                            else:
+                            elif baseline == "bot_style":
+                                assert bot_runtime is not None
+                                assert run_state is not None
+                                assert bot_buffers is not None
                                 identity = BotBufferIdentity(
                                     run_id, task.task_name, baseline, arm, model
                                 )
@@ -603,6 +642,47 @@ def _run_faithful_config(
                                         )
                                         for entry in result["memory_after"]
                                     ]
+                            else:
+                                identity = (run_id, task_name, baseline, arm, model)
+                                if baseline == "full_history":
+                                    state = transcript_states
+                                    policy = FullHistoryPolicy()
+                                elif baseline == "reflexion_style":
+                                    state = reflection_states
+                                    policy = ReflexionStylePolicy()
+                                else:
+                                    state = cheatsheet_states
+                                    policy = DynamicCheatsheetOptionalPolicy()
+                                if identity not in state:
+                                    entries, filter_decision = build_arm_corpus(
+                                        baseline_records, task_name, cast(Any, arm)
+                                    )
+                                    state[identity] = entries
+                                    filter_decisions[identity] = filter_decision
+                                else:
+                                    filter_decision = filter_decisions[identity]
+                                memory = MemoryState(entries=state[identity])
+                                result = policy.run(
+                                    task,
+                                    memory,
+                                    client=trial_client,
+                                    model=model,
+                                    config={
+                                        **config.get("replay", {}),
+                                        "sample_id": task.sample_id,
+                                        "run_id": run_id,
+                                        "baseline": baseline,
+                                        "arm": arm,
+                                        "model": model,
+                                    },
+                                    verifier=lambda response, task: task_handler["verify"](
+                                        _parse_answer(response), task
+                                    ),
+                                )
+                                verifier_result = result["verifier_result"]
+                                state[identity] = [
+                                    MemoryEntry(**entry) for entry in result["memory_after"]
+                                ]
                             trial = _faithful_result_trial(
                                 config=config,
                                 run_id=run_id,
