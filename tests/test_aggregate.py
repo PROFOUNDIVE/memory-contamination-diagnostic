@@ -70,6 +70,11 @@ def _bot_write_event(**overrides):
     return base
 
 
+def _trial_with_method_calls(**overrides):
+    base = _trial_row(**overrides)
+    return TrialLog.model_validate(base)
+
+
 def _write_trials_jsonl(run_dir: Path, rows: list[dict]) -> Path:
     trials_path = run_dir / "trials.jsonl"
     trials_path.write_text("".join(json.dumps(row) + chr(10) for row in rows), encoding="utf-8")
@@ -218,6 +223,93 @@ def test_aggregate_run_computes_shallow_metrics_and_cli_prints_json(tmp_path) ->
     cli_result = _cli_aggregate(run_dir)
     assert cli_result.returncode == 0
     assert json.loads(cli_result.stdout) == result
+
+
+def test_method_call_metrics_cover_native_full_history_reflexion_and_dc() -> None:
+    from memcontam.evaluation.aggregate import _method_call_metrics
+
+    trials = [
+        _trial_with_method_calls(
+            trial_id="run1:game24:s1:reflexion_style:clean:replay",
+            baseline="reflexion_style",
+            arm="clean",
+            method_calls=[
+                _method_call(
+                    "reflexion_generate",
+                    latency_ms=11,
+                    token_usage={"prompt_tokens": 5, "completion_tokens": 6, "total_tokens": 11},
+                )
+            ],
+        ),
+        _trial_with_method_calls(
+            trial_id="run1:game24:s2:reflexion_style:contaminated:replay",
+            sample_id="s2",
+            baseline="reflexion_style",
+            arm="contaminated",
+            verifier_result=VerifierResult(is_correct=False, reason="incorrect"),
+            raw_response="final: wrong",
+            parsed_answer="wrong",
+            repeated_failure_label="repeated_failure",
+            method_calls=[
+                _method_call(
+                    "reflexion_generate",
+                    latency_ms=12,
+                    token_usage={"prompt_tokens": 7, "completion_tokens": 8, "total_tokens": 15},
+                ),
+                _method_call(
+                    "reflexion_reflect",
+                    latency_ms=13,
+                    token_usage={"prompt_tokens": 3, "completion_tokens": 4, "total_tokens": 7},
+                    error_type="RuntimeError",
+                ),
+            ],
+        ),
+        _trial_with_method_calls(
+            trial_id="run1:game24:s3:full_history:clean:replay",
+            sample_id="s3",
+            baseline="full_history",
+            method_calls=[
+                _method_call(
+                    "full_history_generate",
+                    latency_ms=14,
+                    token_usage={"prompt_tokens": 2, "completion_tokens": 9, "total_tokens": 11},
+                )
+            ],
+        ),
+        _trial_with_method_calls(
+            trial_id="run1:game24:s4:dynamic_cheatsheet_optional:clean:replay",
+            sample_id="s4",
+            baseline="dynamic_cheatsheet_optional",
+            method_calls=[
+                _method_call(
+                    "dynamic_cheatsheet_generate",
+                    latency_ms=15,
+                    token_usage={"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+                ),
+                _method_call(
+                    "dynamic_cheatsheet_curate",
+                    latency_ms=16,
+                    token_usage={"prompt_tokens": 4, "completion_tokens": 2, "total_tokens": 6},
+                ),
+            ],
+        ),
+    ]
+
+    metrics = _method_call_metrics(trials)
+
+    assert metrics["method_call_count"] == 6
+    assert metrics["method_call_error_count"] == 1
+    assert metrics["prompt_token_total"] == 22
+    assert metrics["completion_token_total"] == 30
+    assert metrics["total_token_total"] == 52
+    assert metrics["latency_ms_total"] == 81
+    assert metrics["stage_histogram"] == {
+        "full_history_generate": 1,
+        "reflexion_generate": 2,
+        "reflexion_reflect": 1,
+        "dynamic_cheatsheet_generate": 1,
+        "dynamic_cheatsheet_curate": 1,
+    }
 
 
 def test_aggregate_run_handles_empty_trials_jsonl(tmp_path) -> None:
