@@ -49,13 +49,14 @@ class DynamicCheatsheetOptionalPolicy:
         )
         updated_cheatsheet, status = _extract_cheatsheet(curated.content, cheatsheet)
 
+        trial_id = _trial_id(task, call_config, model)
         event = {
             "type": "dynamic_cheatsheet_update",
             "status": status,
+            "source_trial_id": trial_id,
             "previous_entry_ids": [entry.entry_id for entry in memory.entries],
         }
         if status == "accepted":
-            trial_id = _trial_id(task, call_config, model)
             entry = MemoryEntry(
                 entry_id=f"dc_cheatsheet:{task.task_name}:{uuid4().hex}",
                 content=updated_cheatsheet,

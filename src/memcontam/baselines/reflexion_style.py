@@ -137,15 +137,16 @@ class ReflexionStylePolicy:
         )
         parent_entry_ids = [entry.entry_id for entry in reflection_entries]
         source_entry_ids = _contaminated_source_entry_ids(reflection_entries)
+        source_trial_id = _trial_id(task, call_config, model)
         event = {
             "type": "reflexion_append",
             "status": "rejected_empty",
+            "source_trial_id": source_trial_id,
             "parent_entry_ids": parent_entry_ids,
             "source_entry_ids": source_entry_ids,
         }
         reflection = reflection_response.content.strip()
         if reflection:
-            source_trial_id = _trial_id(task, call_config, model)
             entry = MemoryEntry(
                 entry_id=f"reflexion:{task.task_name}:{task.sample_id}:{uuid4().hex}",
                 content=f"Reflection: {reflection}",
@@ -167,6 +168,7 @@ class ReflexionStylePolicy:
                 "type": "reflexion_append",
                 "status": "accepted",
                 "new_entry_id": entry.entry_id,
+                "source_trial_id": source_trial_id,
                 "parent_entry_ids": parent_entry_ids,
                 "source_entry_ids": source_entry_ids,
             }

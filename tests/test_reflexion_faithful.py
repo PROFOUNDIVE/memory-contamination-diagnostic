@@ -194,6 +194,7 @@ def test_run_rejects_empty_failure_reflection_without_mutating_memory() -> None:
     assert result["memory_write_event"] == {
         "type": "reflexion_append",
         "status": "rejected_empty",
+        "source_trial_id": "run_001:math_equation_balancer:sample_001:reflexion_style:clean:replay",
         "parent_entry_ids": ["one"],
         "source_entry_ids": [],
     }

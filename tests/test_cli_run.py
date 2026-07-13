@@ -9,7 +9,7 @@ import memcontam.cli as cli
 from memcontam.cli import run_config
 from memcontam.cli import load_config
 from memcontam.clients.base import LLMResponse
-from memcontam.logging.schema import TrialLog
+from memcontam.logging.schema import TrialLog, VerifierResult
 from memcontam.memory.embeddings import FakeEmbeddingProvider
 
 
@@ -803,3 +803,198 @@ def test_faithful_config_rejects_unknown_baseline(tmp_path, monkeypatch) -> None
 
     with pytest.raises(SystemExit, match="unsupported faithful baseline: expel_optional"):
         run_config(config, run_id="unknown_faithful_baseline")
+
+
+_NATIVE_MEMORY_BASELINES = [
+    "full_history",
+    "reflexion_style",
+    "dynamic_cheatsheet_optional",
+]
+
+_NATIVE_MEMORY_GAME24_PAIRS = {
+    "full_history": (
+        "memory_clean_game24_full_history_001",
+        "memory_corrupted_game24_full_history_001",
+    ),
+    "reflexion_style": (
+        "memory_clean_game24_reflexion_style_001",
+        "memory_corrupted_game24_reflexion_style_001",
+    ),
+    "dynamic_cheatsheet_optional": (
+        "memory_clean_game24_dynamic_cheatsheet_optional_001",
+        "memory_corrupted_game24_dynamic_cheatsheet_optional_001",
+    ),
+}
+
+
+def _run_native_memory_config(tmp_path, monkeypatch, **overrides) -> list[dict]:
+    repo_root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(repo_root)
+    config = load_config(repo_root / "configs/g0_fh_reflexion_dc_faithful_replay.yaml")
+    config["logging"]["output_dir"] = str(tmp_path / "runs")
+    config["models"] = ["gpt4o"]
+    config["tasks"] = [{"name": "game24", "sample_path": "data/tasks/game24_pilot.jsonl", "limit": 2}]
+    for key, value in overrides.items():
+        config[key] = value
+    run_dir = run_config(config, run_id="native_memory_test")
+    return [json.loads(line) for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()]
+
+
+@pytest.mark.parametrize("baseline", _NATIVE_MEMORY_BASELINES)
+def test_native_memory_arm_semantics(baseline: str, tmp_path, monkeypatch) -> None:
+    rows = _run_native_memory_config(
+        tmp_path,
+        monkeypatch,
+        baselines=[baseline],
+        arms=["clean", "contaminated", "contaminated_filter"],
+    )
+
+    clean_entry_id, corrupted_entry_id = _NATIVE_MEMORY_GAME24_PAIRS[baseline]
+    arm_rows = {row["arm"]: row for row in rows if row["baseline"] == baseline}
+    assert set(arm_rows) == {"clean", "contaminated", "contaminated_filter"}
+
+    clean_row = arm_rows["clean"]
+    assert clean_row["contamination_exposure"]["is_exposed"] is False
+    assert clean_row["contamination_exposure"]["exposure_mode"] == "none"
+    assert all(
+        entry.get("clean_or_contaminated") != "contaminated"
+        for entry in clean_row["memory_before"]
+    )
+
+    contaminated_row = arm_rows["contaminated"]
+    assert contaminated_row["contamination_exposure"]["is_exposed"] is True
+    assert contaminated_row["contamination_exposure"]["exposure_mode"] == "memory_before"
+    assert corrupted_entry_id in {
+        entry.get("entry_id") for entry in contaminated_row["memory_before"]
+    }
+
+    filter_row = arm_rows["contaminated_filter"]
+    assert filter_row["filter_decision"] is not None
+    assert filter_row["filter_decision"]["dropped"] > 0
+    assert corrupted_entry_id not in {
+        entry.get("entry_id") for entry in filter_row["memory_before"]
+    }
+    assert clean_entry_id in {
+        entry.get("entry_id") for entry in filter_row["memory_before"]
+    }
+    assert filter_row["contamination_exposure"]["is_exposed"] is False
+
+
+@pytest.mark.parametrize("baseline", _NATIVE_MEMORY_BASELINES)
+def test_native_memory_retrieval_fields_empty(baseline: str, tmp_path, monkeypatch) -> None:
+    rows = _run_native_memory_config(tmp_path, monkeypatch, baselines=[baseline])
+    for row in rows:
+        assert row["retrieved_memory"] == []
+        assert row["retrieved_scores"] == []
+
+
+def test_native_memory_gold_leakage(tmp_path, monkeypatch) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(repo_root)
+    sample_path = tmp_path / "meb_canary.jsonl"
+    sample_path.write_text(
+        json.dumps(
+            {
+                "sample_id": "meb_canary_001",
+                "input": "1 + 1 = ?",
+                "verifier_spec": {
+                    "target": "CANARY_EXPECTED_abc123",
+                    "target_value": "CANARY_VALUE_xyz789",
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    canary_reason = "CANARY_REASON_leakCheck"
+    canary_expected = "CANARY_EXPECTED_abc123"
+    canary_value = "CANARY_VALUE_xyz789"
+
+    def _canary_verifier(parsed_answer: str, task):
+        return VerifierResult(
+            is_correct=True,
+            parsed_answer=parsed_answer,
+            reason=f"ok {canary_reason}",
+            metadata={
+                "expected": canary_expected,
+                "target_value": canary_value,
+            },
+        )
+
+    monkeypatch.setitem(cli.TASK_DISPATCH["math_equation_balancer"], "verify", _canary_verifier)
+
+    config = load_config(repo_root / "configs/g0_fh_reflexion_dc_faithful_replay.yaml")
+    config["logging"]["output_dir"] = str(tmp_path / "runs")
+    config["models"] = ["gpt4o"]
+    config["tasks"] = [{"name": "math_equation_balancer", "sample_path": str(sample_path), "limit": 1}]
+    config["baselines"] = _NATIVE_MEMORY_BASELINES
+    config["arms"] = ["clean", "contaminated", "contaminated_filter"]
+    config["replay"] = {
+        "responses_by_sample": {
+            "meb_canary_001": {
+                "full_history_generate": "final: 2 + 5 = 7",
+                "reflexion_generate": "final: 2 + 5 = 7",
+                "reflexion_reflect": "I should evaluate left to right.",
+                "dynamic_cheatsheet_generate": "final: 2 + 5 = 7",
+                "dynamic_cheatsheet_curate": "<cheatsheet>Evaluate addition left-to-right.</cheatsheet>",
+            }
+        }
+    }
+
+    run_dir = run_config(config, run_id="native_memory_gold_leakage")
+    rows = [json.loads(line) for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()]
+
+    assert len(rows) == 9
+    canaries = {canary_expected, canary_value, canary_reason}
+    for row in rows:
+        TrialLog.model_validate(row)
+        assert canary_expected in row["gold_or_verifier_spec"].get("target", "")
+        assert canary_value in row["gold_or_verifier_spec"].get("target_value", "")
+        assert canary_reason in row["verifier_result"].get("reason", "")
+
+        prompt_text = "\n".join(message["content"] for message in row["prompt_messages"])
+        for canary in canaries:
+            assert canary not in prompt_text
+            for entry in row["memory_before"] + row["memory_after"]:
+                assert canary not in str(entry.get("content", ""))
+
+
+def test_native_memory_lineage_on_writes(tmp_path, monkeypatch) -> None:
+    rows = _run_native_memory_config(
+        tmp_path,
+        monkeypatch,
+        arms=["clean", "contaminated"],
+    )
+
+    for baseline in _NATIVE_MEMORY_BASELINES:
+        baseline_rows = [row for row in rows if row["baseline"] == baseline]
+        assert baseline_rows
+        for row in baseline_rows:
+            event = row["memory_write_event"]
+            if event is None or event.get("status") != "accepted":
+                continue
+            assert "source_trial_id" in event
+            assert "parent_entry_ids" in event
+            assert "source_entry_ids" in event
+            assert row["trial_id"] == event["source_trial_id"]
+
+        for arm in ["clean", "contaminated"]:
+            arm_rows = [row for row in baseline_rows if row["arm"] == arm]
+            assert arm_rows
+            for row in arm_rows:
+                event = row["memory_write_event"]
+                if event is None or event.get("status") != "accepted":
+                    continue
+                new_entry_id = event.get("new_entry_id")
+                if not new_entry_id:
+                    continue
+                after_entries = {entry["entry_id"]: entry for entry in row["memory_after"]}
+                if new_entry_id not in after_entries:
+                    continue
+                new_entry = after_entries[new_entry_id]
+                if arm == "clean":
+                    assert new_entry["clean_or_contaminated"] == "clean"
+                else:
+                    assert event["source_entry_ids"]
+                    assert new_entry["clean_or_contaminated"] == "contaminated"

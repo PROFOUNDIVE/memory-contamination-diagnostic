@@ -459,3 +459,109 @@ def test_method_call_rejects_missing_stage() -> None:
             raw_response="final: 24",
             model="gpt4o",
         )
+
+
+@pytest.mark.parametrize(
+    "baseline,memory_write_event",
+    [
+        (
+            "full_history",
+            {
+                "type": "full_history_append",
+                "status": "accepted",
+                "new_entry_id": "fh:game24:s1:abc",
+                "source_trial_id": "r1:game24:s1:full_history:clean:gpt4o",
+                "parent_entry_ids": ["memory_clean_game24_full_history_001"],
+                "source_entry_ids": [],
+            },
+        ),
+        (
+            "reflexion_style",
+            {
+                "type": "reflexion_append",
+                "status": "accepted",
+                "new_entry_id": "ref:game24:s1:abc",
+                "source_trial_id": "r1:game24:s1:reflexion_style:clean:gpt4o",
+                "parent_entry_ids": ["memory_clean_game24_reflexion_style_001"],
+                "source_entry_ids": [],
+            },
+        ),
+        (
+            "dynamic_cheatsheet_optional",
+            {
+                "type": "dynamic_cheatsheet_update",
+                "status": "accepted",
+                "previous_entry_ids": ["memory_clean_game24_dynamic_cheatsheet_optional_001"],
+                "new_entry_id": "dc:game24:abc",
+                "source_trial_id": "r1:game24:s1:dynamic_cheatsheet_optional:clean:gpt4o",
+                "parent_entry_ids": ["memory_clean_game24_dynamic_cheatsheet_optional_001"],
+                "source_entry_ids": [],
+                "source_contaminated_entry_ids": [],
+            },
+        ),
+    ],
+)
+def test_native_memory_baseline_trial_log_conforms_to_schema(
+    baseline: str, memory_write_event: dict[str, Any]
+) -> None:
+    log = TrialLog(
+        trial_id="t_native",
+        run_id="r1",
+        task_name="game24",
+        sample_id="s1",
+        baseline=baseline,
+        arm="clean",
+        backbone="gpt4o",
+        input={"numbers": [1, 3, 4, 6]},
+        gold_or_verifier_spec={"target": 24},
+        prompt_messages=[{"role": "user", "content": "solve"}],
+        raw_response="final: 24",
+        verifier_result=VerifierResult(is_correct=True),
+        memory_write_event=memory_write_event,
+        contamination_exposure=ContaminationExposure(
+            condition="clean",
+            is_exposed=False,
+            source_entry_ids=[],
+            contamination_types=[],
+            memory_before_entry_ids=[],
+            retrieved_entry_ids=[],
+            exposure_mode="none",
+            reason="clean arm has no contaminated memory sources",
+        ),
+    )
+
+    expected_top_keys = {
+        "trial_id",
+        "run_id",
+        "task_name",
+        "sample_id",
+        "baseline",
+        "arm",
+        "backbone",
+        "input",
+        "gold_or_verifier_spec",
+        "prompt_messages",
+        "memory_before",
+        "retrieved_memory",
+        "retrieved_scores",
+        "filter_decision",
+        "raw_response",
+        "parsed_answer",
+        "verifier_result",
+        "metadata",
+        "memory_write_event",
+        "memory_after",
+        "method_calls",
+        "contamination_exposure",
+        "bad_memory_uptake_label",
+        "repeated_failure_label",
+        "recovery_after_filter_label",
+        "latency_ms",
+        "token_usage",
+        "cost_estimate",
+        "retry_count",
+        "error_type",
+    }
+    assert set(log.model_dump().keys()) == expected_top_keys
+    assert set(log.contamination_exposure.model_dump().keys()) == EXPOSURE_KEYS
+    assert log.memory_write_event == memory_write_event

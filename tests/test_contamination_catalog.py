@@ -84,6 +84,26 @@ def test_v2_corpus_memory_type_matches_baseline(v2_corpus, baseline: str, memory
             assert r.memory_type == memory_type
 
 
+def test_v2_corpus_memory_types_are_native_baseline_categories(v2_corpus) -> None:
+    for r in v2_corpus:
+        assert r.memory_type in {
+            "full_history_transcript",
+            "verbal_reflection",
+            "cheatsheet_item",
+        }
+
+
+def test_v2_corpus_contaminated_pairs_match_clean_record(v2_corpus) -> None:
+    clean_by_id = {r.entry_id: r for r in v2_corpus if r.clean_or_contaminated == "clean"}
+    for r in v2_corpus:
+        if r.clean_or_contaminated != "contaminated":
+            continue
+        clean = clean_by_id[r.paired_clean_entry_id]
+        assert clean.task == r.task
+        assert clean.memory_type == r.memory_type
+        assert clean.target_baselines == r.target_baselines
+
+
 def test_v2_corpus_clean_payload_matches_task_strategy(v2_corpus) -> None:
     v1 = load_corpus(Path(__file__).resolve().parents[1] / "data/memory/catalog_v1.jsonl")
     v1_clean_by_task = {
