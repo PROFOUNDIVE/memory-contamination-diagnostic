@@ -95,6 +95,9 @@ def _check_shape(trials: list[TrialLog]) -> dict[str, Any]:
         baselines.add(trial.baseline)
         samples_by_task.setdefault(trial.task_name, set()).add(trial.sample_id)
 
+        identity = _identity(trial)
+        seen_identities.add(identity)
+
         if trial.trial_id in seen_trial_ids:
             reasons.append(f"duplicate trial_id: {trial.trial_id}")
         seen_trial_ids.add(trial.trial_id)
