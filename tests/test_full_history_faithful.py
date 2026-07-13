@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+from typing import Callable, cast
 
-from memcontam.baselines.full_history import FullHistoryPolicy
+import pytest
+
+from memcontam.baselines.full_history import FullHistoryPolicy, _call_verifier
 from memcontam.clients.replay import ReplayClient
 from memcontam.logging.schema import VerifierResult
 from memcontam.memory.stores import MemoryEntry, MemoryState
@@ -141,7 +144,21 @@ def test_run_marks_contaminated_lineage_from_any_parent() -> None:
     )
 
     new_entry = result["memory_after"][-1]
+    assert result["retrieved_records"] == []
+    assert result["retrieved_scores"] == []
     assert new_entry["clean_or_contaminated"] == "contaminated"
     assert new_entry["metadata"]["lineage"] == "contaminated"
     assert new_entry["metadata"]["source_entry_ids"] == ["cont-1"]
     assert result["memory_write_event"]["source_entry_ids"] == ["cont-1"]
+
+
+def test_call_verifier_requires_task_argument() -> None:
+    task = TaskInstance(sample_id="s-3", task_name="full_history", input={})
+
+    def one_argument_verifier(answer: str) -> VerifierResult:
+        return VerifierResult(is_correct=True, parsed_answer=answer)
+
+    with pytest.raises(TypeError):
+        _call_verifier(
+            cast(Callable[[str, TaskInstance], VerifierResult], one_argument_verifier), "answer", task
+        )

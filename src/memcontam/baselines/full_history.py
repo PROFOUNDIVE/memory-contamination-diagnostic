@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import inspect
 import json
 from typing import Any, Callable
 from uuid import uuid4
@@ -152,9 +151,6 @@ def _parse_answer(response: str) -> str:
 
 
 def _call_verifier(
-    verifier: Callable[..., VerifierResult], parsed_answer: str, task: TaskInstance
+    verifier: Callable[[str, TaskInstance], VerifierResult], parsed_answer: str, task: TaskInstance
 ) -> VerifierResult:
-    signature = inspect.signature(verifier)
-    if len(signature.parameters) >= 2:
-        return verifier(parsed_answer, task)
-    return verifier(parsed_answer)
+    return verifier(parsed_answer, task)
