@@ -104,6 +104,25 @@ def _valid_clean_record(entry_id: str, task: str = "game24") -> dict:
     }
 
 
+def _valid_dc_rs_record(
+    entry_id: str,
+    task: str = "game24",
+    output_text: str = "1 + 2 + 3 + 3",
+    paired_clean_entry_id: str | None = None,
+) -> dict:
+    return {
+        "entry_id": entry_id,
+        "task": task,
+        "target_baselines": ["dynamic_cheatsheet_rs_optional"],
+        "memory_type": "dc_rs_io_pair",
+        "content": '{"numbers":[1,2,3,3],"target":9}',
+        "output_text": output_text,
+        "source": "pilot_warmup_dc_rs",
+        "clean_or_contaminated": "clean" if paired_clean_entry_id is None else "contaminated",
+        "paired_clean_entry_id": paired_clean_entry_id,
+    }
+
+
 def test_corpus_rejects_invalid_or_answer_leaking_records() -> None:
     base = [
         _valid_clean_record("clean_game24_001"),
@@ -205,3 +224,86 @@ def test_corpus_rejects_invalid_or_answer_leaking_records() -> None:
             load_corpus(corrupted_without_pair_path)
         assert "corrupted_game24_001" in str(exc.value)
         assert "missing_clean_id" in str(exc.value)
+
+
+def test_dc_rs_io_pair_loads_and_propagates_output_text_metadata() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        path = _write_fixture(tmp_path, [_valid_dc_rs_record("dc_rs_clean_game24_001")])
+        records = load_corpus(path)
+        assert len(records) == 1
+        record = records[0]
+        assert record.memory_type == "dc_rs_io_pair"
+        assert record.content == '{"numbers":[1,2,3,3],"target":9}'
+        assert record.output_text == "1 + 2 + 3 + 3"
+
+        entries, _ = build_arm_corpus(records, "game24", "clean")
+        assert len(entries) == 1
+        entry = entries[0]
+        assert entry.content == record.content
+        assert entry.metadata.get("output_text") == "1 + 2 + 3 + 3"
+        assert "task" in entry.metadata
+        assert "source" in entry.metadata
+        assert "target_baselines" in entry.metadata
+
+
+def test_dc_rs_io_pair_rejects_missing_output_text() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        row = _valid_dc_rs_record("dc_rs_clean_game24_002")
+        del row["output_text"]
+        path = _write_fixture(tmp_path, [row])
+        with pytest.raises(CorpusValidationError) as exc:
+            load_corpus(path)
+        assert "dc_rs_clean_game24_002" in str(exc.value)
+        assert "output_text" in str(exc.value).lower()
+
+
+def test_dc_rs_io_pair_rejects_blank_output_text() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        for blank in ["", "   ", "\t"]:
+            row = _valid_dc_rs_record("dc_rs_clean_game24_003", output_text=blank)
+            path = _write_fixture(tmp_path, [row])
+            with pytest.raises(CorpusValidationError) as exc:
+                load_corpus(path)
+            assert "dc_rs_clean_game24_003" in str(exc.value)
+            assert "output_text" in str(exc.value).lower()
+
+
+def test_dc_rs_io_pair_rejects_blank_content() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        row = _valid_dc_rs_record("dc_rs_clean_game24_004")
+        row["content"] = ""
+        path = _write_fixture(tmp_path, [row])
+        with pytest.raises(CorpusValidationError) as exc:
+            load_corpus(path)
+        assert "dc_rs_clean_game24_004" in str(exc.value)
+        assert "content" in str(exc.value).lower()
+
+
+def test_dc_rs_io_pair_rejects_leaking_output_text() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        row = _valid_dc_rs_record(
+            "dc_rs_clean_game24_005",
+            output_text="The answer is final: 24 because 6 / (1 - 3/4).",
+        )
+        path = _write_fixture(tmp_path, [row])
+        with pytest.raises(CorpusValidationError) as exc:
+            load_corpus(path)
+        assert "dc_rs_clean_game24_005" in str(exc.value)
+        assert "final:" in str(exc.value)
+
+
+def test_non_dc_rs_records_parse_without_output_text() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        path = _write_fixture(tmp_path, [_valid_clean_record("clean_game24_007")])
+        records = load_corpus(path)
+        assert len(records) == 1
+        assert records[0].output_text is None
+
+        entries, _ = build_arm_corpus(records, "game24", "clean")
+        assert "output_text" not in entries[0].metadata

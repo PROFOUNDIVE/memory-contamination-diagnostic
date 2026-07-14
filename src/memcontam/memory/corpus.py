@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from memcontam.memory.filters import drop_known_contaminated
 from memcontam.memory.stores import MemoryEntry
@@ -18,6 +18,7 @@ KNOWN_BASELINES = {
     "reflexion_style",
     "bot_style",
     "dynamic_cheatsheet_optional",
+    "dynamic_cheatsheet_rs_optional",
     "expel_optional",
 }
 
@@ -46,12 +47,22 @@ class CorpusValidationError(ValueError):
     pass
 
 
+def _assert_no_leakage(text: str, entry_id: str) -> None:
+    lowered = text.lower()
+    for substring in _FORBIDDEN_ANSWER_SUBSTRINGS:
+        if substring.lower() in lowered:
+            raise ValueError(
+                f"record {entry_id!r} contains raw evaluation answer {substring!r}"
+            )
+
+
 class CorpusRecord(BaseModel):
     entry_id: str
     task: str
     target_baselines: list[str] = Field(default_factory=list)
     memory_type: str
     content: str
+    output_text: str | None = None
     source: str
     clean_or_contaminated: Literal["clean", "contaminated"]
     paired_clean_entry_id: str | None = None
@@ -82,13 +93,30 @@ class CorpusRecord(BaseModel):
     @classmethod
     def _no_raw_evaluation_answers(cls, value: str, info) -> str:
         entry_id = info.data.get("entry_id", "?")
-        lowered = value.lower()
-        for substring in _FORBIDDEN_ANSWER_SUBSTRINGS:
-            if substring.lower() in lowered:
-                raise ValueError(
-                    f"record {entry_id!r} contains raw evaluation answer {substring!r}"
-                )
+        _assert_no_leakage(value, entry_id)
         return value
+
+    @field_validator("output_text")
+    @classmethod
+    def _output_text_no_raw_evaluation_answers(cls, value: str | None, info) -> str | None:
+        if value is None:
+            return value
+        entry_id = info.data.get("entry_id", "?")
+        _assert_no_leakage(value, entry_id)
+        return value
+
+    @model_validator(mode="after")
+    def _dc_rs_io_pair_has_input_and_output(self) -> "CorpusRecord":
+        if self.memory_type == "dc_rs_io_pair":
+            if not self.content or not self.content.strip():
+                raise ValueError(
+                    f"record {self.entry_id!r} dc_rs_io_pair requires non-empty content"
+                )
+            if self.output_text is None or not self.output_text.strip():
+                raise ValueError(
+                    f"record {self.entry_id!r} dc_rs_io_pair requires non-empty output_text"
+                )
+        return self
 
 
 class _ValidatedCorpus:
@@ -158,6 +186,8 @@ def _to_memory_entry(record: CorpusRecord) -> MemoryEntry:
     }
     if record.paired_clean_entry_id is not None:
         metadata["paired_clean_entry_id"] = record.paired_clean_entry_id
+    if record.memory_type == "dc_rs_io_pair" and record.output_text is not None:
+        metadata["output_text"] = record.output_text
     return MemoryEntry(
         entry_id=record.entry_id,
         content=record.content,

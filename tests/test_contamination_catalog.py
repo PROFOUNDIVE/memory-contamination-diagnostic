@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -118,3 +120,28 @@ def test_v2_corpus_contaminated_payload_does_not_leak_answers(v2_corpus) -> None
     for r in v2_corpus:
         if r.clean_or_contaminated == "contaminated":
             assert "final:" not in r.content.lower()
+
+
+def test_dc_rs_io_pair_schema_accepted() -> None:
+    row = {
+        "entry_id": "dc_rs_clean_game24_schema_001",
+        "task": "game24",
+        "target_baselines": ["dynamic_cheatsheet_rs_optional"],
+        "memory_type": "dc_rs_io_pair",
+        "content": '{"numbers":[1,2,3,3],"target":9}',
+        "output_text": "1 + 2 + 3 + 3",
+        "source": "pilot_warmup_dc_rs",
+        "clean_or_contaminated": "clean",
+        "paired_clean_entry_id": None,
+    }
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "catalog.jsonl"
+        with path.open("w", encoding="utf-8") as f:
+            f.write(json.dumps(row) + "\n")
+
+        records = load_corpus(path)
+        assert len(records) == 1
+        record = records[0]
+        assert record.memory_type == "dc_rs_io_pair"
+        assert record.output_text == "1 + 2 + 3 + 3"
+        assert "dynamic_cheatsheet_rs_optional" in KNOWN_BASELINES
