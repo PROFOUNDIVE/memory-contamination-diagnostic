@@ -107,6 +107,7 @@ def _valid_clean_record(entry_id: str, task: str = "game24") -> dict:
 def _valid_dc_rs_record(
     entry_id: str,
     task: str = "game24",
+    content: str = '{"numbers":[1,2,3,3],"target":9}',
     output_text: str = "1 + 2 + 3 + 3",
     paired_clean_entry_id: str | None = None,
 ) -> dict:
@@ -115,7 +116,7 @@ def _valid_dc_rs_record(
         "task": task,
         "target_baselines": ["dynamic_cheatsheet_rs_optional"],
         "memory_type": "dc_rs_io_pair",
-        "content": '{"numbers":[1,2,3,3],"target":9}',
+        "content": content,
         "output_text": output_text,
         "source": "pilot_warmup_dc_rs",
         "clean_or_contaminated": "clean" if paired_clean_entry_id is None else "contaminated",
@@ -307,3 +308,74 @@ def test_non_dc_rs_records_parse_without_output_text() -> None:
 
         entries, _ = build_arm_corpus(records, "game24", "clean")
         assert "output_text" not in entries[0].metadata
+
+
+@pytest.mark.parametrize(
+    "task,content,clean_id,corrupted_id,clean_output,corrupted_output,expected_filter_dropped",
+    [
+        (
+            "game24",
+            '{"numbers":[1,2,3,3],"target":9}',
+            "dc_rs_clean_game24_001",
+            "dc_rs_corrupted_game24_001",
+            "1 + 2 + 3 + 3",
+            "1 * 2 + 3 + 3",
+            1,
+        ),
+        (
+            "math_equation_balancer",
+            '{"input":"7 + 8 = ?"}',
+            "dc_rs_clean_meb_001",
+            "dc_rs_corrupted_meb_001",
+            "7 + 8 = 15",
+            "7 + 8 = 14",
+            1,
+        ),
+        (
+            "word_sorting",
+            '{"words":["kiwi","apple","mango"]}',
+            "dc_rs_clean_word_sorting_001",
+            "dc_rs_corrupted_word_sorting_001",
+            '["apple","kiwi","mango"]',
+            '["mango","apple","kiwi"]',
+            1,
+        ),
+    ],
+)
+def test_dc_rs_arm_construction_keeps_clean_pair_and_filters_corruption(
+    task: str,
+    content: str,
+    clean_id: str,
+    corrupted_id: str,
+    clean_output: str,
+    corrupted_output: str,
+    expected_filter_dropped: int,
+) -> None:
+    rows = [
+        _valid_dc_rs_record(clean_id, task=task, content=content, output_text=clean_output),
+        _valid_dc_rs_record(
+            corrupted_id,
+            task=task,
+            content=content,
+            output_text=corrupted_output,
+            paired_clean_entry_id=clean_id,
+        ),
+    ]
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        path = _write_fixture(tmp_path, rows)
+        records = load_corpus(path)
+
+        clean_entries, _ = build_arm_corpus(records, task, "clean")
+        contaminated_entries, _ = build_arm_corpus(records, task, "contaminated")
+        filtered_entries, filtered_meta = build_arm_corpus(records, task, "contaminated_filter")
+
+        assert [entry.entry_id for entry in clean_entries] == [clean_id]
+        assert [entry.entry_id for entry in contaminated_entries] == sorted([clean_id, corrupted_id])
+        assert [entry.entry_id for entry in filtered_entries] == [clean_id]
+        assert filtered_meta == {"filter": "drop_known_contaminated", "dropped": expected_filter_dropped}
+        assert contaminated_entries[0].content == content
+        assert contaminated_entries[1].content == content
+        assert contaminated_entries[0].metadata.get("output_text") == clean_output
+        assert contaminated_entries[1].metadata.get("output_text") == corrupted_output
