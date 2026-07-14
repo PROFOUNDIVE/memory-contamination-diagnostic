@@ -2,17 +2,152 @@
 
 from __future__ import annotations
 
+import hashlib
+import tempfile
+from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
 
 from memcontam.clients.base import LLMClient
 from memcontam.clients.recording import MethodCallRecorder
 from memcontam.logging.schema import VerifierResult
+from memcontam.memory.embeddings import EmbeddingProvider
+from memcontam.memory.retrieval import DenseIndex
 from memcontam.memory.stores import MemoryEntry, MemoryState
 from memcontam.tasks.base import TaskInstance
 
 
 Verifier = Callable[[str, TaskInstance], VerifierResult]
+
+
+class DynamicCheatsheetRetrievalSynthesisPolicy:
+    def __init__(
+        self,
+        *,
+        embedding_provider: EmbeddingProvider | None = None,
+        cache_dir: str | Path | None = None,
+    ) -> None:
+        self.embedding_provider = embedding_provider
+        self.cache_dir = cache_dir
+
+    def run(
+        self,
+        task: TaskInstance,
+        memory: MemoryState,
+        *,
+        client: LLMClient,
+        model: str,
+        config: dict[str, Any] | None = None,
+        verifier: Verifier | None = None,
+    ) -> dict[str, Any]:
+        call_config = {**(config or {}), "sample_id": (config or {}).get("sample_id", task.sample_id)}
+        trial_id = _trial_id(task, call_config, model)
+        memory_before = [entry.model_dump() for entry in memory.entries]
+        pair_entries = [entry for entry in memory.entries if entry.memory_type == "dc_rs_io_pair"]
+        cheatsheet_entries = [entry for entry in memory.entries if _is_cheatsheet(entry)]
+        cheatsheet = _dc_rs_cheatsheet(cheatsheet_entries)
+        retrieved_records = self._retrieve_pairs(task.input, pair_entries, trial_id)
+        pairs_by_id = {entry.entry_id: entry for entry in pair_entries}
+        retrieved_pairs = [pairs_by_id[record.document_id] for record in retrieved_records]
+        recorder = MethodCallRecorder(client)
+
+        synthesized = recorder.chat(
+            [_synthesis_message(task, cheatsheet, retrieved_pairs)],
+            model=model,
+            config={**call_config, "method_stage": "dc_rs_synthesize"},
+        )
+        updated_cheatsheet, parser_status = _extract_cheatsheet(synthesized.content, cheatsheet)
+        generated = recorder.chat(
+            [_generation_message(task, updated_cheatsheet)],
+            model=model,
+            config={**call_config, "method_stage": "dc_rs_generate"},
+        )
+        parsed_answer = _parse_answer(generated.content)
+        verifier_result = (
+            verifier(parsed_answer, task)
+            if verifier is not None
+            else _default_verifier(parsed_answer)
+        )
+
+        method_calls = recorder.get_records()
+        method_calls[0].retrieved_records = retrieved_records
+        lineage = _lineage(memory.entries)
+        if parser_status == "accepted":
+            replacement = MemoryEntry(
+                entry_id=f"dc_rs_cheatsheet:{trial_id}",
+                content=updated_cheatsheet,
+                memory_type="dynamic_cheatsheet",
+                clean_or_contaminated=(
+                    "contaminated" if lineage["source_contaminated_entry_ids"] else "clean"
+                ),
+                source_trial_id=trial_id,
+                metadata=lineage,
+            )
+            state_entries = [entry for entry in memory.entries if not _is_cheatsheet(entry)]
+            memory_after_entries = [replacement, *state_entries]
+            synthesis_update = {"status": "replaced", "parser_status": parser_status}
+        else:
+            memory_after_entries = list(memory.entries)
+            synthesis_update = {"status": "preserved", "parser_status": parser_status}
+
+        pair = MemoryEntry(
+            entry_id=f"dc_rs_pair:{trial_id}",
+            content=str(task.input),
+            memory_type="dc_rs_io_pair",
+            clean_or_contaminated=(
+                "contaminated" if lineage["source_contaminated_entry_ids"] else "clean"
+            ),
+            source_trial_id=trial_id,
+            metadata={**lineage, "output_text": parsed_answer},
+        )
+        memory_after_entries.append(pair)
+        event = {
+            "type": "dynamic_cheatsheet_rs_update",
+            "status": parser_status,
+            "source_trial_id": trial_id,
+            "previous_entry_ids": [entry.entry_id for entry in memory.entries],
+            "synthesis_update": synthesis_update,
+            "pair_appended": {
+                "entry_id": pair.entry_id,
+                "source_trial_id": trial_id,
+                "parent_entry_ids": lineage["parent_entry_ids"],
+                "source_entry_ids": lineage["source_entry_ids"],
+                "source_contaminated_entry_ids": lineage["source_contaminated_entry_ids"],
+            },
+        }
+        return {
+            "final_response": generated.content,
+            "parsed_answer": parsed_answer,
+            "verifier_result": verifier_result,
+            "retrieved_records": retrieved_records,
+            "retrieved_memory": [
+                {**record.model_dump(), "entry_id": record.document_id} for record in retrieved_records
+            ],
+            "retrieved_scores": [record.score for record in retrieved_records],
+            "method_calls": method_calls,
+            "memory_before": memory_before,
+            "memory_after": [entry.model_dump() for entry in memory_after_entries],
+            "memory_write_event": event,
+            "metadata": {},
+        }
+
+    def _retrieve_pairs(
+        self, task_input: dict, pair_entries: list[MemoryEntry], trial_id: str
+    ) -> list[Any]:
+        k = min(3, len(pair_entries))
+        if self.cache_dir is None:
+            with tempfile.TemporaryDirectory() as cache_dir:
+                return DenseIndex(
+                    pair_entries, provider=self.embedding_provider, cache_dir=cache_dir
+                ).retrieve(str(task_input), k)
+        cache_key = hashlib.sha256(
+            "\0".join([trial_id, *(entry.entry_id for entry in pair_entries)]).encode("utf-8")
+        ).hexdigest()
+        return DenseIndex(
+            pair_entries,
+            provider=self.embedding_provider,
+            cache_dir=Path(self.cache_dir) / cache_key,
+        ).retrieve(str(task_input), k)
 
 
 class DynamicCheatsheetOptionalPolicy:
@@ -154,6 +289,29 @@ def _generation_message(task: TaskInstance, cheatsheet: str) -> dict[str, str]:
         "content": (
             f"Task input: {task.input}\n\nCheatsheet:\n{cheatsheet}\n\n"
             "Solve the task and respond in the normal harness format: final: <answer>."
+        ),
+    }
+
+
+def _dc_rs_cheatsheet(entries: list[MemoryEntry]) -> str:
+    if len(entries) == 1:
+        return entries[0].content
+    return "\n".join(entry.content for entry in entries)
+
+
+def _synthesis_message(
+    task: TaskInstance, cheatsheet: str, pairs: list[MemoryEntry]
+) -> dict[str, str]:
+    prior_pairs = "\n\n".join(
+        f"Prior input:\n{entry.content}\n\nPrior output:\n{entry.metadata['output_text']}"
+        for entry in pairs
+    )
+    return {
+        "role": "user",
+        "content": (
+            f"Existing cheatsheet:\n{cheatsheet}\n\nRetrieved prior input/output pairs:\n"
+            f"{prior_pairs}\n\nCurrent task input:\n{task.input}\n\n"
+            "Return exactly one <cheatsheet>...</cheatsheet> block for solving the current task."
         ),
     }
 
