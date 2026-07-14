@@ -12,7 +12,10 @@ import yaml
 
 from memcontam.baselines.bot_style import BotStylePolicy, distill_thought_template
 from memcontam.baselines.bot_runtime import BotRuntime
-from memcontam.baselines.dynamic_cheatsheet_optional import DynamicCheatsheetOptionalPolicy
+from memcontam.baselines.dynamic_cheatsheet_optional import (
+    DynamicCheatsheetOptionalPolicy,
+    DynamicCheatsheetRetrievalSynthesisPolicy,
+)
 from memcontam.baselines.full_history import FullHistoryPolicy
 from memcontam.baselines.no_memory import NoMemoryPolicy
 from memcontam.baselines.reflexion_style import ReflexionStylePolicy
@@ -90,6 +93,7 @@ FAITHFUL_BASELINES = {
     "full_history",
     "reflexion_style",
     "dynamic_cheatsheet_optional",
+    "dynamic_cheatsheet_rs_optional",
 }
 
 def validate_config(path: Path) -> None:
@@ -307,9 +311,18 @@ def _bad_memory_uptake_label(arm: str, exposure: ContaminationExposure) -> BadMe
     return "not_evaluable"
 
 
+def _validate_reflexion_config(config: dict[str, Any]) -> None:
+    reflexion = config.get("reflexion")
+    if reflexion is not None:
+        max_attempts = reflexion.get("max_attempts")
+        if max_attempts not in {1, 2}:
+            raise SystemExit("reflexion.max_attempts must be 1 or 2")
+
+
 def _is_faithful_config(config: dict[str, Any]) -> bool:
     run_mode = config.get("run", {}).get("mode")
     if run_mode == "faithful":
+        _validate_reflexion_config(config)
         return True
     if run_mode is not None and run_mode != "legacy":
         raise SystemExit(f"unsupported run.mode: {run_mode}")
@@ -497,7 +510,10 @@ def _run_faithful_config(
     repeated_failure_tracker: _RepeatedFailureTracker,
 ) -> None:
     corpus_records = load_corpus(Path(_corpus_path(config)))
-    needs_embedding = any(baseline in {"retrieval_rag", "bot_style"} for baseline in config["baselines"])
+    needs_embedding = any(
+        baseline in {"retrieval_rag", "bot_style", "dynamic_cheatsheet_rs_optional"}
+        for baseline in config["baselines"]
+    )
     needs_bot = "bot_style" in config["baselines"]
     embedding_provider: EmbeddingProvider | None = None
     cache_dir: Path | None = None
@@ -524,6 +540,7 @@ def _run_faithful_config(
     transcript_states: dict[tuple[str, ...], list[MemoryEntry]] = {}
     reflection_states: dict[tuple[str, ...], list[MemoryEntry]] = {}
     cheatsheet_states: dict[tuple[str, ...], list[MemoryEntry]] = {}
+    dc_rs_states: dict[tuple[str, ...], list[MemoryEntry]] = {}
     filter_decisions: dict[tuple[str, ...], dict[str, Any] | None] = {}
 
     with trials_path.open("w", encoding="utf-8") as f:
@@ -650,6 +667,20 @@ def _run_faithful_config(
                                 elif baseline == "reflexion_style":
                                     state = reflection_states
                                     policy = ReflexionStylePolicy()
+                                elif baseline == "dynamic_cheatsheet_rs_optional":
+                                    state = dc_rs_states
+                                    if embedding_provider is not None and cache_dir is not None:
+                                        dc_embedding_provider = embedding_provider
+                                        dc_cache_dir = (
+                                            cache_dir / "dc_rs" / task_name / arm / model
+                                        )
+                                    else:
+                                        dc_embedding_provider = FakeEmbeddingProvider()
+                                        dc_cache_dir = None
+                                    policy = DynamicCheatsheetRetrievalSynthesisPolicy(
+                                        embedding_provider=dc_embedding_provider,
+                                        cache_dir=dc_cache_dir,
+                                    )
                                 else:
                                     state = cheatsheet_states
                                     policy = DynamicCheatsheetOptionalPolicy()
@@ -662,19 +693,24 @@ def _run_faithful_config(
                                 else:
                                     filter_decision = filter_decisions[identity]
                                 memory = MemoryState(entries=state[identity])
+                                policy_config = {
+                                    **config.get("replay", {}),
+                                    "sample_id": task.sample_id,
+                                    "run_id": run_id,
+                                    "baseline": baseline,
+                                    "arm": arm,
+                                    "model": model,
+                                }
+                                if baseline == "reflexion_style":
+                                    policy_config["max_attempts"] = config.get(
+                                        "reflexion", {}
+                                    ).get("max_attempts", 1)
                                 result = policy.run(
                                     task,
                                     memory,
                                     client=trial_client,
                                     model=model,
-                                    config={
-                                        **config.get("replay", {}),
-                                        "sample_id": task.sample_id,
-                                        "run_id": run_id,
-                                        "baseline": baseline,
-                                        "arm": arm,
-                                        "model": model,
-                                    },
+                                    config=policy_config,
                                     verifier=lambda response, task: task_handler["verify"](
                                         _parse_answer(response), task
                                     ),

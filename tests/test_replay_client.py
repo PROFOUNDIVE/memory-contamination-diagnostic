@@ -10,6 +10,7 @@ from memcontam.clients.replay import ReplayClient
 
 
 V0_5_FIXTURE_PATH = Path("data/replay/g0_fh_reflexion_dc_faithful_v1.yaml")
+FOLLOWUP_FIXTURE_PATH = Path("data/replay/g0_dc_rs_reflexion_fidelity_followup_v1.yaml")
 
 
 def test_replay_client_consumes_named_stages_in_order() -> None:
@@ -173,3 +174,74 @@ def test_replay_client_respects_reflexion_and_dc_stage_order() -> None:
     assert reflexion_reflect == stages["reflexion_reflect"]
     assert dc_generate == stages["dynamic_cheatsheet_generate"]
     assert dc_curate == stages["dynamic_cheatsheet_curate"]
+
+
+def test_replay_client_uses_followup_fixture_stage_responses() -> None:
+    fixture = yaml.safe_load(FOLLOWUP_FIXTURE_PATH.read_text(encoding="utf-8"))
+    client = ReplayClient(responses_by_sample=fixture["responses_by_sample"])
+    sample_id = "game24_pilot_001"
+    stages = fixture["responses_by_sample"][sample_id]
+
+    assert client.chat(
+        [{"role": "user", "content": "prompt"}],
+        model="replay",
+        config={"sample_id": sample_id, "method_stage": "dc_rs_synthesize"},
+    ).content == stages["dc_rs_synthesize"]
+    assert client.chat(
+        [{"role": "user", "content": "prompt"}],
+        model="replay",
+        config={"sample_id": sample_id, "method_stage": "dc_rs_generate"},
+    ).content == stages["dc_rs_generate"]
+    assert client.chat(
+        [{"role": "user", "content": "prompt"}],
+        model="replay",
+        config={"sample_id": sample_id, "method_stage": "reflexion_generate"},
+    ).content == stages["reflexion_generate"][0]
+    assert client.chat(
+        [{"role": "user", "content": "prompt"}],
+        model="replay",
+        config={"sample_id": sample_id, "method_stage": "reflexion_reflect"},
+    ).content == stages["reflexion_reflect"]
+    assert client.chat(
+        [{"role": "user", "content": "prompt"}],
+        model="replay",
+        config={"sample_id": sample_id, "method_stage": "reflexion_generate"},
+    ).content == stages["reflexion_generate"][1]
+
+
+def test_replay_client_followup_non_retry_samples_have_single_reflexion_generate() -> None:
+    fixture = yaml.safe_load(FOLLOWUP_FIXTURE_PATH.read_text(encoding="utf-8"))
+    client = ReplayClient(responses_by_sample=fixture["responses_by_sample"])
+
+    for sample_id, stages in fixture["responses_by_sample"].items():
+        if sample_id == "game24_pilot_001":
+            continue
+        assert isinstance(stages["reflexion_generate"], str), sample_id
+        assert client.chat(
+            [{"role": "user", "content": "prompt"}],
+            model="replay",
+            config={"sample_id": sample_id, "method_stage": "reflexion_generate"},
+        ).content == stages["reflexion_generate"]
+
+
+def test_replay_client_followup_dc_rs_stages_are_ordered_before_reflexion() -> None:
+    fixture = yaml.safe_load(FOLLOWUP_FIXTURE_PATH.read_text(encoding="utf-8"))
+    client = ReplayClient(responses_by_sample=fixture["responses_by_sample"])
+    sample_id = "meb_pilot_001"
+    stages = fixture["responses_by_sample"][sample_id]
+
+    assert client.chat(
+        [{"role": "user", "content": "prompt"}],
+        model="replay",
+        config={"sample_id": sample_id, "method_stage": "dc_rs_synthesize"},
+    ).content == stages["dc_rs_synthesize"]
+    assert client.chat(
+        [{"role": "user", "content": "prompt"}],
+        model="replay",
+        config={"sample_id": sample_id, "method_stage": "dc_rs_generate"},
+    ).content == stages["dc_rs_generate"]
+    assert client.chat(
+        [{"role": "user", "content": "prompt"}],
+        model="replay",
+        config={"sample_id": sample_id, "method_stage": "reflexion_generate"},
+    ).content == stages["reflexion_generate"]

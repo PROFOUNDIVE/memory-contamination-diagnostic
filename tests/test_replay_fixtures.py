@@ -26,6 +26,15 @@ V0_5_EXPECTED_STAGES = [
     "dynamic_cheatsheet_curate",
 ]
 
+FOLLOWUP_CONFIG_PATH = Path("configs/g0_dc_rs_reflexion_fidelity_followup_replay.yaml")
+FOLLOWUP_FIXTURE_PATH = Path("data/replay/g0_dc_rs_reflexion_fidelity_followup_v1.yaml")
+FOLLOWUP_EXPECTED_STAGES = [
+    "dc_rs_synthesize",
+    "dc_rs_generate",
+    "reflexion_generate",
+    "reflexion_reflect",
+]
+
 
 def _load_yaml(path: Path) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -122,3 +131,74 @@ def test_v0_5_replay_rejects_internal_answer_leakage(stage: str) -> None:
     ]
 
     assert leaked == []
+
+
+def test_followup_config_matches_fixture() -> None:
+    config = _load_yaml(FOLLOWUP_CONFIG_PATH)
+    fixture = _load_yaml(FOLLOWUP_FIXTURE_PATH)
+
+    assert config["replay"]["responses_by_sample"] == fixture["responses_by_sample"]
+
+
+def test_followup_replay_fixture_covers_all_stages() -> None:
+    fixture = _load_yaml(FOLLOWUP_FIXTURE_PATH)
+
+    assert set(fixture["responses_by_sample"].keys()) == {
+        "game24_pilot_001",
+        "game24_pilot_002",
+        "game24_pilot_003",
+        "meb_pilot_001",
+        "meb_pilot_002",
+        "meb_pilot_003",
+        "word_sorting_pilot_001",
+        "word_sorting_pilot_002",
+        "word_sorting_pilot_003",
+    }
+
+    for sample_id, stages in fixture["responses_by_sample"].items():
+        expected = list(FOLLOWUP_EXPECTED_STAGES)
+        if sample_id != "game24_pilot_001":
+            expected.remove("reflexion_reflect")
+        assert list(stages) == expected, sample_id
+        assert all(stages[stage] for stage in expected)
+
+
+def test_followup_only_game24_pilot_001_has_reflexion_retry() -> None:
+    fixture = _load_yaml(FOLLOWUP_FIXTURE_PATH)
+    retry_samples = [
+        sample_id
+        for sample_id, stages in fixture["responses_by_sample"].items()
+        if isinstance(stages["reflexion_generate"], list)
+    ]
+    assert retry_samples == ["game24_pilot_001"]
+
+
+def test_followup_dc_rs_synthesize_contains_cheatsheet_tag() -> None:
+    fixture = _load_yaml(FOLLOWUP_FIXTURE_PATH)
+    missing = [
+        sample_id
+        for sample_id, stages in fixture["responses_by_sample"].items()
+        if "<cheatsheet>" not in stages["dc_rs_synthesize"]
+    ]
+    assert missing == []
+
+
+@pytest.mark.parametrize("stage", ["reflexion_reflect", "dc_rs_synthesize"])
+def test_followup_replay_rejects_internal_answer_leakage(stage: str) -> None:
+    fixture = _load_yaml(FOLLOWUP_FIXTURE_PATH)
+    leaked = [
+        sample_id
+        for sample_id, stages in fixture["responses_by_sample"].items()
+        if stage in stages and "final:" in stages[stage].lower()
+    ]
+
+    assert leaked == []
+
+
+def test_followup_reflexion_retry_has_wrong_then_correct_generate() -> None:
+    fixture = _load_yaml(FOLLOWUP_FIXTURE_PATH)
+    stages = fixture["responses_by_sample"]["game24_pilot_001"]
+    assert isinstance(stages["reflexion_generate"], list)
+    assert len(stages["reflexion_generate"]) == 2
+    assert "1 + 1 + 1 + 1" in stages["reflexion_generate"][0]
+    assert "6 / (1 - (3 / 4))" in stages["reflexion_generate"][1]

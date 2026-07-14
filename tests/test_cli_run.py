@@ -998,3 +998,139 @@ def test_native_memory_lineage_on_writes(tmp_path, monkeypatch) -> None:
                 else:
                     assert event["source_entry_ids"]
                     assert new_entry["clean_or_contaminated"] == "contaminated"
+
+
+def test_v0_5_config_without_reflexion_block_validates(monkeypatch) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(repo_root)
+    cli.validate_config(repo_root / "configs/g0_fh_reflexion_dc_faithful_replay.yaml")
+
+
+def test_followup_config_validates(monkeypatch) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(repo_root)
+    cli.validate_config(
+        repo_root / "configs/g0_dc_rs_reflexion_fidelity_followup_replay.yaml"
+    )
+
+
+def test_reflexion_max_attempts_three_rejected(tmp_path, monkeypatch) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(repo_root)
+    sample_path = _write_game24_sample(tmp_path)
+    config = {
+        "run": {"name": "smoke", "mode": "faithful"},
+        "models": ["replay"],
+        "tasks": [{"name": "game24", "sample_path": sample_path, "limit": 1}],
+        "baselines": ["reflexion_style"],
+        "arms": ["clean"],
+        "memory": {"corpus_path": str(repo_root / "data/memory/catalog_v2.jsonl")},
+        "reflexion": {"max_attempts": 3},
+        "logging": {"output_dir": str(tmp_path / "runs")},
+        "replay": {"responses": ["final: 6 / (1 - 3 / 4)"]},
+    }
+
+    with pytest.raises(SystemExit, match="reflexion.max_attempts must be 1 or 2"):
+        run_config(config, run_id="bad_reflexion_attempts")
+
+
+def test_dc_rs_reflexion_followup_gate_emits_108_rows_with_isolated_identities(
+    tmp_path, monkeypatch
+) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(repo_root)
+    config = load_config(
+        repo_root / "configs/g0_dc_rs_reflexion_fidelity_followup_replay.yaml"
+    )
+    config["logging"]["output_dir"] = str(tmp_path / "runs")
+
+    run_dir = run_config(config, run_id="followup_gate_test")
+    rows = [
+        json.loads(line)
+        for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+
+    assert len(rows) == 108
+    assert {row["baseline"] for row in rows} == {
+        "dynamic_cheatsheet_rs_optional",
+        "reflexion_style",
+    }
+    dc_rs_rows = [row for row in rows if row["baseline"] == "dynamic_cheatsheet_rs_optional"]
+    reflexion_rows = [row for row in rows if row["baseline"] == "reflexion_style"]
+    assert len(dc_rs_rows) == 54
+    assert len(reflexion_rows) == 54
+
+    for row in dc_rs_rows:
+        assert [call["stage"] for call in row["method_calls"]] == [
+            "dc_rs_synthesize",
+            "dc_rs_generate",
+        ]
+        assert row["memory_write_event"]["type"] == "dynamic_cheatsheet_rs_update"
+
+    retry_rows = [row for row in reflexion_rows if len(row["method_calls"]) == 3]
+    assert len(retry_rows) == 6
+    for row in retry_rows:
+        assert [call["stage"] for call in row["method_calls"]] == [
+            "reflexion_generate",
+            "reflexion_reflect",
+            "reflexion_generate",
+        ]
+        assert row["sample_id"] == "game24_pilot_001"
+
+    success_rows = [row for row in reflexion_rows if len(row["method_calls"]) == 1]
+    assert len(success_rows) == 48
+
+    first_clean_gpt4o = next(
+        row
+        for row in dc_rs_rows
+        if row["sample_id"] == "game24_pilot_001"
+        and row["arm"] == "clean"
+        and row["backbone"] == "gpt4o"
+    )
+    second_clean_gpt4o = next(
+        row
+        for row in dc_rs_rows
+        if row["sample_id"] == "game24_pilot_002"
+        and row["arm"] == "clean"
+        and row["backbone"] == "gpt4o"
+    )
+    second_contaminated_gpt4o = next(
+        row
+        for row in dc_rs_rows
+        if row["sample_id"] == "game24_pilot_002"
+        and row["arm"] == "contaminated"
+        and row["backbone"] == "gpt4o"
+    )
+
+    first_pair_id = first_clean_gpt4o["memory_after"][-1]["entry_id"]
+    assert first_pair_id in {
+        entry["entry_id"] for entry in second_clean_gpt4o["memory_before"]
+    }
+    assert first_pair_id not in {
+        entry["entry_id"] for entry in second_contaminated_gpt4o["memory_before"]
+    }
+
+
+def test_dc_rs_reflexion_followup_uses_offline_embeddings(tmp_path, monkeypatch) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(repo_root)
+    config = load_config(
+        repo_root / "configs/g0_dc_rs_reflexion_fidelity_followup_replay.yaml"
+    )
+    config["logging"]["output_dir"] = str(tmp_path / "runs")
+
+    def unexpected_sentence_transformer(**_kwargs):
+        raise AssertionError("follow-up replay gate must not load sentence-transformers")
+
+    monkeypatch.setattr(cli, "SentenceTransformerProvider", unexpected_sentence_transformer)
+
+    run_dir = run_config(config, run_id="followup_offline_embeddings")
+    rows = [
+        json.loads(line)
+        for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+
+    assert len(rows) == 108
+    dc_rs_rows = [row for row in rows if row["baseline"] == "dynamic_cheatsheet_rs_optional"]
+    assert dc_rs_rows
+    assert all(row["method_calls"] for row in dc_rs_rows)
