@@ -1,9 +1,11 @@
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 G0_DOC = ROOT / "docs" / "g0-baseline-fidelity-gate-v0.4.md"
 README = ROOT / "README.md"
 V05_DOC = ROOT / "docs" / "g0-baseline-fidelity-gate-v0.5.md"
+FOLLOWUP_DOC = ROOT / "docs" / "g0-dc-rs-reflexion-fidelity-followup.md"
 
 
 def test_g0_doc_states_partial_rag_bot_scope() -> None:
@@ -79,8 +81,8 @@ def test_g0_doc_states_replay_only_llm_boundary() -> None:
 
 def test_readme_does_not_overstate_baseline_fidelity() -> None:
     text = README.read_text(encoding="utf-8")
-    assert "not full reproduction" in text, (
-        "README must retain the no-full-reproduction caveat"
+    assert "not a complete reproduction" in text, (
+        "README must retain the no-complete-reproduction caveat"
     )
     assert "all baselines pass G0" not in text, (
         "README must not claim all baselines pass G0"
@@ -216,7 +218,7 @@ def test_readme_contains_v05_section() -> None:
     assert "fidelity/QA artifact" in text, (
         "README must state that replay output is a fidelity/QA artifact"
     )
-    assert "not benchmark/manuscript evidence" in text, (
+    assert "not benchmark or manuscript-quality evidence" in text, (
         "README must deny benchmark/manuscript-evidence status"
     )
 
@@ -224,3 +226,162 @@ def test_readme_contains_v05_section() -> None:
 def test_pyproject_version_remains_0_1_0() -> None:
     text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert 'version = "0.1.0"' in text, "pyproject.toml must remain at version 0.1.0"
+
+
+def test_followup_doc_exists() -> None:
+    assert FOLLOWUP_DOC.is_file(), "v0.5+ follow-up report must exist"
+
+
+def test_followup_doc_contains_section_title_and_scope() -> None:
+    text = FOLLOWUP_DOC.read_text(encoding="utf-8")
+    assert "# G0 DC-RS and Reflexion Same-Sample Retry Fidelity Follow-up" in text, (
+        "Follow-up doc must use the approved title"
+    )
+    assert "post-`v0.5` follow-up" in text, (
+        "Follow-up doc must identify itself as post-v0.5"
+    )
+    assert "optional appendix comparator" in text, (
+        "Follow-up doc must label DC-RS as optional appendix comparator"
+    )
+    assert "same-sample retry" in text, (
+        "Follow-up doc must mention same-sample retry"
+    )
+
+
+def test_followup_doc_contains_official_sources() -> None:
+    text = FOLLOWUP_DOC.read_text(encoding="utf-8")
+    assert "https://aclanthology.org/2026.eacl-long.333/" in text, (
+        "Follow-up doc must cite the Dynamic Cheatsheet paper"
+    )
+    assert "https://github.com/suzgunmirac/dynamic-cheatsheet" in text, (
+        "Follow-up doc must cite the Dynamic Cheatsheet repository"
+    )
+    assert "https://arxiv.org/abs/2303.11366" in text, (
+        "Follow-up doc must cite the Reflexion paper"
+    )
+    assert "https://github.com/noahshinn/reflexion" in text, (
+        "Follow-up doc must cite the Reflexion repository"
+    )
+
+
+def test_followup_doc_contains_adaptation_table() -> None:
+    text = FOLLOWUP_DOC.read_text(encoding="utf-8")
+    assert "| Must Preserve | Safely Adapted | Omitted |" in text, (
+        "Follow-up doc must contain a three-column adaptation table"
+    )
+    assert "top-3 cosine" in text, "Follow-up doc must mention top-3 cosine retrieval"
+    assert "same-identity" in text, "Follow-up doc must mention same-identity retrieval"
+    assert "no weight updates" in text, "Follow-up doc must state no weight updates"
+
+
+def test_followup_doc_contains_exact_artifacts_and_counts() -> None:
+    text = FOLLOWUP_DOC.read_text(encoding="utf-8")
+    assert "configs/g0_dc_rs_reflexion_fidelity_followup_replay.yaml" in text, (
+        "Follow-up doc must name the exact config"
+    )
+    assert "data/replay/g0_dc_rs_reflexion_fidelity_followup_v1.yaml" in text, (
+        "Follow-up doc must name the exact fixture"
+    )
+    assert "g0_dc_rs_reflexion_fidelity_followup_replay" in text, (
+        "Follow-up doc must name the exact run id"
+    )
+    assert "scripts/inspect_g0_dc_rs_reflexion_fidelity.py" in text, (
+        "Follow-up doc must name the exact inspector"
+    )
+    assert "108 trial rows" in text, "Follow-up doc must state 108 trial rows"
+    assert "174 native method calls" in text, (
+        "Follow-up doc must state 174 native method calls"
+    )
+    assert '"dc_rs_calls": 108' in text, "Follow-up doc must record dc_rs_calls 108"
+    assert '"reflexion_calls": 66' in text, "Follow-up doc must record reflexion_calls 66"
+    assert '"method_calls": 174' in text, "Follow-up doc must record method_calls 174"
+    assert '"trials": 108' in text, "Follow-up doc must record trials 108"
+
+
+def test_followup_doc_contains_bounded_claim_phrases() -> None:
+    text = FOLLOWUP_DOC.read_text(encoding="utf-8")
+    assert (
+        "Faithful adapted DC-RS optional appendix comparator: top-3 cosine retrieval over prior same-identity input/output pairs, label-free pre-answer cheatsheet synthesis, then memory-conditioned generation, with native method-call costs logged."
+        in text
+    ), "Follow-up doc must contain the bounded DC-RS claim verbatim"
+    assert (
+        "Faithful adapted Reflexion control flow: failed trajectory plus sanitized evaluator feedback produces linguistic reflection, latest-three reflection memory conditions a same-sample retry, stopping on success or attempt limit; no weight updates."
+        in text
+    ), "Follow-up doc must contain the bounded Reflexion claim verbatim"
+
+
+def test_followup_doc_does_not_contain_forbidden_overclaims() -> None:
+    text = FOLLOWUP_DOC.read_text(encoding="utf-8")
+    forbidden = [
+        "full reproduction",
+        "benchmark improvement",
+        "main DC baseline",
+        "benchmark evidence",
+        "manuscript evidence",
+    ]
+    for phrase in forbidden:
+        assert phrase not in text, (
+            f"Follow-up doc must not contain forbidden overclaim: {phrase!r}"
+        )
+
+
+def test_readme_contains_followup_section() -> None:
+    text = README.read_text(encoding="utf-8")
+    assert "## v0.5+ DC-RS and Reflexion Same-Sample Retry Follow-up" in text, (
+        "README must contain the follow-up section above v0.5"
+    )
+    assert "`v0.5` remains the historical full G0 baseline-fidelity pass" in text, (
+        "README must state that v0.5 remains the historical full pass"
+    )
+    assert "configs/g0_dc_rs_reflexion_fidelity_followup_replay.yaml" in text, (
+        "README must point to the follow-up config"
+    )
+    assert "scripts/inspect_g0_dc_rs_reflexion_fidelity.py" in text, (
+        "README must point to the follow-up inspector"
+    )
+    assert "g0_dc_rs_reflexion_fidelity_followup_replay" in text, (
+        "README must reference the follow-up canonical run id"
+    )
+    assert "docs/g0-dc-rs-reflexion-fidelity-followup.md" in text, (
+        "README must link to the follow-up report"
+    )
+
+
+def test_readme_contains_followup_bounded_claim_phrases() -> None:
+    text = README.read_text(encoding="utf-8")
+    assert (
+        "Faithful adapted DC-RS optional appendix comparator: top-3 cosine retrieval over prior same-identity input/output pairs, label-free pre-answer cheatsheet synthesis, then memory-conditioned generation, with native method-call costs logged."
+        in text
+    ), "README must contain the bounded DC-RS claim verbatim"
+    assert (
+        "Faithful adapted Reflexion control flow: failed trajectory plus sanitized evaluator feedback produces linguistic reflection, latest-three reflection memory conditions a same-sample retry, stopping on success or attempt limit; no weight updates."
+        in text
+    ), "README must contain the bounded Reflexion claim verbatim"
+
+
+def test_readme_and_followup_forbid_overclaim_phrases() -> None:
+    for path in (README, FOLLOWUP_DOC):
+        text = path.read_text(encoding="utf-8")
+        for phrase in [
+            "full reproduction",
+            "benchmark improvement",
+            "main DC baseline",
+            "benchmark evidence",
+            "manuscript evidence",
+        ]:
+            assert phrase not in text, (
+                f"{path.name} must not contain forbidden phrase: {phrase!r}"
+            )
+
+
+def test_historical_v04_v05_reports_unchanged() -> None:
+    result = subprocess.run(
+        ["git", "diff", "--", "docs/g0-baseline-fidelity-gate-v0.4.md", "docs/g0-baseline-fidelity-gate-v0.5.md"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, "git diff command failed"
+    assert result.stdout == "", (
+        "Historical v0.4 and v0.5 reports must not be modified"
+    )

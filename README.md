@@ -2,17 +2,40 @@
 
 Controlled memory-contamination diagnostic harness for reasoning-memory systems.
 
+## v0.5+ DC-RS and Reflexion Same-Sample Retry Follow-up
+
+This post-`v0.5` follow-up records source-bounded fidelity claims after the Task 8 replay evidence exists. `v0.5` remains the historical full G0 baseline-fidelity pass; this follow-up tightens Reflexion to the source-required same-sample retry semantics and adds DC-RS as an optional appendix comparator.
+
+- Faithful adapted DC-RS optional appendix comparator: top-3 cosine retrieval over prior same-identity input/output pairs, label-free pre-answer cheatsheet synthesis, then memory-conditioned generation, with native method-call costs logged.
+- Faithful adapted Reflexion control flow: failed trajectory plus sanitized evaluator feedback produces linguistic reflection, latest-three reflection memory conditions a same-sample retry, stopping on success or attempt limit; no weight updates.
+
+The canonical replay evidence run is `g0_dc_rs_reflexion_fidelity_followup_replay` using `configs/g0_dc_rs_reflexion_fidelity_followup_replay.yaml` and inspected by `scripts/inspect_g0_dc_rs_reflexion_fidelity.py`. It emits 108 trial rows and 174 native method calls (DC-RS 108, Reflexion 66). External LLM responses are replay fixtures, so the verification requires no API keys or live model access. The replay output is a fidelity/QA artifact, not benchmark or manuscript-quality evidence.
+
+Verification commands:
+
+```bash
+python -m memcontam.cli validate-config configs/g0_dc_rs_reflexion_fidelity_followup_replay.yaml
+python -m pytest tests/test_dc_rs_faithful.py tests/test_reflexion_faithful.py tests/test_cli_run.py tests/test_replay_client.py tests/test_replay_fixtures.py tests/test_contamination_catalog.py tests/test_logging_schema.py tests/test_aggregate.py tests/test_docs_scope.py -q
+python -m pytest tests/test_task_verifiers.py tests/test_cli_run.py tests/test_contamination_catalog.py tests/test_openai_compatible_client.py tests/test_aggregate.py tests/test_docs_scope.py -q
+python -m ruff check src tests scripts
+python -m memcontam.cli run configs/g0_dc_rs_reflexion_fidelity_followup_replay.yaml --run-id g0_dc_rs_reflexion_fidelity_followup_replay
+python -m memcontam.cli aggregate runs/g0_dc_rs_reflexion_fidelity_followup_replay
+python scripts/inspect_g0_dc_rs_reflexion_fidelity.py runs/g0_dc_rs_reflexion_fidelity_followup_replay
+```
+
+See [`docs/g0-dc-rs-reflexion-fidelity-followup.md`](docs/g0-dc-rs-reflexion-fidelity-followup.md) for the full follow-up report.
+
 ## v0.5 Faithful Full-History, Reflexion, and Dynamic Cheatsheet Baselines
 
-`v0.5` is the current full G0 baseline-fidelity pass for `full_history`, `reflexion_style`, and `dynamic_cheatsheet_optional` over the locked 3-task pilot set.
+`v0.5` is the historical full G0 baseline-fidelity pass for `full_history`, `reflexion_style`, and `dynamic_cheatsheet_optional` over the locked 3-task pilot set.
 
 - `full_history` is a faithful append-only full-history baseline. Each trial makes one `full_history_generate` call and appends one sanitized transcript entry. Prior memory is rendered verbatim; no retrieval, summarization, or truncation is used in this gate.
-- `reflexion_style` is a Reflexion-style verbal memory proxy / faithful adapted control flow. It calls `reflexion_generate` on every trial and `reflexion_reflect` only after verifier failure, then appends a non-empty reflection. The actor reads the latest three ordered reflections from the current identity. This is not a full reproduction of the official Reflexion agent.
+- `reflexion_style` is a Reflexion-style verbal memory proxy / faithful adapted control flow. It calls `reflexion_generate` on every trial and `reflexion_reflect` only after verifier failure, then appends a non-empty reflection. The actor reads the latest three ordered reflections from the current identity. This is not a complete reproduction of the official Reflexion agent.
 - `dynamic_cheatsheet_optional` is a faithful adapted DC-Cu optional appendix comparator. Each trial calls `dynamic_cheatsheet_generate` then `dynamic_cheatsheet_curate`. A parsed non-empty `<cheatsheet>` block replaces the cheatsheet; missing or empty tags preserve prior state. Code-execution, provider-tool, and retrieval paths are removed. DC is not a new main baseline.
 
 The matrix is `3 tasks × 3 baselines × 3 arms × 2 models = 162 trials`. The canonical replay evidence run is `g0_fh_reflexion_dc_faithful_replay` using `configs/g0_fh_reflexion_dc_faithful_replay.yaml` and inspected by `scripts/inspect_g0_fh_reflexion_dc_fidelity.py`.
 
-External LLM responses are replay fixtures in this gate, so the verification requires no API keys or live model access. The replay output is a fidelity/QA artifact, not benchmark/manuscript evidence. Live runs must keep the same stage structure.
+External LLM responses are replay fixtures in this gate, so the verification requires no API keys or live model access. The replay output is a fidelity/QA artifact, not benchmark or manuscript-quality evidence. Live runs must keep the same stage structure.
 
 `v0.5` is the intended repository research-artifact Git tag; `pyproject.toml` remains at version `0.1.0` and no package is published.
 
@@ -78,7 +101,7 @@ python .sisyphus/evidence/inspect_g0_replay.py
 
 This release is not a benchmark result or full paper reproduction. The proxy baseline claim is:
 
-> retrieval-only RAG lower-bound, Reflexion-style verbal memory proxy, BoT-style thought-template proxy; not full reproduction.
+> retrieval-only RAG lower-bound, Reflexion-style verbal memory proxy, BoT-style thought-template proxy; not a complete reproduction.
 
 The current G0 fidelity work is scoped to RAG + BoT only; `no_memory`, `full_history`, `reflexion_style`, Dynamic Cheatsheet, and ExpeL are not claimed to pass G0 in this plan. The canonical replay evidence run is `g0_rag_bot_faithful_replay` (config `configs/g0_rag_bot_faithful_replay.yaml`), inspected by `scripts/inspect_g0_rag_bot_fidelity.py`. See `docs/g0-baseline-fidelity-gate-v0.2.md` for the full implementation result and verification commands.
 
@@ -112,6 +135,7 @@ The bundled config emits 90 replay trial rows:
 
 ## Documentation
 
+- v0.5+ DC-RS and Reflexion same-sample retry follow-up report: `docs/g0-dc-rs-reflexion-fidelity-followup.md`
 - v0.5 G0 full pass report: `docs/g0-baseline-fidelity-gate-v0.5.md`
 - v0.4 G0 partial pass report: `docs/g0-baseline-fidelity-gate-v0.4.md`
 - v0.3 G0 partial pass report: `docs/g0-baseline-fidelity-gate-v0.3.md`
