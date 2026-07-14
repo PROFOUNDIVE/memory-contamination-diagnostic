@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from memcontam.baselines.reflexion_style import ReflexionStylePolicy
 from memcontam.clients.replay import ReplayClient
 from memcontam.logging.schema import VerifierResult
@@ -16,13 +18,16 @@ def _task() -> TaskInstance:
     )
 
 
-def _config() -> dict[str, str]:
-    return {
+def _config(*, max_attempts: int | None = None) -> dict[str, object]:
+    config: dict[str, object] = {
         "run_id": "run_001",
         "baseline": "reflexion_style",
         "arm": "clean",
         "model": "replay",
     }
+    if max_attempts is not None:
+        config["max_attempts"] = max_attempts
+    return config
 
 
 def test_build_prompt_keeps_legacy_last_three_entries_behavior() -> None:
@@ -68,7 +73,7 @@ def test_run_success_generates_once_without_writing_and_uses_last_three_reflecti
         memory,
         client=client,
         model="replay",
-        config=_config(),
+        config=_config(max_attempts=2),
         verifier=verify,
     )
 
@@ -87,7 +92,7 @@ def test_run_success_generates_once_without_writing_and_uses_last_three_reflecti
     assert "seed corpus instruction" not in actor_prompt
 
 
-def test_run_failure_reflects_once_and_appends_lineaged_reflection() -> None:
+def test_run_max_attempts_one_preserves_reflect_then_return_without_retry() -> None:
     task = _task()
     memory = MemoryState(
         entries=[
@@ -105,7 +110,7 @@ def test_run_failure_reflects_once_and_appends_lineaged_reflection() -> None:
     client = ReplayClient(
         responses_by_sample={
             "sample_001": {
-                "reflexion_generate": "final: incorrect",
+                "reflexion_generate": ["final: incorrect"],
                 "reflexion_reflect": "  Re-check operator precedence.  ",
             }
         }
@@ -124,7 +129,7 @@ def test_run_failure_reflects_once_and_appends_lineaged_reflection() -> None:
         memory,
         client=client,
         model="replay",
-        config=_config(),
+        config=_config(max_attempts=1),
         verifier=verify,
     )
 
@@ -157,6 +162,97 @@ def test_run_failure_reflects_once_and_appends_lineaged_reflection() -> None:
     assert "TOP_SECRET_REASON" not in prompts
 
 
+def test_run_max_attempts_two_retries_same_sample_with_feedback_and_latest_three_memory() -> None:
+    task = _task()
+    memory = MemoryState(
+        entries=[
+            MemoryEntry(entry_id="old", content="old", memory_type="verbal_reflection"),
+            MemoryEntry(entry_id="one", content="one", memory_type="verbal_reflection"),
+            MemoryEntry(entry_id="two", content="two", memory_type="verbal_reflection"),
+        ]
+    )
+    client = ReplayClient(
+        responses_by_sample={
+            "sample_001": {
+                "reflexion_generate": ["final: incorrect", "final: 4"],
+                "reflexion_reflect": "Check the equation format.",
+            }
+        }
+    )
+
+    def verify(answer: str, received_task: TaskInstance) -> VerifierResult:
+        assert received_task is task
+        if answer == "incorrect":
+            return VerifierResult(
+                is_correct=False,
+                parsed_answer=answer,
+                reason="wrong_answer",
+                metadata={"expected": "TOP_SECRET_GOLD", "detail": "answer did not parse"},
+            )
+        assert answer == "4"
+        return VerifierResult(is_correct=True, parsed_answer=answer)
+
+    result = ReflexionStylePolicy().run(
+        task,
+        memory,
+        client=client,
+        model="replay",
+        config=_config(max_attempts=2),
+        verifier=verify,
+    )
+
+    assert [call.stage for call in result["method_calls"]] == [
+        "reflexion_generate",
+        "reflexion_reflect",
+        "reflexion_generate",
+    ]
+    assert result["final_response"] == "final: 4"
+    assert result["parsed_answer"] == "4"
+    assert result["verifier_result"].is_correct is True
+    assert result["memory_write_event"]["status"] == "accepted"
+    retry_prompt = result["method_calls"][-1].messages[1]["content"]
+    assert "Failed raw response:\nfinal: incorrect" in retry_prompt
+    assert "Verifier feedback:\nwrong_answer" in retry_prompt
+    assert "Reflection: one\nReflection: two\nReflection: Check the equation format." in retry_prompt
+    assert "Reflection: old" not in retry_prompt
+    assert "TOP_SECRET_GOLD" not in retry_prompt
+
+
+def test_run_stops_after_failed_retry_without_second_reflection() -> None:
+    task = _task()
+    memory = MemoryState()
+    client = ReplayClient(
+        responses_by_sample={
+            "sample_001": {
+                "reflexion_generate": ["final: first", "final: second"],
+                "reflexion_reflect": "Try a different operation.",
+            }
+        }
+    )
+
+    def verify(answer: str, received_task: TaskInstance) -> VerifierResult:
+        assert received_task is task
+        return VerifierResult(is_correct=False, parsed_answer=answer, reason="wrong_answer")
+
+    result = ReflexionStylePolicy().run(
+        task,
+        memory,
+        client=client,
+        model="replay",
+        config=_config(max_attempts=2),
+        verifier=verify,
+    )
+
+    assert [call.stage for call in result["method_calls"]] == [
+        "reflexion_generate",
+        "reflexion_reflect",
+        "reflexion_generate",
+    ]
+    assert result["final_response"] == "final: second"
+    assert result["parsed_answer"] == "second"
+    assert result["verifier_result"].is_correct is False
+
+
 def test_run_rejects_empty_failure_reflection_without_mutating_memory() -> None:
     task = _task()
     memory = MemoryState(
@@ -180,7 +276,7 @@ def test_run_rejects_empty_failure_reflection_without_mutating_memory() -> None:
         memory,
         client=client,
         model="replay",
-        config=_config(),
+        config=_config(max_attempts=2),
         verifier=verify,
     )
 
@@ -194,7 +290,19 @@ def test_run_rejects_empty_failure_reflection_without_mutating_memory() -> None:
     assert result["memory_write_event"] == {
         "type": "reflexion_append",
         "status": "rejected_empty",
+        "fidelity_invalid": True,
         "source_trial_id": "run_001:math_equation_balancer:sample_001:reflexion_style:clean:replay",
         "parent_entry_ids": ["one"],
         "source_entry_ids": [],
     }
+
+
+def test_run_rejects_max_attempts_outside_one_or_two() -> None:
+    with pytest.raises(ValueError, match="max_attempts"):
+        ReflexionStylePolicy().run(
+            _task(),
+            MemoryState(),
+            client=ReplayClient(responses=["final: 4"]),
+            model="replay",
+            config=_config(max_attempts=3),
+        )

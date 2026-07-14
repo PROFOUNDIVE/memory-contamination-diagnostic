@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Callable
 from uuid import uuid4
 
@@ -34,6 +35,13 @@ def _render_reflection(entry: MemoryEntry) -> str:
 
 def _reflection_context(entries: list[MemoryEntry]) -> str:
     return "\n".join(_render_reflection(entry) for entry in entries) or "(none)"
+
+
+def _sanitized_feedback(verifier_result: VerifierResult) -> str:
+    reason = verifier_result.reason
+    if isinstance(reason, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,127}", reason):
+        return reason
+    return "verifier_rejected"
 
 
 def _contaminated_source_entry_ids(entries: list[MemoryEntry]) -> list[str]:
@@ -79,6 +87,9 @@ class ReflexionStylePolicy:
         verifier: Callable[[str, TaskInstance], VerifierResult] | None = None,
     ) -> dict[str, Any]:
         call_config = {**(config or {}), "sample_id": (config or {}).get("sample_id", task.sample_id)}
+        max_attempts = call_config.get("max_attempts", 1)
+        if type(max_attempts) is not int or max_attempts not in {1, 2}:
+            raise ValueError("reflexion max_attempts must be 1 or 2")
         memory_before = [entry.model_dump() for entry in memory.entries]
         reflection_entries = _reflection_entries(memory)
         reflection_context = _reflection_context(reflection_entries)
@@ -117,6 +128,7 @@ class ReflexionStylePolicy:
                 None,
             )
 
+        feedback = _sanitized_feedback(verifier_result)
         reflection_response = recorder.chat(
             [
                 {
@@ -129,6 +141,7 @@ class ReflexionStylePolicy:
                         f"Task: {task.task_name}\n\nReflections:\n{reflection_context}"
                         f"\n\nTask input:\n{task.input}\n\nFailed raw response:\n{response.content}"
                         f"\n\nParsed answer:\n{parsed_answer}\n\nCorrect: false"
+                        f"\n\nVerifier feedback:\n{feedback}"
                     ),
                 },
             ],
@@ -172,10 +185,54 @@ class ReflexionStylePolicy:
                 "parent_entry_ids": parent_entry_ids,
                 "source_entry_ids": source_entry_ids,
             }
+        elif max_attempts == 2:
+            event["fidelity_invalid"] = True
+
+        if not reflection or max_attempts == 1:
+            return _result(
+                response.content,
+                parsed_answer,
+                verifier_result,
+                recorder,
+                memory_before,
+                memory,
+                event,
+            )
+
+        retry_reflection_context = _reflection_context(_reflection_entries(memory))
+        retry_response = recorder.chat(
+            [
+                {
+                    "role": "system",
+                    "content": f"Solve the {task.task_name} task using reflections when useful.",
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Task: {task.task_name}\n\nFailed raw response:\n{response.content}"
+                        f"\n\nParsed answer:\n{parsed_answer}\n\nVerifier feedback:\n{feedback}"
+                        f"\n\nReflections:\n{retry_reflection_context}"
+                        f"\n\nCurrent task input:\n{task.input}"
+                    ),
+                },
+            ],
+            model=model,
+            config={
+                **call_config,
+                "method_stage": "reflexion_generate",
+                "retry_count": 1,
+            },
+        )
+        retry_parsed_answer = _parse_answer(retry_response.content)
+        retry_verifier_result = (
+            verifier(retry_parsed_answer, task)
+            if verifier is not None
+            else VerifierResult(is_correct=True)
+        )
         return _result(
-            response.content,
-            parsed_answer,
-            verifier_result,
+            retry_response.content,
+            retry_parsed_answer,
+            retry_verifier_result,
             recorder,
             memory_before,
             memory,
