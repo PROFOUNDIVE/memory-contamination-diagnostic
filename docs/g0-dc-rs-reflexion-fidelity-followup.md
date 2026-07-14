@@ -84,7 +84,7 @@ Both projects are cited as research sources. The prompts, state shapes, and cont
 
 - Two stages per trial in fixed order: `dc_rs_synthesize` then `dc_rs_generate`.
 - Persistent state is keyed by `(run_id, task_name, baseline, arm, backbone)`; the cheatsheet and the `dc_rs_io_pair` corpus grow under that key. No `sample_id` appears in the persistent state key.
-- `dc_rs_synthesize` retrieves top-3 cosine-scored `dc_rs_io_pair` records from prior same-identity entries, synthesizes a label-free `<cheatsheet>` block, and writes a `MemoryEntry` with `memory_type="dynamic_cheatsheet_rs"` when a non-empty block is parsed.
+- `dc_rs_synthesize` retrieves top-3 cosine-scored `dc_rs_io_pair` records from prior same-identity entries, synthesizes a label-free `<cheatsheet>` block, and writes a `MemoryEntry` with `memory_type="dynamic_cheatsheet"` when a non-empty block is parsed.
 - `dc_rs_generate` reads the current cheatsheet and current task input, emits an answer, and the trial appends a deterministic `dc_rs_io_pair` entry after verification.
 - Emits `memory_write_event={"type": "dynamic_cheatsheet_rs_update", "status": "accepted", ...}` on accepted synthesis.
 - Native method-call costs are logged per call.
@@ -198,7 +198,7 @@ Independent row count: 108. Independent method-call sum: 174.
 - `data/memory/catalog_v2.jsonl`
 - `data/replay/g0_dc_rs_reflexion_fidelity_followup_v1.yaml`
 - `scripts/inspect_g0_dc_rs_reflexion_fidelity.py`
-- `src/memcontam/baselines/dynamic_cheatsheet_rs_optional.py`
+- `src/memcontam/baselines/dynamic_cheatsheet_optional.py`
 - `src/memcontam/baselines/reflexion_style.py`
 - `src/memcontam/cli.py`
 - `tests/test_dc_rs_faithful.py`
