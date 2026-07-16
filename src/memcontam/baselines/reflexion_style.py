@@ -209,9 +209,7 @@ class ReflexionStylePolicy:
                 {
                     "role": "user",
                     "content": (
-                        f"Task: {task.task_name}\n\nFailed raw response:\n{response.content}"
-                        f"\n\nParsed answer:\n{parsed_answer}\n\nVerifier feedback:\n{feedback}"
-                        f"\n\nReflections:\n{retry_reflection_context}"
+                        f"Task: {task.task_name}\n\nReflections:\n{retry_reflection_context}"
                         f"\n\nCurrent task input:\n{task.input}"
                     ),
                 },

@@ -162,7 +162,7 @@ def test_run_max_attempts_one_preserves_reflect_then_return_without_retry() -> N
     assert "TOP_SECRET_REASON" not in prompts
 
 
-def test_run_max_attempts_two_retries_same_sample_with_feedback_and_latest_three_memory() -> None:
+def test_run_max_attempts_two_retries_same_sample_with_latest_three_memory_only() -> None:
     task = _task()
     memory = MemoryState(
         entries=[
@@ -211,8 +211,9 @@ def test_run_max_attempts_two_retries_same_sample_with_feedback_and_latest_three
     assert result["verifier_result"].is_correct is True
     assert result["memory_write_event"]["status"] == "accepted"
     retry_prompt = result["method_calls"][-1].messages[1]["content"]
-    assert "Failed raw response:\nfinal: incorrect" in retry_prompt
-    assert "Verifier feedback:\nwrong_answer" in retry_prompt
+    assert "Failed raw response" not in retry_prompt
+    assert "Parsed answer" not in retry_prompt
+    assert "Verifier feedback" not in retry_prompt
     assert "Reflection: one\nReflection: two\nReflection: Check the equation format." in retry_prompt
     assert "Reflection: old" not in retry_prompt
     assert "TOP_SECRET_GOLD" not in retry_prompt
