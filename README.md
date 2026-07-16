@@ -2,7 +2,7 @@
 
 Controlled memory-contamination diagnostic harness for reasoning-memory systems.
 
-All claims below are for **faithful adapted baselines**, not exact or full reproductions. Replay evidence is a fidelity/QA artifact, not benchmark or manuscript-quality evidence.
+All claims below are for **faithful adapted baselines**, not complete reproductions of the official methods. Replay evidence is a fidelity/QA artifact, not benchmark or manuscript-quality evidence.
 
 ---
 
