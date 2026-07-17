@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from memcontam.logging.provenance import PromptSourcePart, build_prompt_with_sources
 from memcontam.memory.embeddings import EmbeddingProvider, FakeEmbeddingProvider, normalized_dot_top_k
 from memcontam.memory.retrieval import RetrievedRecord, retrieve_records
 from memcontam.memory.stores import MemoryEntry, MemoryState
@@ -119,6 +120,14 @@ def _build_instantiation_prompt(
     distilled: dict[str, str],
     template: dict[str, Any] | None,
 ) -> str:
+    return _build_instantiation_prompt_with_sources(task, distilled, template)[0]
+
+
+def _build_instantiation_prompt_with_sources(
+    task: TaskInstance,
+    distilled: dict[str, str],
+    template: dict[str, Any] | None,
+) -> tuple[str, list[Any]]:
     if template is not None:
         template_section = (
             f"entry_id={template['entry_id']}\n{template['content']}"
@@ -136,7 +145,7 @@ def _build_instantiation_prompt(
             "No template is available; reason directly from the distilled problem."
         )
 
-    return (
+    prefix = (
         "Distilled information:\n"
         "\n"
         "1. Key information:\n"
@@ -155,13 +164,20 @@ def _build_instantiation_prompt(
         f"{distilled['answer_form']}\n"
         "\n"
         "Retrieved thought template:\n"
-        f"{template_section}\n"
-        "\n"
+    )
+    suffix = (
+        "\n\n"
         "Instantiated guidance:\n"
         f"{instantiated}\n"
         "\n"
         f"Solve: {task.input}"
     )
+    entry = template.get("memory_entry") if template is not None else None
+    if isinstance(entry, MemoryEntry):
+        return build_prompt_with_sources(
+            [prefix, PromptSourcePart(template_section, entry), suffix], message_index=1
+        )
+    return prefix + template_section + suffix, []
 
 
 def distill_thought_template(
@@ -374,15 +390,17 @@ class BotStylePolicy:
         config: dict[str, Any],
         retrieved: dict[str, Any] | None = None,
     ) -> str:
+        content, source_spans = _build_instantiation_prompt_with_sources(task, distilled, retrieved)
         messages = [
             {"role": "system", "content": _INSTANTIATION_INSTRUCTIONS},
             {
                 "role": "user",
-                "content": _build_instantiation_prompt(task, distilled, retrieved),
+                "content": content,
             },
         ]
         call_config = dict(config)
         call_config.setdefault("sample_id", task.sample_id)
         call_config["method_stage"] = "bot_instantiate_solve"
+        call_config["source_spans"] = source_spans
         response = client.chat(messages, model, call_config)
         return response.content

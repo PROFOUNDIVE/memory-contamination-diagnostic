@@ -42,7 +42,14 @@ class BotRuntime:
         verifier: Verifier,
     ) -> dict[str, Any]:
         call_config = {**config, "sample_id": config.get("sample_id", task.sample_id)}
-        recorder = MethodCallRecorder(client)
+        trial_id = ":".join(
+            [identity.run_id, task.task_name, task.sample_id, identity.baseline, identity.arm, model]
+        )
+        recorder = MethodCallRecorder(
+            client,
+            event_callback=call_config.get("_logging_event_callback"),
+            trial_context={**call_config.get("_logging_trial_context", {}), "trial_id": trial_id},
+        )
         memory = MemoryState(entries=list(buffer_snapshot))
         embedding_provider = call_config.get("embedding_provider", FakeEmbeddingProvider())
 
@@ -53,6 +60,7 @@ class BotRuntime:
         final_response = self.policy.template_instantiation_solve(
             task, distilled, memory, recorder, model, call_config, retrieved=retrieved
         )
+        answer_call_id = recorder.get_records()[-1].call_id
         verifier_result = verifier(final_response)
         memory_before = [_memory_entry_dict(entry) for entry in buffer_snapshot]
 
@@ -87,6 +95,7 @@ class BotRuntime:
             "memory_before": memory_before,
             "memory_after": memory_after,
             "memory_write_event": memory_write_event,
+            "answer_call_id": answer_call_id,
             "metadata": {
                 "bot_buffer_identity": asdict(identity),
                 "distilled_problem": distilled,

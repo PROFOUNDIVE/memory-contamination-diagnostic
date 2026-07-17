@@ -126,8 +126,12 @@ def test_bot_runtime_runs_reference_order_and_updates() -> None:
             entry_id="tpl_001",
             content="Look for factor pairs of 24 and build subexpressions that create them.",
             memory_type="thought_template",
-            clean_or_contaminated="clean",
+            clean_or_contaminated="contaminated",
             source_trial_id="prev_trial_1",
+            metadata={
+                "parent_entry_ids": ["template-parent"],
+                "source_entry_ids": ["template-source"],
+            },
         )
     ]
     client = ReplayClient(
@@ -168,6 +172,17 @@ def test_bot_runtime_runs_reference_order_and_updates() -> None:
     assert result["memory_write_event"]["status"] == "accepted"
     assert result["memory_write_event"]["new_entry_id"] == result["memory_after"][-1]["entry_id"]
     assert result["metadata"]["bot_buffer_identity"] == identity.__dict__
+    answer_call = result["method_calls"][1]
+    assert result["answer_call_id"] == answer_call.call_id
+    assert answer_call.stage == "bot_instantiate_solve"
+    assert [call.source_spans for call in result["method_calls"] if call is not answer_call] == [[], [], []]
+    assert len(answer_call.source_spans) == 1
+    span = answer_call.source_spans[0]
+    assert answer_call.messages[1]["content"][span.start : span.end] == (
+        "entry_id=tpl_001\nLook for factor pairs of 24 and build subexpressions that create them."
+    )
+    assert span.source_ids == ["template-source"]
+    assert span.parent_ids == ["template-parent"]
 
 
 def test_bot_runtime_failed_verifier_stops_update() -> None:
