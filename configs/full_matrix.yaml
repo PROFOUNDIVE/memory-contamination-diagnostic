@@ -1,7 +1,9 @@
 run:
   name: full_matrix
   description: "Main PeerJ diagnostic matrix; fill sample counts after pilot"
+  mode: faithful
   stage: main
+  contract_level: phase11
   provider: frontier_reasoning
   model_snapshots:
     frontier_reasoning: TODO
@@ -39,7 +41,22 @@ arms:
 
 logging:
   output_dir: runs
-  schema_version: logging_v1
+  schema_version: logging_v2
   prompt_version: prompt_v0
   memory_policy_version: memory_policy_v0
   contamination_catalog_version: contamination_v0
+
+evaluation:
+  evaluation_law_id: phase11_full_matrix_online_v1
+  regime: online
+  task_law_id: locked_three_tasks_full_matrix_v1
+  inference_law_id: frontier_reasoning_main_v1
+  checkpoint_policy_id: null
+
+target_contamination_set:
+  target_set_id: controlled_injected_derived_v1
+  definition_version: phase11_v1
+  included_classes:
+    - injected
+    - derived
+  require_exact_lineage: true

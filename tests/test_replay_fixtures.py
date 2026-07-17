@@ -5,6 +5,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+import memcontam.cli as cli
+
 
 CONFIG_PATH = Path("configs/g0_rag_bot_faithful_replay.yaml")
 FIXTURE_PATH = Path("data/replay/g0_rag_bot_faithful_v1.yaml")
@@ -19,6 +21,7 @@ VERSIONED_CONFIGS = [
     ),
 ]
 CONTRACT_CONFIG_PATH = Path("configs/logging_contract_replay.yaml")
+PHASE11_CONTRACT_CONFIG_PATH = Path("configs/logging_contract_phase11_replay.yaml")
 CONTRACT_SAMPLE_IDS = ["game24_pilot_001", "meb_pilot_001", "word_sorting_pilot_001"]
 CONTRACT_EXPECTED_STAGES = [
     "no_memory_generate",
@@ -129,6 +132,89 @@ def test_logging_contract_replay_fixture_is_offline_and_expands_to_39_combinatio
     assert len(retry) == 2
     assert "1 + 1 + 1 + 1" in retry[0]
     assert "6 / (1 - (3 / 4))" in retry[1]
+
+
+def test_phase11_logging_contract_replay_fixture_is_offline_and_expands_to_39_combinations() -> None:
+    config = _load_yaml(PHASE11_CONTRACT_CONFIG_PATH)
+    fixture = config["replay"]["responses_by_sample"]
+
+    assert config["run"]["mode"] == "faithful"
+    assert config["run"]["stage"] == "replay"
+    assert config["run"]["provider"] == "replay"
+    assert config["run"]["contract_level"] == "phase11"
+    assert config["run"]["model_snapshots"] == {
+        "replay_logging_contract_phase11": "logging_contract_phase11_fixture_v1"
+    }
+    assert config["models"] == ["replay_logging_contract_phase11"]
+    assert config["logging"]["schema_version"] == "logging_v2"
+    assert config["replay"]["fixture_version"] == "logging_contract_phase11_fixture_v1"
+    assert config["memory"]["corpus_path"] == "data/memory/catalog_v3.jsonl"
+    assert config["memory"]["corpus_version"] == "memory_catalog_v3"
+    assert config["embedding"]["offline_fallback"] is True
+    assert config["live_smoke"]["enabled"] is False
+    assert config["evaluation"] == {
+        "evaluation_law_id": "phase11_logging_contract_online_replay_v1",
+        "regime": "online",
+        "task_law_id": "locked_three_tasks_limit1_v1",
+        "inference_law_id": "logging_contract_phase11_replay_fixture_v1",
+        "checkpoint_policy_id": None,
+    }
+    assert config["target_contamination_set"] == {
+        "target_set_id": "controlled_injected_derived_v1",
+        "definition_version": "phase11_v1",
+        "included_classes": ["injected", "derived"],
+        "require_exact_lineage": True,
+    }
+    assert set(fixture) == set(CONTRACT_SAMPLE_IDS)
+    assert _expected_valid_combinations(config) == 39
+
+    for sample_id in CONTRACT_SAMPLE_IDS:
+        stages = fixture[sample_id]
+        assert list(stages) == CONTRACT_EXPECTED_STAGES, sample_id
+        assert all(stages[stage] for stage in CONTRACT_EXPECTED_STAGES)
+
+
+@pytest.mark.parametrize(
+    "section,expected",
+    [
+        ("evaluation", "logging_v2 requires evaluation"),
+        ("target_contamination_set", "logging_v2 requires target_contamination_set"),
+    ],
+)
+def test_phase11_config_validation_fails_closed_when_typed_sections_are_missing(
+    tmp_path: Path, section: str, expected: str
+) -> None:
+    config = _load_yaml(PHASE11_CONTRACT_CONFIG_PATH)
+    config.pop(section)
+    path = tmp_path / f"missing_{section}.yaml"
+    path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+
+    with pytest.raises(SystemExit, match=expected):
+        cli.validate_config(path)
+
+
+@pytest.mark.parametrize(
+    "section,key,value,expected",
+    [
+        ("evaluation", "regime", "later", "evaluation.regime"),
+        (
+            "target_contamination_set",
+            "included_classes",
+            ["injected", "bogus"],
+            "target_contamination_set.included_classes",
+        ),
+    ],
+)
+def test_phase11_config_validation_fails_closed_for_unknown_typed_values(
+    tmp_path: Path, section: str, key: str, value: object, expected: str
+) -> None:
+    config = _load_yaml(PHASE11_CONTRACT_CONFIG_PATH)
+    config[section][key] = value
+    path = tmp_path / f"bad_{section}_{key}.yaml"
+    path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+
+    with pytest.raises(SystemExit, match=expected):
+        cli.validate_config(path)
 
 
 @pytest.mark.parametrize("stage", ["bot_problem_distill", "bot_thought_distill", "bot_novelty_decide"])

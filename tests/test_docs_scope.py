@@ -286,6 +286,21 @@ def test_full_matrix_validate_config_rejects_todo_limits(monkeypatch) -> None:
         cli.validate_config(FULL_MATRIX_CONFIG)
 
 
+def test_full_matrix_carries_phase11_keys_but_keeps_placeholders() -> None:
+    config = yaml.safe_load(FULL_MATRIX_CONFIG.read_text(encoding="utf-8"))
+
+    assert config["logging"]["schema_version"] == "logging_v2"
+    assert config["run"]["contract_level"] == "phase11"
+    assert config["evaluation"]["evaluation_law_id"] == "phase11_full_matrix_online_v1"
+    assert config["target_contamination_set"] == {
+        "target_set_id": "controlled_injected_derived_v1",
+        "definition_version": "phase11_v1",
+        "included_classes": ["injected", "derived"],
+        "require_exact_lineage": True,
+    }
+    assert [task["limit"] for task in config["tasks"]] == ["TODO", "TODO", "TODO"]
+
+
 def test_followup_doc_contains_adaptation_table() -> None:
     text = FOLLOWUP_DOC.read_text(encoding="utf-8")
     assert "| Must Preserve | Safely Adapted | Omitted |" in text, (

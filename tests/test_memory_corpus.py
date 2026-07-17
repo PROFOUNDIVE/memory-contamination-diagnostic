@@ -24,6 +24,10 @@ def _catalog_path() -> Path:
     return Path(__file__).resolve().parents[1] / "data/memory/catalog_v1.jsonl"
 
 
+def _phase11_catalog_path() -> Path:
+    return Path(__file__).resolve().parents[1] / "data/memory/catalog_v3.jsonl"
+
+
 def _content_hash(entries: list[MemoryEntry]) -> str:
     payload = json.dumps(
         [entry.model_dump() for entry in entries],
@@ -104,6 +108,17 @@ def _valid_clean_record(entry_id: str, task: str = "game24") -> dict:
         "source": "pilot_warmup",
         "clean_or_contaminated": "clean",
         "paired_clean_entry_id": None,
+    }
+
+
+def _with_seed_provenance(row: dict, contamination_class: str = "clean") -> dict:
+    return {
+        **row,
+        "contamination_class": contamination_class,
+        "lineage_status": "exact",
+        "lineage_basis": "seed",
+        "direct_parent_ids": [],
+        "injected_root_ids": [row["entry_id"]] if contamination_class == "injected" else [],
     }
 
 
@@ -311,6 +326,103 @@ def test_non_dc_rs_records_parse_without_output_text() -> None:
 
         entries, _ = build_arm_corpus(records, "game24", "clean")
         assert "output_text" not in entries[0].metadata
+
+
+def test_legacy_records_do_not_emit_phase11_metadata_defaults() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        path = _write_fixture(Path(tmp), [_valid_clean_record("clean_game24_008")])
+        records = load_corpus(path)
+
+        entries, _ = build_arm_corpus(records, "game24", "clean")
+        metadata = entries[0].metadata
+
+        for key in [
+            "contamination_class",
+            "lineage_status",
+            "lineage_basis",
+            "direct_parent_ids",
+            "injected_root_ids",
+        ]:
+            assert key not in metadata
+
+
+def test_phase11_catalog_v3_records_have_seed_provenance_and_metadata() -> None:
+    records = load_corpus(_phase11_catalog_path())
+
+    assert len(records) == 24
+    for record in records:
+        assert record.lineage_status == "exact"
+        assert record.lineage_basis == "seed"
+        assert record.direct_parent_ids == []
+        if record.clean_or_contaminated == "clean":
+            assert record.contamination_class == "clean"
+            assert record.injected_root_ids == []
+        else:
+            assert record.contamination_class == "injected"
+            assert record.injected_root_ids == [record.entry_id]
+
+    entries, _ = build_arm_corpus(records, "game24", "contaminated")
+    injected = next(entry for entry in entries if entry.clean_or_contaminated == "contaminated")
+    assert injected.metadata["contamination_class"] == "injected"
+    assert injected.metadata["lineage_status"] == "exact"
+    assert injected.metadata["lineage_basis"] == "seed"
+    assert injected.metadata["injected_root_ids"] == [injected.entry_id]
+    assert injected.metadata["direct_parent_ids"] == []
+
+
+def test_phase11_seed_provenance_rejects_injected_record_without_self_root() -> None:
+    clean = _with_seed_provenance(_valid_clean_record("clean_game24_seed_001"))
+    injected = _with_seed_provenance(
+        {
+            **_valid_clean_record("corrupted_game24_seed_001"),
+            "content": "A misleading rule that does not help.",
+            "source": "injected_corruption",
+            "clean_or_contaminated": "contaminated",
+            "paired_clean_entry_id": "clean_game24_seed_001",
+        },
+        "injected",
+    )
+    injected["injected_root_ids"] = []
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = _write_fixture(Path(tmp), [clean, injected])
+        with pytest.raises(CorpusValidationError) as exc:
+            load_corpus(path)
+        assert "corrupted_game24_seed_001" in str(exc.value)
+        assert "injected_root_ids" in str(exc.value)
+
+
+def test_phase11_seed_provenance_rejects_clean_record_with_injected_roots() -> None:
+    clean = _with_seed_provenance(_valid_clean_record("clean_game24_seed_002"))
+    clean["injected_root_ids"] = ["some_injected_root"]
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = _write_fixture(Path(tmp), [clean])
+        with pytest.raises(CorpusValidationError) as exc:
+            load_corpus(path)
+        assert "clean_game24_seed_002" in str(exc.value)
+        assert "clean seed" in str(exc.value)
+
+
+@pytest.mark.parametrize("contamination_class", ["derived", "natural"])
+def test_phase11_seed_provenance_rejects_invalid_seed_classes(
+    contamination_class: str,
+) -> None:
+    row = _with_seed_provenance(
+        {
+            **_valid_clean_record(f"bad_{contamination_class}_seed_001"),
+            "clean_or_contaminated": "contaminated",
+            "paired_clean_entry_id": "clean_game24_seed_003",
+        },
+        contamination_class,
+    )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = _write_fixture(Path(tmp), [_with_seed_provenance(_valid_clean_record("clean_game24_seed_003")), row])
+        with pytest.raises(CorpusValidationError) as exc:
+            load_corpus(path)
+        assert f"bad_{contamination_class}_seed_001" in str(exc.value)
+        assert "seed" in str(exc.value)
 
 
 @pytest.mark.parametrize(

@@ -31,12 +31,15 @@ from memcontam.logging.schema import (
     BadMemoryUptakeLabel,
     CallEvent,
     ContaminationExposure,
+    EvaluationLawSpec,
     FailureEvent,
     FilterEvent,
     LOGGING_V1,
+    LOGGING_V2,
     MethodCall,
     RepeatedFailureLabel,
     RunMetadata,
+    TargetContaminationSetSpec,
     TrialLog,
 )
 from memcontam.logging.provenance import compute_exposure_from_spans, normalize_memory_event
@@ -194,7 +197,7 @@ _STAGES = {"debug", "replay", "partial", "pilot", "main", "benchmark"}
 
 def _is_strict_config(config: dict[str, Any]) -> bool:
     return (
-        config.get("logging", {}).get("schema_version") == LOGGING_V1
+        config.get("logging", {}).get("schema_version") in {LOGGING_V1, LOGGING_V2}
         and config.get("run", {}).get("mode") == "faithful"
     )
 
@@ -238,6 +241,9 @@ def _run_metadata(config: dict[str, Any], run_id: str, run_started_at: str) -> R
         sample_order_hash=sample_order_hash,
         stage=run_config["stage"],
         schema_version=logging_config["schema_version"],
+        contract_level=run_config.get("contract_level", "phase10"),
+        evaluation_law=config.get("evaluation"),
+        target_contamination_set=config.get("target_contamination_set"),
         prompt_version=logging_config["prompt_version"],
         memory_policy_version=logging_config["memory_policy_version"],
         contamination_catalog_version=logging_config["contamination_catalog_version"],
@@ -258,12 +264,15 @@ def _validate_run_config(config: dict[str, Any]) -> None:
             raise SystemExit("legacy run.mode is limited to debug or replay")
         return
 
+    schema_version = config.get("logging", {}).get("schema_version")
     if "stage" not in run_config:
-        raise SystemExit("logging_v1 requires run.stage")
+        raise SystemExit(f"{schema_version} requires run.stage")
     if not faithful:
-        raise SystemExit("logging_v1 requires run.mode=faithful")
+        raise SystemExit(f"{schema_version} requires run.mode=faithful")
     if config.get("live_smoke", {}).get("enabled", False):
         raise SystemExit("strict offline configs require live_smoke.enabled=false")
+    if schema_version == LOGGING_V2:
+        _validate_phase11_config_sections(config)
 
     required_versions = {
         "logging.prompt_version": config.get("logging", {}).get("prompt_version"),
@@ -279,22 +288,52 @@ def _validate_run_config(config: dict[str, Any]) -> None:
         if not isinstance(value, str) or not value or value.lower() in {"unknown", "todo"}
     ]
     if unresolved:
-        raise SystemExit(f"logging_v1 requires resolved versions: {', '.join(unresolved)}")
+        raise SystemExit(f"{schema_version} requires resolved versions: {', '.join(unresolved)}")
 
     provider = run_config.get("provider")
     snapshots = run_config.get("model_snapshots")
     if not isinstance(provider, str) or not provider:
-        raise SystemExit("logging_v1 requires run.provider")
+        raise SystemExit(f"{schema_version} requires run.provider")
     if not isinstance(snapshots, dict):
-        raise SystemExit("logging_v1 requires run.model_snapshots")
+        raise SystemExit(f"{schema_version} requires run.model_snapshots")
     for model in config["models"]:
         snapshot = snapshots.get(model)
         if not isinstance(snapshot, str) or not snapshot or snapshot.lower() in {"unknown", "todo"}:
-            raise SystemExit(f"logging_v1 requires resolved snapshot for model: {model}")
+            raise SystemExit(f"{schema_version} requires resolved snapshot for model: {model}")
     for task in config["tasks"]:
         limit = task.get("limit")
         if not isinstance(limit, int) or limit <= 0:
-            raise SystemExit(f"logging_v1 requires positive task limit: {task.get('name', 'unknown')}")
+            raise SystemExit(f"{schema_version} requires positive task limit: {task.get('name', 'unknown')}")
+
+    if schema_version == LOGGING_V2:
+        load_corpus(Path(_corpus_path(config)))
+
+
+def _validate_phase11_config_sections(config: dict[str, Any]) -> None:
+    run_config = config.get("run", {})
+    if run_config.get("contract_level") != "phase11":
+        raise SystemExit("logging_v2 requires run.contract_level=phase11")
+    _validate_typed_config_section(
+        "evaluation", config.get("evaluation"), EvaluationLawSpec
+    )
+    _validate_typed_config_section(
+        "target_contamination_set",
+        config.get("target_contamination_set"),
+        TargetContaminationSetSpec,
+    )
+
+
+def _validate_typed_config_section(section: str, value: Any, model: Any) -> None:
+    if value is None:
+        raise SystemExit(f"logging_v2 requires {section}")
+    try:
+        model.model_validate(value)
+    except ValueError as exc:
+        errors = getattr(exc, "errors", lambda: [])()
+        if errors:
+            loc = ".".join(str(part) for part in errors[0].get("loc", ()))
+            raise SystemExit(f"invalid {section}.{loc}: {errors[0].get('msg')}") from exc
+        raise SystemExit(f"invalid {section}: {exc}") from exc
 
 
 def _embedding_provider(config: dict[str, Any]) -> EmbeddingProvider:

@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from memcontam.logging.schema import ContaminationClass, LineageBasis, LineageStatus
 from memcontam.memory.filters import FilterTelemetry, drop_known_contaminated
 from memcontam.memory.stores import MemoryEntry
 
@@ -66,6 +67,11 @@ class CorpusRecord(BaseModel):
     source: str
     clean_or_contaminated: Literal["clean", "contaminated"]
     paired_clean_entry_id: str | None = None
+    contamination_class: ContaminationClass | None = None
+    lineage_status: LineageStatus | None = None
+    lineage_basis: LineageBasis | None = None
+    direct_parent_ids: list[str] = Field(default_factory=list)
+    injected_root_ids: list[str] = Field(default_factory=list)
 
     @field_validator("task")
     @classmethod
@@ -116,7 +122,45 @@ class CorpusRecord(BaseModel):
                 raise ValueError(
                     f"record {self.entry_id!r} dc_rs_io_pair requires non-empty output_text"
                 )
+        self._validate_phase11_seed_provenance()
         return self
+
+    def _validate_phase11_seed_provenance(self) -> None:
+        has_phase11_fields = any(
+            [
+                self.contamination_class is not None,
+                self.lineage_status is not None,
+                self.lineage_basis is not None,
+                bool(self.direct_parent_ids),
+                bool(self.injected_root_ids),
+            ]
+        )
+        if not has_phase11_fields:
+            return
+        if self.contamination_class is None:
+            raise ValueError(f"record {self.entry_id!r} requires contamination_class")
+        if self.lineage_status is None:
+            raise ValueError(f"record {self.entry_id!r} requires lineage_status")
+        if self.lineage_basis is None:
+            raise ValueError(f"record {self.entry_id!r} requires lineage_basis")
+        if self.contamination_class == "clean" and self.clean_or_contaminated != "clean":
+            raise ValueError(f"record {self.entry_id!r} clean class must be clean")
+        if self.contamination_class != "clean" and self.clean_or_contaminated != "contaminated":
+            raise ValueError(f"record {self.entry_id!r} contaminated class must be contaminated")
+        if self.lineage_status == "exact" and self.lineage_basis == "signature":
+            raise ValueError(f"record {self.entry_id!r} signature basis cannot be exact")
+        if self.lineage_basis != "seed":
+            return
+        if self.contamination_class not in {"clean", "injected"}:
+            raise ValueError(f"record {self.entry_id!r} seed provenance must be clean or injected")
+        if self.direct_parent_ids:
+            raise ValueError(f"record {self.entry_id!r} seed provenance cannot have parents")
+        if self.contamination_class == "clean" and self.injected_root_ids:
+            raise ValueError(f"record {self.entry_id!r} clean seed cannot have injected_root_ids")
+        if self.contamination_class == "injected" and self.injected_root_ids != [self.entry_id]:
+            raise ValueError(
+                f"record {self.entry_id!r} injected seed requires injected_root_ids=[entry_id]"
+            )
 
 
 class _ValidatedCorpus:
@@ -188,6 +232,18 @@ def _to_memory_entry(record: CorpusRecord) -> MemoryEntry:
         metadata["paired_clean_entry_id"] = record.paired_clean_entry_id
     if record.memory_type == "dc_rs_io_pair" and record.output_text is not None:
         metadata["output_text"] = record.output_text
+    for field_name in (
+        "contamination_class",
+        "lineage_status",
+        "lineage_basis",
+        "direct_parent_ids",
+        "injected_root_ids",
+    ):
+        if field_name not in record.model_fields_set:
+            continue
+        value = getattr(record, field_name)
+        if value is not None:
+            metadata[field_name] = value
     return MemoryEntry(
         entry_id=record.entry_id,
         content=record.content,
