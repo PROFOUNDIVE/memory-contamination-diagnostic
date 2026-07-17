@@ -10,6 +10,12 @@ from uuid import uuid4
 
 from memcontam.clients.base import LLMClient
 from memcontam.clients.recording import MethodCallRecorder
+from memcontam.logging.provenance import (
+    PromptSourcePart,
+    build_prompt_with_sources,
+    derived_source_span,
+    source_lineage_from_spans,
+)
 from memcontam.logging.schema import VerifierResult
 from memcontam.memory.embeddings import EmbeddingProvider
 from memcontam.memory.retrieval import DenseIndex
@@ -49,19 +55,39 @@ class DynamicCheatsheetRetrievalSynthesisPolicy:
         retrieved_records = self._retrieve_pairs(task.input, pair_entries, trial_id)
         pairs_by_id = {entry.entry_id: entry for entry in pair_entries}
         retrieved_pairs = [pairs_by_id[record.document_id] for record in retrieved_records]
-        recorder = MethodCallRecorder(client)
+        recorder = MethodCallRecorder(
+            client,
+            event_callback=call_config.get("_logging_event_callback"),
+            trial_context={**call_config.get("_logging_trial_context", {}), "trial_id": trial_id},
+        )
 
+        synthesis_message, synthesis_spans = _synthesis_message_with_sources(
+            task, cheatsheet_entries, retrieved_pairs
+        )
         synthesized = recorder.chat(
-            [_synthesis_message(task, cheatsheet, retrieved_pairs)],
+            [synthesis_message],
             model=model,
-            config={**call_config, "method_stage": "dc_rs_synthesize"},
+            config={
+                **call_config,
+                "method_stage": "dc_rs_synthesize",
+                "source_spans": synthesis_spans,
+            },
         )
+        synthesis_call = recorder.get_records()[-1]
         updated_cheatsheet, parser_status = _extract_cheatsheet(synthesized.content, cheatsheet)
-        generated = recorder.chat(
-            [_generation_message(task, updated_cheatsheet)],
-            model=model,
-            config={**call_config, "method_stage": "dc_rs_generate"},
+        generation_message, generation_spans = _dc_rs_generation_message(
+            task, updated_cheatsheet, synthesis_call.call_id, synthesis_call.source_spans
         )
+        generated = recorder.chat(
+            [generation_message],
+            model=model,
+            config={
+                **call_config,
+                "method_stage": "dc_rs_generate",
+                "source_spans": generation_spans,
+            },
+        )
+        answer_call_id = recorder.get_records()[-1].call_id
         parsed_answer = _parse_answer(generated.content)
         verifier_result = (
             verifier(parsed_answer, task)
@@ -128,6 +154,7 @@ class DynamicCheatsheetRetrievalSynthesisPolicy:
             "memory_before": memory_before,
             "memory_after": [entry.model_dump() for entry in memory_after_entries],
             "memory_write_event": event,
+            "answer_call_id": answer_call_id,
             "metadata": {},
         }
 
@@ -164,13 +191,28 @@ class DynamicCheatsheetOptionalPolicy:
         call_config = {**(config or {}), "sample_id": (config or {}).get("sample_id", task.sample_id)}
         cheatsheet, lineage = _current_cheatsheet(memory)
         memory_before = [entry.model_dump() for entry in memory.entries]
-        recorder = MethodCallRecorder(client)
+        trial_id = _trial_id(task, call_config, model)
+        recorder = MethodCallRecorder(
+            client,
+            event_callback=call_config.get("_logging_event_callback"),
+            trial_context={**call_config.get("_logging_trial_context", {}), "trial_id": trial_id},
+        )
+        cheatsheet_entries = [entry for entry in memory.entries if _is_cheatsheet(entry)]
+        generation_entries = cheatsheet_entries if len(cheatsheet_entries) == 1 else memory.entries
+        generation_message, generation_spans = _generation_message_with_sources(
+            task, cheatsheet, generation_entries
+        )
 
         generated = recorder.chat(
-            [_generation_message(task, cheatsheet)],
+            [generation_message],
             model=model,
-            config={**call_config, "method_stage": "dynamic_cheatsheet_generate"},
+            config={
+                **call_config,
+                "method_stage": "dynamic_cheatsheet_generate",
+                "source_spans": generation_spans,
+            },
         )
+        answer_call_id = recorder.get_records()[-1].call_id
         parsed_answer = _parse_answer(generated.content)
         verifier_result = (
             verifier(parsed_answer, task)
@@ -184,7 +226,6 @@ class DynamicCheatsheetOptionalPolicy:
         )
         updated_cheatsheet, status = _extract_cheatsheet(curated.content, cheatsheet)
 
-        trial_id = _trial_id(task, call_config, model)
         event = {
             "type": "dynamic_cheatsheet_update",
             "status": status,
@@ -225,6 +266,7 @@ class DynamicCheatsheetOptionalPolicy:
             "memory_before": memory_before,
             "memory_after": memory_after,
             "memory_write_event": event,
+            "answer_call_id": answer_call_id,
             "metadata": {},
         }
 
@@ -293,6 +335,25 @@ def _generation_message(task: TaskInstance, cheatsheet: str) -> dict[str, str]:
     }
 
 
+def _generation_message_with_sources(
+    task: TaskInstance, cheatsheet: str, entries: list[MemoryEntry]
+) -> tuple[dict[str, str], list[Any]]:
+    prefix = f"Task input: {task.input}\n\nCheatsheet:\n"
+    suffix = "\n\nSolve the task and respond in the normal harness format: final: <answer>."
+    if not entries:
+        return {"role": "user", "content": prefix + cheatsheet + suffix}, []
+
+    parts: list[str | PromptSourcePart] = [prefix]
+    for index, entry in enumerate(entries):
+        if index:
+            parts.append("\n")
+        text = entry.content if len(entries) == 1 and _is_cheatsheet(entry) else f"- {entry.content}"
+        parts.append(PromptSourcePart(text, entry))
+    parts.append(suffix)
+    content, spans = build_prompt_with_sources(parts, message_index=0)
+    return {"role": "user", "content": content}, spans
+
+
 def _dc_rs_cheatsheet(entries: list[MemoryEntry]) -> str:
     if len(entries) == 1:
         return entries[0].content
@@ -314,6 +375,67 @@ def _synthesis_message(
             "Return exactly one <cheatsheet>...</cheatsheet> block for solving the current task."
         ),
     }
+
+
+def _synthesis_message_with_sources(
+    task: TaskInstance,
+    cheatsheet_entries: list[MemoryEntry],
+    pairs: list[MemoryEntry],
+) -> tuple[dict[str, str], list[Any]]:
+    parts: list[str | PromptSourcePart] = ["Existing cheatsheet:\n"]
+    for index, entry in enumerate(cheatsheet_entries):
+        if index:
+            parts.append("\n")
+        parts.append(PromptSourcePart(entry.content, entry))
+    parts.append("\n\nRetrieved prior input/output pairs:\n")
+    for index, entry in enumerate(pairs):
+        if index:
+            parts.append("\n\n")
+        parts.append(
+            PromptSourcePart(
+                f"Prior input:\n{entry.content}\n\nPrior output:\n{entry.metadata['output_text']}",
+                entry,
+            )
+        )
+    parts.append(
+        f"\n\nCurrent task input:\n{task.input}\n\n"
+        "Return exactly one <cheatsheet>...</cheatsheet> block for solving the current task."
+    )
+    content, spans = build_prompt_with_sources(parts, message_index=0)
+    return {"role": "user", "content": content}, spans
+
+
+def _dc_rs_generation_message(
+    task: TaskInstance,
+    cheatsheet: str,
+    synthesis_call_id: str | None,
+    synthesis_spans: list[Any],
+) -> tuple[dict[str, str], list[Any]]:
+    prefix = f"Task input: {task.input}\n\nCheatsheet:\n"
+    suffix = "\n\nSolve the task and respond in the normal harness format: final: <answer>."
+    if not cheatsheet or synthesis_call_id is None:
+        return {"role": "user", "content": prefix + cheatsheet + suffix}, []
+    source_ids, parent_ids, clean_or_contaminated = source_lineage_from_spans(synthesis_spans)
+    content = prefix + cheatsheet + suffix
+    return {
+        "role": "user",
+        "content": content,
+    }, [
+        derived_source_span(
+            cheatsheet,
+            message_index=0,
+            start=len(prefix),
+            end=len(prefix) + len(cheatsheet),
+            entry_id=f"dc_rs_synthesized:{synthesis_call_id}",
+            parent_call_id=synthesis_call_id,
+            source_ids=source_ids,
+            parent_ids=parent_ids,
+            lineage_id=synthesis_call_id,
+            version="dc_rs_synthesis_v1",
+            origin="dc_rs_synthesize",
+            clean_or_contaminated=clean_or_contaminated,
+        )
+    ]
 
 
 def _curation_message(

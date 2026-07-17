@@ -4,6 +4,7 @@ import pytest
 
 from memcontam.baselines import dynamic_cheatsheet_optional
 from memcontam.clients.base import LLMResponse
+from memcontam.logging.provenance import compute_exposure_from_spans, normalize_memory_event
 from memcontam.logging.schema import VerifierResult
 from memcontam.memory.stores import MemoryEntry, MemoryState
 from memcontam.tasks.base import TaskInstance
@@ -132,6 +133,53 @@ def test_dc_rs_zero_candidates_synthesizes_before_generation_and_appends_afterwa
     assert "current output" not in _prompt_text(client)
     assert result["memory_write_event"]["synthesis_update"]["status"] == "replaced"
     assert result["memory_write_event"]["pair_appended"]["entry_id"] == appended["entry_id"]
+
+
+def test_dc_rs_derived_cheatsheet_keeps_synthesis_lineage_in_answer_prompt(tmp_path) -> None:
+    memory = MemoryState(
+        entries=[
+            MemoryEntry(
+                entry_id="dc_cheatsheet:seed",
+                content="old cheatsheet",
+                memory_type="dynamic_cheatsheet",
+                clean_or_contaminated="clean",
+                metadata={"source_entry_ids": ["clean-origin"]},
+            ),
+            MemoryEntry(
+                entry_id="contaminated-pair",
+                content="prior contaminated input",
+                memory_type="dc_rs_io_pair",
+                clean_or_contaminated="contaminated",
+                source_trial_id="prior:contaminated-pair",
+                metadata={
+                    "output_text": "prior contaminated output",
+                    "parent_entry_ids": ["pair-parent"],
+                    "source_entry_ids": ["contaminated-origin"],
+                },
+            ),
+        ]
+    )
+    client = _QueuedClient(["<cheatsheet>new cheatsheet</cheatsheet>", "final: current output"])
+
+    result = _policy(_TieEmbeddingProvider(), tmp_path).run(
+        _task(), memory, client=client, model="replay", config=_config(), verifier=_verifier
+    )
+
+    synthesis_call, answer_call = result["method_calls"]
+    assert result["answer_call_id"] == answer_call.call_id
+    assert result["answer_call_id"] != synthesis_call.call_id
+    assert len(answer_call.source_spans) == 1
+    span = answer_call.source_spans[0]
+    assert answer_call.messages[0]["content"][span.start : span.end] == "new cheatsheet"
+    assert span.parent_call_id == synthesis_call.call_id
+    assert "contaminated-origin" in span.source_ids
+    assert "pair-parent" in span.parent_ids
+    assert span.clean_or_contaminated == "contaminated"
+    exposure = compute_exposure_from_spans(
+        result["answer_call_id"], answer_call.source_spans, "contaminated"
+    )
+    assert exposure.is_exposed is True
+    assert "contaminated-origin" in exposure.exposed_source_ids
 
 
 @pytest.mark.parametrize(
@@ -265,3 +313,76 @@ def test_dc_rs_prompts_exclude_labels_provenance_and_other_identity_pairs(tmp_pa
         "contaminated",
     ]:
         assert forbidden not in prompts
+
+
+def test_dc_rs_replaced_cheatsheet_normalizes_replace_and_append(tmp_path) -> None:
+    memory = MemoryState(entries=[_cheatsheet()])
+    client = _QueuedClient(["<cheatsheet>new cheatsheet</cheatsheet>", "final: current output"])
+
+    result = _policy(_TieEmbeddingProvider(), tmp_path).run(
+        _task(), memory, client=client, model="replay", config=_config(), verifier=_verifier
+    )
+
+    source_trial_id = "run-1:game24:sample-1:dynamic_cheatsheet_rs_optional:contaminated:replay"
+    before = [MemoryEntry.model_validate(entry) for entry in result["memory_before"]]
+    after = [MemoryEntry.model_validate(entry) for entry in result["memory_after"]]
+    event = normalize_memory_event(
+        "dynamic_cheatsheet_rs_optional",
+        source_trial_id,
+        before,
+        after,
+        result["memory_write_event"],
+    )
+
+    assert event is not None
+    assert event.status == "accepted"
+    assert event.operation == "replace_and_append"
+    assert event.baseline == "dynamic_cheatsheet_rs_optional"
+    assert event.source_trial_id == source_trial_id
+    assert event.before_entry_ids == ["dc_cheatsheet:seed"]
+    assert len(event.after_entry_ids) == 2
+    assert "dc_cheatsheet:seed" not in event.after_entry_ids
+    assert event.new_entry_ids == [e.entry_id for e in after if e.entry_id != "dc_cheatsheet:seed"]
+    assert event.removed_entry_ids == ["dc_cheatsheet:seed"]
+    assert event.before_snapshot_hash != event.after_snapshot_hash
+    assert event.creation_origin == "dynamic_cheatsheet"
+
+
+@pytest.mark.parametrize(
+    ("synthesis", "parser_status"),
+    [
+        ("no cheatsheet tag", "preserved_missing_tag"),
+        ("<cheatsheet> </cheatsheet>", "preserved_empty"),
+    ],
+)
+def test_dc_rs_malformed_synthesis_still_appends_pair(
+    synthesis: str, parser_status: str, tmp_path
+) -> None:
+    memory = MemoryState(entries=[_cheatsheet("keep this exact cheatsheet")])
+    client = _QueuedClient([synthesis, "final: current output"])
+
+    result = _policy(_TieEmbeddingProvider(), tmp_path).run(
+        _task(), memory, client=client, model="replay", config=_config(), verifier=_verifier
+    )
+
+    source_trial_id = "run-1:game24:sample-1:dynamic_cheatsheet_rs_optional:contaminated:replay"
+    before = [MemoryEntry.model_validate(entry) for entry in result["memory_before"]]
+    after = [MemoryEntry.model_validate(entry) for entry in result["memory_after"]]
+    event = normalize_memory_event(
+        "dynamic_cheatsheet_rs_optional",
+        source_trial_id,
+        before,
+        after,
+        result["memory_write_event"],
+    )
+
+    assert event is not None
+    # The synthesis sub-operation is preserved, but an I/O pair is appended, so
+    # the overall decision is an accepted mutation.
+    assert event.status == "accepted"
+    assert event.operation == "replace_and_append"
+    assert event.before_entry_ids == ["dc_cheatsheet:seed"]
+    assert event.after_entry_ids != ["dc_cheatsheet:seed"]
+    assert event.new_entry_ids == [e.entry_id for e in after if e.memory_type == "dc_rs_io_pair"]
+    assert event.removed_entry_ids == []
+    assert event.before_snapshot_hash != event.after_snapshot_hash

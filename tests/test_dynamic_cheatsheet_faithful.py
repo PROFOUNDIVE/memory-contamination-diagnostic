@@ -7,6 +7,7 @@ from memcontam.baselines.dynamic_cheatsheet_optional import (
     _extract_cheatsheet,
 )
 from memcontam.clients.base import LLMResponse
+from memcontam.logging.provenance import normalize_memory_event
 from memcontam.logging.schema import VerifierResult
 from memcontam.memory.stores import MemoryEntry, MemoryState
 from memcontam.tasks.base import TaskInstance
@@ -96,6 +97,18 @@ def test_dc_cumulative_replaces_and_reuses_tagged_cheatsheet() -> None:
     assert first["retrieved_records"] == []
     assert first["retrieved_memory"] == []
     assert first["retrieved_scores"] == []
+    assert first["answer_call_id"] == first["method_calls"][0].call_id
+    assert first["answer_call_id"] != first["method_calls"][1].call_id
+    generate_call = first["method_calls"][0]
+    assert [
+        generate_call.messages[0]["content"][span.start : span.end]
+        for span in generate_call.source_spans
+    ] == [
+        "- Build factor-pair subexpressions.",
+        "- Check arithmetic before committing an expression.",
+    ]
+    assert generate_call.source_spans[1].source_ids == ["contaminated_origin"]
+    assert first["method_calls"][1].source_spans == []
 
     generate_prompt = client.calls[0][0][0]["content"]
     assert "Cheatsheet:\n- Build factor-pair subexpressions.\n- Check arithmetic" in generate_prompt
@@ -201,3 +214,120 @@ def test_extract_cheatsheet_uses_first_complete_block_and_preserves_fallback() -
     assert _extract_cheatsheet("<cheatsheet> </cheatsheet>", "old") == ("old", "preserved_empty")
     assert _extract_cheatsheet("<cheatsheet>unfinished", "old") == ("old", "preserved_missing_tag")
     assert _extract_cheatsheet("no tag", "old") == ("old", "preserved_missing_tag")
+
+
+def test_accepted_dc_cu_update_normalizes_replace_mutation() -> None:
+    seed_memory = MemoryState(
+        entries=[
+            MemoryEntry(
+                entry_id="clean_seed",
+                content="Build factor-pair subexpressions.",
+                memory_type="cheatsheet_item",
+                clean_or_contaminated="clean",
+                metadata={"source_entry_ids": ["clean_origin"]},
+            ),
+            MemoryEntry(
+                entry_id="contaminated_seed",
+                content="Check arithmetic before committing an expression.",
+                memory_type="cheatsheet_item",
+                clean_or_contaminated="contaminated",
+                metadata={"source_entry_ids": ["contaminated_origin"]},
+            ),
+        ]
+    )
+    client = _QueuedClient(
+        [
+            "final: (1 + 3) * (2 + 4)",
+            "<cheatsheet>Use factor pairs, then check arithmetic.</cheatsheet>",
+        ]
+    )
+    config = {
+        "sample_id": "game24_001",
+        "run_id": "run_001",
+        "baseline": "dynamic_cheatsheet_optional",
+        "arm": "clean",
+        "model": "replay",
+    }
+    policy = DynamicCheatsheetOptionalPolicy()
+    result = policy.run(
+        _task(), seed_memory, client=client, model="replay", config=config, verifier=_verifier
+    )
+
+    source_trial_id = "run_001:game24:game24_001:dynamic_cheatsheet_optional:clean:replay"
+    before = [MemoryEntry.model_validate(entry) for entry in result["memory_before"]]
+    after = [MemoryEntry.model_validate(entry) for entry in result["memory_after"]]
+    event = normalize_memory_event(
+        "dynamic_cheatsheet_optional",
+        source_trial_id,
+        before,
+        after,
+        result["memory_write_event"],
+    )
+
+    assert event is not None
+    assert event.status == "accepted"
+    assert event.operation == "replace"
+    assert event.baseline == "dynamic_cheatsheet_optional"
+    assert event.source_trial_id == source_trial_id
+    assert event.before_entry_ids == ["clean_seed", "contaminated_seed"]
+    assert len(event.after_entry_ids) == 1
+    assert event.new_entry_ids == [result["memory_write_event"]["new_entry_id"]]
+    assert event.removed_entry_ids == ["clean_seed", "contaminated_seed"]
+    assert event.before_snapshot_hash != event.after_snapshot_hash
+    assert event.parent_entry_ids == ["clean_seed", "contaminated_seed"]
+    assert event.source_entry_ids == ["contaminated_origin"]
+    assert event.contaminated_source_ids == ["contaminated_origin"]
+
+
+@pytest.mark.parametrize(
+    ("curator_output", "status"),
+    [
+        ("No replacement today.", "preserved_missing_tag"),
+        ("<cheatsheet> \n </cheatsheet>", "preserved_empty"),
+    ],
+)
+def test_preserved_dc_cu_update_normalizes_no_mutation(
+    curator_output: str, status: str
+) -> None:
+    memory = MemoryState(
+        entries=[
+            MemoryEntry(
+                entry_id="dc_cheatsheet:game24:previous",
+                content="prior cheatsheet\nwith exact bytes",
+                memory_type="dynamic_cheatsheet",
+                clean_or_contaminated="clean",
+                source_trial_id="previous-trial",
+                metadata={"parent_entry_ids": ["seed"], "source_entry_ids": ["seed"]},
+            )
+        ]
+    )
+    client = _QueuedClient(["final: 24", curator_output])
+
+    result = DynamicCheatsheetOptionalPolicy().run(
+        _task(), memory, client=client, model="replay", verifier=_verifier
+    )
+
+    source_trial_id = (
+        "unknown_run:game24:game24_001:dynamic_cheatsheet_optional:clean:replay"
+    )
+    before = [MemoryEntry.model_validate(entry) for entry in result["memory_before"]]
+    after = [MemoryEntry.model_validate(entry) for entry in result["memory_after"]]
+    event = normalize_memory_event(
+        "dynamic_cheatsheet_optional",
+        source_trial_id,
+        before,
+        after,
+        result["memory_write_event"],
+    )
+
+    assert event is not None
+    assert event.status == "preserved"
+    assert event.operation == "replace"
+    assert event.before_entry_ids == ["dc_cheatsheet:game24:previous"]
+    assert event.after_entry_ids == ["dc_cheatsheet:game24:previous"]
+    assert event.new_entry_ids == []
+    assert event.updated_entry_ids == []
+    assert event.removed_entry_ids == []
+    assert event.before_snapshot_hash == event.after_snapshot_hash
+    assert event.creation_origin is None
+    assert event.memory_version is None
