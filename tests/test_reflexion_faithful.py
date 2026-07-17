@@ -4,7 +4,8 @@ import pytest
 
 from memcontam.baselines.reflexion_style import ReflexionStylePolicy
 from memcontam.clients.replay import ReplayClient
-from memcontam.logging.schema import VerifierResult
+from memcontam.logging.provenance import compute_exposure_from_spans, normalize_memory_event
+from memcontam.logging.schema import MemoryEvent, VerifierResult
 from memcontam.memory.stores import MemoryEntry, MemoryState
 from memcontam.tasks.base import TaskInstance
 
@@ -86,6 +87,12 @@ def test_run_success_generates_once_without_writing_and_uses_last_three_reflecti
     assert result["retrieved_records"] == []
     assert result["retrieved_memory"] == []
     assert result["retrieved_scores"] == []
+    assert result["answer_call_id"] == result["method_calls"][0].call_id
+    answer_call = result["method_calls"][0]
+    assert [
+        answer_call.messages[1]["content"][span.start : span.end]
+        for span in answer_call.source_spans
+    ] == ["Reflection: middle", "Reflection: newer", "Reflection: latest"]
     actor_prompt = result["method_calls"][0].messages[1]["content"]
     assert "Reflection: middle\nReflection: newer\nReflection: latest" in actor_prompt
     assert "oldest" not in actor_prompt
@@ -168,7 +175,13 @@ def test_run_max_attempts_two_retries_same_sample_with_latest_three_memory_only(
         entries=[
             MemoryEntry(entry_id="old", content="old", memory_type="verbal_reflection"),
             MemoryEntry(entry_id="one", content="one", memory_type="verbal_reflection"),
-            MemoryEntry(entry_id="two", content="two", memory_type="verbal_reflection"),
+            MemoryEntry(
+                entry_id="two",
+                content="two",
+                memory_type="verbal_reflection",
+                clean_or_contaminated="contaminated",
+                metadata={"source_entry_ids": ["contaminated-reflection"]},
+            ),
         ]
     )
     client = ReplayClient(
@@ -210,6 +223,8 @@ def test_run_max_attempts_two_retries_same_sample_with_latest_three_memory_only(
     assert result["parsed_answer"] == "4"
     assert result["verifier_result"].is_correct is True
     assert result["memory_write_event"]["status"] == "accepted"
+    assert result["answer_call_id"] == result["method_calls"][2].call_id
+    assert result["answer_call_id"] != result["method_calls"][1].call_id
     retry_prompt = result["method_calls"][-1].messages[1]["content"]
     assert "Failed raw response" not in retry_prompt
     assert "Parsed answer" not in retry_prompt
@@ -217,6 +232,42 @@ def test_run_max_attempts_two_retries_same_sample_with_latest_three_memory_only(
     assert "Reflection: one\nReflection: two\nReflection: Check the equation format." in retry_prompt
     assert "Reflection: old" not in retry_prompt
     assert "TOP_SECRET_GOLD" not in retry_prompt
+    retry_span = next(
+        span for span in result["method_calls"][-1].source_spans if span.entry_id == memory.entries[-1].entry_id
+    )
+    assert retry_span.source_ids == ["contaminated-reflection"]
+    assert retry_span.parent_ids == ["old", "one", "two"]
+
+
+def test_reflection_only_auxiliary_call_does_not_set_answer_exposure() -> None:
+    task = _task()
+    client = ReplayClient(
+        responses_by_sample={
+            "sample_001": {
+                "reflexion_generate": "final: incorrect",
+                "reflexion_reflect": "Ignore the contaminated failed trajectory.",
+            }
+        }
+    )
+    result = ReflexionStylePolicy().run(
+        task,
+        MemoryState(),
+        client=client,
+        model="replay",
+        config=_config(max_attempts=1),
+        verifier=lambda answer, received_task: VerifierResult(
+            is_correct=False, parsed_answer=answer, reason="wrong_answer"
+        ),
+    )
+
+    answer_call = result["method_calls"][0]
+    assert result["answer_call_id"] == answer_call.call_id
+    assert result["answer_call_id"] != result["method_calls"][1].call_id
+    exposure = compute_exposure_from_spans(
+        result["answer_call_id"], answer_call.source_spans, "contaminated"
+    )
+    assert exposure.is_exposed is False
+    assert exposure.exposure_mode == "not_in_final_prompt"
 
 
 def test_run_stops_after_failed_retry_without_second_reflection() -> None:
@@ -307,3 +358,113 @@ def test_run_rejects_max_attempts_outside_one_or_two() -> None:
             model="replay",
             config=_config(max_attempts=3),
         )
+
+
+def _normalize_reflexion_event(
+    result: dict[str, object], source_trial_id: str
+) -> MemoryEvent | None:
+    before = [MemoryEntry.model_validate(entry) for entry in result["memory_before"]]  # type: ignore[index]
+    after = [MemoryEntry.model_validate(entry) for entry in result["memory_after"]]  # type: ignore[index]
+    return normalize_memory_event(
+        "reflexion_style",
+        source_trial_id,
+        before,
+        after,
+        result["memory_write_event"],  # type: ignore[index]
+    )
+
+
+def test_accepted_reflection_memory_event_normalizes_append() -> None:
+    task = _task()
+    memory = MemoryState(
+        entries=[
+            MemoryEntry(entry_id="seed", content="seed corpus instruction", memory_type="seed"),
+            MemoryEntry(
+                entry_id="one",
+                content="Reflection: one",
+                memory_type="verbal_reflection",
+                clean_or_contaminated="contaminated",
+                metadata={"source_entry_ids": ["cont-1"]},
+            ),
+        ]
+    )
+    client = ReplayClient(
+        responses_by_sample={
+            "sample_001": {
+                "reflexion_generate": "final: incorrect",
+                "reflexion_reflect": "Check units.",
+            }
+        }
+    )
+
+    def verify(*args: object) -> VerifierResult:
+        assert args == ("incorrect", task)
+        return VerifierResult(is_correct=False, parsed_answer="incorrect", reason="wrong_units")
+
+    result = ReflexionStylePolicy().run(
+        task,
+        memory,
+        client=client,
+        model="replay",
+        config=_config(max_attempts=1),
+        verifier=verify,
+    )
+
+    source_trial_id = "run_001:math_equation_balancer:sample_001:reflexion_style:clean:replay"
+    event = _normalize_reflexion_event(result, source_trial_id)
+
+    assert event is not None
+    assert event.status == "accepted"
+    assert event.operation == "append"
+    assert event.before_entry_ids == ["seed", "one"]
+    assert event.after_entry_ids == ["seed", "one", result["memory_write_event"]["new_entry_id"]]
+    assert event.new_entry_ids == [result["memory_write_event"]["new_entry_id"]]
+    assert event.removed_entry_ids == []
+    assert event.before_snapshot_hash != event.after_snapshot_hash
+    assert event.parent_entry_ids == ["one"]
+    assert event.source_entry_ids == ["cont-1"]
+    assert event.contaminated_source_ids == ["cont-1"]
+    assert event.creation_origin == "reflexion_reflect"
+
+
+def test_rejected_empty_reflection_memory_event_preserves_snapshot() -> None:
+    task = _task()
+    memory = MemoryState(
+        entries=[MemoryEntry(entry_id="one", content="one", memory_type="verbal_reflection")]
+    )
+    client = ReplayClient(
+        responses_by_sample={
+            "sample_001": {
+                "reflexion_generate": "final: incorrect",
+                "reflexion_reflect": "  \n\t",
+            }
+        }
+    )
+
+    def verify(*args: object) -> VerifierResult:
+        assert args == ("incorrect", task)
+        return VerifierResult(is_correct=False, parsed_answer="incorrect")
+
+    result = ReflexionStylePolicy().run(
+        task,
+        memory,
+        client=client,
+        model="replay",
+        config=_config(max_attempts=2),
+        verifier=verify,
+    )
+
+    source_trial_id = "run_001:math_equation_balancer:sample_001:reflexion_style:clean:replay"
+    event = _normalize_reflexion_event(result, source_trial_id)
+
+    assert event is not None
+    assert event.status == "rejected"
+    assert event.operation == "append"
+    assert event.before_entry_ids == ["one"]
+    assert event.after_entry_ids == ["one"]
+    assert event.new_entry_ids == []
+    assert event.updated_entry_ids == []
+    assert event.removed_entry_ids == []
+    assert event.before_snapshot_hash == event.after_snapshot_hash
+    assert event.creation_origin is None
+    assert event.memory_version is None

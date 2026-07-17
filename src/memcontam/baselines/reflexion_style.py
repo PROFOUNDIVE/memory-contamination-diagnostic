@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from memcontam.clients.base import LLMClient
 from memcontam.clients.recording import MethodCallRecorder
+from memcontam.logging.provenance import PromptSourcePart, build_prompt_with_sources
 from memcontam.logging.schema import VerifierResult
 from memcontam.memory.stores import MemoryEntry, MemoryState
 from memcontam.tasks.base import TaskInstance
@@ -35,6 +36,30 @@ def _render_reflection(entry: MemoryEntry) -> str:
 
 def _reflection_context(entries: list[MemoryEntry]) -> str:
     return "\n".join(_render_reflection(entry) for entry in entries) or "(none)"
+
+
+def _generation_messages(
+    task: TaskInstance, reflection_entries: list[MemoryEntry]
+) -> tuple[list[dict[str, str]], list[Any]]:
+    parts: list[str | PromptSourcePart] = [
+        f"Task: {task.task_name}\n\nReflections:\n",
+    ]
+    if reflection_entries:
+        for index, entry in enumerate(reflection_entries):
+            if index:
+                parts.append("\n")
+            parts.append(PromptSourcePart(_render_reflection(entry), entry))
+    else:
+        parts.append("(none)")
+    parts.append(f"\n\nCurrent task input:\n{task.input}")
+    content, spans = build_prompt_with_sources(parts, message_index=1)
+    return [
+        {
+            "role": "system",
+            "content": f"Solve the {task.task_name} task using reflections when useful.",
+        },
+        {"role": "user", "content": content},
+    ], spans
 
 
 def _sanitized_feedback(verifier_result: VerifierResult) -> str:
@@ -93,24 +118,23 @@ class ReflexionStylePolicy:
         memory_before = [entry.model_dump() for entry in memory.entries]
         reflection_entries = _reflection_entries(memory)
         reflection_context = _reflection_context(reflection_entries)
-        recorder = MethodCallRecorder(client)
-        response = recorder.chat(
-            [
-                {
-                    "role": "system",
-                    "content": f"Solve the {task.task_name} task using reflections when useful.",
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        f"Task: {task.task_name}\n\nReflections:\n{reflection_context}"
-                        f"\n\nCurrent task input:\n{task.input}"
-                    ),
-                },
-            ],
-            model=model,
-            config={**call_config, "method_stage": "reflexion_generate"},
+        source_trial_id = _trial_id(task, call_config, model)
+        recorder = MethodCallRecorder(
+            client,
+            event_callback=call_config.get("_logging_event_callback"),
+            trial_context={**call_config.get("_logging_trial_context", {}), "trial_id": source_trial_id},
         )
+        generation_messages, generation_spans = _generation_messages(task, reflection_entries)
+        response = recorder.chat(
+            generation_messages,
+            model=model,
+            config={
+                **call_config,
+                "method_stage": "reflexion_generate",
+                "source_spans": generation_spans,
+            },
+        )
+        answer_call_id = recorder.get_records()[-1].call_id
         parsed_answer = _parse_answer(response.content)
         verifier_result = (
             verifier(parsed_answer, task)
@@ -126,6 +150,7 @@ class ReflexionStylePolicy:
                 memory_before,
                 memory,
                 None,
+                answer_call_id,
             )
 
         feedback = _sanitized_feedback(verifier_result)
@@ -148,9 +173,9 @@ class ReflexionStylePolicy:
             model=model,
             config={**call_config, "method_stage": "reflexion_reflect"},
         )
+        reflection_call_id = recorder.get_records()[-1].call_id
         parent_entry_ids = [entry.entry_id for entry in reflection_entries]
         source_entry_ids = _contaminated_source_entry_ids(reflection_entries)
-        source_trial_id = _trial_id(task, call_config, model)
         event = {
             "type": "reflexion_append",
             "status": "rejected_empty",
@@ -169,6 +194,7 @@ class ReflexionStylePolicy:
                 metadata={
                     "parent_entry_ids": parent_entry_ids,
                     "source_entry_ids": source_entry_ids,
+                    "parent_call_id": reflection_call_id,
                     "reflection_lineage": {
                         "stage": "reflexion_reflect",
                         "parent_entry_ids": parent_entry_ids,
@@ -197,30 +223,21 @@ class ReflexionStylePolicy:
                 memory_before,
                 memory,
                 event,
+                answer_call_id,
             )
 
-        retry_reflection_context = _reflection_context(_reflection_entries(memory))
+        retry_messages, retry_spans = _generation_messages(task, _reflection_entries(memory))
         retry_response = recorder.chat(
-            [
-                {
-                    "role": "system",
-                    "content": f"Solve the {task.task_name} task using reflections when useful.",
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        f"Task: {task.task_name}\n\nReflections:\n{retry_reflection_context}"
-                        f"\n\nCurrent task input:\n{task.input}"
-                    ),
-                },
-            ],
+            retry_messages,
             model=model,
             config={
                 **call_config,
                 "method_stage": "reflexion_generate",
                 "retry_count": 1,
+                "source_spans": retry_spans,
             },
         )
+        answer_call_id = recorder.get_records()[-1].call_id
         retry_parsed_answer = _parse_answer(retry_response.content)
         retry_verifier_result = (
             verifier(retry_parsed_answer, task)
@@ -235,6 +252,7 @@ class ReflexionStylePolicy:
             memory_before,
             memory,
             event,
+            answer_call_id,
         )
 
 
@@ -246,6 +264,7 @@ def _result(
     memory_before: list[dict[str, Any]],
     memory: MemoryState,
     memory_write_event: dict[str, Any] | None,
+    answer_call_id: str | None,
 ) -> dict[str, Any]:
     return {
         "final_response": final_response,
@@ -259,4 +278,5 @@ def _result(
         "memory_after": [entry.model_dump() for entry in memory.entries],
         "metadata": {},
         "memory_write_event": memory_write_event,
+        "answer_call_id": answer_call_id,
     }
