@@ -10,6 +10,7 @@ All claims below are for **faithful adapted baselines**, not complete reproducti
 
 | Tag | Scope | Baselines | Key features |
 |---|---|---|---|
+| `v0.7` | Strict logging audit remediation over the locked offline 39-row gate | `no_memory`, `full_history`, `retrieval_rag`, `reflexion_style`, `bot_style` | `run.json` plus typed split streams, answer-call source-span exposure, durable failures, stage-gated aggregation |
 | `v0.6` | Stricter Reflexion retry fidelity over the locked 3-task pilot set | `dynamic_cheatsheet_rs_optional`, `reflexion_style` | Retry actor sees only latest-three reflections + current input; failed trajectory stays inside `reflexion_reflect` |
 | `v0.5` | Full G0 native-memory pass over the locked 3-task pilot set | `full_history`, `reflexion_style`, `dynamic_cheatsheet_optional` | Append-only full history, failure-gated reflection, latest-three reflection window, generate/curate DC-Cu loop |
 | `v0.5+` | DC-RS appendix comparator + same-sample retry follow-up (historical; superseded by `v0.6`) | `dynamic_cheatsheet_rs_optional`, `reflexion_style` | Top-3 cosine DC-RS synthesis, same-sample retry bounded by `max_attempts: 2` |
@@ -19,6 +20,48 @@ All claims below are for **faithful adapted baselines**, not complete reproducti
 | `v0.1` | Initial scaffold | — | Early technical notes |
 
 For detailed reports see the [Documentation](#documentation) section.
+
+---
+
+## v0.7 Strict Logging Audit Remediation
+
+`v0.7` closes the strict logging audit blockers with a replay-only 39-row contract gate. New strict runs write `run.json`, canonical `trials.jsonl`, and four typed streams: `calls.jsonl`, `failures.jsonl`, `filter_events.jsonl`, and `memory_events.jsonl`. Exposure is derived from the explicit answer call's source spans, not from retrieval or memory-presence proxies.
+
+Verification commands:
+
+```bash
+python -m memcontam.cli validate-config configs/logging_contract_replay.yaml
+python -m pytest tests/test_logging_contract_gate.py tests/test_task_verifiers.py tests/test_cli_run.py tests/test_contamination_catalog.py tests/test_openai_compatible_client.py tests/test_aggregate.py -q
+python -m pytest tests/test_logging_schema.py tests/test_logging_writer.py tests/test_method_calls.py tests/test_cli_run.py tests/test_aggregate.py tests/test_logging_contract_gate.py -q
+python -m ruff check src tests scripts
+
+RUN_ID="logging-contract-replay-$(date -u +%Y%m%dT%H%M%SZ)"
+python -m memcontam.cli run configs/logging_contract_replay.yaml --run-id "$RUN_ID"
+python -m memcontam.cli aggregate "runs/$RUN_ID" --stage replay
+```
+
+This offline gate is not an API-connected pilot, main run, or benchmark result. No API-connected pilot was run; main readiness requires later evidence and an explicit decision. See [`docs/logging-audit-remediation-v0.7.md`](docs/logging-audit-remediation-v0.7.md) for the release report and [`docs/logging-contract-v1.md`](docs/logging-contract-v1.md) for operator rules.
+
+---
+
+## Strict Offline Logging Contract Operator Rules
+
+`configs/logging_contract_replay.yaml` is a strict offline replay gate for the locked 39-row logging matrix. It checks cross-stream joins, answer-call source spans, filter and memory lineage, failure continuation, and redaction of provider raw payload sentinels. It requires no API credentials.
+
+Verification commands:
+
+```bash
+python -m memcontam.cli validate-config configs/logging_contract_replay.yaml
+python -m pytest tests/test_logging_contract_gate.py tests/test_task_verifiers.py tests/test_cli_run.py tests/test_contamination_catalog.py tests/test_openai_compatible_client.py tests/test_aggregate.py -q
+python -m ruff check src tests scripts
+
+# Optional replay-only CLI contract check; use a new UTC-suffixed run ID.
+RUN_ID="logging-contract-replay-$(date -u +%Y%m%dT%H%M%SZ)"
+python -m memcontam.cli run configs/logging_contract_replay.yaml --run-id "$RUN_ID"
+python -m memcontam.cli aggregate "runs/$RUN_ID" --stage replay
+```
+
+This offline gate is not an API-connected pilot, main run, or benchmark result. No API-connected pilot was run; main readiness requires later evidence and an explicit decision. See [`docs/logging-contract-v1.md`](docs/logging-contract-v1.md) for the operator contract.
 
 ---
 
@@ -194,6 +237,8 @@ The bundled config emits 90 replay trial rows:
 
 ## Documentation
 
+- v0.7 logging audit remediation report: [`docs/logging-audit-remediation-v0.7.md`](docs/logging-audit-remediation-v0.7.md)
+- v0.7 strict offline logging operator contract: [`docs/logging-contract-v1.md`](docs/logging-contract-v1.md)
 - v0.6 stricter Reflexion retry fidelity report: [`docs/g0-baseline-fidelity-gate-v0.6.md`](docs/g0-baseline-fidelity-gate-v0.6.md)
 - v0.5+ DC-RS and Reflexion same-sample retry follow-up report: [`docs/g0-dc-rs-reflexion-fidelity-followup.md`](docs/g0-dc-rs-reflexion-fidelity-followup.md)
 - v0.5 G0 full pass report: [`docs/g0-baseline-fidelity-gate-v0.5.md`](docs/g0-baseline-fidelity-gate-v0.5.md)
