@@ -6,9 +6,10 @@ from typing import Any
 
 from memcontam.clients.base import LLMClient
 from memcontam.clients.recording import MethodCallRecorder
+from memcontam.logging.provenance import PromptSourcePart, build_prompt_with_sources
 from memcontam.memory.embeddings import EmbeddingProvider
 from memcontam.memory.retrieval import DenseIndex, render_retrieved_record, retrieve_records
-from memcontam.memory.stores import MemoryState
+from memcontam.memory.stores import MemoryEntry, MemoryState
 from memcontam.tasks.base import TaskInstance
 
 
@@ -30,12 +31,33 @@ def run_faithful_rag(
     def _run(index_cache_dir: str | Path) -> dict[str, Any]:
         index = DenseIndex(memory.entries, provider=embedding_provider, cache_dir=index_cache_dir)
         retrieved_records = index.retrieve(str(task.input), k)
-        messages = [_generation_message(task, retrieved_records)]
-        recorder = MethodCallRecorder(client)
+        entries_by_id = {entry.entry_id: entry for entry in memory.entries}
+        message, source_spans = _generation_message(task, retrieved_records, entries_by_id)
+        messages = [message]
+        trial_id = ":".join(
+            [
+                str(config.get("run_id", "unknown")),
+                task.task_name,
+                task.sample_id,
+                str(config.get("baseline", "retrieval_rag")),
+                str(config.get("arm", "clean")),
+                str(config.get("model", model)),
+            ]
+        )
+        recorder = MethodCallRecorder(
+            client,
+            event_callback=config.get("_logging_event_callback"),
+            trial_context={**config.get("_logging_trial_context", {}), "trial_id": trial_id},
+        )
         response = recorder.chat(
             messages,
             model=model,
-            config={**config, "sample_id": config.get("sample_id", task.sample_id), "method_stage": "rag_generate"},
+            config={
+                **config,
+                "sample_id": config.get("sample_id", task.sample_id),
+                "method_stage": "rag_generate",
+                "source_spans": source_spans,
+            },
         )
         method_calls = recorder.get_records()
         if method_calls:
@@ -47,6 +69,7 @@ def run_faithful_rag(
             "embedding_library_version": str(index.manifest["embedding_library_version"]),
             "top_k": k,
         }
+        answer_call_id = method_calls[0].call_id if method_calls else None
         return {
             "final_response": response.content,
             "parsed_answer": _parse_answer(response.content),
@@ -56,6 +79,7 @@ def run_faithful_rag(
             "memory_after": [entry.model_dump() for entry in memory.entries],
             "metadata": metadata,
             "memory_write_event": None,
+            "answer_call_id": answer_call_id,
         }
 
     if cache_dir is not None:
@@ -64,12 +88,22 @@ def run_faithful_rag(
         return _run(temp_cache_dir)
 
 
-def _generation_message(task: TaskInstance, records: list[Any]) -> dict[str, str]:
-    context = "\n".join(
-        f"rank={record.rank} document_id={record.document_id} score={record.score:.6f}\n{record.text}"
-        for record in records
-    )
-    return {"role": "user", "content": f"Retrieved memory:\n{context}\n\nSolve: {task.input}"}
+def _generation_message(
+    task: TaskInstance,
+    records: list[Any],
+    entries_by_id: dict[str, MemoryEntry],
+) -> tuple[dict[str, str], list[Any]]:
+    parts: list[str | PromptSourcePart] = ["Retrieved memory:\n"]
+    for index, record in enumerate(records):
+        if index > 0:
+            parts.append("\n")
+        parts.append(f"rank={record.rank} document_id={record.document_id} score={record.score:.6f}\n")
+        entry = entries_by_id[record.document_id]
+        parts.append(PromptSourcePart(record.text, entry))
+    parts.append("\n\nSolve: ")
+    parts.append(str(task.input))
+    content, spans = build_prompt_with_sources(parts, message_index=0)
+    return {"role": "user", "content": content}, spans
 
 
 def _parse_answer(response: str) -> str:

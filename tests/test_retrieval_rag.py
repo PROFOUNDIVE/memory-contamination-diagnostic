@@ -1,23 +1,34 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from memcontam.memory.embeddings import FakeEmbeddingProvider
+from memcontam.baselines.retrieval_rag import run_faithful_rag
+from memcontam.clients.replay import ReplayClient
+from memcontam.logging.provenance import compute_exposure_from_spans
+from memcontam.logging.schema import PromptSourceSpan
+from memcontam.memory.embeddings import EmbeddingProvider, FakeEmbeddingProvider
 from memcontam.memory.retrieval import DenseIndex
-from memcontam.memory.stores import MemoryEntry
+from memcontam.memory.stores import MemoryEntry, MemoryState
+from memcontam.tasks.base import TaskInstance
 
 
-def _entry(entry_id: str, content: str, *, source: str = "fixture") -> MemoryEntry:
+def _entry(entry_id: str, content: str, *, source: str = "fixture", contaminated: bool = False) -> MemoryEntry:
     return MemoryEntry(
         entry_id=entry_id,
         content=content,
         memory_type="strategy",
-        clean_or_contaminated="clean",
+        clean_or_contaminated="contaminated" if contaminated else "clean",
         metadata={"source": source},
     )
+
+
+def _task(question: str = "alpha beta") -> TaskInstance:
+    return TaskInstance(sample_id="s-1", task_name="retrieval_rag", input={"question": question})
 
 
 def test_dense_index_returns_exact_stable_top_k(tmp_path: Path) -> None:
@@ -64,3 +75,101 @@ def test_dense_index_rejects_nan_vectors(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="contains NaN"):
         DenseIndex([_entry("doc-1", "alpha")], provider=BadProvider(2), cache_dir=tmp_path)
+
+
+def _legacy_generation_message(task: TaskInstance, records: list[Any]) -> dict[str, str]:
+    context = "\n".join(
+        f"rank={record.rank} document_id={record.document_id} score={record.score:.6f}\n{record.text}"
+        for record in records
+    )
+    return {"role": "user", "content": f"Retrieved memory:\n{context}\n\nSolve: {task.input}"}
+
+
+def test_run_faithful_rag_records_answer_source_spans(tmp_path: Path) -> None:
+    entries = [
+        _entry("doc-1", "alpha beta gamma"),
+        _entry("doc-2", "alpha beta delta"),
+    ]
+    memory = MemoryState(entries=entries)
+    task = _task()
+    client = ReplayClient(responses_by_sample={"s-1": {"rag_generate": "final: answer"}})
+
+    result = run_faithful_rag(
+        task,
+        memory,
+        client=client,
+        model="gpt-4o",
+        config={"sample_id": "s-1"},
+        top_k=2,
+        embedding_provider=FakeEmbeddingProvider(vector_dimension=8),
+        cache_dir=tmp_path,
+    )
+
+    assert len(result["method_calls"]) == 1
+    call = result["method_calls"][0]
+    assert call.stage == "rag_generate"
+    assert call.call_id is not None
+    assert result["answer_call_id"] == call.call_id
+    assert len(call.source_spans) == 2
+    expected_message = _legacy_generation_message(task, result["retrieved_records"])
+    assert call.messages == [expected_message]
+
+    content = call.messages[0]["content"]
+    for span, record in zip(call.source_spans, result["retrieved_records"]):
+        assert isinstance(span, PromptSourceSpan)
+        assert span.message_index == 0
+        assert content[span.start:span.end] == record.text
+        assert span.rendered_hash == hashlib.sha256(record.text.encode("utf-8")).hexdigest()
+        assert span.entry_id == record.document_id
+        assert span.clean_or_contaminated == "clean"
+        assert span.origin == "seed"
+
+
+def test_rag_contaminated_not_retrieved_is_not_in_final_prompt(tmp_path: Path) -> None:
+    class _ControlledProvider(EmbeddingProvider):
+        @property
+        def metadata(self) -> dict[str, object]:
+            return {
+                "model_id": "controlled",
+                "revision": "local",
+                "embedding_library_version": "test",
+                "vector_dimension": 4,
+            }
+
+        def encode_query(self, text: str) -> list[float]:
+            return [1.0, 0.0, 0.0, 0.0]
+
+        def encode_document(self, text: str) -> list[float]:
+            if "clean" in text:
+                return [1.0, 0.0, 0.0, 0.0]
+            return [0.0, 1.0, 0.0, 0.0]
+
+    entries = [
+        _entry("clean-1", "clean relevant content"),
+        _entry("cont-1", "contaminated content", contaminated=True),
+    ]
+    memory = MemoryState(entries=entries)
+    task = _task()
+    client = ReplayClient(responses_by_sample={"s-1": {"rag_generate": "final: answer"}})
+
+    result = run_faithful_rag(
+        task,
+        memory,
+        client=client,
+        model="gpt-4o",
+        config={"sample_id": "s-1"},
+        top_k=1,
+        embedding_provider=_ControlledProvider(),
+        cache_dir=tmp_path,
+    )
+
+    assert len(result["retrieved_records"]) == 1
+    assert result["retrieved_records"][0].document_id == "clean-1"
+    call = result["method_calls"][0]
+    assert all(span.clean_or_contaminated == "clean" for span in call.source_spans)
+    exposure = compute_exposure_from_spans(
+        result["answer_call_id"], call.source_spans, "contaminated"
+    )
+    assert exposure.status == "supported"
+    assert exposure.is_exposed is False
+    assert exposure.exposure_mode == "not_in_final_prompt"
