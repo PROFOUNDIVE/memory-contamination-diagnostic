@@ -10,6 +10,7 @@ import pytest
 from memcontam.clients import openai_compatible as openai_compatible_module
 from memcontam.clients.openai_compatible import OpenAICompatibleClient
 from memcontam.clients.base import LLMResponse
+from memcontam.clients.recording import MethodCallRecorder
 from memcontam.cli import load_config, run_config
 
 
@@ -92,3 +93,65 @@ def test_replay_config_runs_without_provider_env_vars(tmp_path, monkeypatch) -> 
 
     assert rows
     assert {row["task_name"] for row in rows} == {"game24", "math_equation_balancer", "word_sorting"}
+
+
+def test_recorder_does_not_persist_secrets_or_raw_payload(monkeypatch) -> None:
+    monkeypatch.setattr(openai, "OpenAI", _FakeOpenAI)
+    monkeypatch.setattr(openai_compatible_module, "OpenAI", _FakeOpenAI)
+    monkeypatch.setenv("OPENAI_API_KEY", "live-secret-key")
+
+    inner = OpenAICompatibleClient(base_url="https://example.invalid/v1", api_key_env="OPENAI_API_KEY")
+    events = []
+    recorder = MethodCallRecorder(
+        inner,
+        event_callback=events.append,
+        trial_context={
+            "run_metadata_id": "run-meta-1",
+            "run_id": "run-1",
+            "trial_id": "trial-1",
+            "trial_seq": 0,
+            "stage": "main",
+        },
+    )
+
+    response = recorder.chat(
+        messages=[{"role": "user", "content": "solve"}],
+        model="gpt-4o",
+        config={
+            "method_stage": "rag_generate",
+            "temperature": 0.2,
+            "top_p": 0.9,
+            "max_tokens": 128,
+            "retry_count": 1,
+            "api_key": "should-not-be-logged",
+            "authorization": "Bearer should-not-be-logged",
+            "headers": {"X-Secret": "should-not-be-logged"},
+        },
+    )
+
+    assert response.content == "final: 24"
+    assert len(events) == 1
+    event = events[0]
+    assert event.call_id == "trial-1:call:1"
+    assert event.model == "gpt-4o"
+    assert event.decoding_params == {"temperature": 0.2, "top_p": 0.9, "max_tokens": 128}
+    assert event.retry_count == 1
+    assert event.response_text == "final: 24"
+    assert event.token_usage == {"prompt_tokens": 7, "completion_tokens": 11, "total_tokens": 18}
+
+    dumped = json.dumps(event.model_dump(mode="json"))
+    assert "live-secret-key" not in dumped
+    assert "should-not-be-logged" not in dumped
+    assert "api_key" not in dumped
+    assert "authorization" not in dumped
+    assert "headers" not in dumped
+    assert '"raw":' not in dumped
+
+    record = recorder.get_records()[0]
+    record_dumped = json.dumps(record.model_dump(mode="json"))
+    assert "live-secret-key" not in record_dumped
+    assert "should-not-be-logged" not in record_dumped
+    assert "api_key" not in record_dumped
+    assert "authorization" not in record_dumped
+    assert "headers" not in record_dumped
+    assert '"raw":' not in record_dumped
