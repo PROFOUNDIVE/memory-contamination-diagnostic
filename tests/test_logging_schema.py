@@ -5,9 +5,18 @@ from pydantic import ValidationError
 
 from memcontam.clients.replay import ReplayClient
 from memcontam.logging.schema import (
+    CallEvent,
     ContaminationExposure,
+    EventContext,
+    FailureEvent,
+    FilterEvent,
+    LOGGING_V1,
+    MemoryEvent,
+    MemoryItemLog,
     MethodCall,
+    PromptSourceSpan,
     RetrievalRecord,
+    RunMetadata,
     TrialLog,
     VerifierResult,
 )
@@ -17,11 +26,12 @@ from memcontam.memory.stores import MemoryEntry
 
 EXPOSURE_KEYS = {
     "condition",
+    "status",
     "is_exposed",
+    "answer_call_id",
+    "target_entry_ids",
     "source_entry_ids",
-    "contamination_types",
-    "memory_before_entry_ids",
-    "retrieved_entry_ids",
+    "exposed_source_ids",
     "exposure_mode",
     "reason",
 }
@@ -42,7 +52,33 @@ def test_trial_log_minimal_shape() -> None:
         raw_response="final: (6/(1-3/4))",
         verifier_result=VerifierResult(is_correct=True),
     )
+    assert log.verifier_result is not None
     assert log.verifier_result.is_correct is True
+
+
+def test_logging_v1_success_requires_answer_call_id() -> None:
+    with pytest.raises(ValidationError, match="answer_call_id"):
+        TrialLog(
+            trial_id="t_strict_missing_answer",
+            run_id="r1",
+            task_name="game24",
+            sample_id="s1",
+            baseline="no_memory",
+            arm="clean",
+            backbone="gpt4o",
+            input={"numbers": [1, 3, 4, 6]},
+            gold_or_verifier_spec={"target": 24},
+            prompt_messages=[{"role": "user", "content": "solve"}],
+            raw_response="final: 24",
+            parsed_answer="24",
+            verifier_result=VerifierResult(is_correct=True),
+            schema_version=LOGGING_V1,
+            stage="replay",
+            status="succeeded",
+            run_metadata_id="run-meta-1",
+            trial_seq=0,
+            event_seq=1,
+        )
 
 
 def test_trial_log_metadata_and_metric_fields_are_explicit() -> None:
@@ -67,13 +103,11 @@ def test_trial_log_metadata_and_metric_fields_are_explicit() -> None:
         memory_write_event={"event_type": "reflection_append"},
         contamination_exposure=ContaminationExposure(
             condition="contaminated",
-            is_exposed=True,
+            status="not_evaluable",
+            is_exposed=None,
             source_entry_ids=["m1"],
-            contamination_types=["wrong_solution"],
-            memory_before_entry_ids=["m1"],
-            retrieved_entry_ids=["m1"],
-            exposure_mode="retrieved_memory",
-            reason="retrieved contaminated memory source",
+            exposure_mode="not_evaluable",
+            reason="legacy proxy exposure has no final-call source spans",
         ),
         bad_memory_uptake_label="not_evaluable",
         repeated_failure_label="repeated_failure",
@@ -98,6 +132,7 @@ def test_trial_log_metadata_and_metric_fields_are_explicit() -> None:
         },
     )
 
+    assert log.verifier_result is not None
     assert log.verifier_result.is_correct is False
     assert log.metadata["git_commit"] == "abc123"
     assert log.metadata["config_hash"] == "hash123"
@@ -454,10 +489,12 @@ def test_trial_log_legacy_method_calls_default() -> None:
 
 def test_method_call_rejects_missing_stage() -> None:
     with pytest.raises(ValidationError):
-        MethodCall(
-            messages=[{"role": "user", "content": "solve"}],
-            raw_response="final: 24",
-            model="gpt4o",
+        MethodCall.model_validate(
+            {
+                "messages": [{"role": "user", "content": "solve"}],
+                "raw_response": "final: 24",
+                "model": "gpt4o",
+            }
         )
 
 
@@ -518,16 +555,7 @@ def test_native_memory_baseline_trial_log_conforms_to_schema(
         raw_response="final: 24",
         verifier_result=VerifierResult(is_correct=True),
         memory_write_event=memory_write_event,
-        contamination_exposure=ContaminationExposure(
-            condition="clean",
-            is_exposed=False,
-            source_entry_ids=[],
-            contamination_types=[],
-            memory_before_entry_ids=[],
-            retrieved_entry_ids=[],
-            exposure_mode="none",
-            reason="clean arm has no contaminated memory sources",
-        ),
+        contamination_exposure=ContaminationExposure(),
     )
 
     expected_top_keys = {
@@ -561,7 +589,346 @@ def test_native_memory_baseline_trial_log_conforms_to_schema(
         "cost_estimate",
         "retry_count",
         "error_type",
+        "schema_version",
+        "stage",
+        "status",
+        "run_metadata_id",
+        "trial_seq",
+        "event_seq",
+        "answer_call_id",
+        "failure_id",
     }
     assert set(log.model_dump().keys()) == expected_top_keys
     assert set(log.contamination_exposure.model_dump().keys()) == EXPOSURE_KEYS
     assert log.memory_write_event == memory_write_event
+
+
+def _strict_success_payload() -> dict[str, Any]:
+    prompt_messages = [{"role": "user", "content": "solve"}]
+    return {
+        "trial_id": "strict-trial-1",
+        "run_id": "strict-run-1",
+        "task_name": "game24",
+        "sample_id": "sample-1",
+        "baseline": "retrieval_rag",
+        "arm": "contaminated",
+        "backbone": "replay-model",
+        "input": {"numbers": [1, 3, 4, 6]},
+        "gold_or_verifier_spec": {"target": 24},
+        "prompt_messages": prompt_messages,
+        "raw_response": "final: 24",
+        "parsed_answer": "24",
+        "verifier_result": {"is_correct": True, "parsed_answer": "24"},
+        "schema_version": LOGGING_V1,
+        "stage": "replay",
+        "status": "succeeded",
+        "run_metadata_id": "run-meta-1",
+        "trial_seq": 0,
+        "event_seq": 4,
+        "answer_call_id": "call-answer-1",
+        "method_calls": [
+            {
+                "call_id": "call-answer-1",
+                "stage": "rag_generate",
+                "messages": prompt_messages,
+                "raw_response": "final: 24",
+                "model": "replay-model",
+                "source_spans": [
+                    {
+                        "message_index": 0,
+                        "start": 0,
+                        "end": 5,
+                        "rendered_hash": "sha256:prompt",
+                        "entry_id": "memory-1",
+                        "source_ids": ["memory-1"],
+                        "parent_ids": [],
+                        "lineage_id": "lineage-1",
+                        "version": "v1",
+                        "origin": "memory_catalog",
+                        "clean_or_contaminated": "contaminated",
+                    }
+                ],
+            }
+        ],
+        "contamination_exposure": {
+            "condition": "contaminated",
+            "status": "supported",
+            "is_exposed": True,
+            "answer_call_id": "call-answer-1",
+            "target_entry_ids": ["memory-1"],
+            "source_entry_ids": ["memory-1"],
+            "exposed_source_ids": ["memory-1"],
+            "exposure_mode": "final_prompt",
+            "reason": "contaminated source span appears in the answer request",
+        },
+    }
+
+
+@pytest.mark.parametrize("field", ["answer_call_id", "prompt_messages", "stage", "run_metadata_id"])
+def test_logging_v1_success_rejects_missing_strict_links(field: str) -> None:
+    payload = _strict_success_payload()
+    del payload[field]
+
+    with pytest.raises(ValidationError):
+        TrialLog.model_validate(payload)
+
+
+def test_logging_v1_success_requires_prompt_from_answer_call() -> None:
+    payload = _strict_success_payload()
+    payload["method_calls"].insert(
+        0,
+        {
+            "call_id": "call-auxiliary-1",
+            "stage": "reflect",
+            "messages": [{"role": "user", "content": "auxiliary"}],
+            "raw_response": "reflection",
+            "model": "replay-model",
+        },
+    )
+    payload["prompt_messages"] = [{"role": "user", "content": "flattened auxiliary and answer"}]
+
+    with pytest.raises(ValidationError, match="prompt_messages"):
+        TrialLog.model_validate(payload)
+
+
+def test_logging_v1_failed_trial_allows_semantic_nulls_with_failure_link() -> None:
+    payload = _strict_success_payload()
+    payload.update(
+        {
+            "status": "failed",
+            "raw_response": None,
+            "parsed_answer": None,
+            "verifier_result": None,
+            "failure_id": "failure-1",
+            "contamination_exposure": {
+                "condition": "contaminated",
+                "status": "not_evaluable",
+                "is_exposed": None,
+                "answer_call_id": "call-answer-1",
+                "target_entry_ids": ["memory-1"],
+                "source_entry_ids": ["memory-1"],
+                "exposed_source_ids": [],
+                "exposure_mode": "not_evaluable",
+                "reason": "provider call failed",
+            },
+        }
+    )
+    payload["method_calls"][0]["raw_response"] = None
+
+    log = TrialLog.model_validate(payload)
+
+    assert log.status == "failed"
+    assert log.raw_response is None
+    assert log.parsed_answer is None
+    assert log.verifier_result is None
+    assert log.failure_id == "failure-1"
+
+
+@pytest.mark.parametrize("field", ["raw_response", "parsed_answer", "verifier_result"])
+def test_logging_v1_success_rejects_null_semantic_values(field: str) -> None:
+    payload = _strict_success_payload()
+    payload[field] = None
+
+    with pytest.raises(ValidationError, match=field):
+        TrialLog.model_validate(payload)
+
+
+def test_legacy_trial_is_downgraded_and_proxy_exposure_is_not_supported() -> None:
+    legacy_payload = {
+        "trial_id": "legacy-trial-1",
+        "run_id": "legacy-run-1",
+        "task_name": "game24",
+        "sample_id": "sample-1",
+        "baseline": "retrieval_rag",
+        "arm": "contaminated",
+        "backbone": "replay-model",
+        "input": {"numbers": [1, 3, 4, 6]},
+        "gold_or_verifier_spec": {"target": 24},
+        "prompt_messages": [{"role": "user", "content": "solve"}],
+        "raw_response": "final: 24",
+        "verifier_result": {"is_correct": True},
+        "contamination_exposure": {
+            "condition": "contaminated",
+            "is_exposed": True,
+            "source_entry_ids": ["memory-1"],
+            "contamination_types": ["wrong_solution"],
+            "memory_before_entry_ids": ["memory-1"],
+            "retrieved_entry_ids": ["memory-1"],
+            "exposure_mode": "retrieved_memory",
+            "reason": "retrieval proxy",
+        },
+    }
+
+    log = TrialLog.model_validate(legacy_payload)
+
+    assert log.schema_version == "legacy"
+    assert log.stage == "legacy"
+    assert log.contamination_exposure.status == "not_evaluable"
+    assert log.contamination_exposure.is_exposed is None
+
+
+def test_legacy_trial_rejects_supported_exposure_without_answer_call_spans() -> None:
+    payload = _strict_success_payload()
+    for field in (
+        "schema_version",
+        "stage",
+        "status",
+        "run_metadata_id",
+        "trial_seq",
+        "event_seq",
+        "answer_call_id",
+    ):
+        del payload[field]
+
+    with pytest.raises(ValidationError, match="legacy"):
+        TrialLog.model_validate(payload)
+
+
+def test_typed_event_models_share_join_context() -> None:
+    context = {
+        "run_metadata_id": "run-meta-1",
+        "run_id": "run-1",
+        "trial_id": "trial-1",
+        "trial_seq": 3,
+        "event_seq": 9,
+        "stage": "replay",
+    }
+    span = PromptSourceSpan(
+        message_index=0,
+        start=0,
+        end=5,
+        rendered_hash="sha256:prompt",
+        entry_id="memory-1",
+        source_ids=["memory-1"],
+        parent_ids=[],
+        lineage_id="lineage-1",
+        version="v1",
+        origin="memory_catalog",
+        clean_or_contaminated="contaminated",
+    )
+    call = CallEvent(
+        call_id="call-1",
+        **context,
+        messages=[{"role": "user", "content": "solve"}],
+        model="replay-model",
+        decoding_params={"temperature": 0.0},
+        response_text="final: 24",
+        token_usage={"total_tokens": 3},
+        latency_ms=7,
+        retry_count=0,
+        source_spans=[span],
+        created_at="2026-07-16T00:00:00Z",
+    )
+    failure = FailureEvent(
+        failure_id="failure-1",
+        **context,
+        origin="provider_call",
+        error_type="ConnectionError",
+        failure_function="chat",
+        failure_module="memcontam.clients",
+        failure_line=12,
+        retry_count=0,
+        disposition="trial_failed",
+        created_at="2026-07-16T00:00:01Z",
+    )
+    filter_event = FilterEvent(
+        filter_id="filter-1",
+        **context,
+        arm="contaminated_filter",
+        baseline="retrieval_rag",
+        decisions=[{"entry_id": "memory-1", "action": "remove"}],
+        kept_source_ids=[],
+        removed_source_ids=["memory-1"],
+        pre_source_ids=["memory-1"],
+        post_source_ids=[],
+        ground_truth_contaminated_ids=["memory-1"],
+        action="outcome",
+        final_answer_source_ids=[],
+        verdict="not_exposed",
+        created_at="2026-07-16T00:00:02Z",
+    )
+    memory_event = MemoryEvent(
+        memory_id="memory-event-1",
+        **context,
+        event_type="write",
+        operation="append",
+        baseline="full_history",
+        source_trial_id="trial-0",
+        parent_entry_ids=["memory-0"],
+        source_entry_ids=["memory-0"],
+        contaminated_source_ids=[],
+        before_entry_ids=["memory-0"],
+        after_entry_ids=["memory-0", "memory-1"],
+        before_snapshot_hash="sha256:before",
+        after_snapshot_hash="sha256:after",
+        new_entry_ids=["memory-1"],
+        updated_entry_ids=[],
+        removed_entry_ids=[],
+        creation_origin="full_history_append",
+        memory_version="v1",
+        status="accepted",
+        created_at="2026-07-16T00:00:03Z",
+    )
+
+    assert EventContext(**context).run_metadata_id == "run-meta-1"
+    assert call.source_spans == [span]
+    assert failure.origin == "provider_call"
+    assert filter_event.removed_source_ids == ["memory-1"]
+    assert memory_event.new_entry_ids == ["memory-1"]
+    with pytest.raises(ValidationError):
+        FailureEvent.model_validate({**failure.model_dump(), "exception_message": "secret"})
+
+
+def test_run_metadata_is_self_contained_and_versioned() -> None:
+    metadata = RunMetadata(
+        run_metadata_id="run-meta-1",
+        run_id="run-1",
+        git_commit="abc123",
+        config_hash="sha256:config",
+        provider="replay",
+        model_snapshots={"replay-model": "fixture-v1"},
+        query_date="2026-07-16",
+        start_date="2026-07-16",
+        seed=7,
+        order="task-sample-baseline",
+        decoding_defaults={"temperature": 0.0},
+        sample_set_hash="sha256:samples",
+        sample_order_hash="sha256:order",
+        stage="replay",
+        schema_version=LOGGING_V1,
+        prompt_version="prompt-v1",
+        memory_policy_version="memory-v1",
+        contamination_catalog_version="catalog-v1",
+        retry_policy_version="retry-v1",
+    )
+
+    assert metadata.schema_version == LOGGING_V1
+    assert metadata.model_snapshots == {"replay-model": "fixture-v1"}
+
+
+def test_memory_item_log_normalizes_lineage_without_mutating_entry_id() -> None:
+    entry = MemoryEntry(
+        entry_id="entry-1",
+        content="A persisted reflection.",
+        memory_type="verbal_reflection",
+        clean_or_contaminated="contaminated",
+        source_trial_id="trial-0",
+        metadata={
+            "parent_entry_ids": ["entry-parent"],
+            "source_entry_ids": ["entry-source"],
+            "lineage_id": "lineage-1",
+            "memory_version": "v2",
+            "creation_origin": "reflexion_reflect",
+        },
+    )
+
+    item = MemoryItemLog.from_memory_entry(entry)
+
+    assert item.entry_id == "entry-1"
+    assert entry.entry_id == "entry-1"
+    assert item.content_hash == "8307c2a606d574c4d841efd53d451f2a69d294c1fc961eeb778f1dd4d62e8dde"
+    assert item.parent_entry_ids == ["entry-parent"]
+    assert item.source_entry_ids == ["entry-source"]
+    assert item.lineage_id == "lineage-1"
+    assert item.version == "v2"
+    assert item.creation_origin == "reflexion_reflect"
