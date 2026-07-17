@@ -2,15 +2,19 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
+import yaml
 
 import memcontam.cli as cli
 from memcontam.cli import run_config
 from memcontam.cli import load_config
 from memcontam.clients.base import LLMResponse
-from memcontam.logging.schema import TrialLog, VerifierResult
+from memcontam.logging.provenance import compute_exposure_from_spans, normalize_memory_event
+from memcontam.logging.schema import PromptSourceSpan, TrialLog, VerifierResult
 from memcontam.memory.embeddings import FakeEmbeddingProvider
+from memcontam.memory.stores import MemoryEntry
 
 
 def _write_game24_sample(tmp_path, numbers=None) -> str:
@@ -33,8 +37,24 @@ def _write_contamination_catalog(tmp_path, baseline: str, content: str) -> None:
     (catalog_dir / "catalog_v0.jsonl").write_text(json.dumps(catalog_row) + chr(10), encoding="utf-8")
 
 
+def _write_minimal_corpus(tmp_path, records: list[dict[str, Any]]) -> str:
+    corpus_dir = tmp_path / "data" / "corpus"
+    corpus_dir.mkdir(parents=True)
+    corpus_path = corpus_dir / "corpus.jsonl"
+    corpus_path.write_text(
+        "".join(json.dumps(record) + "\n" for record in records),
+        encoding="utf-8",
+    )
+    return str(corpus_path)
+
+
 def _run_single_baseline(
-    tmp_path, monkeypatch, baseline: str, memory_content: str, response: str = "final: 6 / (1 - 3 / 4)"
+    tmp_path,
+    monkeypatch,
+    baseline: str,
+    memory_content: str,
+    response: str = "final: 6 / (1 - 3 / 4)",
+    arm: str = "contaminated",
 ) -> dict:
     sample_path = _write_game24_sample(tmp_path)
     _write_contamination_catalog(tmp_path, baseline, memory_content)
@@ -44,7 +64,7 @@ def _run_single_baseline(
         "models": ["replay"],
         "tasks": [{"name": "game24", "sample_path": sample_path, "limit": 1}],
         "baselines": [baseline],
-        "arms": ["contaminated"],
+        "arms": [arm],
         "logging": {"output_dir": str(tmp_path / "runs")},
         "replay": {"responses": [response]},
     }
@@ -93,13 +113,14 @@ def test_run_config_writes_replay_trial_log_jsonl(tmp_path) -> None:
     assert row["memory_write_event"] is None
     assert row["contamination_exposure"] == {
         "condition": "clean",
-        "is_exposed": False,
+        "status": "not_evaluable",
+        "is_exposed": None,
+        "answer_call_id": None,
+        "target_entry_ids": [],
         "source_entry_ids": [],
-        "contamination_types": [],
-        "memory_before_entry_ids": [],
-        "retrieved_entry_ids": [],
-        "exposure_mode": "none",
-        "reason": "clean arm has no contaminated memory sources",
+        "exposed_source_ids": [],
+        "exposure_mode": "not_evaluable",
+        "reason": "legacy proxy exposure has no final-call source spans",
     }
     assert row["bad_memory_uptake_label"] == "not_applicable"
     assert row["repeated_failure_label"] == "not_applicable"
@@ -496,13 +517,20 @@ def test_contaminated_filter_logs_filter_decision_and_filtered_exposure(tmp_path
     row = json.loads((run_dir / "trials.jsonl").read_text(encoding="utf-8"))
     TrialLog.model_validate(row)
 
-    assert row["filter_decision"] == {"filter": "drop_known_contaminated", "dropped": 1}
+    assert row["filter_decision"]["filter_name"] == "drop_known_contaminated"
+    assert row["filter_decision"]["input_count"] == 1
+    assert row["filter_decision"]["removed_count"] == 1
+    assert row["filter_decision"]["dropped"] == 1
+    assert len(row["filter_decision"]["decisions"]) == 1
+    assert row["filter_decision"]["decisions"][0]["ground_truth"] == "contaminated"
+    assert row["filter_decision"]["decisions"][0]["action"] == "removed"
     assert row["memory_before"] == []
     assert row["retrieved_memory"] == []
     assert row["contamination_exposure"]["condition"] == "contaminated_filter"
-    assert row["contamination_exposure"]["is_exposed"] is False
+    assert row["contamination_exposure"]["status"] == "not_evaluable"
+    assert row["contamination_exposure"]["is_exposed"] is None
     assert row["contamination_exposure"]["source_entry_ids"] == []
-    assert row["contamination_exposure"]["exposure_mode"] == "none"
+    assert row["contamination_exposure"]["exposure_mode"] == "not_evaluable"
     assert row["recovery_after_filter_label"] == "not_applicable"
 
 
@@ -517,13 +545,14 @@ def test_contaminated_row_with_no_retrieval_logs_memory_before_exposure(tmp_path
     assert row["retrieved_memory"] == []
     assert row["contamination_exposure"] == {
         "condition": "contaminated",
-        "is_exposed": True,
+        "status": "not_evaluable",
+        "is_exposed": None,
+        "answer_call_id": None,
+        "target_entry_ids": [],
         "source_entry_ids": ["full_history_memory_1"],
-        "contamination_types": ["proxy_memory"],
-        "memory_before_entry_ids": ["full_history_memory_1"],
-        "retrieved_entry_ids": [],
-        "exposure_mode": "memory_before",
-        "reason": "contaminated memory sources were available before prompting",
+        "exposed_source_ids": [],
+        "exposure_mode": "not_evaluable",
+        "reason": "legacy proxy exposure has no final-call source spans",
     }
 
 
@@ -535,11 +564,39 @@ def test_controlled_exposure_does_not_imply_bad_memory_uptake(tmp_path, monkeypa
         "For numbers 1 3 4 6 use the wrong expression 1 + 3 + 4 + 6.",
     )
 
-    assert row["contamination_exposure"]["is_exposed"] is True
+    assert row["contamination_exposure"]["status"] == "not_evaluable"
+    assert row["contamination_exposure"]["is_exposed"] is None
+    assert row["contamination_exposure"]["source_entry_ids"]
     assert row["retrieved_memory"]
     assert row["bad_memory_uptake_label"] == "not_evaluable"
     assert row["bad_memory_uptake_label"] != "uptake_detected"
     assert row["memory_write_event"] is None
+
+
+def test_no_memory_and_rag_rows_normalize_to_no_memory_event(
+    tmp_path, monkeypatch
+) -> None:
+    for baseline in ("no_memory", "retrieval_rag"):
+        baseline_tmp = tmp_path / baseline
+        baseline_tmp.mkdir()
+        row = _run_single_baseline(
+            baseline_tmp,
+            monkeypatch,
+            baseline,
+            "Unused contaminated memory.",
+            arm="clean" if baseline == "no_memory" else "contaminated",
+        )
+
+        before = [MemoryEntry.model_validate(entry) for entry in row["memory_before"]]
+        after = [MemoryEntry.model_validate(entry) for entry in row["memory_after"]]
+        event = normalize_memory_event(
+            baseline,
+            row["trial_id"],
+            before,
+            after,
+            row["memory_write_event"],
+        )
+        assert event is None, f"{baseline} should not emit a memory event"
 
 
 def test_failure_row_still_validates_with_provenance_labels(tmp_path, monkeypatch) -> None:
@@ -549,11 +606,12 @@ def test_failure_row_still_validates_with_provenance_labels(tmp_path, monkeypatc
         "no_memory",
         "Unused contaminated memory.",
         "final: 1 + 3 + 4 + 6",
+        arm="clean",
     )
 
     assert row["verifier_result"]["is_correct"] is False
     assert row["verifier_result"]["reason"]
-    assert row["bad_memory_uptake_label"] == "not_evaluable"
+    assert row["bad_memory_uptake_label"] == "not_applicable"
     assert row["repeated_failure_label"] == "first_failure"
     TrialLog.model_validate(row)
 
@@ -640,6 +698,8 @@ def test_faithful_rag_bot_sequence_persists_and_logs(tmp_path, monkeypatch) -> N
     monkeypatch.chdir(repo_root)
     config = load_config(repo_root / "configs/g0_rag_bot_faithful_replay.yaml")
     config["logging"]["output_dir"] = str(tmp_path / "runs")
+    config["embedding"]["cache_path"] = str(tmp_path / "embedding_cache")
+    assert config["embedding"]["cache_path"] == str(tmp_path / "embedding_cache")
     config["models"] = ["gpt4o"]
     config["tasks"] = [{"name": "game24", "sample_path": "data/tasks/game24_pilot.jsonl", "limit": 2}]
     config["arms"] = ["clean"]
@@ -676,6 +736,8 @@ def test_faithful_bot_state_isolated_across_conditions(tmp_path, monkeypatch) ->
     monkeypatch.chdir(repo_root)
     config = load_config(repo_root / "configs/g0_rag_bot_faithful_replay.yaml")
     config["logging"]["output_dir"] = str(tmp_path / "runs")
+    config["embedding"]["cache_path"] = str(tmp_path / "embedding_cache")
+    assert config["embedding"]["cache_path"] == str(tmp_path / "embedding_cache")
     config["models"] = ["gpt4o", "frontier_reasoning"]
     config["tasks"] = [{"name": "game24", "sample_path": "data/tasks/game24_pilot.jsonl", "limit": 2}]
     config["baselines"] = ["bot_style"]
@@ -712,10 +774,112 @@ def test_faithful_bot_state_isolated_across_conditions(tmp_path, monkeypatch) ->
 
 
 def test_is_faithful_config_accepts_explicit_mode_and_rejects_unknown_mode() -> None:
-    assert cli._is_faithful_config({"run": {"mode": "faithful"}})
+    assert cli._is_faithful_config({
+        "run": {"mode": "faithful"},
+        "baselines": ["no_memory"],
+        "arms": ["clean"],
+    })
 
     with pytest.raises(SystemExit, match="unsupported run.mode: unsupported"):
-        cli._is_faithful_config({"run": {"mode": "unsupported"}})
+        cli._is_faithful_config({
+            "run": {"mode": "unsupported"},
+            "baselines": ["no_memory"],
+            "arms": ["clean"],
+        })
+
+
+_MAIN_BASELINES = [
+    "no_memory",
+    "full_history",
+    "retrieval_rag",
+    "reflexion_style",
+    "bot_style",
+]
+
+
+def test_valid_arms_for_baseline_no_memory_is_clean_only() -> None:
+    assert cli._valid_arms_for_baseline(
+        "no_memory", ["clean", "contaminated", "contaminated_filter"]
+    ) == ["clean"]
+    assert cli._valid_arms_for_baseline("no_memory", ["contaminated", "contaminated_filter"]) == []
+    assert cli._valid_arms_for_baseline("no_memory", ["clean"]) == ["clean"]
+
+
+def test_valid_arms_for_baseline_memory_baselines_keep_all_requested_arms() -> None:
+    arms = ["clean", "contaminated", "contaminated_filter"]
+    for baseline in ["full_history", "retrieval_rag", "reflexion_style", "bot_style"]:
+        assert cli._valid_arms_for_baseline(baseline, arms) == arms
+
+
+def test_valid_arms_main_matrix_yields_thirteen_pairs_and_thirty_nine_task_combinations() -> None:
+    arms = ["clean", "contaminated", "contaminated_filter"]
+    valid_pairs = [
+        (baseline, arm)
+        for baseline in _MAIN_BASELINES
+        for arm in cli._valid_arms_for_baseline(baseline, arms)
+    ]
+    assert len(valid_pairs) == 13
+    assert len(valid_pairs) * 3 == 39
+
+
+def test_validate_config_rejects_no_memory_only_without_clean_arm(tmp_path) -> None:
+    sample_path = tmp_path / "game24_one.jsonl"
+    sample_path.write_text(
+        '{"sample_id":"sample_1","numbers":[1,3,4,6],"target":24}' + chr(10),
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "no_memory_only.yaml"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "run": {"name": "smoke"},
+                "models": ["replay"],
+                "tasks": [
+                    {"name": "game24", "sample_path": str(sample_path), "limit": 1}
+                ],
+                "baselines": ["no_memory"],
+                "arms": ["contaminated", "contaminated_filter"],
+                "logging": {"output_dir": str(tmp_path / "runs")},
+                "replay": {"responses": ["final: 6 / (1 - 3 / 4)"]},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit, match="zero valid"):
+        cli.validate_config(config_path)
+
+
+def test_run_config_no_memory_skips_contaminated_arms(tmp_path, monkeypatch) -> None:
+    sample_path = tmp_path / "game24_one.jsonl"
+    sample_path.write_text(
+        '{"sample_id":"sample_1","numbers":[1,3,4,6],"target":24}' + chr(10),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    config = {
+        "run": {"name": "smoke"},
+        "models": ["replay"],
+        "tasks": [{"name": "game24", "sample_path": str(sample_path), "limit": 1}],
+        "baselines": ["no_memory"],
+        "arms": ["clean", "contaminated", "contaminated_filter"],
+        "logging": {"output_dir": str(tmp_path / "runs")},
+        "replay": {"responses": ["final: 6 / (1 - 3 / 4)"]},
+    }
+
+    run_dir = run_config(config, run_id="no_memory_arm_filter")
+    rows = [
+        json.loads(line)
+        for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+
+    assert len(rows) == 1
+    assert rows[0]["baseline"] == "no_memory"
+    assert rows[0]["arm"] == "clean"
+    assert rows[0]["filter_decision"] is None
+    assert rows[0]["memory_write_event"] is None
+    assert rows[0]["memory_before"] == []
+    assert rows[0]["memory_after"] == []
 
 
 def test_faithful_native_memory_config_dispatches_without_embedding_or_bot_resources(
@@ -854,22 +1018,25 @@ def test_native_memory_arm_semantics(baseline: str, tmp_path, monkeypatch) -> No
     assert set(arm_rows) == {"clean", "contaminated", "contaminated_filter"}
 
     clean_row = arm_rows["clean"]
-    assert clean_row["contamination_exposure"]["is_exposed"] is False
-    assert clean_row["contamination_exposure"]["exposure_mode"] == "none"
+    assert clean_row["contamination_exposure"]["status"] == "not_applicable"
+    assert clean_row["contamination_exposure"]["is_exposed"] is None
+    assert clean_row["contamination_exposure"]["exposure_mode"] == "clean"
     assert all(
         entry.get("clean_or_contaminated") != "contaminated"
         for entry in clean_row["memory_before"]
     )
 
     contaminated_row = arm_rows["contaminated"]
+    assert contaminated_row["contamination_exposure"]["status"] == "supported"
     assert contaminated_row["contamination_exposure"]["is_exposed"] is True
-    assert contaminated_row["contamination_exposure"]["exposure_mode"] == "memory_before"
+    assert contaminated_row["contamination_exposure"]["source_entry_ids"]
     assert corrupted_entry_id in {
         entry.get("entry_id") for entry in contaminated_row["memory_before"]
     }
 
     filter_row = arm_rows["contaminated_filter"]
     assert filter_row["filter_decision"] is not None
+    assert filter_row["filter_decision"]["removed_count"] > 0
     assert filter_row["filter_decision"]["dropped"] > 0
     assert corrupted_entry_id not in {
         entry.get("entry_id") for entry in filter_row["memory_before"]
@@ -877,6 +1044,7 @@ def test_native_memory_arm_semantics(baseline: str, tmp_path, monkeypatch) -> No
     assert clean_entry_id in {
         entry.get("entry_id") for entry in filter_row["memory_before"]
     }
+    assert filter_row["contamination_exposure"]["status"] == "supported"
     assert filter_row["contamination_exposure"]["is_exposed"] is False
 
 
@@ -1014,6 +1182,14 @@ def test_followup_config_validates(monkeypatch) -> None:
     )
 
 
+def test_full_matrix_config_rejects_todo_limits(monkeypatch) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(repo_root)
+
+    with pytest.raises(SystemExit, match="unresolved task limits"):
+        cli.validate_config(repo_root / "configs/full_matrix.yaml")
+
+
 def test_reflexion_max_attempts_three_rejected(tmp_path, monkeypatch) -> None:
     repo_root = Path(__file__).resolve().parents[1]
     monkeypatch.chdir(repo_root)
@@ -1043,6 +1219,8 @@ def test_dc_rs_reflexion_followup_gate_emits_108_rows_with_isolated_identities(
         repo_root / "configs/g0_dc_rs_reflexion_fidelity_followup_replay.yaml"
     )
     config["logging"]["output_dir"] = str(tmp_path / "runs")
+    config["embedding"]["cache_path"] = str(tmp_path / "embedding_cache")
+    assert config["embedding"]["cache_path"] == str(tmp_path / "embedding_cache")
 
     run_dir = run_config(config, run_id="followup_gate_test")
     rows = [
@@ -1118,6 +1296,8 @@ def test_dc_rs_reflexion_followup_uses_offline_embeddings(tmp_path, monkeypatch)
         repo_root / "configs/g0_dc_rs_reflexion_fidelity_followup_replay.yaml"
     )
     config["logging"]["output_dir"] = str(tmp_path / "runs")
+    config["embedding"]["cache_path"] = str(tmp_path / "embedding_cache")
+    assert config["embedding"]["cache_path"] == str(tmp_path / "embedding_cache")
 
     def unexpected_sentence_transformer(**_kwargs):
         raise AssertionError("follow-up replay gate must not load sentence-transformers")
@@ -1134,3 +1314,411 @@ def test_dc_rs_reflexion_followup_uses_offline_embeddings(tmp_path, monkeypatch)
     dc_rs_rows = [row for row in rows if row["baseline"] == "dynamic_cheatsheet_rs_optional"]
     assert dc_rs_rows
     assert all(row["method_calls"] for row in dc_rs_rows)
+
+
+def test_faithful_no_memory_run_has_answer_call_and_no_source_spans(tmp_path, monkeypatch) -> None:
+    sample_path = _write_game24_sample(tmp_path)
+    corpus_path = _write_minimal_corpus(tmp_path, [])
+    monkeypatch.chdir(tmp_path)
+    config = {
+        "run": {"name": "smoke", "mode": "faithful"},
+        "models": ["replay"],
+        "tasks": [{"name": "game24", "sample_path": sample_path, "limit": 1}],
+        "baselines": ["no_memory"],
+        "arms": ["clean"],
+        "embedding": {"corpus_path": corpus_path},
+        "logging": {"output_dir": str(tmp_path / "runs")},
+        "replay": {"responses": ["final: 6 / (1 - 3 / 4)"]},
+    }
+
+    run_dir = run_config(config, run_id="no_memory_faithful")
+    row = json.loads((run_dir / "trials.jsonl").read_text(encoding="utf-8"))
+    TrialLog.model_validate(row)
+
+    assert row["baseline"] == "no_memory"
+    assert row["arm"] == "clean"
+    assert row["answer_call_id"] is not None
+    assert len(row["method_calls"]) == 1
+    call = row["method_calls"][0]
+    assert call["call_id"] == row["answer_call_id"]
+    assert call["stage"] == "no_memory_generate"
+    assert call["source_spans"] == []
+    assert row["memory_before"] == []
+    assert row["memory_after"] == []
+    assert row["retrieved_memory"] == []
+    assert row["memory_write_event"] is None
+    assert row["filter_decision"] is None
+
+
+def test_faithful_rag_contaminated_filter_false_positive_not_in_final_prompt(
+    tmp_path, monkeypatch
+) -> None:
+    sample_path = _write_game24_sample(tmp_path)
+    corpus_records = [
+        {
+            "entry_id": "game24_clean_001",
+            "task": "game24",
+            "memory_type": "memory_seed",
+            "content": "A general strategy for Game24 is to look for ways to make 1 from subtraction or division.",
+            "source": "pilot_corpus",
+            "clean_or_contaminated": "clean",
+        },
+        {
+            "entry_id": "game24_cont_001",
+            "task": "game24",
+            "memory_type": "memory_seed",
+            "content": "A contaminated hint that should be filtered.",
+            "source": "pilot_corpus",
+            "clean_or_contaminated": "contaminated",
+            "paired_clean_entry_id": "game24_clean_001",
+        },
+    ]
+    corpus_path = _write_minimal_corpus(tmp_path, corpus_records)
+    monkeypatch.chdir(tmp_path)
+    config = {
+        "run": {"name": "smoke", "mode": "faithful"},
+        "models": ["replay"],
+        "tasks": [{"name": "game24", "sample_path": sample_path, "limit": 1}],
+        "baselines": ["retrieval_rag"],
+        "arms": ["contaminated_filter"],
+        "embedding": {
+            "corpus_path": corpus_path,
+            "top_k": 1,
+            "offline_fallback": True,
+        },
+        "logging": {"output_dir": str(tmp_path / "runs")},
+        "replay": {"responses": ["final: 6 / (1 - 3 / 4)"]},
+    }
+
+    run_dir = run_config(config, run_id="rag_filter_false_positive")
+    row = json.loads((run_dir / "trials.jsonl").read_text(encoding="utf-8"))
+    TrialLog.model_validate(row)
+
+    assert row["baseline"] == "retrieval_rag"
+    assert row["arm"] == "contaminated_filter"
+    assert row["answer_call_id"] is not None
+    call = next(call for call in row["method_calls"] if call["call_id"] == row["answer_call_id"])
+    spans = [PromptSourceSpan.model_validate(span) for span in call["source_spans"]]
+    assert all(span.clean_or_contaminated == "clean" for span in spans)
+    assert all(span.entry_id != "game24_cont_001" for span in spans)
+    exposure = compute_exposure_from_spans(row["answer_call_id"], spans, "contaminated_filter")
+    assert exposure.status == "supported"
+    assert exposure.is_exposed is False
+    assert exposure.exposure_mode == "not_in_final_prompt"
+
+
+def test_strict_faithful_replay_writes_manifest_calls_and_canonical_trial(
+    tmp_path, monkeypatch
+) -> None:
+    sample_path = _write_game24_sample(tmp_path)
+    corpus_path = _write_minimal_corpus(tmp_path, [])
+    monkeypatch.chdir(tmp_path)
+    config = {
+        "run": {
+            "name": "strict-smoke",
+            "mode": "faithful",
+            "stage": "replay",
+            "provider": "replay",
+            "model_snapshots": {"replay": "fixture-v1"},
+            "task_order_seed": 7,
+            "sample_order_seed": 11,
+            "retry_policy_version": "retry-v1",
+        },
+        "models": ["replay"],
+        "tasks": [{"name": "game24", "sample_path": sample_path, "limit": 1}],
+        "baselines": ["no_memory"],
+        "arms": ["clean"],
+        "memory": {"corpus_path": corpus_path},
+        "logging": {
+            "output_dir": str(tmp_path / "runs"),
+            "schema_version": "logging_v1",
+            "prompt_version": "prompt-v1",
+            "memory_policy_version": "memory-v1",
+            "contamination_catalog_version": "catalog-v1",
+        },
+        "replay": {"fixture_version": "fixture-v1", "responses": ["final: 6 / (1 - 3 / 4)"]},
+        "live_smoke": {"enabled": False},
+    }
+
+    run_dir = run_config(config, run_id="strict_replay")
+
+    manifest = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    calls = [
+        json.loads(line)
+        for line in (run_dir / "calls.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    trials = [
+        json.loads(line)
+        for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert manifest["status"] == "completed"
+    assert manifest["counts"] == {
+        "calls": 1,
+        "failures": 0,
+        "filter_events": 0,
+        "memory_events": 0,
+        "trials": 1,
+    }
+    assert len(calls) == len(trials) == 1
+    trial = trials[0]
+    assert trial["schema_version"] == "logging_v1"
+    assert trial["status"] == "succeeded"
+    assert trial["run_metadata_id"] == manifest["run_metadata"]["run_metadata_id"]
+    assert trial["answer_call_id"] == calls[0]["call_id"]
+    assert trial["prompt_messages"] == calls[0]["messages"]
+    assert trial["latency_ms"] == calls[0]["latency_ms"]
+    assert trial["token_usage"] == calls[0]["token_usage"]
+    assert trial["retry_count"] == calls[0]["retry_count"]
+    assert trial["event_seq"] > calls[0]["event_seq"]
+
+
+def test_strict_faithful_runner_continues_after_provider_and_verifier_failures(
+    tmp_path, monkeypatch
+) -> None:
+    sample_path = tmp_path / "game24_three.jsonl"
+    sample_path.write_text(
+        "".join(
+            json.dumps({"sample_id": f"sample_{index}", "numbers": [1, 3, 4, 6], "target": 24})
+            + "\n"
+            for index in range(1, 4)
+        ),
+        encoding="utf-8",
+    )
+    corpus_path = _write_minimal_corpus(tmp_path, [])
+    monkeypatch.chdir(tmp_path)
+
+    class FlakyClient:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def chat(self, messages, model, config):
+            self.calls += 1
+            if self.calls == 1:
+                raise ConnectionError("provider failure")
+            return LLMResponse(
+                content="final: 6 / (1 - 3 / 4)",
+                raw={},
+                token_usage={"total_tokens": 3},
+                latency_ms=5,
+            )
+
+    original_verify = cli.TASK_DISPATCH["game24"]["verify"]
+    verify_calls = 0
+
+    def flaky_verify(parsed_answer, task):
+        nonlocal verify_calls
+        verify_calls += 1
+        if verify_calls == 1:
+            raise ValueError("verifier failure")
+        return original_verify(parsed_answer, task)
+
+    monkeypatch.setitem(cli.TASK_DISPATCH["game24"], "verify", flaky_verify)
+    config = {
+        "run": {
+            "name": "strict-failures",
+            "mode": "faithful",
+            "stage": "replay",
+            "provider": "replay",
+            "model_snapshots": {"replay": "fixture-v1"},
+            "task_order_seed": 7,
+            "sample_order_seed": 11,
+            "retry_policy_version": "retry-v1",
+        },
+        "models": ["replay"],
+        "tasks": [{"name": "game24", "sample_path": str(sample_path), "limit": 3}],
+        "baselines": ["no_memory"],
+        "arms": ["clean"],
+        "memory": {"corpus_path": corpus_path},
+        "logging": {
+            "output_dir": str(tmp_path / "runs"),
+            "schema_version": "logging_v1",
+            "prompt_version": "prompt-v1",
+            "memory_policy_version": "memory-v1",
+            "contamination_catalog_version": "catalog-v1",
+        },
+        "replay": {"fixture_version": "fixture-v1"},
+        "live_smoke": {"enabled": False},
+    }
+
+    run_dir = run_config(config, run_id="strict_failures", _client_override=FlakyClient())
+
+    manifest = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    calls = [
+        json.loads(line)
+        for line in (run_dir / "calls.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    failures = [
+        json.loads(line)
+        for line in (run_dir / "failures.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    trials = [
+        json.loads(line)
+        for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert manifest["status"] == "completed"
+    assert manifest["counts"] == {
+        "calls": 3,
+        "failures": 2,
+        "filter_events": 0,
+        "memory_events": 0,
+        "trials": 3,
+    }
+    assert [failure["origin"] for failure in failures] == ["provider_call", "verifier"]
+    assert [trial["status"] for trial in trials] == ["failed", "failed", "succeeded"]
+    for trial in trials[:2]:
+        assert trial["raw_response"] is None
+        assert trial["parsed_answer"] is None
+        assert trial["verifier_result"] is None
+        assert trial["failure_id"] in {failure["failure_id"] for failure in failures}
+        assert trial["answer_call_id"] in {call["call_id"] for call in calls}
+    assert trials[-1]["verifier_result"]["is_correct"] is True
+
+
+def _strict_no_memory_config(tmp_path, sample_path: str, corpus_path: str) -> dict[str, Any]:
+    return {
+        "run": {
+            "name": "strict-negative",
+            "mode": "faithful",
+            "stage": "replay",
+            "provider": "replay",
+            "model_snapshots": {"replay": "fixture-v1"},
+            "task_order_seed": 7,
+            "sample_order_seed": 11,
+            "retry_policy_version": "retry-v1",
+        },
+        "models": ["replay"],
+        "tasks": [{"name": "game24", "sample_path": sample_path, "limit": 1}],
+        "baselines": ["no_memory"],
+        "arms": ["clean"],
+        "memory": {"corpus_path": corpus_path},
+        "logging": {
+            "output_dir": str(tmp_path / "runs"),
+            "schema_version": "logging_v1",
+            "prompt_version": "prompt-v1",
+            "memory_policy_version": "memory-v1",
+            "contamination_catalog_version": "catalog-v1",
+        },
+        "replay": {"fixture_version": "fixture-v1", "responses": ["final: 6 / (1 - 3 / 4)"]},
+        "live_smoke": {"enabled": False},
+    }
+
+
+def test_strict_failed_multicall_trial_keeps_answer_call_not_failed_curation(
+    tmp_path, monkeypatch
+) -> None:
+    sample_path = _write_game24_sample(tmp_path)
+    corpus_path = _write_minimal_corpus(tmp_path, [])
+    monkeypatch.chdir(tmp_path)
+
+    class CurationFailureClient:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def chat(self, messages, model, config):
+            self.calls += 1
+            if self.calls == 2:
+                raise ConnectionError("curation failure")
+            return LLMResponse(
+                content="final: 6 / (1 - 3 / 4)",
+                raw={},
+                token_usage={"total_tokens": 3},
+                latency_ms=5,
+            )
+
+    config = _strict_no_memory_config(tmp_path, sample_path, corpus_path)
+    config["baselines"] = ["dynamic_cheatsheet_optional"]
+    run_dir = run_config(config, run_id="strict_curation_failure", _client_override=CurationFailureClient())
+
+    calls = [
+        json.loads(line)
+        for line in (run_dir / "calls.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    trial = json.loads((run_dir / "trials.jsonl").read_text(encoding="utf-8"))
+    assert [call["method_stage"] for call in calls] == [
+        "dynamic_cheatsheet_generate",
+        "dynamic_cheatsheet_curate",
+    ]
+    assert trial["status"] == "failed"
+    assert trial["answer_call_id"] == calls[0]["call_id"]
+    assert trial["prompt_messages"] == calls[0]["messages"]
+    assert trial["method_calls"][0]["stage"] == "dynamic_cheatsheet_generate"
+    assert trial["method_calls"][1]["stage"] == "dynamic_cheatsheet_curate"
+
+
+def test_strict_run_rejects_collision_without_changing_existing_directory(tmp_path, monkeypatch) -> None:
+    sample_path = _write_game24_sample(tmp_path)
+    corpus_path = _write_minimal_corpus(tmp_path, [])
+    monkeypatch.chdir(tmp_path)
+    config = _strict_no_memory_config(tmp_path, sample_path, corpus_path)
+    run_dir = tmp_path / "runs" / "strict_collision"
+    run_dir.mkdir(parents=True)
+    sentinel = run_dir / "keep.txt"
+    sentinel.write_text("unchanged", encoding="utf-8")
+
+    with pytest.raises(FileExistsError, match="already exists"):
+        run_config(config, run_id="strict_collision")
+
+    assert sentinel.read_text(encoding="utf-8") == "unchanged"
+    assert not list(run_dir.parent.glob("strict_collision.tmp-*"))
+
+
+def test_strict_fatal_writer_error_never_finalizes_completed_run(tmp_path, monkeypatch) -> None:
+    sample_path = _write_game24_sample(tmp_path)
+    corpus_path = _write_minimal_corpus(tmp_path, [])
+    monkeypatch.chdir(tmp_path)
+    config = _strict_no_memory_config(tmp_path, sample_path, corpus_path)
+
+    def fail_trial_write(self, trial):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(cli.RunLogWriter, "write_trial", fail_trial_write)
+    with pytest.raises(OSError, match="disk full"):
+        run_config(config, run_id="strict_writer_failure")
+
+    final_dir = tmp_path / "runs" / "strict_writer_failure"
+    temp_dirs = list(final_dir.parent.glob("strict_writer_failure.tmp-*"))
+    assert not final_dir.exists()
+    assert len(temp_dirs) == 1
+    manifest = json.loads((temp_dirs[0] / "run.json").read_text(encoding="utf-8"))
+    assert manifest["status"] == "failed"
+
+
+def test_strict_offline_config_rejects_live_smoke_before_client_creation(tmp_path, monkeypatch) -> None:
+    sample_path = _write_game24_sample(tmp_path)
+    corpus_path = _write_minimal_corpus(tmp_path, [])
+    config = _strict_no_memory_config(tmp_path, sample_path, corpus_path)
+    config["live_smoke"]["enabled"] = True
+
+    with pytest.raises(SystemExit, match="live_smoke.enabled=false"):
+        run_config(config, run_id="strict_live_smoke")
+
+    assert not (tmp_path / "runs" / "strict_live_smoke").exists()
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (lambda config: config["run"].update(stage="unsupported"), "unsupported run.stage"),
+        (
+            lambda config: config["run"].update(model_snapshots={"replay": "TODO"}),
+            "resolved snapshot",
+        ),
+        (lambda config: config["tasks"][0].update(limit=0), "positive task limit"),
+        (
+            lambda config: config["run"].update(mode="legacy", stage="partial"),
+            "legacy run.mode",
+        ),
+    ],
+)
+def test_run_config_rejects_invalid_strict_or_legacy_stage_boundaries(
+    tmp_path, mutate, message
+) -> None:
+    sample_path = _write_game24_sample(tmp_path)
+    corpus_path = _write_minimal_corpus(tmp_path, [])
+    config = _strict_no_memory_config(tmp_path, sample_path, corpus_path)
+    mutate(config)
+
+    with pytest.raises(SystemExit, match=message):
+        run_config(config, run_id="invalid_strict_boundary")
+
+    assert not (tmp_path / "runs" / "invalid_strict_boundary").exists()

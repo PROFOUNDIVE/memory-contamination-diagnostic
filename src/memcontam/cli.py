@@ -4,6 +4,7 @@ import argparse
 import json
 import hashlib
 import subprocess
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -22,19 +23,28 @@ from memcontam.baselines.reflexion_style import ReflexionStylePolicy
 from memcontam.baselines.retrieval_rag import RetrievalRagPolicy
 from memcontam.clients.base import LLMClient
 from memcontam.clients.openai_compatible import OpenAICompatibleClient
+from memcontam.clients.recording import MethodCallRecorder, summarize_calls
 from memcontam.clients.replay import ReplayClient
 from memcontam.evaluation.aggregate import aggregate_run
 from memcontam.contamination.catalog import load_catalog
 from memcontam.logging.schema import (
     BadMemoryUptakeLabel,
+    CallEvent,
     ContaminationExposure,
+    FailureEvent,
+    FilterEvent,
+    LOGGING_V1,
+    MethodCall,
     RepeatedFailureLabel,
+    RunMetadata,
     TrialLog,
 )
+from memcontam.logging.provenance import compute_exposure_from_spans, normalize_memory_event
+from memcontam.logging.writer import RunLogWriter
 from memcontam.memory.bot_buffer import BotBufferIdentity, ThoughtTemplate
 from memcontam.memory.corpus import CorpusRecord, build_arm_corpus, load_corpus
 from memcontam.memory.embeddings import EmbeddingProvider, FakeEmbeddingProvider, SentenceTransformerProvider
-from memcontam.memory.filters import drop_known_contaminated
+from memcontam.memory.filters import FilterTelemetry, drop_known_contaminated
 from memcontam.memory.retrieval import retrieve_records
 from memcontam.memory.run_state import RunState
 from memcontam.memory.stores import MemoryEntry, MemoryState
@@ -88,6 +98,7 @@ BASELINE_POLICIES = {
 }
 
 FAITHFUL_BASELINES = {
+    "no_memory",
     "retrieval_rag",
     "bot_style",
     "full_history",
@@ -97,7 +108,8 @@ FAITHFUL_BASELINES = {
 }
 
 def validate_config(path: Path) -> None:
-    _is_faithful_config(load_config(path))
+    config = load_config(path)
+    _validate_run_config(config)
     print(f"valid config: {path}")
 
 
@@ -138,7 +150,7 @@ def _validate_run_id(run_id: str) -> None:
         raise SystemExit(f"invalid run id: {run_id}")
 
 
-def _memory_entries_for_arm(arm: str, baseline: str) -> tuple[list[MemoryEntry], dict[str, Any] | None]:
+def _memory_entries_for_arm(arm: str, baseline: str) -> tuple[list[MemoryEntry], FilterTelemetry | None]:
     if arm == "clean":
         return [], None
     catalog_path = Path("data/contamination/catalog_v0.jsonl")
@@ -175,6 +187,114 @@ def _retrieved_memory(baseline: str, task_input: dict[str, Any], memory: MemoryS
 def _config_hash(config: dict[str, Any]) -> str:
     payload = json.dumps(config, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
+
+
+_STAGES = {"debug", "replay", "partial", "pilot", "main", "benchmark"}
+
+
+def _is_strict_config(config: dict[str, Any]) -> bool:
+    return (
+        config.get("logging", {}).get("schema_version") == LOGGING_V1
+        and config.get("run", {}).get("mode") == "faithful"
+    )
+
+
+def _hash_values(values: list[str]) -> str:
+    payload = json.dumps(values, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _sample_hashes(config: dict[str, Any]) -> tuple[str, str]:
+    sample_order = [
+        str(row["sample_id"])
+        for task_config in config["tasks"]
+        for row in _load_jsonl(Path(task_config["sample_path"]), task_config.get("limit"))
+    ]
+    return _hash_values(sorted(sample_order)), _hash_values(sample_order)
+
+
+def _run_metadata(config: dict[str, Any], run_id: str, run_started_at: str) -> RunMetadata:
+    run_config = config["run"]
+    logging_config = config["logging"]
+    replay_config = config.get("replay", {})
+    sample_set_hash, sample_order_hash = _sample_hashes(config)
+    return RunMetadata(
+        run_metadata_id=f"{run_id}:metadata",
+        run_id=run_id,
+        git_commit=_git_commit(),
+        config_hash=_config_hash(config),
+        provider=run_config["provider"],
+        model_snapshots=dict(run_config["model_snapshots"]),
+        query_date=run_started_at[:10],
+        start_date=run_started_at[:10],
+        seed=run_config.get("sample_order_seed"),
+        order=run_config.get("task_order_seed", "task-sample-baseline-arm-model"),
+        decoding_defaults={
+            key: replay_config[key]
+            for key in ("temperature", "top_p", "max_tokens")
+            if key in replay_config
+        },
+        sample_set_hash=sample_set_hash,
+        sample_order_hash=sample_order_hash,
+        stage=run_config["stage"],
+        schema_version=logging_config["schema_version"],
+        prompt_version=logging_config["prompt_version"],
+        memory_policy_version=logging_config["memory_policy_version"],
+        contamination_catalog_version=logging_config["contamination_catalog_version"],
+        retry_policy_version=run_config["retry_policy_version"],
+    )
+
+
+def _validate_run_config(config: dict[str, Any]) -> None:
+    _validate_placeholder_main_config(config)
+    run_config = config.get("run", {})
+    stage = run_config.get("stage", "replay")
+    if stage not in _STAGES:
+        raise SystemExit(f"unsupported run.stage: {stage}")
+
+    faithful = _is_faithful_config(config)
+    if not _is_strict_config(config):
+        if not faithful and stage not in {"debug", "replay"}:
+            raise SystemExit("legacy run.mode is limited to debug or replay")
+        return
+
+    if "stage" not in run_config:
+        raise SystemExit("logging_v1 requires run.stage")
+    if not faithful:
+        raise SystemExit("logging_v1 requires run.mode=faithful")
+    if config.get("live_smoke", {}).get("enabled", False):
+        raise SystemExit("strict offline configs require live_smoke.enabled=false")
+
+    required_versions = {
+        "logging.prompt_version": config.get("logging", {}).get("prompt_version"),
+        "logging.memory_policy_version": config.get("logging", {}).get("memory_policy_version"),
+        "logging.contamination_catalog_version": config.get("logging", {}).get(
+            "contamination_catalog_version"
+        ),
+        "run.retry_policy_version": run_config.get("retry_policy_version"),
+    }
+    unresolved = [
+        key
+        for key, value in required_versions.items()
+        if not isinstance(value, str) or not value or value.lower() in {"unknown", "todo"}
+    ]
+    if unresolved:
+        raise SystemExit(f"logging_v1 requires resolved versions: {', '.join(unresolved)}")
+
+    provider = run_config.get("provider")
+    snapshots = run_config.get("model_snapshots")
+    if not isinstance(provider, str) or not provider:
+        raise SystemExit("logging_v1 requires run.provider")
+    if not isinstance(snapshots, dict):
+        raise SystemExit("logging_v1 requires run.model_snapshots")
+    for model in config["models"]:
+        snapshot = snapshots.get(model)
+        if not isinstance(snapshot, str) or not snapshot or snapshot.lower() in {"unknown", "todo"}:
+            raise SystemExit(f"logging_v1 requires resolved snapshot for model: {model}")
+    for task in config["tasks"]:
+        limit = task.get("limit")
+        if not isinstance(limit, int) or limit <= 0:
+            raise SystemExit(f"logging_v1 requires positive task limit: {task.get('name', 'unknown')}")
 
 
 def _embedding_provider(config: dict[str, Any]) -> EmbeddingProvider:
@@ -258,15 +378,17 @@ def _contamination_exposure(
         is_exposed = False
         exposure_mode = "none"
         reason = "no contaminated memory sources remained after filtering"
-    return ContaminationExposure(
-        condition=cast(Literal["clean", "contaminated", "contaminated_filter"], arm),
-        is_exposed=is_exposed,
-        source_entry_ids=source_ids,
-        contamination_types=contamination_types,
-        memory_before_entry_ids=memory_before_ids,
-        retrieved_entry_ids=retrieved_ids,
-        exposure_mode=exposure_mode,
-        reason=reason,
+    return ContaminationExposure.model_validate(
+        {
+            "condition": cast(Literal["clean", "contaminated", "contaminated_filter"], arm),
+            "is_exposed": is_exposed,
+            "source_entry_ids": source_ids,
+            "contamination_types": contamination_types,
+            "memory_before_entry_ids": memory_before_ids,
+            "retrieved_entry_ids": retrieved_ids,
+            "exposure_mode": exposure_mode,
+            "reason": reason,
+        }
     )
 
 
@@ -319,7 +441,42 @@ def _validate_reflexion_config(config: dict[str, Any]) -> None:
             raise SystemExit("reflexion.max_attempts must be 1 or 2")
 
 
+def _validate_placeholder_main_config(config: dict[str, Any]) -> None:
+    if config.get("run", {}).get("stage") != "main":
+        return
+    unresolved_limits = [
+        task.get("name", "unknown")
+        for task in config.get("tasks", [])
+        if task.get("limit") == "TODO"
+    ]
+    unresolved_snapshots = [
+        model
+        for model, snapshot in config.get("run", {}).get("model_snapshots", {}).items()
+        if snapshot == "TODO"
+    ]
+    if unresolved_limits or unresolved_snapshots:
+        parts = []
+        if unresolved_limits:
+            parts.append(f"unresolved task limits: {', '.join(unresolved_limits)}")
+        if unresolved_snapshots:
+            parts.append(f"unresolved model snapshots: {', '.join(unresolved_snapshots)}")
+        raise SystemExit("; ".join(parts))
+
+
+def _valid_arms_for_baseline(baseline: str, requested_arms: list[str]) -> list[str]:
+    if baseline == "no_memory":
+        return [arm for arm in requested_arms if arm == "clean"]
+    return list(requested_arms)
+
+
 def _is_faithful_config(config: dict[str, Any]) -> bool:
+    valid_pairs = [
+        (baseline, arm)
+        for baseline in config.get("baselines", [])
+        for arm in _valid_arms_for_baseline(baseline, config.get("arms", []))
+    ]
+    if not valid_pairs:
+        raise SystemExit("config has zero valid baseline×arm combinations")
     run_mode = config.get("run", {}).get("mode")
     if run_mode == "faithful":
         _validate_reflexion_config(config)
@@ -350,7 +507,7 @@ def _records_for_baseline(
 
 def _bot_injection_entries(
     records: list[CorpusRecord], task_name: str, arm: str
-) -> tuple[list[MemoryEntry], dict[str, Any] | None]:
+) -> tuple[list[MemoryEntry], FilterTelemetry | None]:
     entries, filter_decision = build_arm_corpus(records, task_name, cast(Any, arm))
     return [entry for entry in entries if entry.clean_or_contaminated == "contaminated"], filter_decision
 
@@ -400,8 +557,121 @@ def _trial_client_for_sample(
     return client
 
 
-def _method_call_messages(method_calls: list[Any]) -> list[dict[str, str]]:
+def _legacy_method_call_messages(method_calls: list[Any]) -> list[dict[str, str]]:
     return [message for call in method_calls for message in call.messages]
+
+
+def _trial_id(run_id: str, task: Any, baseline: str, arm: str, model: str) -> str:
+    return ":".join([run_id, task.task_name, task.sample_id, baseline, arm, model])
+
+
+def _event_context(metadata: RunMetadata, trial_id: str, trial_seq: int) -> dict[str, Any]:
+    return {
+        "run_metadata_id": metadata.run_metadata_id,
+        "run_id": metadata.run_id,
+        "trial_id": trial_id,
+        "trial_seq": trial_seq,
+        "event_seq": 0,
+        "stage": metadata.stage,
+    }
+
+
+def _timestamp() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _filter_event(
+    metadata: RunMetadata,
+    trial_id: str,
+    trial_seq: int,
+    baseline: str,
+    arm: str,
+    telemetry: FilterTelemetry,
+    action: Literal["apply", "outcome"],
+    *,
+    final_answer_source_ids: list[str] | None = None,
+    verdict: str | None = None,
+) -> FilterEvent:
+    decisions = telemetry["decisions"]
+    return FilterEvent(
+        filter_id="",
+        **_event_context(metadata, trial_id, trial_seq),
+        arm=cast(Literal["clean", "contaminated", "contaminated_filter"], arm),
+        baseline=baseline,
+        decisions=[dict(decision) for decision in decisions],
+        kept_source_ids=telemetry["kept_source_ids"],
+        removed_source_ids=telemetry["removed_source_ids"],
+        pre_source_ids=telemetry["input_source_ids"],
+        post_source_ids=telemetry["kept_source_ids"],
+        ground_truth_contaminated_ids=[
+            decision["entry_id"] for decision in decisions if decision["ground_truth"] == "contaminated"
+        ],
+        action=action,
+        final_answer_source_ids=final_answer_source_ids or [],
+        verdict=verdict,
+        created_at=_timestamp(),
+    )
+
+
+def _answer_call(method_calls: list[Any], answer_call_id: str) -> Any:
+    answer_call = next((call for call in method_calls if call.call_id == answer_call_id), None)
+    if answer_call is None:
+        raise RuntimeError("faithful result has no answer call")
+    return answer_call
+
+
+def _failure_location(exc: Exception) -> tuple[str | None, str | None, int | None]:
+    frames = traceback.extract_tb(exc.__traceback__)
+    if not frames:
+        return None, None, None
+    frame = frames[-1]
+    path = Path(frame.filename)
+    try:
+        module = str(path.resolve().relative_to(Path.cwd()))
+    except ValueError:
+        module = path.name
+    return frame.name, module, frame.lineno
+
+
+def _failure_origin(call_events: list[CallEvent], exc: Exception) -> Literal[
+    "provider_call", "parser", "verifier", "runner"
+]:
+    if call_events and call_events[-1].origin == "provider_call":
+        return "provider_call"
+    names = " ".join(frame.name.lower() for frame in traceback.extract_tb(exc.__traceback__))
+    if "verify" in names:
+        return "verifier"
+    if "parse" in names:
+        return "parser"
+    return "runner"
+
+
+def _failure_event(
+    metadata: RunMetadata,
+    trial_id: str,
+    trial_seq: int,
+    call_events: list[CallEvent],
+    exc: Exception,
+) -> FailureEvent:
+    origin = _failure_origin(call_events, exc)
+    function, module, line = _failure_location(exc)
+    if origin == "provider_call" and call_events:
+        call = call_events[-1]
+        function = call.failure_function or function
+        module = call.failure_module or module
+        line = call.failure_line if call.failure_line is not None else line
+    return FailureEvent(
+        failure_id="",
+        **_event_context(metadata, trial_id, trial_seq),
+        origin=origin,
+        error_type=type(exc).__name__,
+        failure_function=function,
+        failure_module=module,
+        failure_line=line,
+        retry_count=summarize_calls(call_events)["retry_count"],
+        disposition="continued",
+        created_at=_timestamp(),
+    )
 
 
 def _faithful_result_trial(
@@ -414,12 +684,15 @@ def _faithful_result_trial(
     model: str,
     result: dict[str, Any],
     verifier_result: Any,
-    filter_decision: dict[str, Any] | None,
+    filter_decision: FilterTelemetry | None,
     trial_order: int,
     run_started_at: str,
     repeated_failure_tracker: _RepeatedFailureTracker,
+    run_metadata: RunMetadata | None = None,
+    call_events: list[CallEvent] | None = None,
+    trial_id: str | None = None,
 ) -> TrialLog:
-    trial_id = ":".join([run_id, task.task_name, task.sample_id, baseline, arm, model])
+    trial_id = trial_id or _trial_id(run_id, task, baseline, arm, model)
     method_calls = result.get("method_calls", [])
     retrieved_memory = result.get("retrieved_memory")
     if retrieved_memory is None:
@@ -432,13 +705,40 @@ def _faithful_result_trial(
     retrieved_scores = result.get("retrieved_scores") or [
         float(entry["score"]) for entry in retrieved_memory if "score" in entry
     ]
-    metadata = {
-        **_trial_metadata(config, model, trial_order, run_started_at),
-        **result.get("metadata", {}),
-    }
-    contamination_exposure = _contamination_exposure(
-        arm, result.get("memory_before", []), retrieved_memory
-    )
+    if run_metadata is None:
+        metadata = {
+            **_trial_metadata(config, model, trial_order, run_started_at),
+            **result.get("metadata", {}),
+        }
+        contamination_exposure = _contamination_exposure(
+            arm, result.get("memory_before", []), retrieved_memory
+        )
+        prompt_messages = _legacy_method_call_messages(method_calls)
+        telemetry = {"latency_ms": None, "token_usage": {}, "retry_count": 0}
+        schema_version = "legacy"
+        stage = "legacy"
+        status = "legacy"
+        run_metadata_id = None
+        strict_trial_seq = None
+        answer_call_id = result.get("answer_call_id")
+    else:
+        answer_call_id = result.get("answer_call_id")
+        if not isinstance(answer_call_id, str):
+            raise RuntimeError("faithful result has no answer_call_id")
+        answer_call = _answer_call(method_calls, answer_call_id)
+        prompt_messages = answer_call.messages
+        contamination_exposure = compute_exposure_from_spans(
+            answer_call_id,
+            answer_call.source_spans,
+            cast(Literal["clean", "contaminated", "contaminated_filter"], arm),
+        )
+        telemetry = summarize_calls(call_events or [])
+        metadata = result.get("metadata", {})
+        schema_version = LOGGING_V1
+        stage = run_metadata.stage
+        status = "succeeded"
+        run_metadata_id = run_metadata.run_metadata_id
+        strict_trial_seq = trial_order
     return TrialLog(
         trial_id=trial_id,
         run_id=run_id,
@@ -449,7 +749,7 @@ def _faithful_result_trial(
         backbone=model,
         input=task.input,
         gold_or_verifier_spec=task.verifier_spec,
-        prompt_messages=_method_call_messages(method_calls),
+        prompt_messages=prompt_messages,
         memory_before=result.get("memory_before", []),
         retrieved_memory=retrieved_memory,
         retrieved_scores=retrieved_scores,
@@ -457,7 +757,7 @@ def _faithful_result_trial(
         parsed_answer=result.get("parsed_answer"),
         verifier_result=verifier_result,
         metadata=metadata,
-        filter_decision=filter_decision,
+        filter_decision=cast(dict[str, Any] | None, filter_decision),
         contamination_exposure=contamination_exposure,
         bad_memory_uptake_label=_bad_memory_uptake_label(arm, contamination_exposure),
         repeated_failure_label=repeated_failure_tracker.label(
@@ -471,10 +771,141 @@ def _faithful_result_trial(
         recovery_after_filter_label="not_applicable",
         memory_write_event=result.get("memory_write_event"),
         memory_after=result.get("memory_after", []),
-        latency_ms=None,
-        token_usage={},
+        latency_ms=telemetry["latency_ms"],
+        token_usage=telemetry["token_usage"],
+        retry_count=telemetry["retry_count"],
         method_calls=method_calls,
+        answer_call_id=answer_call_id,
+        schema_version=schema_version,
+        stage=stage,
+        status=status,
+        run_metadata_id=run_metadata_id,
+        trial_seq=strict_trial_seq,
+        event_seq=0 if run_metadata is not None else None,
     )
+
+
+def _failed_faithful_trial(
+    *,
+    metadata: RunMetadata,
+    trial_id: str,
+    trial_seq: int,
+    task: Any,
+    baseline: str,
+    arm: str,
+    model: str,
+    method_calls: list[Any],
+    call_events: list[CallEvent],
+    memory_before: list[dict[str, Any]],
+    memory_after: list[dict[str, Any]],
+    filter_decision: FilterTelemetry | None,
+    failure_id: str,
+    error_type: str,
+) -> TrialLog:
+    if not method_calls:
+        raise RuntimeError("failed faithful trial has no provider call")
+    answer_stages = {
+        "no_memory": {"no_memory_generate"},
+        "retrieval_rag": {"rag_generate"},
+        "full_history": {"full_history_generate"},
+        "reflexion_style": {"reflexion_generate"},
+        "bot_style": {"bot_instantiate_solve"},
+        "dynamic_cheatsheet_optional": {"dynamic_cheatsheet_generate"},
+        "dynamic_cheatsheet_rs_optional": {"dc_rs_generate"},
+    }
+    answer_call = next(
+        (call for call in reversed(method_calls) if call.stage in answer_stages[baseline]), None
+    )
+    if answer_call is None:
+        raise RuntimeError("failed faithful trial has no answer-stage provider call")
+    if not isinstance(answer_call.call_id, str):
+        raise RuntimeError("failed faithful trial has no answer call id")
+    answer_call_id = answer_call.call_id
+    exposure = compute_exposure_from_spans(
+        answer_call_id,
+        answer_call.source_spans,
+        cast(Literal["clean", "contaminated", "contaminated_filter"], arm),
+    )
+    telemetry = summarize_calls(call_events)
+    return TrialLog(
+        trial_id=trial_id,
+        run_id=metadata.run_id,
+        task_name=task.task_name,
+        sample_id=task.sample_id,
+        baseline=baseline,
+        arm=cast(Literal["clean", "contaminated", "contaminated_filter"], arm),
+        backbone=model,
+        input=task.input,
+        gold_or_verifier_spec=task.verifier_spec,
+        prompt_messages=answer_call.messages,
+        memory_before=memory_before,
+        retrieved_memory=[],
+        retrieved_scores=[],
+        filter_decision=cast(dict[str, Any] | None, filter_decision),
+        raw_response=None,
+        parsed_answer=None,
+        verifier_result=None,
+        metadata={},
+        memory_write_event=None,
+        memory_after=memory_after,
+        method_calls=method_calls,
+        contamination_exposure=exposure,
+        bad_memory_uptake_label="not_evaluable" if arm != "clean" else "not_applicable",
+        repeated_failure_label="not_applicable",
+        recovery_after_filter_label="not_applicable",
+        latency_ms=telemetry["latency_ms"],
+        token_usage=telemetry["token_usage"],
+        retry_count=telemetry["retry_count"],
+        error_type=error_type,
+        schema_version=LOGGING_V1,
+        stage=metadata.stage,
+        status="failed",
+        run_metadata_id=metadata.run_metadata_id,
+        trial_seq=trial_seq,
+        event_seq=0,
+        answer_call_id=answer_call_id,
+        failure_id=failure_id,
+    )
+
+
+def _method_calls_from_events(call_events: list[CallEvent]) -> list[MethodCall]:
+    return [
+        MethodCall(
+            call_id=event.call_id,
+            stage=event.method_stage,
+            messages=event.messages,
+            raw_response=event.response_text,
+            model=event.model,
+            temperature=event.decoding_params.get("temperature"),
+            top_p=event.decoding_params.get("top_p"),
+            max_tokens=event.decoding_params.get("max_tokens"),
+            latency_ms=event.latency_ms,
+            token_usage=event.token_usage,
+            retry_count=event.retry_count,
+            error_type=event.error_type,
+            source_spans=event.source_spans,
+        )
+        for event in call_events
+    ]
+
+
+def _snapshot_memory_entries(snapshot: list[dict[str, Any]]) -> list[MemoryEntry]:
+    entries: list[MemoryEntry] = []
+    for entry in snapshot:
+        if "memory_type" in entry:
+            entries.append(MemoryEntry.model_validate(entry))
+            continue
+        entries.append(
+            MemoryEntry(
+                entry_id=entry["entry_id"],
+                content=entry["content"],
+                memory_type="thought_template",
+                clean_or_contaminated="clean",
+                source_trial_id=entry.get("source_trial_id"),
+                metadata=entry.get("metadata", {}),
+            )
+        )
+    return entries
 
 
 class _RepeatedFailureTracker:
@@ -508,43 +939,55 @@ def _run_faithful_config(
     trials_path: Path,
     run_started_at: str,
     repeated_failure_tracker: _RepeatedFailureTracker,
+    run_metadata: RunMetadata | None = None,
+    run_dir: Path | None = None,
 ) -> None:
-    corpus_records = load_corpus(Path(_corpus_path(config)))
-    needs_embedding = any(
-        baseline in {"retrieval_rag", "bot_style", "dynamic_cheatsheet_rs_optional"}
-        for baseline in config["baselines"]
-    )
-    needs_bot = "bot_style" in config["baselines"]
-    embedding_provider: EmbeddingProvider | None = None
-    cache_dir: Path | None = None
-    if needs_embedding:
-        embedding_provider = _embedding_provider(config)
-        cache_dir = Path(config["embedding"].get("cache_path", "data/embedding_cache")) / run_id
+    writer: RunLogWriter | None = None
+    trial_file = None
+    if run_metadata is not None:
+        if run_dir is None:
+            raise ValueError("strict faithful run requires final run directory")
+        writer = RunLogWriter(run_dir, run_metadata)
+    else:
+        trials_path.parent.mkdir(parents=True, exist_ok=True)
+        trial_file = trials_path.open("w", encoding="utf-8")
 
-    run_state: RunState | None = None
-    bot_runtime: BotRuntime | None = None
-    bot_buffers: dict[BotBufferIdentity, list[MemoryEntry]] | None = None
-    if needs_bot:
-        run_state = RunState(
-            run_id,
-            config_hash=_config_hash(config),
-            evaluation_sample_ids=[
-                row["sample_id"]
-                for task_config in config["tasks"]
-                for row in _load_jsonl(Path(task_config["sample_path"]), task_config.get("limit"))
-            ],
+    try:
+        corpus_records = load_corpus(Path(_corpus_path(config)))
+        needs_embedding = any(
+            baseline in {"retrieval_rag", "bot_style", "dynamic_cheatsheet_rs_optional"}
+            for baseline in config["baselines"]
         )
-        bot_runtime = BotRuntime()
-        bot_buffers = {}
+        needs_bot = "bot_style" in config["baselines"]
+        embedding_provider: EmbeddingProvider | None = None
+        cache_dir: Path | None = None
+        if needs_embedding:
+            embedding_provider = _embedding_provider(config)
+            cache_dir = Path(config["embedding"].get("cache_path", "data/embedding_cache")) / run_id
 
-    transcript_states: dict[tuple[str, ...], list[MemoryEntry]] = {}
-    reflection_states: dict[tuple[str, ...], list[MemoryEntry]] = {}
-    cheatsheet_states: dict[tuple[str, ...], list[MemoryEntry]] = {}
-    dc_rs_states: dict[tuple[str, ...], list[MemoryEntry]] = {}
-    filter_decisions: dict[tuple[str, ...], dict[str, Any] | None] = {}
+        run_state: RunState | None = None
+        bot_runtime: BotRuntime | None = None
+        bot_buffers: dict[BotBufferIdentity, list[MemoryEntry]] | None = None
+        if needs_bot:
+            run_state = RunState(
+                run_id,
+                config_hash=_config_hash(config),
+                evaluation_sample_ids=[
+                    row["sample_id"]
+                    for task_config in config["tasks"]
+                    for row in _load_jsonl(Path(task_config["sample_path"]), task_config.get("limit"))
+                ],
+            )
+            bot_runtime = BotRuntime()
+            bot_buffers = {}
 
-    with trials_path.open("w", encoding="utf-8") as f:
+        transcript_states: dict[tuple[str, ...], list[MemoryEntry]] = {}
+        reflection_states: dict[tuple[str, ...], list[MemoryEntry]] = {}
+        cheatsheet_states: dict[tuple[str, ...], list[MemoryEntry]] = {}
+        dc_rs_states: dict[tuple[str, ...], list[MemoryEntry]] = {}
+        filter_decisions: dict[tuple[str, ...], FilterTelemetry | None] = {}
         trial_order = 0
+
         for task_config in config["tasks"]:
             task_name = task_config["name"]
             if task_name not in TASK_DISPATCH:
@@ -559,7 +1002,7 @@ def _run_faithful_config(
                     if baseline not in FAITHFUL_BASELINES:
                         raise SystemExit(f"unsupported faithful baseline: {baseline}")
                     baseline_records = _records_for_baseline(corpus_records, task_name, baseline)
-                    for arm in config["arms"]:
+                    for arm in _valid_arms_for_baseline(baseline, config["arms"]):
                         injection_entries: list[MemoryEntry] = []
                         if baseline == "retrieval_rag":
                             memory_entries, filter_decision = build_arm_corpus(
@@ -571,154 +1014,227 @@ def _run_faithful_config(
                                 baseline_records, task_name, arm
                             )
                             memory = MemoryState(entries=[])
+
                         for model in config["models"]:
-                            trial_client = _trial_client_for_sample(
-                                client, responses_by_sample, task.sample_id, replay_responses
+                            trial_id = _trial_id(run_id, task, baseline, arm, model)
+                            call_events: list[CallEvent] = []
+                            strict_context = (
+                                _event_context(run_metadata, trial_id, trial_order)
+                                if run_metadata is not None
+                                else {}
                             )
-                            if baseline == "retrieval_rag":
-                                assert embedding_provider is not None
-                                assert cache_dir is not None
-                                rag_cache_dir = cache_dir / task_name / arm
-                                result = RetrievalRagPolicy().run(
-                                    task,
-                                    memory,
-                                    client=trial_client,
-                                    model=model,
-                                    config={**config.get("replay", {}), "sample_id": task.sample_id},
-                                    top_k=config["embedding"].get("top_k"),
-                                    embedding_provider=embedding_provider,
-                                    cache_dir=rag_cache_dir,
-                                )
-                                verifier_result = task_handler["verify"](result["parsed_answer"], task)
-                            elif baseline == "bot_style":
-                                assert bot_runtime is not None
-                                assert run_state is not None
-                                assert bot_buffers is not None
-                                identity = BotBufferIdentity(
-                                    run_id, task.task_name, baseline, arm, model
-                                )
-                                if identity not in bot_buffers:
-                                    if arm == "clean":
-                                        snapshot = run_state.snapshot_clean_warmup(identity)
-                                        bot_buffers[identity] = [
-                                            _template_to_entry(entry) for entry in snapshot.entries
-                                        ]
-                                    else:
-                                        injected_templates = [
-                                            _entry_to_template(entry) for entry in injection_entries
-                                        ]
-                                        bot_buffers[identity] = [
-                                            _template_to_entry(entry)
-                                            for entry in run_state.clone_for_arm(
-                                                identity, injected_templates
-                                            )
-                                        ]
-                                result = bot_runtime.run(
-                                    identity=identity,
-                                    task=task,
-                                    buffer_snapshot=bot_buffers[identity],
-                                    client=trial_client,
-                                    model=model,
-                                    config={
-                                        **config.get("replay", {}),
-                                        "sample_id": task.sample_id,
-                                        "embedding_provider": embedding_provider,
-                                    },
-                                    verifier=lambda response, task=task: task_handler["verify"](
-                                        _parse_answer(response), task
-                                    ),
-                                )
-                                verifier_result = result["verifier_result"]
-                                event = result.get("memory_write_event")
-                                if event and event.get("status") == "accepted":
-                                    original_entry_id = str(event["new_entry_id"])
-                                    scoped_entry_id = _scoped_bot_entry_id(original_entry_id, identity)
-                                    event["new_entry_id"] = scoped_entry_id
-                                    for entry in result["memory_after"]:
-                                        if entry.get("entry_id") == original_entry_id:
-                                            entry["entry_id"] = scoped_entry_id
-                                    event["sample_id"] = ":".join(
-                                        [
-                                            run_id,
-                                            task.task_name,
-                                            task.sample_id,
-                                            baseline,
-                                            arm,
-                                            model,
-                                        ]
+
+                            def record_call(event: CallEvent) -> None:
+                                if writer is not None:
+                                    call_events.append(writer.write_call(event))
+
+                            policy_context = {
+                                **config.get("replay", {}),
+                                "sample_id": task.sample_id,
+                                "run_id": run_id,
+                                "baseline": baseline,
+                                "arm": arm,
+                                "model": model,
+                                "_logging_trial_context": strict_context,
+                                "_logging_event_callback": record_call if writer is not None else None,
+                            }
+                            trial_memory_before: list[dict[str, Any]] | None = None
+                            if writer is not None and filter_decision is not None:
+                                writer.write_filter(
+                                    _filter_event(
+                                        writer.run_metadata,
+                                        trial_id,
+                                        trial_order,
+                                        baseline,
+                                        arm,
+                                        filter_decision,
+                                        "apply",
                                     )
-                                    run_state.register_warmup_result(identity, event)
-                                    bot_buffers[identity] = [
-                                        MemoryEntry(
-                                            entry_id=entry["entry_id"],
-                                            content=entry["content"],
-                                            memory_type="thought_template",
-                                            clean_or_contaminated="clean",
-                                            source_trial_id=entry.get("source_trial_id"),
-                                            metadata=entry.get("metadata", {}),
-                                        )
-                                        for entry in result["memory_after"]
+                                )
+
+                            try:
+                                trial_client = _trial_client_for_sample(
+                                    client, responses_by_sample, task.sample_id, replay_responses
+                                )
+                                if baseline == "retrieval_rag":
+                                    assert embedding_provider is not None
+                                    assert cache_dir is not None
+                                    trial_memory_before = [entry.model_dump() for entry in memory.entries]
+                                    result = RetrievalRagPolicy().run(
+                                        task,
+                                        memory,
+                                        client=trial_client,
+                                        model=model,
+                                        config=policy_context,
+                                        top_k=config["embedding"].get("top_k"),
+                                        embedding_provider=embedding_provider,
+                                        cache_dir=cache_dir / task_name / arm,
+                                    )
+                                    verifier_result = task_handler["verify"](result["parsed_answer"], task)
+                                elif baseline == "no_memory":
+                                    trial_memory_before = [entry.model_dump() for entry in memory.entries]
+                                    result = NoMemoryPolicy().run(
+                                        task,
+                                        memory,
+                                        client=trial_client,
+                                        model=model,
+                                        config=policy_context,
+                                    )
+                                    verifier_result = task_handler["verify"](result["parsed_answer"], task)
+                                elif baseline == "bot_style":
+                                    assert bot_runtime is not None
+                                    assert run_state is not None
+                                    assert bot_buffers is not None
+                                    identity = BotBufferIdentity(
+                                        run_id, task.task_name, baseline, arm, model
+                                    )
+                                    if identity not in bot_buffers:
+                                        if arm == "clean":
+                                            snapshot = run_state.snapshot_clean_warmup(identity)
+                                            bot_buffers[identity] = [
+                                                _template_to_entry(entry) for entry in snapshot.entries
+                                            ]
+                                        else:
+                                            injected_templates = [
+                                                _entry_to_template(entry) for entry in injection_entries
+                                            ]
+                                            bot_buffers[identity] = [
+                                                _template_to_entry(entry)
+                                                for entry in run_state.clone_for_arm(
+                                                    identity, injected_templates
+                                                )
+                                            ]
+                                    trial_memory_before = [
+                                        entry.model_dump() for entry in bot_buffers[identity]
                                     ]
-                            else:
-                                identity = (run_id, task_name, baseline, arm, model)
-                                if baseline == "full_history":
-                                    state = transcript_states
-                                    policy = FullHistoryPolicy()
-                                elif baseline == "reflexion_style":
-                                    state = reflection_states
-                                    policy = ReflexionStylePolicy()
-                                elif baseline == "dynamic_cheatsheet_rs_optional":
-                                    state = dc_rs_states
-                                    if embedding_provider is not None and cache_dir is not None:
-                                        dc_embedding_provider = embedding_provider
-                                        dc_cache_dir = (
-                                            cache_dir / "dc_rs" / task_name / arm / model
+                                    result = bot_runtime.run(
+                                        identity=identity,
+                                        task=task,
+                                        buffer_snapshot=bot_buffers[identity],
+                                        client=trial_client,
+                                        model=model,
+                                        config={
+                                            **policy_context,
+                                            "embedding_provider": embedding_provider,
+                                        },
+                                        verifier=lambda response, task=task: task_handler["verify"](
+                                            _parse_answer(response), task
+                                        ),
+                                    )
+                                    verifier_result = result["verifier_result"]
+                                    event = result.get("memory_write_event")
+                                    if event and event.get("status") == "accepted":
+                                        original_entry_id = str(event["new_entry_id"])
+                                        scoped_entry_id = _scoped_bot_entry_id(original_entry_id, identity)
+                                        event["new_entry_id"] = scoped_entry_id
+                                        for entry in result["memory_after"]:
+                                            if entry.get("entry_id") == original_entry_id:
+                                                entry["entry_id"] = scoped_entry_id
+                                        event["sample_id"] = trial_id
+                                        run_state.register_warmup_result(identity, event)
+                                        bot_buffers[identity] = [
+                                            MemoryEntry(
+                                                entry_id=entry["entry_id"],
+                                                content=entry["content"],
+                                                memory_type="thought_template",
+                                                clean_or_contaminated="clean",
+                                                source_trial_id=entry.get("source_trial_id"),
+                                                metadata=entry.get("metadata", {}),
+                                            )
+                                            for entry in result["memory_after"]
+                                        ]
+                                else:
+                                    identity = (run_id, task_name, baseline, arm, model)
+                                    if baseline == "full_history":
+                                        state = transcript_states
+                                        policy = FullHistoryPolicy()
+                                    elif baseline == "reflexion_style":
+                                        state = reflection_states
+                                        policy = ReflexionStylePolicy()
+                                    elif baseline == "dynamic_cheatsheet_rs_optional":
+                                        state = dc_rs_states
+                                        policy = DynamicCheatsheetRetrievalSynthesisPolicy(
+                                            embedding_provider=(
+                                                embedding_provider
+                                                if embedding_provider is not None
+                                                else FakeEmbeddingProvider()
+                                            ),
+                                            cache_dir=(
+                                                cache_dir / "dc_rs" / task_name / arm / model
+                                                if cache_dir is not None
+                                                else None
+                                            ),
                                         )
                                     else:
-                                        dc_embedding_provider = FakeEmbeddingProvider()
-                                        dc_cache_dir = None
-                                    policy = DynamicCheatsheetRetrievalSynthesisPolicy(
-                                        embedding_provider=dc_embedding_provider,
-                                        cache_dir=dc_cache_dir,
+                                        state = cheatsheet_states
+                                        policy = DynamicCheatsheetOptionalPolicy()
+                                    if identity not in state:
+                                        entries, filter_decision = build_arm_corpus(
+                                            baseline_records, task_name, cast(Any, arm)
+                                        )
+                                        state[identity] = entries
+                                        filter_decisions[identity] = filter_decision
+                                    else:
+                                        filter_decision = filter_decisions[identity]
+                                    memory = MemoryState(entries=state[identity])
+                                    trial_memory_before = [entry.model_dump() for entry in memory.entries]
+                                    if baseline == "reflexion_style":
+                                        policy_context["max_attempts"] = config.get(
+                                            "reflexion", {}
+                                        ).get("max_attempts", 1)
+                                    result = policy.run(
+                                        task,
+                                        memory,
+                                        client=trial_client,
+                                        model=model,
+                                        config=policy_context,
+                                        verifier=lambda response, task: task_handler["verify"](
+                                            _parse_answer(response), task
+                                        ),
                                     )
-                                else:
-                                    state = cheatsheet_states
-                                    policy = DynamicCheatsheetOptionalPolicy()
-                                if identity not in state:
-                                    entries, filter_decision = build_arm_corpus(
-                                        baseline_records, task_name, cast(Any, arm)
+                                    verifier_result = result["verifier_result"]
+                                    state[identity] = [
+                                        MemoryEntry(**entry) for entry in result["memory_after"]
+                                    ]
+                            except Exception as exc:
+                                if writer is None:
+                                    raise
+                                if not call_events:
+                                    raise
+                                failure = writer.write_failure(
+                                    _failure_event(
+                                        writer.run_metadata,
+                                        trial_id,
+                                        trial_order,
+                                        call_events,
+                                        exc,
                                     )
-                                    state[identity] = entries
-                                    filter_decisions[identity] = filter_decision
-                                else:
-                                    filter_decision = filter_decisions[identity]
-                                memory = MemoryState(entries=state[identity])
-                                policy_config = {
-                                    **config.get("replay", {}),
-                                    "sample_id": task.sample_id,
-                                    "run_id": run_id,
-                                    "baseline": baseline,
-                                    "arm": arm,
-                                    "model": model,
-                                }
-                                if baseline == "reflexion_style":
-                                    policy_config["max_attempts"] = config.get(
-                                        "reflexion", {}
-                                    ).get("max_attempts", 1)
-                                result = policy.run(
-                                    task,
-                                    memory,
-                                    client=trial_client,
-                                    model=model,
-                                    config=policy_config,
-                                    verifier=lambda response, task: task_handler["verify"](
-                                        _parse_answer(response), task
-                                    ),
                                 )
-                                verifier_result = result["verifier_result"]
-                                state[identity] = [
-                                    MemoryEntry(**entry) for entry in result["memory_after"]
-                                ]
+                                writer.write_trial(
+                                    _failed_faithful_trial(
+                                        metadata=writer.run_metadata,
+                                        trial_id=trial_id,
+                                        trial_seq=trial_order,
+                                        task=task,
+                                        baseline=baseline,
+                                        arm=arm,
+                                        model=model,
+                                        method_calls=_method_calls_from_events(call_events),
+                                        call_events=call_events,
+                                        memory_before=(
+                                            trial_memory_before
+                                            if trial_memory_before is not None
+                                            else [entry.model_dump() for entry in memory.entries]
+                                        ),
+                                        memory_after=[entry.model_dump() for entry in memory.entries],
+                                        filter_decision=filter_decision,
+                                        failure_id=failure.failure_id,
+                                        error_type=type(exc).__name__,
+                                    )
+                                )
+                                trial_order += 1
+                                continue
+
                             trial = _faithful_result_trial(
                                 config=config,
                                 run_id=run_id,
@@ -732,18 +1248,71 @@ def _run_faithful_config(
                                 trial_order=trial_order,
                                 run_started_at=run_started_at,
                                 repeated_failure_tracker=repeated_failure_tracker,
+                                run_metadata=writer.run_metadata if writer is not None else None,
+                                call_events=call_events,
+                                trial_id=trial_id,
                             )
-                            f.write(trial.model_dump_json() + "\n")
+                            if writer is not None:
+                                answer_call = _answer_call(result["method_calls"], trial.answer_call_id or "")
+                                final_source_ids = [
+                                    source_id
+                                    for span in answer_call.source_spans
+                                    for source_id in (span.source_ids or [span.entry_id])
+                                ]
+                                if filter_decision is not None:
+                                    writer.write_filter(
+                                        _filter_event(
+                                            writer.run_metadata,
+                                            trial_id,
+                                            trial_order,
+                                            baseline,
+                                            arm,
+                                            filter_decision,
+                                            "outcome",
+                                            final_answer_source_ids=final_source_ids,
+                                            verdict=str(verifier_result.is_correct).lower(),
+                                        )
+                                    )
+                                memory_event = normalize_memory_event(
+                                    baseline,
+                                    trial_id,
+                                    _snapshot_memory_entries(result["memory_before"]),
+                                    _snapshot_memory_entries(result["memory_after"]),
+                                    result.get("memory_write_event"),
+                                )
+                                if memory_event is not None:
+                                    writer.write_memory(
+                                        memory_event.model_copy(
+                                            update=_event_context(
+                                                writer.run_metadata, trial_id, trial_order
+                                            )
+                                        )
+                                    )
+                                writer.write_trial(trial)
+                            else:
+                                assert trial_file is not None
+                                trial_file.write(trial.model_dump_json() + "\n")
                             trial_order += 1
+        if writer is not None:
+            writer.finalize()
+    except BaseException:
+        if writer is not None:
+            writer.finalize(status="failed")
+        raise
+    finally:
+        if trial_file is not None:
+            trial_file.close()
 
 
 def run_config(
     config: dict[str, Any], run_id: str, _client_override: LLMClient | None = None
 ) -> Path:
     _validate_run_id(run_id)
+    _validate_run_config(config)
     output_dir = Path(config.get("logging", {}).get("output_dir", "runs"))
     run_dir = output_dir / run_id
-    run_dir.mkdir(parents=True, exist_ok=True)
+    if run_dir.exists():
+        raise FileExistsError(f"final run path already exists: {run_dir}")
     trials_path = run_dir / "trials.jsonl"
 
     replay_config = config.get("replay", {})
@@ -767,6 +1336,7 @@ def run_config(
     run_started_at = datetime.now(timezone.utc).isoformat()
     repeated_failure_tracker = _RepeatedFailureTracker()
     if _is_faithful_config(config):
+        run_metadata = _run_metadata(config, run_id, run_started_at) if _is_strict_config(config) else None
         _run_faithful_config(
             config,
             run_id,
@@ -776,9 +1346,12 @@ def run_config(
             trials_path,
             run_started_at,
             repeated_failure_tracker,
+            run_metadata=run_metadata,
+            run_dir=run_dir if run_metadata is not None else None,
         )
         print(f"wrote replay trials: {trials_path}")
         return run_dir
+    run_dir.mkdir(parents=True)
     with trials_path.open("w", encoding="utf-8") as f:
         trial_order = 0
         for task_config in config["tasks"]:
@@ -795,7 +1368,7 @@ def run_config(
                     if baseline not in BASELINE_POLICIES:
                         raise SystemExit(f"unsupported baseline: {baseline}")
                     policy = BASELINE_POLICIES[baseline]()
-                    for arm in config["arms"]:
+                    for arm in _valid_arms_for_baseline(baseline, config["arms"]):
                         memory_entries, filter_decision = _memory_entries_for_arm(arm, baseline)
                         memory = MemoryState(entries=memory_entries)
                         memory_before = [entry.model_dump() for entry in memory.entries]
@@ -814,12 +1387,22 @@ def run_config(
                                 if task.sample_id in responses_by_sample
                                 else client
                             )
-                            response = trial_client.chat(prompt_messages, model=model, config={})
+                            trial_id = _trial_id(run_id, task, baseline, arm, model)
+                            recorder = MethodCallRecorder(
+                                trial_client,
+                                trial_context={"trial_id": trial_id},
+                            )
+                            response = recorder.chat(
+                                prompt_messages,
+                                model=model,
+                                config={
+                                    **config.get("replay", {}),
+                                    "sample_id": task.sample_id,
+                                    "method_stage": "legacy_generate",
+                                },
+                            )
                             parsed_answer = _parse_answer(response.content)
                             verifier_result = task_handler["verify"](parsed_answer, task)
-                            trial_id = ":".join(
-                                [run_id, task.task_name, task.sample_id, baseline, arm, model]
-                            )
                             memory_write_event = (
                                 _bot_memory_writeback(
                                     trial_id,
@@ -832,13 +1415,14 @@ def run_config(
                                 if baseline == "bot_style"
                                 else None
                             )
+                            arm_literal = cast(Literal["clean", "contaminated", "contaminated_filter"], arm)
                             trial = TrialLog(
                                 trial_id=trial_id,
                                 run_id=run_id,
                                 task_name=task.task_name,
                                 sample_id=task.sample_id,
                                 baseline=baseline,
-                                arm=arm,
+                                arm=arm_literal,
                                 backbone=model,
                                 input=task.input,
                                 gold_or_verifier_spec=task.verifier_spec,
@@ -850,7 +1434,7 @@ def run_config(
                                 parsed_answer=verifier_result.parsed_answer,
                                 verifier_result=verifier_result,
                                 metadata=_trial_metadata(config, model, trial_order, run_started_at),
-                                filter_decision=filter_decision,
+                                filter_decision=cast(dict[str, Any] | None, filter_decision),
                                 contamination_exposure=contamination_exposure,
                                 bad_memory_uptake_label=_bad_memory_uptake_label(
                                     arm, contamination_exposure
@@ -868,6 +1452,8 @@ def run_config(
                                 memory_after=[entry.model_dump() for entry in memory.entries],
                                 latency_ms=response.latency_ms,
                                 token_usage=response.token_usage,
+                                retry_count=0,
+                                method_calls=recorder.get_records(),
                             )
                             f.write(trial.model_dump_json() + "\n")
                             trial_order += 1
@@ -888,6 +1474,8 @@ def main() -> None:
 
     aggregate = sub.add_parser("aggregate")
     aggregate.add_argument("run_dir", type=Path)
+    aggregate.add_argument("--stage", type=str, default=None)
+    aggregate.add_argument("--allow-legacy", action="store_true")
 
     args = parser.parse_args()
 
@@ -898,7 +1486,15 @@ def main() -> None:
     elif args.command == "aggregate":
         if not args.run_dir.exists():
             raise SystemExit(f"run dir not found: {args.run_dir}")
-        print(json.dumps(aggregate_run(args.run_dir)))
+        print(
+            json.dumps(
+                aggregate_run(
+                    args.run_dir,
+                    stage=args.stage,
+                    allow_legacy=args.allow_legacy,
+                )
+            )
+        )
 
 
 if __name__ == "__main__":
