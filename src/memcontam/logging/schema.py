@@ -3,12 +3,13 @@ from __future__ import annotations
 import hashlib
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from memcontam.memory.stores import MemoryEntry
 
 
 LOGGING_V1 = "logging_v1"
+LOGGING_V2 = "logging_v2"
 
 BadMemoryUptakeLabel = Literal[
     "not_applicable", "not_evaluable", "no_uptake_detected", "uptake_detected"
@@ -17,6 +18,68 @@ RepeatedFailureLabel = Literal["not_applicable", "first_failure", "repeated_fail
 RecoveryAfterFilterLabel = Literal["not_applicable", "recovered", "not_recovered"]
 ExposureStatus = Literal["supported", "not_applicable", "not_evaluable"]
 ExposureMode = Literal["clean", "final_prompt", "not_in_final_prompt", "not_evaluable"]
+EvaluationRegime = Literal["online", "frozen"]
+MemoryUpdateMode = Literal["enabled", "disabled", "not_applicable"]
+ContaminationClass = Literal["clean", "injected", "derived", "natural"]
+LineageStatus = Literal["exact", "approximate", "unavailable"]
+LineageBasis = Literal[
+    "seed", "recorded_parent", "recorded_source", "version_edge", "signature", "none"
+]
+
+
+class EvaluationLawSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    evaluation_law_id: str
+    regime: EvaluationRegime
+    task_law_id: str
+    inference_law_id: str
+    checkpoint_policy_id: str | None = None
+
+
+class TargetContaminationSetSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    target_set_id: str
+    definition_version: str
+    included_classes: list[ContaminationClass]
+    require_exact_lineage: bool
+
+
+class CheckpointPolicySpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    policy_id: str | None = None
+    interval: int | None = Field(default=None, gt=0)
+    artifact_root: str | None = None
+
+
+class CheckpointRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    checkpoint_id: str
+    checkpoint_trial_index: int = Field(ge=0)
+    checkpoint_memory_hash: str
+    checkpoint_source_run_id: str
+    artifact_path: str | None = None
+
+
+class LineageEdge(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    child_entry_id: str
+    parent_entry_id: str
+    relation: str
+    lineage_status: LineageStatus
+    lineage_basis: LineageBasis
+    injected_root_ids: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_lineage_basis(self) -> LineageEdge:
+        if self.lineage_status == "exact" and self.lineage_basis == "signature":
+            raise ValueError("signature basis cannot claim exact lineage")
+        return self
 
 
 class RunMetadata(BaseModel):
@@ -37,17 +100,30 @@ class RunMetadata(BaseModel):
     sample_order_hash: str
     stage: str
     schema_version: str
+    contract_level: Literal["phase10", "phase11"] = "phase10"
+    evaluation_law: EvaluationLawSpec | None = None
+    target_contamination_set: TargetContaminationSetSpec | None = None
+    checkpoint_policy: CheckpointPolicySpec = Field(default_factory=CheckpointPolicySpec)
     prompt_version: str
     memory_policy_version: str
     contamination_catalog_version: str
     retry_policy_version: str
 
-    @field_validator("schema_version")
-    @classmethod
-    def _require_logging_v1(cls, value: str) -> str:
-        if value != LOGGING_V1:
-            raise ValueError(f"schema_version must be {LOGGING_V1}")
-        return value
+    @model_validator(mode="after")
+    def _validate_logging_contract(self) -> RunMetadata:
+        if self.schema_version == LOGGING_V1:
+            if self.contract_level != "phase10":
+                raise ValueError("logging_v1 requires contract_level=phase10")
+            return self
+        if self.schema_version == LOGGING_V2:
+            if self.contract_level != "phase11":
+                raise ValueError("logging_v2 requires contract_level=phase11")
+            if self.evaluation_law is None:
+                raise ValueError("logging_v2 requires evaluation_law")
+            if self.target_contamination_set is None:
+                raise ValueError("logging_v2 requires target_contamination_set")
+            return self
+        raise ValueError(f"schema_version must be {LOGGING_V1} or {LOGGING_V2}")
 
 
 class EventContext(BaseModel):
@@ -76,11 +152,22 @@ class PromptSourceSpan(BaseModel):
     version: str
     origin: str
     clean_or_contaminated: Literal["clean", "contaminated"]
+    contamination_class: ContaminationClass | None = None
+    injected_root_ids: list[str] = Field(default_factory=list)
+    lineage_status: LineageStatus | None = None
+    lineage_basis: LineageBasis | None = None
+    direct_parent_ids: list[str] = Field(default_factory=list)
+    target_set_id: str | None = None
+    is_target_contamination: bool | None = None
 
     @model_validator(mode="after")
     def _require_nonempty_span(self) -> PromptSourceSpan:
         if self.end <= self.start:
             raise ValueError("source span end must be greater than start")
+        _validate_phase11_lineage_fields(self)
+        _validate_contamination_compatibility(
+            self.clean_or_contaminated, self.contamination_class
+        )
         return self
 
 
@@ -151,6 +238,7 @@ class MemoryEvent(EventContext):
     memory_version: str | None
     status: str
     created_at: str
+    lineage_edges: list[LineageEdge] = Field(default_factory=list)
 
 
 class MemoryItemLog(BaseModel):
@@ -167,6 +255,21 @@ class MemoryItemLog(BaseModel):
     version: str
     creation_origin: str
     metadata: dict[str, Any]
+    contamination_class: ContaminationClass | None = None
+    injected_root_ids: list[str] = Field(default_factory=list)
+    lineage_status: LineageStatus | None = None
+    lineage_basis: LineageBasis | None = None
+    direct_parent_ids: list[str] = Field(default_factory=list)
+    target_set_id: str | None = None
+    is_target_contamination: bool | None = None
+
+    @model_validator(mode="after")
+    def _validate_phase11_lineage(self) -> MemoryItemLog:
+        _validate_phase11_lineage_fields(self)
+        _validate_contamination_compatibility(
+            self.clean_or_contaminated, self.contamination_class
+        )
+        return self
 
     @classmethod
     def from_memory_entry(cls, entry: MemoryEntry) -> MemoryItemLog:
@@ -225,6 +328,10 @@ class ContaminationExposure(BaseModel):
     exposed_source_ids: list[str] = Field(default_factory=list)
     exposure_mode: ExposureMode = "clean"
     reason: str = "clean arm has no contaminated memory sources"
+    target_set_id: str | None = None
+    exposed_entry_ids: list[str] = Field(default_factory=list)
+    exposed_injected_root_ids: list[str] = Field(default_factory=list)
+    evidence_lineage_status: LineageStatus | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -340,7 +447,7 @@ class TrialLog(BaseModel):
     cost_estimate: float | None = None
     retry_count: int = 0
     error_type: str | None = None
-    schema_version: Literal["legacy", "logging_v1"] = "legacy"
+    schema_version: Literal["legacy", "logging_v1", "logging_v2"] = "legacy"
     stage: str = "legacy"
     status: Literal["legacy", "succeeded", "failed"] = "legacy"
     run_metadata_id: str | None = None
@@ -348,6 +455,13 @@ class TrialLog(BaseModel):
     event_seq: int | None = Field(default=None, ge=0)
     answer_call_id: str | None = None
     failure_id: str | None = None
+    evaluation_law_id: str | None = None
+    target_set_id: str | None = None
+    memory_update_mode: MemoryUpdateMode | None = None
+    trajectory_pair_id: str | None = None
+    checkpoint_index: int | None = Field(default=None, ge=0)
+    pair_id: str | None = None
+    checkpoint_ref: CheckpointRef | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -356,7 +470,7 @@ class TrialLog(BaseModel):
             return value
 
         data = dict(value)
-        if data.get("schema_version") != LOGGING_V1:
+        if data.get("schema_version") not in {LOGGING_V1, LOGGING_V2}:
             data["schema_version"] = "legacy"
             data["stage"] = "legacy"
             data["status"] = "legacy"
@@ -369,20 +483,21 @@ class TrialLog(BaseModel):
                 raise ValueError("legacy rows cannot report supported exposure without answer-call source spans")
             return self
 
+        version = self.schema_version
         if not self.stage or self.stage == "legacy":
-            raise ValueError("logging_v1 requires stage")
+            raise ValueError(f"{version} requires stage")
         if self.status not in {"succeeded", "failed"}:
-            raise ValueError("logging_v1 requires status")
+            raise ValueError(f"{version} requires status")
         if not self.run_metadata_id:
-            raise ValueError("logging_v1 requires run_metadata_id")
+            raise ValueError(f"{version} requires run_metadata_id")
         if self.trial_seq is None:
-            raise ValueError("logging_v1 requires trial_seq")
+            raise ValueError(f"{version} requires trial_seq")
         if self.event_seq is None:
-            raise ValueError("logging_v1 requires final event_seq")
+            raise ValueError(f"{version} requires final event_seq")
         if not self.answer_call_id:
-            raise ValueError("logging_v1 requires answer_call_id")
+            raise ValueError(f"{version} requires answer_call_id")
         if not self.prompt_messages:
-            raise ValueError("logging_v1 requires exact answer prompt_messages")
+            raise ValueError(f"{version} requires exact answer prompt_messages")
 
         answer_call = next((call for call in self.method_calls if call.call_id == self.answer_call_id), None)
         if answer_call is None:
@@ -410,4 +525,75 @@ class TrialLog(BaseModel):
             }
             if exposure.is_exposed and not set(exposure.exposed_source_ids).issubset(span_source_ids):
                 raise ValueError("exposed source IDs must be present in final-call source spans")
+        if self.schema_version == LOGGING_V2:
+            self._validate_logging_v2_contract(answer_call)
         return self
+
+    def _validate_logging_v2_contract(self, answer_call: MethodCall) -> None:
+        required = {
+            "evaluation_law_id": self.evaluation_law_id,
+            "target_set_id": self.target_set_id,
+            "memory_update_mode": self.memory_update_mode,
+            "trajectory_pair_id": self.trajectory_pair_id,
+            "pair_id": self.pair_id,
+        }
+        for field_name, value in required.items():
+            if value is None or value == "":
+                raise ValueError(f"logging_v2 requires {field_name}")
+        if self.contamination_exposure.target_set_id != self.target_set_id:
+            raise ValueError("logging_v2 contamination exposure must reference target_set_id")
+        if self.contamination_exposure.status == "supported":
+            if self.contamination_exposure.evidence_lineage_status is None:
+                raise ValueError("logging_v2 supported exposure requires evidence_lineage_status")
+            if self.contamination_exposure.is_exposed and not self.contamination_exposure.exposed_entry_ids:
+                raise ValueError("logging_v2 exposed evidence requires exposed_entry_ids")
+        for span in answer_call.source_spans:
+            for field_name in (
+                "contamination_class",
+                "lineage_status",
+                "lineage_basis",
+                "target_set_id",
+                "is_target_contamination",
+            ):
+                if getattr(span, field_name) is None:
+                    raise ValueError(f"logging_v2 source spans require {field_name}")
+            if span.target_set_id != self.target_set_id:
+                raise ValueError("logging_v2 source span target_set_id must match trial target_set_id")
+        writing_baselines = {
+            "full_history",
+            "reflexion_style",
+            "bot_style",
+            "dynamic_cheatsheet_optional",
+            "dynamic_cheatsheet_rs_optional",
+        }
+        if self.memory_update_mode == "enabled":
+            if self.checkpoint_ref is not None:
+                raise ValueError("online logging_v2 trial must not include checkpoint_ref")
+        elif self.memory_update_mode == "disabled":
+            if self.baseline in writing_baselines:
+                raise ValueError("frozen logging_v2 rejects memory-writing baselines")
+            if self.checkpoint_ref is None:
+                raise ValueError("frozen logging_v2 trial requires checkpoint_ref")
+        elif self.checkpoint_ref is not None:
+            raise ValueError("not_applicable memory_update_mode must not include checkpoint_ref")
+
+
+def _validate_phase11_lineage_fields(value: Any) -> None:
+    if value.lineage_status == "exact" and value.lineage_basis == "signature":
+        raise ValueError("signature basis cannot claim exact lineage")
+    if value.contamination_class == "derived" and value.lineage_status == "exact":
+        if not value.direct_parent_ids:
+            raise ValueError("exact derived lineage requires direct_parent_ids")
+        if not value.injected_root_ids:
+            raise ValueError("exact derived lineage requires injected_root_ids")
+
+
+def _validate_contamination_compatibility(
+    clean_or_contaminated: str, contamination_class: ContaminationClass | None
+) -> None:
+    if contamination_class is None:
+        return
+    if clean_or_contaminated == "clean" and contamination_class != "clean":
+        raise ValueError("clean_or_contaminated must agree with contamination_class")
+    if clean_or_contaminated == "contaminated" and contamination_class == "clean":
+        raise ValueError("clean_or_contaminated must agree with contamination_class")

@@ -6,11 +6,14 @@ from pydantic import ValidationError
 from memcontam.clients.replay import ReplayClient
 from memcontam.logging.schema import (
     CallEvent,
+    CheckpointRef,
     ContaminationExposure,
     EventContext,
     FailureEvent,
     FilterEvent,
+    LineageEdge,
     LOGGING_V1,
+    LOGGING_V2,
     MemoryEvent,
     MemoryItemLog,
     MethodCall,
@@ -34,6 +37,10 @@ EXPOSURE_KEYS = {
     "exposed_source_ids",
     "exposure_mode",
     "reason",
+    "target_set_id",
+    "exposed_entry_ids",
+    "exposed_injected_root_ids",
+    "evidence_lineage_status",
 }
 
 
@@ -597,6 +604,13 @@ def test_native_memory_baseline_trial_log_conforms_to_schema(
         "event_seq",
         "answer_call_id",
         "failure_id",
+        "evaluation_law_id",
+        "target_set_id",
+        "memory_update_mode",
+        "trajectory_pair_id",
+        "checkpoint_index",
+        "pair_id",
+        "checkpoint_ref",
     }
     assert set(log.model_dump().keys()) == expected_top_keys
     assert set(log.contamination_exposure.model_dump().keys()) == EXPOSURE_KEYS
@@ -875,6 +889,9 @@ def test_typed_event_models_share_join_context() -> None:
     assert failure.origin == "provider_call"
     assert filter_event.removed_source_ids == ["memory-1"]
     assert memory_event.new_entry_ids == ["memory-1"]
+    assert memory_event.lineage_edges == []
+    with pytest.raises(ValidationError, match="lineage_edges"):
+        CallEvent.model_validate({**call.model_dump(), "lineage_edges": []})
     with pytest.raises(ValidationError):
         FailureEvent.model_validate({**failure.model_dump(), "exception_message": "secret"})
 
@@ -906,6 +923,165 @@ def test_run_metadata_is_self_contained_and_versioned() -> None:
     assert metadata.model_snapshots == {"replay-model": "fixture-v1"}
 
 
+def test_logging_v2_run_metadata_requires_phase11_law_and_target_set() -> None:
+    metadata = _logging_v2_run_metadata()
+
+    assert metadata.schema_version == LOGGING_V2
+    assert metadata.contract_level == "phase11"
+    assert metadata.evaluation_law is not None
+    assert metadata.evaluation_law.evaluation_law_id == "law-online-v1"
+    assert metadata.target_contamination_set is not None
+    assert metadata.target_contamination_set.target_set_id == "target-set-v1"
+
+    with pytest.raises(ValidationError, match="evaluation_law"):
+        _logging_v2_run_metadata(evaluation_law=None)
+    with pytest.raises(ValidationError, match="target_contamination_set"):
+        _logging_v2_run_metadata(target_contamination_set=None)
+
+
+def test_logging_v2_trial_round_trips_with_exact_lineage_and_target_exposure() -> None:
+    trial = TrialLog.model_validate(_logging_v2_trial_payload())
+
+    assert trial.schema_version == LOGGING_V2
+    assert trial.evaluation_law_id == "law-online-v1"
+    assert trial.target_set_id == "target-set-v1"
+    assert trial.pair_id == "pair-sample-1"
+    assert trial.method_calls[0].source_spans[0].contamination_class == "derived"
+    assert trial.contamination_exposure.target_set_id == "target-set-v1"
+    assert trial.contamination_exposure.exposed_injected_root_ids == ["root-1"]
+    assert "ancestor_ids" not in trial.model_dump()
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["evaluation_law_id", "target_set_id", "memory_update_mode", "trajectory_pair_id", "pair_id"],
+)
+def test_logging_v2_trial_rejects_missing_phase11_fields(field: str) -> None:
+    payload = _logging_v2_trial_payload()
+    del payload[field]
+
+    with pytest.raises(ValidationError, match=field):
+        TrialLog.model_validate(payload)
+
+
+def test_logging_v2_trial_rejects_missing_required_lineage_fields() -> None:
+    payload = _logging_v2_trial_payload()
+    del payload["method_calls"][0]["source_spans"][0]["lineage_status"]
+
+    with pytest.raises(ValidationError, match="lineage_status"):
+        TrialLog.model_validate(payload)
+
+
+@pytest.mark.parametrize("field", ["direct_parent_ids", "injected_root_ids"])
+def test_exact_derived_span_and_item_require_direct_parents_and_injected_roots(field: str) -> None:
+    span_payload = _logging_v2_span_payload()
+    span_payload[field] = []
+    with pytest.raises(ValidationError, match=field):
+        PromptSourceSpan.model_validate(span_payload)
+
+    item_payload = _logging_v2_memory_item_payload()
+    item_payload[field] = []
+    with pytest.raises(ValidationError, match=field):
+        MemoryItemLog.model_validate(item_payload)
+
+
+def test_signature_basis_cannot_claim_exact_lineage() -> None:
+    with pytest.raises(ValidationError, match="signature"):
+        PromptSourceSpan.model_validate(
+            {**_logging_v2_span_payload(), "lineage_status": "exact", "lineage_basis": "signature"}
+        )
+    with pytest.raises(ValidationError, match="signature"):
+        MemoryItemLog.model_validate(
+            {**_logging_v2_memory_item_payload(), "lineage_status": "exact", "lineage_basis": "signature"}
+        )
+
+
+def test_lineage_edge_uses_explicit_direct_entry_edge_fields() -> None:
+    edge = LineageEdge.model_validate(
+        {
+            "child_entry_id": "memory-derived-1",
+            "parent_entry_id": "memory-root-1",
+            "relation": "derived_from",
+            "lineage_status": "exact",
+            "lineage_basis": "recorded_parent",
+            "injected_root_ids": ["root-1"],
+        }
+    )
+
+    assert edge.child_entry_id == "memory-derived-1"
+    assert edge.parent_entry_id == "memory-root-1"
+    with pytest.raises(ValidationError, match="child_id"):
+        LineageEdge.model_validate(
+            {
+                "child_id": "memory-derived-1",
+                "parent_id": "memory-root-1",
+                "lineage_status": "exact",
+                "lineage_basis": "recorded_parent",
+            }
+        )
+    with pytest.raises(ValidationError, match="signature"):
+        LineageEdge.model_validate(
+            {
+                "child_entry_id": "memory-derived-1",
+                "parent_entry_id": "memory-root-1",
+                "relation": "derived_from",
+                "lineage_status": "exact",
+                "lineage_basis": "signature",
+            }
+        )
+
+
+def test_checkpoint_ref_uses_phase11_checkpoint_identity() -> None:
+    checkpoint = CheckpointRef.model_validate(_checkpoint_ref_payload())
+
+    assert checkpoint.checkpoint_trial_index == 3
+    assert checkpoint.checkpoint_memory_hash == "sha256:checkpoint"
+    assert checkpoint.checkpoint_source_run_id == "run-v2"
+    with pytest.raises(ValidationError, match="checkpoint_index"):
+        CheckpointRef.model_validate(
+            {
+                "checkpoint_id": "checkpoint-3",
+                "checkpoint_index": 3,
+                "snapshot_hash": "sha256:checkpoint",
+            }
+        )
+
+
+def test_logging_v2_frozen_and_online_checkpoint_rules() -> None:
+    frozen = _logging_v2_trial_payload(
+        evaluation_law_id="law-frozen-v1",
+        memory_update_mode="disabled",
+        checkpoint_index=3,
+        checkpoint_ref=_checkpoint_ref_payload(),
+    )
+    assert TrialLog.model_validate(frozen).checkpoint_ref is not None
+
+    missing_checkpoint = dict(frozen)
+    missing_checkpoint["checkpoint_ref"] = None
+    with pytest.raises(ValidationError, match="checkpoint_ref"):
+        TrialLog.model_validate(missing_checkpoint)
+
+    writing_baseline = dict(frozen)
+    writing_baseline["baseline"] = "full_history"
+    with pytest.raises(ValidationError, match="frozen"):
+        TrialLog.model_validate(writing_baseline)
+
+    online_with_checkpoint = _logging_v2_trial_payload(
+        checkpoint_ref=_checkpoint_ref_payload(checkpoint_id="checkpoint-1", checkpoint_trial_index=1)
+    )
+    with pytest.raises(ValidationError, match="online"):
+        TrialLog.model_validate(online_with_checkpoint)
+
+
+def test_logging_v1_remains_phase10_and_does_not_accept_phase11_contract_level() -> None:
+    v1_payload = _strict_success_payload()
+
+    assert TrialLog.model_validate(v1_payload).schema_version == LOGGING_V1
+    assert TrialLog.model_validate(v1_payload).evaluation_law_id is None
+    with pytest.raises(ValidationError, match="contract_level"):
+        RunMetadata.model_validate({**_logging_v2_run_metadata().model_dump(), "schema_version": LOGGING_V1})
+
+
 def test_memory_item_log_normalizes_lineage_without_mutating_entry_id() -> None:
     entry = MemoryEntry(
         entry_id="entry-1",
@@ -932,3 +1108,160 @@ def test_memory_item_log_normalizes_lineage_without_mutating_entry_id() -> None:
     assert item.lineage_id == "lineage-1"
     assert item.version == "v2"
     assert item.creation_origin == "reflexion_reflect"
+
+
+def _logging_v2_run_metadata(**overrides: Any) -> RunMetadata:
+    payload = {
+        "run_metadata_id": "run-meta-v2",
+        "run_id": "run-v2",
+        "git_commit": "abc123",
+        "config_hash": "sha256:config",
+        "provider": "replay",
+        "model_snapshots": {"replay-model": "fixture-v1"},
+        "query_date": "2026-07-17",
+        "start_date": "2026-07-17",
+        "seed": 7,
+        "order": "task-sample-baseline",
+        "decoding_defaults": {"temperature": 0.0},
+        "sample_set_hash": "sha256:samples",
+        "sample_order_hash": "sha256:order",
+        "stage": "replay",
+        "schema_version": LOGGING_V2,
+        "contract_level": "phase11",
+        "evaluation_law": {
+            "evaluation_law_id": "law-online-v1",
+            "regime": "online",
+            "task_law_id": "locked-tasks-v1",
+            "inference_law_id": "replay-fixtures-v1",
+        },
+        "target_contamination_set": {
+            "target_set_id": "target-set-v1",
+            "definition_version": "phase11-v1",
+            "included_classes": ["injected", "derived"],
+            "require_exact_lineage": True,
+        },
+        "checkpoint_policy": {"enabled": False},
+        "prompt_version": "prompt-v1",
+        "memory_policy_version": "memory-v1",
+        "contamination_catalog_version": "catalog-v1",
+        "retry_policy_version": "retry-v1",
+    }
+    payload.update(overrides)
+    return RunMetadata.model_validate(payload)
+
+
+def _logging_v2_span_payload() -> dict[str, Any]:
+    return {
+        "message_index": 0,
+        "start": 0,
+        "end": 5,
+        "rendered_hash": "sha256:prompt",
+        "entry_id": "memory-derived-1",
+        "source_ids": ["memory-derived-1"],
+        "parent_ids": ["memory-root-1"],
+        "lineage_id": "lineage-1",
+        "version": "v2",
+        "origin": "reflexion_reflect",
+        "clean_or_contaminated": "contaminated",
+        "contamination_class": "derived",
+        "injected_root_ids": ["root-1"],
+        "lineage_status": "exact",
+        "lineage_basis": "recorded_parent",
+        "direct_parent_ids": ["memory-root-1"],
+        "target_set_id": "target-set-v1",
+        "is_target_contamination": True,
+    }
+
+
+def _logging_v2_memory_item_payload() -> dict[str, Any]:
+    return {
+        "entry_id": "memory-derived-1",
+        "content_hash": "sha256:content",
+        "memory_type": "verbal_reflection",
+        "clean_or_contaminated": "contaminated",
+        "source_trial_id": "trial-0",
+        "parent_entry_ids": ["memory-root-1"],
+        "source_entry_ids": ["memory-derived-1"],
+        "lineage_id": "lineage-1",
+        "version": "v2",
+        "creation_origin": "reflexion_reflect",
+        "metadata": {},
+        "contamination_class": "derived",
+        "injected_root_ids": ["root-1"],
+        "lineage_status": "exact",
+        "lineage_basis": "recorded_parent",
+        "direct_parent_ids": ["memory-root-1"],
+        "target_set_id": "target-set-v1",
+        "is_target_contamination": True,
+    }
+
+
+def _checkpoint_ref_payload(**overrides: Any) -> dict[str, Any]:
+    payload = {
+        "checkpoint_id": "checkpoint-3",
+        "checkpoint_trial_index": 3,
+        "checkpoint_memory_hash": "sha256:checkpoint",
+        "checkpoint_source_run_id": "run-v2",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _logging_v2_trial_payload(**overrides: Any) -> dict[str, Any]:
+    prompt_messages = [{"role": "user", "content": "solve"}]
+    payload = {
+        "trial_id": "trial-v2-1",
+        "run_id": "run-v2",
+        "task_name": "game24",
+        "sample_id": "sample-1",
+        "baseline": "retrieval_rag",
+        "arm": "contaminated",
+        "backbone": "replay-model",
+        "input": {"numbers": [1, 3, 4, 6]},
+        "gold_or_verifier_spec": {"target": 24},
+        "prompt_messages": prompt_messages,
+        "raw_response": "final: 24",
+        "parsed_answer": "24",
+        "verifier_result": {"is_correct": True, "parsed_answer": "24"},
+        "schema_version": LOGGING_V2,
+        "stage": "replay",
+        "status": "succeeded",
+        "run_metadata_id": "run-meta-v2",
+        "trial_seq": 0,
+        "event_seq": 4,
+        "answer_call_id": "call-answer-1",
+        "evaluation_law_id": "law-online-v1",
+        "target_set_id": "target-set-v1",
+        "memory_update_mode": "enabled",
+        "trajectory_pair_id": "trajectory-sample-1",
+        "checkpoint_index": None,
+        "pair_id": "pair-sample-1",
+        "checkpoint_ref": None,
+        "method_calls": [
+            {
+                "call_id": "call-answer-1",
+                "stage": "rag_generate",
+                "messages": prompt_messages,
+                "raw_response": "final: 24",
+                "model": "replay-model",
+                "source_spans": [_logging_v2_span_payload()],
+            }
+        ],
+        "contamination_exposure": {
+            "condition": "contaminated",
+            "status": "supported",
+            "is_exposed": True,
+            "answer_call_id": "call-answer-1",
+            "target_entry_ids": ["memory-derived-1"],
+            "source_entry_ids": ["memory-derived-1"],
+            "exposed_source_ids": ["memory-derived-1"],
+            "exposure_mode": "final_prompt",
+            "reason": "target contaminated source span appears in the answer request",
+            "target_set_id": "target-set-v1",
+            "exposed_entry_ids": ["memory-derived-1"],
+            "exposed_injected_root_ids": ["root-1"],
+            "evidence_lineage_status": "exact",
+        },
+    }
+    payload.update(overrides)
+    return payload
