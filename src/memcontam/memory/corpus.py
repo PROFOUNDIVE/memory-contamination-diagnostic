@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from memcontam.memory.filters import drop_known_contaminated
+from memcontam.memory.filters import FilterTelemetry, drop_known_contaminated
 from memcontam.memory.stores import MemoryEntry
 
 
@@ -202,7 +202,7 @@ def build_arm_corpus(
     records: list[CorpusRecord],
     task: str,
     arm: Literal["clean", "contaminated", "contaminated_filter"],
-) -> tuple[list[MemoryEntry], dict[str, Any] | None]:
+) -> tuple[list[MemoryEntry], FilterTelemetry | None]:
     task_records = [record for record in records if record.task == task]
     clean_records = [record for record in task_records if record.clean_or_contaminated == "clean"]
     clean_ids = {record.entry_id for record in clean_records}

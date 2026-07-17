@@ -6,11 +6,14 @@ from pathlib import Path
 
 import pytest
 
+from hashlib import sha256
+
 from memcontam.memory.corpus import (
     CorpusValidationError,
     build_arm_corpus,
     load_corpus,
 )
+from memcontam.memory.filters import drop_known_contaminated
 from memcontam.memory.stores import MemoryEntry
 
 
@@ -374,8 +377,92 @@ def test_dc_rs_arm_construction_keeps_clean_pair_and_filters_corruption(
         assert [entry.entry_id for entry in clean_entries] == [clean_id]
         assert [entry.entry_id for entry in contaminated_entries] == sorted([clean_id, corrupted_id])
         assert [entry.entry_id for entry in filtered_entries] == [clean_id]
-        assert filtered_meta == {"filter": "drop_known_contaminated", "dropped": expected_filter_dropped}
+        assert filtered_meta is not None
+        assert filtered_meta["filter_name"] == "drop_known_contaminated"
+        assert filtered_meta["input_count"] == 2
+        assert filtered_meta["kept_count"] == 1
+        assert filtered_meta["removed_count"] == expected_filter_dropped
+        assert filtered_meta["dropped"] == expected_filter_dropped
+        assert len(filtered_meta["decisions"]) == 2
+        assert filtered_meta["input_source_ids"] == sorted([clean_id, corrupted_id])
+        assert filtered_meta["kept_source_ids"] == [clean_id]
+        assert filtered_meta["removed_source_ids"] == [corrupted_id]
+        removed_decision = next(
+            decision for decision in filtered_meta["decisions"]
+            if decision["entry_id"] == corrupted_id
+        )
+        assert removed_decision["ground_truth"] == "contaminated"
+        assert removed_decision["action"] == "removed"
+        assert removed_decision["reason"] == "known_contaminated"
+        assert removed_decision["score"] is None
         assert contaminated_entries[0].content == content
         assert contaminated_entries[1].content == content
         assert contaminated_entries[0].metadata.get("output_text") == clean_output
         assert contaminated_entries[1].metadata.get("output_text") == corrupted_output
+
+
+def test_drop_known_contaminated_records_item_level_decisions_and_counts() -> None:
+    entries = [
+        MemoryEntry(
+            entry_id="clean_game24_001",
+            content="Break the problem into smaller sub-expressions.",
+            memory_type="strategy",
+            clean_or_contaminated="clean",
+            source_trial_id=None,
+            metadata={},
+        ),
+        MemoryEntry(
+            entry_id="corrupted_game24_001",
+            content="A misleading rule that does not help.",
+            memory_type="wrong_rule",
+            clean_or_contaminated="contaminated",
+            source_trial_id=None,
+            metadata={},
+        ),
+    ]
+
+    kept, telemetry = drop_known_contaminated(entries)
+
+    assert [entry.entry_id for entry in kept] == ["clean_game24_001"]
+    assert telemetry["filter_name"] == "drop_known_contaminated"
+    assert telemetry["input_count"] == 2
+    assert telemetry["kept_count"] == 1
+    assert telemetry["removed_count"] == 1
+    assert telemetry["dropped"] == 1
+    assert telemetry["input_source_ids"] == ["clean_game24_001", "corrupted_game24_001"]
+    assert telemetry["kept_source_ids"] == ["clean_game24_001"]
+    assert telemetry["removed_source_ids"] == ["corrupted_game24_001"]
+
+    decisions = telemetry["decisions"]
+    assert len(decisions) == 2
+
+    clean_decision = next(d for d in decisions if d["entry_id"] == "clean_game24_001")
+    assert clean_decision["content_hash"] == sha256(
+        "Break the problem into smaller sub-expressions.".encode("utf-8")
+    ).hexdigest()
+    assert clean_decision["ground_truth"] == "clean"
+    assert clean_decision["action"] == "kept"
+    assert clean_decision["reason"] == "clean"
+    assert clean_decision["score"] is None
+
+    corrupted_decision = next(d for d in decisions if d["entry_id"] == "corrupted_game24_001")
+    assert corrupted_decision["content_hash"] == sha256(
+        "A misleading rule that does not help.".encode("utf-8")
+    ).hexdigest()
+    assert corrupted_decision["ground_truth"] == "contaminated"
+    assert corrupted_decision["action"] == "removed"
+    assert corrupted_decision["reason"] == "known_contaminated"
+    assert corrupted_decision["score"] is None
+
+
+def test_drop_known_contaminated_empty_input() -> None:
+    kept, telemetry = drop_known_contaminated([])
+    assert kept == []
+    assert telemetry["filter_name"] == "drop_known_contaminated"
+    assert telemetry["input_count"] == 0
+    assert telemetry["kept_count"] == 0
+    assert telemetry["removed_count"] == 0
+    assert telemetry["decisions"] == []
+    assert telemetry["input_source_ids"] == []
+    assert telemetry["kept_source_ids"] == []
+    assert telemetry["removed_source_ids"] == []
