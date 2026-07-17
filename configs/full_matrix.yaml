@@ -1,6 +1,11 @@
 run:
   name: full_matrix
   description: "Main PeerJ diagnostic matrix; fill sample counts after pilot"
+  stage: main
+  provider: frontier_reasoning
+  model_snapshots:
+    frontier_reasoning: TODO
+    gpt4o: TODO
   task_order_seed: 1
   sample_order_seed: 1
   retry_policy_version: retry_v0
@@ -31,3 +36,10 @@ arms:
   - clean
   - contaminated
   - contaminated_filter
+
+logging:
+  output_dir: runs
+  schema_version: logging_v1
+  prompt_version: prompt_v0
+  memory_policy_version: memory_policy_v0
+  contamination_catalog_version: contamination_v0

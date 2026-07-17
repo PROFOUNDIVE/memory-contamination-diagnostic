@@ -2,6 +2,11 @@ run:
   name: g0_dc_rs_reflexion_fidelity_followup_replay
   description: "Faithful DC-RS optional appendix and Reflexion same-sample retry replay skeleton for the locked 3-task pilot set"
   mode: faithful
+  stage: replay
+  provider: replay
+  model_snapshots:
+    gpt4o: g0_dc_rs_reflexion_fidelity_followup_v1
+    frontier_reasoning: g0_dc_rs_reflexion_fidelity_followup_v1
   task_order_seed: 1
   sample_order_seed: 1
   retry_policy_version: retry_v0
@@ -32,6 +37,7 @@ arms:
 
 logging:
   output_dir: runs
+  schema_version: logging_v1
   prompt_version: prompt_v0
   memory_policy_version: memory_policy_v0
   contamination_catalog_version: contamination_v0
@@ -44,6 +50,7 @@ reflexion:
   max_attempts: 2
 
 replay:
+  fixture_version: g0_dc_rs_reflexion_fidelity_followup_v1
   responses_by_sample:
     game24_pilot_001:
       dc_rs_synthesize: "<cheatsheet>Look for a fraction denominator that converts one number into a useful multiplier.</cheatsheet>"
