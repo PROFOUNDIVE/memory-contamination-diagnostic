@@ -1,11 +1,15 @@
+import pytest
 import subprocess
 from pathlib import Path
+import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 G0_DOC = ROOT / "docs" / "g0-baseline-fidelity-gate-v0.4.md"
 README = ROOT / "README.md"
 V05_DOC = ROOT / "docs" / "g0-baseline-fidelity-gate-v0.5.md"
 FOLLOWUP_DOC = ROOT / "docs" / "g0-dc-rs-reflexion-fidelity-followup.md"
+CONTRACT_CONFIG = ROOT / "configs" / "logging_contract_replay.yaml"
+FULL_MATRIX_CONFIG = ROOT / "configs" / "full_matrix.yaml"
 
 
 def test_g0_doc_states_partial_rag_bot_scope() -> None:
@@ -262,6 +266,24 @@ def test_followup_doc_contains_official_sources() -> None:
     assert "https://github.com/noahshinn/reflexion" in text, (
         "Follow-up doc must cite the Reflexion repository"
     )
+
+
+def test_logging_contract_replay_config_is_offline_replay_only() -> None:
+    config = yaml.safe_load(CONTRACT_CONFIG.read_text(encoding="utf-8"))
+    assert config["run"]["mode"] == "faithful"
+    assert config["run"]["stage"] == "replay"
+    assert config["run"]["provider"] == "replay"
+    assert config["logging"]["schema_version"] == "logging_v1"
+    assert config["embedding"]["offline_fallback"] is True
+    assert config["live_smoke"]["enabled"] is False
+
+
+def test_full_matrix_validate_config_rejects_todo_limits(monkeypatch) -> None:
+    import memcontam.cli as cli
+
+    monkeypatch.chdir(ROOT)
+    with pytest.raises(SystemExit, match="unresolved task limits"):
+        cli.validate_config(FULL_MATRIX_CONFIG)
 
 
 def test_followup_doc_contains_adaptation_table() -> None:
