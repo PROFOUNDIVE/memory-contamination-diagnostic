@@ -21,8 +21,10 @@ from memcontam.logging.schema import (
     RetrievalRecord,
     RunMetadata,
     TrialLog,
+    TargetContaminationSetSpec,
     VerifierResult,
 )
+from memcontam.logging import provenance
 from memcontam.memory.retrieval import retrieve_records
 from memcontam.memory.stores import MemoryEntry
 
@@ -996,6 +998,75 @@ def test_signature_basis_cannot_claim_exact_lineage() -> None:
         )
 
 
+def test_logging_v2_accepts_an_exact_natural_target_set_row() -> None:
+    payload = _logging_v2_trial_payload()
+    natural_span = payload["method_calls"][0]["source_spans"][0]
+    natural_span.update(
+        {
+            "entry_id": "natural-1",
+            "source_ids": ["natural-1"],
+            "parent_ids": [],
+            "lineage_id": "natural-1",
+            "clean_or_contaminated": "contaminated",
+            "contamination_class": "natural",
+            "injected_root_ids": [],
+            "lineage_basis": "recorded_parent",
+            "direct_parent_ids": [],
+            "target_set_id": "natural-target-v1",
+            "is_target_contamination": True,
+        }
+    )
+    payload["target_set_id"] = "natural-target-v1"
+    payload["memory_before"] = [{"entry_id": "natural-1", "metadata": {}}]
+    payload["contamination_exposure"].update(
+        {
+            "target_entry_ids": ["natural-1"],
+            "source_entry_ids": ["natural-1"],
+            "exposed_source_ids": ["natural-1"],
+            "target_set_id": "natural-target-v1",
+            "exposed_entry_ids": ["natural-1"],
+            "exposed_injected_root_ids": [],
+        }
+    )
+
+    trial = TrialLog.model_validate(payload)
+
+    assert trial.method_calls[0].source_spans[0].is_target_contamination is True
+
+
+def test_legacy_parent_metadata_does_not_become_exact_direct_lineage() -> None:
+    root = MemoryEntry(
+        entry_id="root-1",
+        content="Injected root.",
+        memory_type="seed",
+        clean_or_contaminated="contaminated",
+        metadata={
+            "contamination_class": "injected",
+            "lineage_status": "exact",
+            "lineage_basis": "seed",
+            "direct_parent_ids": [],
+            "injected_root_ids": ["root-1"],
+        },
+    )
+    legacy_child = MemoryEntry(
+        entry_id="legacy-child-1",
+        content="Legacy descendant.",
+        memory_type="note",
+        clean_or_contaminated="contaminated",
+        source_trial_id="trial-1",
+        metadata={
+            "parent_entry_ids": ["root-1"],
+            "injected_root_ids": ["root-1"],
+        },
+    )
+
+    lineage = provenance.canonical_lineage_for_entry(legacy_child, [root, legacy_child])
+
+    assert lineage.contamination_class == "clean"
+    assert lineage.lineage_status == "unavailable"
+    assert lineage.direct_parent_ids == []
+
+
 def test_lineage_edge_uses_explicit_direct_entry_edge_fields() -> None:
     edge = LineageEdge.model_validate(
         {
@@ -1110,6 +1181,268 @@ def test_memory_item_log_normalizes_lineage_without_mutating_entry_id() -> None:
     assert item.creation_origin == "reflexion_reflect"
 
 
+def test_memory_item_log_canonicalizes_seed_natural_and_approximate_lineage() -> None:
+    injected_seed = MemoryEntry(
+        entry_id="injected-seed",
+        content="Injected misleading rule.",
+        memory_type="strategy",
+        clean_or_contaminated="contaminated",
+        metadata={
+            "contamination_class": "injected",
+            "lineage_status": "exact",
+            "lineage_basis": "seed",
+            "direct_parent_ids": [],
+            "injected_root_ids": ["injected-seed"],
+            "ancestor_ids": ["must-not-be-canonical"],
+        },
+    )
+    natural_transcript = MemoryEntry(
+        entry_id="natural-transcript",
+        content="Incorrect full-history response.",
+        memory_type="full_history_transcript",
+        clean_or_contaminated="clean",
+        source_trial_id="trial-1",
+        metadata={"memory_error_status": "satisfied", "parent_entry_ids": ["clean-seed"]},
+    )
+    clean_reflection = MemoryEntry(
+        entry_id="clean-reflection",
+        content="Reflection: verify the arithmetic.",
+        memory_type="verbal_reflection",
+        clean_or_contaminated="clean",
+        source_trial_id="trial-1",
+        metadata={"parent_entry_ids": ["clean-seed"]},
+    )
+    signature_candidate = MemoryEntry(
+        entry_id="signature-candidate",
+        content="Possibly related note.",
+        memory_type="note",
+        clean_or_contaminated="contaminated",
+        source_trial_id="trial-1",
+        metadata={
+            "contamination_class": "derived",
+            "lineage_status": "approximate",
+            "lineage_basis": "signature",
+            "direct_parent_ids": ["injected-seed"],
+            "injected_root_ids": ["injected-seed"],
+        },
+    )
+
+    seed_item = MemoryItemLog.from_memory_entry(injected_seed)
+    natural_item = MemoryItemLog.from_memory_entry(natural_transcript)
+    reflection_item = MemoryItemLog.from_memory_entry(clean_reflection)
+    signature_item = MemoryItemLog.from_memory_entry(signature_candidate)
+
+    assert seed_item.contamination_class == "injected"
+    assert seed_item.injected_root_ids == ["injected-seed"]
+    assert "ancestor_ids" not in seed_item.metadata
+    assert natural_item.contamination_class == "natural"
+    assert natural_item.injected_root_ids == []
+    assert reflection_item.contamination_class == "clean"
+    assert signature_item.contamination_class == "clean"
+    assert signature_item.lineage_status == "approximate"
+    assert signature_item.lineage_basis == "signature"
+    assert signature_item.injected_root_ids == []
+
+
+def test_v2_exposure_uses_exact_answer_spans_against_fixed_target_set() -> None:
+    target_set = TargetContaminationSetSpec(
+        target_set_id="controlled_injected_derived_v1",
+        definition_version="phase11-v1",
+        included_classes=["injected", "derived"],
+        require_exact_lineage=True,
+    )
+    exact_span = PromptSourceSpan.model_validate(
+        {
+            **_logging_v2_span_payload(),
+            "parent_ids": ["root-1"],
+            "direct_parent_ids": ["root-1"],
+        }
+    )
+    injected_span = PromptSourceSpan.model_validate(
+        {
+            **_logging_v2_span_payload(),
+            "entry_id": "root-1",
+            "source_ids": ["root-1"],
+            "parent_ids": [],
+            "lineage_id": "root-1",
+            "contamination_class": "injected",
+            "injected_root_ids": ["root-1"],
+            "lineage_basis": "seed",
+            "direct_parent_ids": [],
+        }
+    )
+    natural_span = PromptSourceSpan.model_validate(
+        {
+            **_logging_v2_span_payload(),
+            "start": 6,
+            "end": 12,
+            "entry_id": "natural-1",
+            "source_ids": ["natural-1"],
+            "parent_ids": [],
+            "lineage_id": "natural-1",
+            "contamination_class": "natural",
+            "injected_root_ids": [],
+            "lineage_status": "exact",
+            "lineage_basis": "recorded_parent",
+            "direct_parent_ids": [],
+            "is_target_contamination": False,
+        }
+    )
+    exposure = provenance.compute_exposure_from_spans_v2(
+        "call-answer-1",
+        [exact_span, natural_span],
+        "contaminated",
+        [
+            _memory_entry_payload("root-1", injected_span.model_dump()),
+            _memory_entry_payload("memory-derived-1", exact_span.model_dump()),
+            _memory_entry_payload("natural-1", natural_span.model_dump()),
+        ],
+        target_set,
+    )
+
+    assert exposure.status == "supported"
+    assert exposure.is_exposed is True
+    assert exposure.target_entry_ids == ["root-1", "memory-derived-1"]
+    assert exposure.source_entry_ids == ["memory-derived-1", "natural-1"]
+    assert exposure.exposed_entry_ids == ["memory-derived-1"]
+    assert exposure.exposed_source_ids == ["memory-derived-1"]
+    assert exposure.exposed_injected_root_ids == ["root-1"]
+    assert exposure.evidence_lineage_status == "exact"
+
+
+def test_v2_exposure_marks_approximate_only_target_evidence_not_evaluable() -> None:
+    target_set = TargetContaminationSetSpec(
+        target_set_id="controlled_injected_derived_v1",
+        definition_version="phase11-v1",
+        included_classes=["injected", "derived"],
+        require_exact_lineage=True,
+    )
+    approximate_span = PromptSourceSpan.model_validate(
+        {
+            **_logging_v2_span_payload(),
+            "entry_id": "approximate-1",
+            "source_ids": ["approximate-1"],
+            "parent_ids": [],
+            "lineage_id": "approximate-1",
+            "lineage_status": "approximate",
+            "lineage_basis": "signature",
+            "direct_parent_ids": [],
+            "injected_root_ids": [],
+            "is_target_contamination": False,
+        }
+    )
+
+    exposure = provenance.compute_exposure_from_spans_v2(
+        "call-answer-1",
+        [approximate_span],
+        "contaminated",
+        [_memory_entry_payload("approximate-1", approximate_span.model_dump())],
+        target_set,
+    )
+
+    assert exposure.status == "not_evaluable"
+    assert exposure.is_exposed is None
+    assert exposure.exposed_entry_ids == []
+    assert exposure.exposed_source_ids == []
+    assert exposure.exposed_injected_root_ids == []
+
+
+def test_v2_exposure_marks_filtered_target_absence_with_distinct_reason() -> None:
+    target_set = TargetContaminationSetSpec(
+        target_set_id="controlled_injected_derived_v1",
+        definition_version="phase11-v1",
+        included_classes=["injected", "derived"],
+        require_exact_lineage=True,
+    )
+
+    exposure = provenance.compute_exposure_from_spans_v2(
+        "call-answer-1", [], "contaminated_filter", [], target_set
+    )
+
+    assert exposure.status == "supported"
+    assert exposure.is_exposed is False
+    assert exposure.reason == "target memory was filtered before final answer rendering"
+
+
+def test_source_spans_preserve_exact_natural_target_context() -> None:
+    target_set = TargetContaminationSetSpec(
+        target_set_id="natural-target-v1",
+        definition_version="phase11-v1",
+        included_classes=["natural"],
+        require_exact_lineage=True,
+    )
+    clean_seed = MemoryEntry(
+        entry_id="clean-seed",
+        content="A clean hint.",
+        memory_type="strategy",
+        clean_or_contaminated="clean",
+        metadata={
+            "contamination_class": "clean",
+            "lineage_status": "exact",
+            "lineage_basis": "seed",
+            "direct_parent_ids": [],
+            "injected_root_ids": [],
+        },
+    )
+    natural = MemoryEntry(
+        entry_id="natural-1",
+        content="A failed response transcript.",
+        memory_type="full_history_transcript",
+        clean_or_contaminated="contaminated",
+        source_trial_id="trial-1",
+        metadata={
+            "parent_entry_ids": ["clean-seed"],
+            "direct_parent_ids": ["clean-seed"],
+            "memory_error_status": "satisfied",
+        },
+    )
+    entries = [clean_seed, natural]
+    natural.metadata.update(provenance.phase11_lineage_metadata(natural, entries, target_set))
+    _, spans = provenance.build_prompt_with_sources(
+        [
+            provenance.PromptSourcePart(natural.content, natural),
+        ],
+        entries=entries,
+    )
+
+    exposure = provenance.compute_exposure_from_spans_v2(
+        "answer-call", spans, "contaminated", entries, target_set
+    )
+    clean_exposure = provenance.compute_exposure_from_spans_v2(
+        "answer-call", spans, "clean", entries, target_set
+    )
+
+    assert spans[-1].contamination_class == "natural"
+    assert spans[-1].lineage_status == "exact"
+    assert spans[-1].is_target_contamination is True
+    assert exposure.is_exposed is True
+    assert exposure.exposed_entry_ids == ["natural-1"]
+    assert clean_exposure.status == "not_applicable"
+    assert clean_exposure.target_entry_ids == ["natural-1"]
+    assert clean_exposure.source_entry_ids == ["natural-1"]
+
+
+def _memory_entry_payload(entry_id: str, span: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "entry_id": entry_id,
+        "content": "memory",
+        "memory_type": "memory_seed",
+        "clean_or_contaminated": span["clean_or_contaminated"],
+        "metadata": {
+            field: span[field]
+            for field in (
+                "contamination_class",
+                "injected_root_ids",
+                "lineage_status",
+                "lineage_basis",
+                "direct_parent_ids",
+                "target_set_id",
+                "is_target_contamination",
+            )
+        },
+    }
+
+
 def _logging_v2_run_metadata(**overrides: Any) -> RunMetadata:
     payload = {
         "run_metadata_id": "run-meta-v2",
@@ -1220,6 +1553,15 @@ def _logging_v2_trial_payload(**overrides: Any) -> dict[str, Any]:
         "input": {"numbers": [1, 3, 4, 6]},
         "gold_or_verifier_spec": {"target": 24},
         "prompt_messages": prompt_messages,
+        "memory_before": [
+            {
+                "entry_id": "memory-derived-1",
+                "metadata": {
+                    "contamination_class": "derived",
+                    "lineage_status": "exact",
+                },
+            }
+        ],
         "raw_response": "final: 24",
         "parsed_answer": "24",
         "verifier_result": {"is_correct": True, "parsed_answer": "24"},

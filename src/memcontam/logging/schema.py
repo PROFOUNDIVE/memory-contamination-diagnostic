@@ -272,8 +272,12 @@ class MemoryItemLog(BaseModel):
         return self
 
     @classmethod
-    def from_memory_entry(cls, entry: MemoryEntry) -> MemoryItemLog:
-        metadata = dict(entry.metadata)
+    def from_memory_entry(
+        cls, entry: MemoryEntry, entries: list[MemoryEntry] | None = None
+    ) -> MemoryItemLog:
+        from memcontam.logging.provenance import canonical_lineage_for_entry, canonical_metadata
+
+        metadata = canonical_metadata(entry.metadata)
         parent_entry_ids = _string_list(metadata.get("parent_entry_ids"))
         source_entry_ids = _string_list(metadata.get("source_entry_ids"))
         if not source_entry_ids:
@@ -297,11 +301,33 @@ class MemoryItemLog(BaseModel):
             else:
                 creation_origin = "seed" if entry.source_trial_id is None else entry.memory_type
 
+        lineage = canonical_lineage_for_entry(entry, entries)
+        target_set_id = metadata.get("target_set_id")
+        is_target_contamination = metadata.get("is_target_contamination")
+        has_phase11_lineage = any(
+            field_name in metadata
+            for field_name in (
+                "contamination_class",
+                "lineage_status",
+                "lineage_basis",
+                "direct_parent_ids",
+                "injected_root_ids",
+                "memory_error_status",
+            )
+        )
+        contamination_class = lineage.contamination_class
+        if not has_phase11_lineage and entry.clean_or_contaminated == "contaminated":
+            contamination_class = None
+        canonical_binary_class = (
+            entry.clean_or_contaminated
+            if contamination_class is None
+            else "clean" if contamination_class == "clean" else "contaminated"
+        )
         return cls(
             entry_id=entry.entry_id,
             content_hash=hashlib.sha256(entry.content.encode("utf-8")).hexdigest(),
             memory_type=entry.memory_type,
-            clean_or_contaminated=entry.clean_or_contaminated,
+            clean_or_contaminated=canonical_binary_class,
             source_trial_id=entry.source_trial_id,
             parent_entry_ids=parent_entry_ids,
             source_entry_ids=source_entry_ids,
@@ -309,6 +335,15 @@ class MemoryItemLog(BaseModel):
             version=str(version),
             creation_origin=creation_origin,
             metadata=metadata,
+            contamination_class=contamination_class,
+            injected_root_ids=lineage.injected_root_ids if contamination_class is not None else [],
+            lineage_status=lineage.lineage_status if contamination_class is not None else None,
+            lineage_basis=lineage.lineage_basis if contamination_class is not None else None,
+            direct_parent_ids=lineage.direct_parent_ids if contamination_class is not None else [],
+            target_set_id=target_set_id if isinstance(target_set_id, str) and target_set_id else None,
+            is_target_contamination=is_target_contamination
+            if isinstance(is_target_contamination, bool)
+            else None,
         )
 
 
@@ -559,6 +594,9 @@ class TrialLog(BaseModel):
                     raise ValueError(f"logging_v2 source spans require {field_name}")
             if span.target_set_id != self.target_set_id:
                 raise ValueError("logging_v2 source span target_set_id must match trial target_set_id")
+        expected_source_ids = _unique_span_entry_ids(answer_call.source_spans)
+        if self.contamination_exposure.source_entry_ids != expected_source_ids:
+            raise ValueError("logging_v2 source_entry_ids must equal rendered answer span entry IDs")
         writing_baselines = {
             "full_history",
             "reflexion_style",
@@ -597,3 +635,24 @@ def _validate_contamination_compatibility(
         raise ValueError("clean_or_contaminated must agree with contamination_class")
     if clean_or_contaminated == "contaminated" and contamination_class == "clean":
         raise ValueError("clean_or_contaminated must agree with contamination_class")
+
+
+def _unique_span_entry_ids(spans: list[PromptSourceSpan]) -> list[str]:
+    entry_ids: list[str] = []
+    for span in spans:
+        if span.entry_id not in entry_ids:
+            entry_ids.append(span.entry_id)
+    return entry_ids
+
+
+def _v2_target_entry_ids(
+    memory_before: list[dict[str, Any]], target_set: TargetContaminationSetSpec
+) -> list[str]:
+    from memcontam.logging.provenance import target_set_membership
+
+    entries = [MemoryEntry.model_validate(entry) for entry in memory_before]
+    return [
+        item.entry_id
+        for item in (MemoryItemLog.from_memory_entry(entry, entries) for entry in entries)
+        if target_set_membership(item, target_set)
+    ]

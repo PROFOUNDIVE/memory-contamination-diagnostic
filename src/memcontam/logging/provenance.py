@@ -4,13 +4,18 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Literal, cast
+from typing import Any, Literal, Sequence, cast
 
 from memcontam.logging.schema import (
+    ContaminationClass,
     ContaminationExposure,
+    LineageBasis,
+    LineageEdge,
+    LineageStatus,
     MemoryEvent,
     MemoryItemLog,
     PromptSourceSpan,
+    TargetContaminationSetSpec,
 )
 from memcontam.memory.stores import MemoryEntry
 
@@ -22,7 +27,9 @@ def memory_snapshot_hash(entries: list[MemoryEntry]) -> str:
     while preserving the list order of entries so append/replacement order
     remains auditable.
     """
-    snapshot = [MemoryItemLog.from_memory_entry(entry).model_dump(mode="json") for entry in entries]
+    snapshot = [
+        MemoryItemLog.from_memory_entry(entry, entries).model_dump(mode="json") for entry in entries
+    ]
     payload = json.dumps(snapshot, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
@@ -58,7 +65,16 @@ def normalize_memory_event(
     after_set = set(after_ids)
     new_ids = [entry_id for entry_id in after_ids if entry_id not in before_set]
     removed_ids = [entry_id for entry_id in before_ids if entry_id not in after_set]
-    updated_ids: list[str] = []
+    before_by_id = {entry.entry_id: entry for entry in memory_before}
+    updated_ids = [
+        entry.entry_id
+        for entry in memory_after
+        if entry.entry_id in before_by_id
+        and MemoryItemLog.from_memory_entry(entry, memory_after).model_dump(mode="json")
+        != MemoryItemLog.from_memory_entry(
+            before_by_id[entry.entry_id], memory_before
+        ).model_dump(mode="json")
+    ]
 
     before_hash = memory_snapshot_hash(memory_before)
     after_hash = memory_snapshot_hash(memory_after)
@@ -74,6 +90,9 @@ def normalize_memory_event(
         for entry_id in new_ids:
             if entry_id not in after_set:
                 raise ValueError(f"accepted memory event claims missing new entry: {entry_id}")
+        declared_new_id = memory_write_event.get("new_entry_id")
+        if isinstance(declared_new_id, str) and declared_new_id and declared_new_id not in new_ids:
+            raise ValueError(f"accepted memory event new_entry_id is not new: {declared_new_id}")
     elif new_ids:
         raise ValueError(
             f"{status} memory event must not claim new entries: {new_ids}"
@@ -119,6 +138,15 @@ def normalize_memory_event(
             memory_version = item.version
 
     operation = _operation_from_event(event_type, baseline)
+    changed_ids = [*new_ids, *updated_ids]
+    after_by_id = {entry.entry_id: entry for entry in memory_after}
+    lineage_edges = [
+        edge
+        for entry_id in changed_ids
+        for edge in build_direct_parent_edges(
+            MemoryItemLog.from_memory_entry(after_by_id[entry_id], memory_after)
+        )
+    ]
 
     # Context fields are writer-assigned; use minimal placeholders here.
     return MemoryEvent(
@@ -147,6 +175,7 @@ def normalize_memory_event(
         memory_version=memory_version,
         status=status,
         created_at=_now(),
+        lineage_edges=lineage_edges,
     )
 
 
@@ -220,6 +249,214 @@ def _now() -> str:
 
 
 @dataclass(frozen=True)
+class CanonicalLineage:
+    contamination_class: ContaminationClass
+    injected_root_ids: list[str]
+    lineage_status: LineageStatus
+    lineage_basis: LineageBasis
+    direct_parent_ids: list[str]
+
+
+def target_set_membership(
+    item: MemoryItemLog, target_set: TargetContaminationSetSpec
+) -> bool:
+    """Return whether a normalized item is eligible for a fixed target set."""
+    return (
+        item.contamination_class in target_set.included_classes
+        and (not target_set.require_exact_lineage or item.lineage_status == "exact")
+    )
+
+
+def combine_lineage_status(statuses: list[LineageStatus]) -> LineageStatus:
+    """Combine local evidence without upgrading approximate evidence to exact."""
+    if statuses and all(status == "exact" for status in statuses):
+        return "exact"
+    if "approximate" in statuses:
+        return "approximate"
+    return "unavailable"
+
+
+def canonical_lineage_for_entry(
+    entry: MemoryEntry,
+    entries: list[MemoryEntry] | None = None,
+    _visited: frozenset[str] = frozenset(),
+) -> CanonicalLineage:
+    """Derive the v2 lineage view from typed seed and recorded-parent evidence.
+
+    Source-ID unions and signatures remain non-authoritative: they never create
+    exact roots or a derived class.
+    """
+    if entry.entry_id in _visited:
+        return CanonicalLineage("clean", [], "unavailable", "none", [])
+
+    metadata = entry.metadata
+    direct_parent_ids = _string_list(metadata.get("direct_parent_ids"))
+    declared_roots = _string_list(metadata.get("injected_root_ids"))
+    declared_status = metadata.get("lineage_status")
+    declared_basis = metadata.get("lineage_basis")
+    declared_class = metadata.get("contamination_class")
+
+    if _is_typed_seed(entry, declared_class, declared_status, declared_basis, direct_parent_ids, declared_roots):
+        return CanonicalLineage(
+            contamination_class=cast(ContaminationClass, declared_class),
+            injected_root_ids=declared_roots,
+            lineage_status="exact",
+            lineage_basis="seed",
+            direct_parent_ids=[],
+        )
+
+    if declared_basis == "signature" or declared_status == "approximate":
+        return CanonicalLineage(
+            contamination_class="clean",
+            injected_root_ids=[],
+            lineage_status="approximate",
+            lineage_basis="signature" if declared_basis == "signature" else "none",
+            direct_parent_ids=[],
+        )
+
+    parent_roots, parent_statuses = _parent_lineage(
+        direct_parent_ids, entries, _visited | {entry.entry_id}
+    )
+    exact_roots = parent_roots or declared_roots
+    status = combine_lineage_status(parent_statuses)
+    if direct_parent_ids and exact_roots and (status == "exact" or entries is None):
+        return CanonicalLineage(
+            contamination_class="derived",
+            injected_root_ids=exact_roots,
+            lineage_status="exact",
+            lineage_basis="recorded_parent",
+            direct_parent_ids=direct_parent_ids,
+        )
+
+    if (
+        entry.memory_type == "full_history_transcript"
+        and metadata.get("memory_error_status") == "satisfied"
+        and not exact_roots
+    ):
+        return CanonicalLineage(
+            contamination_class="natural",
+            injected_root_ids=[],
+            lineage_status=status,
+            lineage_basis="recorded_parent" if direct_parent_ids else "none",
+            direct_parent_ids=direct_parent_ids,
+        )
+
+    return CanonicalLineage(
+        contamination_class="clean",
+        injected_root_ids=[],
+        lineage_status=status,
+        lineage_basis="recorded_parent" if direct_parent_ids and status == "exact" else "none",
+        direct_parent_ids=direct_parent_ids if status == "exact" else [],
+    )
+
+
+def phase11_lineage_metadata(
+    entry: MemoryEntry,
+    entries: list[MemoryEntry],
+    target_set: TargetContaminationSetSpec | dict[str, Any] | str | None,
+) -> dict[str, Any]:
+    """Return the v2 metadata view for a runtime-created memory entry."""
+    if not target_set:
+        return {}
+    if isinstance(target_set, str):
+        target_set = TargetContaminationSetSpec(
+            target_set_id=target_set,
+            definition_version="phase11_v1",
+            included_classes=["injected", "derived"],
+            require_exact_lineage=True,
+        )
+    elif isinstance(target_set, dict):
+        target_set = TargetContaminationSetSpec.model_validate(target_set)
+    lineage = canonical_lineage_for_entry(entry, entries)
+    return {
+        "contamination_class": lineage.contamination_class,
+        "injected_root_ids": lineage.injected_root_ids,
+        "lineage_status": lineage.lineage_status,
+        "lineage_basis": lineage.lineage_basis,
+        "direct_parent_ids": lineage.direct_parent_ids,
+        "target_set_id": target_set.target_set_id,
+        "is_target_contamination": (
+            lineage.contamination_class in target_set.included_classes
+            and (not target_set.require_exact_lineage or lineage.lineage_status == "exact")
+        ),
+    }
+
+
+def build_direct_parent_edges(item: MemoryItemLog) -> list[LineageEdge]:
+    """Build one compact direct edge per recorded parent for a changed entry."""
+    return [
+        LineageEdge(
+            child_entry_id=item.entry_id,
+            parent_entry_id=parent_entry_id,
+            relation="recorded_parent",
+            lineage_status=item.lineage_status or "unavailable",
+            lineage_basis=item.lineage_basis or "none",
+            injected_root_ids=item.injected_root_ids if item.lineage_status == "exact" else [],
+        )
+        for parent_entry_id in item.direct_parent_ids
+    ]
+
+
+def canonical_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    """Remove forbidden transitive lineage material from canonical rows."""
+    return {
+        key: _without_ancestor_material(value)
+        for key, value in metadata.items()
+        if key != "ancestor_ids" and not key.startswith("ancestor_")
+    }
+
+
+def _parent_lineage(
+    parent_ids: list[str], entries: list[MemoryEntry] | None, visited: frozenset[str]
+) -> tuple[list[str], list[LineageStatus]]:
+    if not entries:
+        return [], []
+    by_id = {entry.entry_id: entry for entry in entries}
+    roots: list[str] = []
+    statuses: list[LineageStatus] = []
+    for parent_id in parent_ids:
+        parent = by_id.get(parent_id)
+        if parent is None:
+            return [], ["unavailable"]
+        parent_lineage = canonical_lineage_for_entry(parent, entries, visited)
+        _extend_unique(roots, parent_lineage.injected_root_ids)
+        statuses.append(parent_lineage.lineage_status)
+    return roots, statuses
+
+
+def _is_typed_seed(
+    entry: MemoryEntry,
+    contamination_class: Any,
+    lineage_status: Any,
+    lineage_basis: Any,
+    direct_parent_ids: list[str],
+    injected_root_ids: list[str],
+) -> bool:
+    if entry.source_trial_id is not None or lineage_status != "exact" or lineage_basis != "seed":
+        return False
+    if contamination_class == "clean":
+        return not direct_parent_ids and not injected_root_ids and entry.clean_or_contaminated == "clean"
+    return (
+        contamination_class == "injected"
+        and not direct_parent_ids
+        and injected_root_ids == [entry.entry_id]
+        and entry.clean_or_contaminated == "contaminated"
+    )
+
+
+def _without_ancestor_material(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _without_ancestor_material(child)
+            for key, child in value.items()
+            if key != "ancestor_ids" and not key.startswith("ancestor_")
+        }
+    if isinstance(value, list):
+        return [_without_ancestor_material(child) for child in value]
+    return value
+
+
+@dataclass(frozen=True)
 class PromptSourcePart:
     text: str
     entry: MemoryEntry
@@ -229,7 +466,11 @@ def build_prompt_with_sources(
     parts: list[str | PromptSourcePart],
     *,
     message_index: int = 0,
+    entries: list[MemoryEntry] | None = None,
 ) -> tuple[str, list[PromptSourceSpan]]:
+    entry_table = entries if entries is not None else [
+        part.entry for part in parts if isinstance(part, PromptSourcePart)
+    ]
     content_parts: list[str] = []
     spans: list[PromptSourceSpan] = []
     offset = 0
@@ -245,6 +486,7 @@ def build_prompt_with_sources(
                 message_index=message_index,
                 start=offset,
                 end=offset + len(part.text),
+                entries=entry_table,
             )
             spans.append(span)
             offset += len(part.text)
@@ -257,8 +499,9 @@ def source_span_from_entry(
     message_index: int,
     start: int,
     end: int,
+    entries: list[MemoryEntry] | None = None,
 ) -> PromptSourceSpan:
-    item = MemoryItemLog.from_memory_entry(entry)
+    item = MemoryItemLog.from_memory_entry(entry, entries)
     return PromptSourceSpan(
         message_index=message_index,
         start=start,
@@ -272,6 +515,13 @@ def source_span_from_entry(
         version=item.version,
         origin=item.creation_origin,
         clean_or_contaminated=cast(Literal["clean", "contaminated"], item.clean_or_contaminated),
+        contamination_class=item.contamination_class,
+        injected_root_ids=item.injected_root_ids,
+        lineage_status=item.lineage_status,
+        lineage_basis=item.lineage_basis,
+        direct_parent_ids=item.direct_parent_ids,
+        target_set_id=item.target_set_id,
+        is_target_contamination=item.is_target_contamination,
     )
 
 
@@ -289,6 +539,13 @@ def derived_source_span(
     version: str,
     origin: str,
     clean_or_contaminated: Literal["clean", "contaminated"],
+    contamination_class: ContaminationClass | None = None,
+    injected_root_ids: list[str] | None = None,
+    lineage_status: LineageStatus | None = None,
+    lineage_basis: LineageBasis | None = None,
+    direct_parent_ids: list[str] | None = None,
+    target_set_id: str | None = None,
+    is_target_contamination: bool | None = None,
 ) -> PromptSourceSpan:
     return PromptSourceSpan(
         message_index=message_index,
@@ -303,6 +560,13 @@ def derived_source_span(
         version=version,
         origin=origin,
         clean_or_contaminated=clean_or_contaminated,
+        contamination_class=contamination_class,
+        injected_root_ids=injected_root_ids or [],
+        lineage_status=lineage_status,
+        lineage_basis=lineage_basis,
+        direct_parent_ids=direct_parent_ids or [],
+        target_set_id=target_set_id,
+        is_target_contamination=is_target_contamination,
     )
 
 
@@ -333,11 +597,12 @@ def _extend_unique(target: list[str], values: list[str]) -> None:
             target.append(value)
 
 
-def compute_exposure_from_spans(
+def compute_exposure_from_spans_v1(
     answer_call_id: str,
     spans: list[PromptSourceSpan],
     condition: Literal["clean", "contaminated", "contaminated_filter"],
 ) -> ContaminationExposure:
+    """Preserve the Phase-10 binary final-answer exposure contract."""
     if condition == "clean":
         return ContaminationExposure(
             condition=condition,
@@ -386,4 +651,142 @@ def compute_exposure_from_spans(
         exposed_source_ids=exposed_source_ids,
         exposure_mode="final_prompt",
         reason="contaminated source span rendered into final answer prompt",
+    )
+
+
+def compute_exposure_from_spans(
+    answer_call_id: str,
+    spans: list[PromptSourceSpan],
+    condition: Literal["clean", "contaminated", "contaminated_filter"],
+) -> ContaminationExposure:
+    """Compatibility wrapper for logging_v1 callers."""
+    return compute_exposure_from_spans_v1(answer_call_id, spans, condition)
+
+
+def compute_exposure_from_spans_v2(
+    answer_call_id: str,
+    spans: list[PromptSourceSpan],
+    condition: Literal["clean", "contaminated", "contaminated_filter"],
+    memory_before: Sequence[dict[str, Any] | MemoryEntry],
+    target_set: TargetContaminationSetSpec,
+) -> ContaminationExposure:
+    """Compute Phase-11 exposure from exact answer spans and a fixed target set."""
+    source_entry_ids = _unique_entry_ids(spans)
+    memory_items = _normalized_memory_items(memory_before)
+    target_entry_ids = [
+        item.entry_id for item in memory_items if target_set_membership(item, target_set)
+    ]
+    if condition == "clean":
+        return ContaminationExposure(
+            condition=condition,
+            status="not_applicable",
+            is_exposed=None,
+            answer_call_id=answer_call_id,
+            target_entry_ids=target_entry_ids,
+            source_entry_ids=source_entry_ids,
+            exposure_mode="clean",
+            reason="clean arm has no controlled target exposure",
+            target_set_id=target_set.target_set_id,
+        )
+
+    target_entry_id_set = set(target_entry_ids)
+    exact_target_spans = [
+        span
+        for span in spans
+        if span.entry_id in target_entry_id_set and _exact_target_span(span, target_set)
+    ]
+
+    if not target_entry_ids and _has_approximate_target_candidate(memory_items, spans, target_set):
+        return ContaminationExposure(
+            condition=condition,
+            status="not_evaluable",
+            is_exposed=None,
+            answer_call_id=answer_call_id,
+            target_entry_ids=[],
+            source_entry_ids=source_entry_ids,
+            exposure_mode="not_evaluable",
+            reason="target membership has approximate-only lineage evidence",
+            target_set_id=target_set.target_set_id,
+            evidence_lineage_status="approximate",
+        )
+
+    if not exact_target_spans:
+        reason = (
+            "target memory was filtered before final answer rendering"
+            if condition == "contaminated_filter" and not target_entry_ids
+            else "target memory was available but not rendered into the final answer prompt"
+        )
+        return ContaminationExposure(
+            condition=condition,
+            status="supported",
+            is_exposed=False,
+            answer_call_id=answer_call_id,
+            target_entry_ids=target_entry_ids,
+            source_entry_ids=source_entry_ids,
+            exposure_mode="not_in_final_prompt",
+            reason=reason,
+            target_set_id=target_set.target_set_id,
+            evidence_lineage_status="exact",
+        )
+
+    exposed_entry_ids = _unique_entry_ids(exact_target_spans)
+    exposed_root_ids: list[str] = []
+    for span in exact_target_spans:
+        _extend_unique(exposed_root_ids, span.injected_root_ids)
+    return ContaminationExposure(
+        condition=condition,
+        status="supported",
+        is_exposed=True,
+        answer_call_id=answer_call_id,
+        target_entry_ids=target_entry_ids,
+        source_entry_ids=source_entry_ids,
+        exposed_source_ids=exposed_entry_ids,
+        exposure_mode="final_prompt",
+        reason="exact target source span rendered into final answer prompt",
+        target_set_id=target_set.target_set_id,
+        exposed_entry_ids=exposed_entry_ids,
+        exposed_injected_root_ids=exposed_root_ids,
+        evidence_lineage_status="exact",
+    )
+
+
+def _normalized_memory_items(
+    memory_before: Sequence[dict[str, Any] | MemoryEntry],
+) -> list[MemoryItemLog]:
+    entries = [
+        entry if isinstance(entry, MemoryEntry) else MemoryEntry.model_validate(entry)
+        for entry in memory_before
+    ]
+    return [MemoryItemLog.from_memory_entry(entry, entries) for entry in entries]
+
+
+def _unique_entry_ids(spans: list[PromptSourceSpan]) -> list[str]:
+    entry_ids: list[str] = []
+    for span in spans:
+        _extend_unique(entry_ids, [span.entry_id])
+    return entry_ids
+
+
+def _exact_target_span(span: PromptSourceSpan, target_set: TargetContaminationSetSpec) -> bool:
+    return (
+        span.contamination_class in target_set.included_classes
+        and (not target_set.require_exact_lineage or span.lineage_status == "exact")
+    )
+
+
+def _has_approximate_target_candidate(
+    memory_items: list[MemoryItemLog],
+    spans: list[PromptSourceSpan],
+    target_set: TargetContaminationSetSpec,
+) -> bool:
+    if not target_set.require_exact_lineage:
+        return False
+    for item in memory_items:
+        declared_class = item.metadata.get("contamination_class", item.contamination_class)
+        declared_status = item.metadata.get("lineage_status", item.lineage_status)
+        if declared_class in target_set.included_classes and declared_status != "exact":
+            return True
+    return any(
+        span.contamination_class in target_set.included_classes and span.lineage_status != "exact"
+        for span in spans
     )
