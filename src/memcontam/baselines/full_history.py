@@ -6,7 +6,11 @@ from uuid import uuid4
 
 from memcontam.clients.base import LLMClient
 from memcontam.clients.recording import MethodCallRecorder
-from memcontam.logging.provenance import PromptSourcePart, build_prompt_with_sources
+from memcontam.logging.provenance import (
+    PromptSourcePart,
+    build_prompt_with_sources,
+    phase11_lineage_metadata,
+)
 from memcontam.logging.schema import VerifierResult
 from memcontam.memory.stores import MemoryEntry, MemoryState
 from memcontam.tasks.base import TaskInstance
@@ -95,6 +99,7 @@ class FullHistoryPolicy:
             source_trial_id=trial_id,
             metadata={
                 "parent_entry_ids": parent_entry_ids,
+                "direct_parent_ids": parent_entry_ids,
                 "source_entry_ids": source_entry_ids,
                 "lineage": lineage,
                 "task_input": task.input,
@@ -102,7 +107,20 @@ class FullHistoryPolicy:
                 "raw_response": response.content,
                 "parsed_answer": parsed_answer,
                 "correct": verifier_result.is_correct,
+                **(
+                    {"memory_error_status": "satisfied"}
+                    if config.get("_logging_target_set_id") and not verifier_result.is_correct
+                    else {}
+                ),
             },
+        )
+        new_entry.metadata.update(
+            phase11_lineage_metadata(
+                new_entry,
+                [*memory.entries, new_entry],
+                config.get("_logging_target_contamination_set")
+                or config.get("_logging_target_set_id"),
+            )
         )
         memory.entries.append(new_entry)
 
@@ -149,7 +167,7 @@ class FullHistoryPolicy:
             parts.append(PromptSourcePart(entry.content, entry))
         parts.append("\n\nSolve: ")
         parts.append(str(task.input))
-        content, spans = build_prompt_with_sources(parts, message_index=0)
+        content, spans = build_prompt_with_sources(parts, message_index=0, entries=memory.entries)
         return [{"role": "user", "content": content}], spans
 
 

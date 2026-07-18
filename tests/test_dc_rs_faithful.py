@@ -182,6 +182,59 @@ def test_dc_rs_derived_cheatsheet_keeps_synthesis_lineage_in_answer_prompt(tmp_p
     assert "contaminated-origin" in exposure.exposed_source_ids
 
 
+def test_dc_rs_synthesized_answer_span_records_exact_source_parents(tmp_path) -> None:
+    injected = MemoryEntry(
+        entry_id="injected-pair",
+        content="prior injected input",
+        memory_type="dc_rs_io_pair",
+        clean_or_contaminated="contaminated",
+        metadata={
+            "output_text": "prior injected output",
+            "contamination_class": "injected",
+            "injected_root_ids": ["injected-pair"],
+            "lineage_status": "exact",
+            "lineage_basis": "seed",
+            "direct_parent_ids": [],
+            "target_set_id": "controlled_injected_derived_v1",
+            "is_target_contamination": True,
+        },
+    )
+    client = _QueuedClient(["<cheatsheet>new cheatsheet</cheatsheet>", "final: current output"])
+
+    clean_cheatsheet = _cheatsheet()
+    clean_cheatsheet.metadata = {
+        "contamination_class": "clean",
+        "injected_root_ids": [],
+        "lineage_status": "exact",
+        "lineage_basis": "seed",
+        "direct_parent_ids": [],
+        "target_set_id": "controlled_injected_derived_v1",
+        "is_target_contamination": False,
+    }
+    result = _policy(_TieEmbeddingProvider(), tmp_path).run(
+        _task(),
+        MemoryState(entries=[clean_cheatsheet, injected]),
+        client=client,
+        model="replay",
+        config={
+            **_config(),
+            "_logging_target_set_id": "controlled_injected_derived_v1",
+        },
+        verifier=_verifier,
+    )
+
+    synthesis_call, answer_call = result["method_calls"]
+    span = answer_call.source_spans[0]
+    assert span.parent_call_id == synthesis_call.call_id
+    assert span.direct_parent_ids == ["dc_cheatsheet:seed", "injected-pair"]
+    assert span.contamination_class == "derived"
+    assert span.injected_root_ids == ["injected-pair"]
+    assert span.lineage_status == "exact"
+    assert span.lineage_basis == "recorded_parent"
+    assert span.target_set_id == "controlled_injected_derived_v1"
+    assert span.is_target_contamination is True
+
+
 @pytest.mark.parametrize(
     ("pairs", "expected_ids"),
     [

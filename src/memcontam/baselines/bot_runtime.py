@@ -11,6 +11,7 @@ from memcontam.baselines.bot_style import (
 )
 from memcontam.clients.base import LLMClient
 from memcontam.clients.recording import MethodCallRecorder
+from memcontam.logging.provenance import phase11_lineage_metadata
 from memcontam.logging.schema import VerifierResult
 from memcontam.memory.bot_buffer import (
     BotBufferIdentity,
@@ -70,7 +71,9 @@ class BotRuntime:
             registry = BotBufferRegistry()
             for entry in buffer_snapshot:
                 registry.insert(identity, _entry_to_template(entry))
-            candidate = _candidate_template(task, final_response, verifier_result, retrieved)
+            candidate = _candidate_template(
+                task, final_response, verifier_result, retrieved, call_config
+            )
             memory_write_event = maybe_update(
                 registry,
                 identity,
@@ -117,16 +120,41 @@ def _candidate_template(
     final_response: str,
     verifier_result: VerifierResult,
     retrieved: dict[str, Any] | None,
+    config: dict[str, Any],
 ) -> ThoughtTemplate:
     trial_id = f"{task.task_name}:{task.sample_id}"
     content = distill_thought_template(task, final_response, verifier_result, retrieved)
     source_entry_ids = [retrieved["entry_id"]] if retrieved else []
+    entry_id = f"bot_candidate:{hashlib.sha256((trial_id + final_response).encode()).hexdigest()[:12]}"
+    direct_parent_ids = [retrieved["entry_id"]] if retrieved else []
+    metadata = {
+        "raw_response": final_response,
+        "distillation_source": "bot_runtime",
+        "direct_parent_ids": direct_parent_ids,
+    }
+    candidate_entry = MemoryEntry(
+        entry_id=entry_id,
+        content=content,
+        memory_type="thought_template",
+        clean_or_contaminated="clean",
+        source_trial_id=trial_id,
+        metadata=metadata,
+    )
+    parent_entries = [retrieved["memory_entry"]] if retrieved else []
+    candidate_entry.metadata.update(
+        phase11_lineage_metadata(
+            candidate_entry,
+            parent_entries,
+            config.get("_logging_target_contamination_set")
+            or config.get("_logging_target_set_id"),
+        )
+    )
     return ThoughtTemplate(
-        entry_id=f"bot_candidate:{hashlib.sha256((trial_id + final_response).encode()).hexdigest()[:12]}",
+        entry_id=entry_id,
         content=content,
         source_trial_id=trial_id,
         source_entry_ids=source_entry_ids,
-        metadata={"raw_response": final_response, "distillation_source": "bot_runtime"},
+        metadata=candidate_entry.metadata,
     )
 
 

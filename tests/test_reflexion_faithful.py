@@ -5,7 +5,7 @@ import pytest
 from memcontam.baselines.reflexion_style import ReflexionStylePolicy
 from memcontam.clients.replay import ReplayClient
 from memcontam.logging.provenance import compute_exposure_from_spans, normalize_memory_event
-from memcontam.logging.schema import MemoryEvent, VerifierResult
+from memcontam.logging.schema import MemoryEvent, MemoryItemLog, VerifierResult
 from memcontam.memory.stores import MemoryEntry, MemoryState
 from memcontam.tasks.base import TaskInstance
 
@@ -239,6 +239,62 @@ def test_run_max_attempts_two_retries_same_sample_with_latest_three_memory_only(
     assert retry_span.parent_ids == ["old", "one", "two"]
 
 
+def test_retry_answer_span_reuses_exact_reflection_lineage() -> None:
+    task = _task()
+    injected = MemoryEntry(
+        entry_id="injected-reflection",
+        content="Use the injected route.",
+        memory_type="verbal_reflection",
+        clean_or_contaminated="contaminated",
+        metadata={
+            "contamination_class": "injected",
+            "injected_root_ids": ["injected-reflection"],
+            "lineage_status": "exact",
+            "lineage_basis": "seed",
+            "direct_parent_ids": [],
+            "target_set_id": "controlled_injected_derived_v1",
+            "is_target_contamination": True,
+        },
+    )
+    client = ReplayClient(
+        responses_by_sample={
+            "sample_001": {
+                "reflexion_generate": ["final: incorrect", "final: 4"],
+                "reflexion_reflect": "Use the mitigation.",
+            }
+        }
+    )
+
+    result = ReflexionStylePolicy().run(
+        task,
+        MemoryState(entries=[injected]),
+        client=client,
+        model="replay",
+        config={
+            **_config(max_attempts=2),
+            "_logging_target_set_id": "controlled_injected_derived_v1",
+        },
+        verifier=lambda answer, _task: VerifierResult(
+            is_correct=answer == "4", parsed_answer=answer, reason="wrong_answer"
+        ),
+    )
+
+    memory_entry = MemoryEntry.model_validate(result["memory_after"][-1])
+    retry_span = next(
+        span
+        for span in result["method_calls"][-1].source_spans
+        if span.entry_id == memory_entry.entry_id
+    )
+    assert memory_entry.metadata["direct_parent_ids"] == ["injected-reflection"]
+    assert retry_span.contamination_class == "derived"
+    assert retry_span.injected_root_ids == ["injected-reflection"]
+    assert retry_span.lineage_status == "exact"
+    assert retry_span.lineage_basis == "recorded_parent"
+    assert retry_span.direct_parent_ids == ["injected-reflection"]
+    assert retry_span.target_set_id == "controlled_injected_derived_v1"
+    assert retry_span.is_target_contamination is True
+
+
 def test_reflection_only_auxiliary_call_does_not_set_answer_exposure() -> None:
     task = _task()
     client = ReplayClient(
@@ -468,3 +524,21 @@ def test_rejected_empty_reflection_memory_event_preserves_snapshot() -> None:
     assert event.before_snapshot_hash == event.after_snapshot_hash
     assert event.creation_origin is None
     assert event.memory_version is None
+
+
+def test_clean_ancestry_reflexion_mitigation_is_not_natural() -> None:
+    entry = MemoryEntry(
+        entry_id="clean-mitigation",
+        content="Reflection: check the operator order.",
+        memory_type="verbal_reflection",
+        source_trial_id="trial-1",
+        metadata={
+            "parent_entry_ids": ["clean-seed"],
+            "memory_error_status": "satisfied",
+        },
+    )
+
+    item = MemoryItemLog.from_memory_entry(entry)
+
+    assert item.contamination_class == "clean"
+    assert item.injected_root_ids == []

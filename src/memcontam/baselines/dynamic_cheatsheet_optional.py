@@ -13,7 +13,9 @@ from memcontam.clients.recording import MethodCallRecorder
 from memcontam.logging.provenance import (
     PromptSourcePart,
     build_prompt_with_sources,
+    combine_lineage_status,
     derived_source_span,
+    phase11_lineage_metadata,
     source_lineage_from_spans,
 )
 from memcontam.logging.schema import VerifierResult
@@ -76,7 +78,11 @@ class DynamicCheatsheetRetrievalSynthesisPolicy:
         synthesis_call = recorder.get_records()[-1]
         updated_cheatsheet, parser_status = _extract_cheatsheet(synthesized.content, cheatsheet)
         generation_message, generation_spans = _dc_rs_generation_message(
-            task, updated_cheatsheet, synthesis_call.call_id, synthesis_call.source_spans
+            task,
+            updated_cheatsheet,
+            synthesis_call.call_id,
+            synthesis_call.source_spans,
+            call_config.get("_logging_target_set_id"),
         )
         generated = recorder.chat(
             [generation_message],
@@ -107,7 +113,18 @@ class DynamicCheatsheetRetrievalSynthesisPolicy:
                     "contaminated" if lineage["source_contaminated_entry_ids"] else "clean"
                 ),
                 source_trial_id=trial_id,
-                metadata=lineage,
+                metadata={
+                    **lineage,
+                    "direct_parent_ids": _span_entry_ids(synthesis_call.source_spans),
+                },
+            )
+            replacement.metadata.update(
+                phase11_lineage_metadata(
+                    replacement,
+                    [*memory.entries, replacement],
+                    call_config.get("_logging_target_contamination_set")
+                    or call_config.get("_logging_target_set_id"),
+                )
             )
             state_entries = [entry for entry in memory.entries if not _is_cheatsheet(entry)]
             memory_after_entries = [replacement, *state_entries]
@@ -124,7 +141,19 @@ class DynamicCheatsheetRetrievalSynthesisPolicy:
                 "contaminated" if lineage["source_contaminated_entry_ids"] else "clean"
             ),
             source_trial_id=trial_id,
-            metadata={**lineage, "output_text": parsed_answer},
+            metadata={
+                **lineage,
+                "output_text": parsed_answer,
+                "direct_parent_ids": _span_entry_ids(synthesis_call.source_spans),
+            },
+        )
+        pair.metadata.update(
+            phase11_lineage_metadata(
+                pair,
+                [*memory.entries, pair],
+                call_config.get("_logging_target_contamination_set")
+                or call_config.get("_logging_target_set_id"),
+            )
         )
         memory_after_entries.append(pair)
         event = {
@@ -241,7 +270,18 @@ class DynamicCheatsheetOptionalPolicy:
                     "contaminated" if lineage["source_contaminated_entry_ids"] else "clean"
                 ),
                 source_trial_id=trial_id,
-                metadata=lineage,
+                metadata={
+                    **lineage,
+                    "direct_parent_ids": [entry.entry_id for entry in generation_entries],
+                },
+            )
+            entry.metadata.update(
+                phase11_lineage_metadata(
+                    entry,
+                    [*memory.entries, entry],
+                    call_config.get("_logging_target_contamination_set")
+                    or call_config.get("_logging_target_set_id"),
+                )
             )
             memory_after = [entry.model_dump()]
             event.update(
@@ -410,12 +450,22 @@ def _dc_rs_generation_message(
     cheatsheet: str,
     synthesis_call_id: str | None,
     synthesis_spans: list[Any],
+    target_set_id: str | None = None,
 ) -> tuple[dict[str, str], list[Any]]:
     prefix = f"Task input: {task.input}\n\nCheatsheet:\n"
     suffix = "\n\nSolve the task and respond in the normal harness format: final: <answer>."
     if not cheatsheet or synthesis_call_id is None:
         return {"role": "user", "content": prefix + cheatsheet + suffix}, []
     source_ids, parent_ids, clean_or_contaminated = source_lineage_from_spans(synthesis_spans)
+    direct_parent_ids = _span_entry_ids(synthesis_spans)
+    lineage_status = combine_lineage_status(
+        [span.lineage_status or "unavailable" for span in synthesis_spans]
+    )
+    injected_root_ids: list[str] = []
+    for span in synthesis_spans:
+        if span.lineage_status == "exact":
+            _extend_unique(injected_root_ids, span.injected_root_ids)
+    contamination_class = "derived" if injected_root_ids and lineage_status == "exact" else "clean"
     content = prefix + cheatsheet + suffix
     return {
         "role": "user",
@@ -434,8 +484,27 @@ def _dc_rs_generation_message(
             version="dc_rs_synthesis_v1",
             origin="dc_rs_synthesize",
             clean_or_contaminated=clean_or_contaminated,
+            contamination_class=contamination_class if target_set_id else None,
+            injected_root_ids=injected_root_ids,
+            lineage_status=lineage_status if target_set_id else None,
+            lineage_basis="recorded_parent" if target_set_id else None,
+            direct_parent_ids=direct_parent_ids,
+            target_set_id=target_set_id,
+            is_target_contamination=(
+                contamination_class == "derived" and lineage_status == "exact"
+                if target_set_id
+                else None
+            ),
         )
     ]
+
+
+def _span_entry_ids(spans: list[Any]) -> list[str]:
+    entry_ids: list[str] = []
+    for span in spans:
+        if isinstance(span.entry_id, str) and span.entry_id not in entry_ids:
+            entry_ids.append(span.entry_id)
+    return entry_ids
 
 
 def _curation_message(

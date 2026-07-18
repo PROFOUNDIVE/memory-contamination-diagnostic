@@ -8,7 +8,7 @@ import pytest
 from memcontam.baselines.full_history import FullHistoryPolicy, _call_verifier
 from memcontam.clients.replay import ReplayClient
 from memcontam.logging.provenance import compute_exposure_from_spans, normalize_memory_event
-from memcontam.logging.schema import PromptSourceSpan, VerifierResult
+from memcontam.logging.schema import MemoryItemLog, PromptSourceSpan, VerifierResult
 from memcontam.memory.stores import MemoryEntry, MemoryState
 from memcontam.tasks.base import TaskInstance
 
@@ -303,3 +303,47 @@ def test_accepted_memory_event_normalizes_append_mutation() -> None:
     assert event.contaminated_source_ids == []
     assert event.creation_origin == "full_history_transcript"
     assert event.memory_version == "v0"
+
+
+def test_normalized_full_history_failure_is_natural_with_clean_ancestry() -> None:
+    before = [
+        MemoryEntry(
+            entry_id="clean-seed",
+            content="A clean hint.",
+            memory_type="strategy",
+            metadata={
+                "contamination_class": "clean",
+                "lineage_status": "exact",
+                "lineage_basis": "seed",
+            },
+        )
+    ]
+    after = [
+        *before,
+        MemoryEntry(
+            entry_id="failed-transcript",
+            content="A failed response transcript.",
+            memory_type="full_history_transcript",
+            source_trial_id="trial-1",
+            metadata={
+                "parent_entry_ids": ["clean-seed"],
+                "direct_parent_ids": ["clean-seed"],
+                "memory_error_status": "satisfied",
+            },
+        ),
+    ]
+
+    event = normalize_memory_event(
+        "full_history",
+        "trial-1",
+        before,
+        after,
+        {"type": "full_history_append", "status": "accepted", "new_entry_id": "failed-transcript"},
+    )
+
+    assert event is not None
+    assert event.lineage_edges[0].child_entry_id == "failed-transcript"
+    assert event.lineage_edges[0].parent_entry_id == "clean-seed"
+    item = MemoryItemLog.from_memory_entry(after[-1], after)
+    assert item.contamination_class == "natural"
+    assert item.injected_root_ids == []

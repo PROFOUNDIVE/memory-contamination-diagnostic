@@ -6,7 +6,11 @@ from uuid import uuid4
 
 from memcontam.clients.base import LLMClient
 from memcontam.clients.recording import MethodCallRecorder
-from memcontam.logging.provenance import PromptSourcePart, build_prompt_with_sources
+from memcontam.logging.provenance import (
+    PromptSourcePart,
+    build_prompt_with_sources,
+    phase11_lineage_metadata,
+)
 from memcontam.logging.schema import VerifierResult
 from memcontam.memory.stores import MemoryEntry, MemoryState
 from memcontam.tasks.base import TaskInstance
@@ -193,6 +197,7 @@ class ReflexionStylePolicy:
                 source_trial_id=source_trial_id,
                 metadata={
                     "parent_entry_ids": parent_entry_ids,
+                    "direct_parent_ids": parent_entry_ids,
                     "source_entry_ids": source_entry_ids,
                     "parent_call_id": reflection_call_id,
                     "reflection_lineage": {
@@ -201,6 +206,14 @@ class ReflexionStylePolicy:
                         "source_trial_id": source_trial_id,
                     },
                 },
+            )
+            entry.metadata.update(
+                phase11_lineage_metadata(
+                    entry,
+                    [*memory.entries, entry],
+                    call_config.get("_logging_target_contamination_set")
+                    or call_config.get("_logging_target_set_id"),
+                )
             )
             memory.entries.append(entry)
             event = {
