@@ -111,7 +111,17 @@ def test_run_config_writes_replay_trial_log_jsonl(tmp_path) -> None:
     assert row["memory_after"] == []
     assert row["filter_decision"] is None
     assert row["memory_write_event"] is None
-    assert row["contamination_exposure"] == {
+    assert {key: row["contamination_exposure"][key] for key in (
+        "condition",
+        "status",
+        "is_exposed",
+        "answer_call_id",
+        "target_entry_ids",
+        "source_entry_ids",
+        "exposed_source_ids",
+        "exposure_mode",
+        "reason",
+    )} == {
         "condition": "clean",
         "status": "not_evaluable",
         "is_exposed": None,
@@ -543,7 +553,17 @@ def test_contaminated_row_with_no_retrieval_logs_memory_before_exposure(tmp_path
     )
 
     assert row["retrieved_memory"] == []
-    assert row["contamination_exposure"] == {
+    assert {key: row["contamination_exposure"][key] for key in (
+        "condition",
+        "status",
+        "is_exposed",
+        "answer_call_id",
+        "target_entry_ids",
+        "source_entry_ids",
+        "exposed_source_ids",
+        "exposure_mode",
+        "reason",
+    )} == {
         "condition": "contaminated",
         "status": "not_evaluable",
         "is_exposed": None,
@@ -1601,6 +1621,279 @@ def _strict_no_memory_config(tmp_path, sample_path: str, corpus_path: str) -> di
         "replay": {"fixture_version": "fixture-v1", "responses": ["final: 6 / (1 - 3 / 4)"]},
         "live_smoke": {"enabled": False},
     }
+
+
+def _phase11_config(tmp_path, sample_path: str, corpus_path: str) -> dict[str, Any]:
+    config = _strict_no_memory_config(tmp_path, sample_path, corpus_path)
+    config["run"]["contract_level"] = "phase11"
+    config["logging"]["schema_version"] = "logging_v2"
+    config["evaluation"] = {
+        "evaluation_law_id": "law-online-v1",
+        "regime": "online",
+        "task_law_id": "task-law-v1",
+        "inference_law_id": "inference-law-v1",
+        "checkpoint_policy_id": None,
+    }
+    config["target_contamination_set"] = {
+        "target_set_id": "controlled_injected_derived_v1",
+        "definition_version": "phase11-v1",
+        "included_classes": ["injected", "derived"],
+        "require_exact_lineage": True,
+    }
+    config["embedding"] = {
+        "corpus_path": corpus_path,
+        "top_k": 1,
+        "offline_fallback": True,
+        "cache_path": str(tmp_path / "embedding_cache"),
+    }
+    return config
+
+
+def test_phase11_runner_writes_law_target_pairing_and_update_context(
+    tmp_path, monkeypatch
+) -> None:
+    sample_path = _write_game24_sample(tmp_path)
+    corpus_path = _write_minimal_corpus(
+        tmp_path,
+        [
+            {
+                "entry_id": "game24_clean_001",
+                "task": "game24",
+                "memory_type": "memory_seed",
+                "content": "Look for fractional complements when solving Game24.",
+                "source": "test",
+                "clean_or_contaminated": "clean",
+                "contamination_class": "clean",
+                "lineage_status": "exact",
+                "lineage_basis": "seed",
+            },
+            {
+                "entry_id": "game24_injected_001",
+                "task": "game24",
+                "memory_type": "memory_seed",
+                "content": "Injected hint: prefer a misleading addition route.",
+                "source": "test",
+                "clean_or_contaminated": "contaminated",
+                "paired_clean_entry_id": "game24_clean_001",
+                "contamination_class": "injected",
+                "lineage_status": "exact",
+                "lineage_basis": "seed",
+                "injected_root_ids": ["game24_injected_001"],
+            },
+        ],
+    )
+    monkeypatch.chdir(tmp_path)
+    config = _phase11_config(tmp_path, sample_path, corpus_path)
+    config["models"] = ["replay", "replay_alt"]
+    config["run"]["model_snapshots"] = {"replay": "fixture-v1", "replay_alt": "fixture-v2"}
+    config["baselines"] = ["no_memory", "retrieval_rag"]
+    config["arms"] = ["clean", "contaminated", "contaminated_filter"]
+    config["replay"] = {"responses_by_sample": {"sample_1": "final: 6 / (1 - 3 / 4)"}}
+
+    run_dir = run_config(config, run_id="phase11_context")
+
+    manifest = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    trials = [
+        json.loads(line)
+        for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert manifest["run_metadata"]["evaluation_law"]["evaluation_law_id"] == "law-online-v1"
+    assert manifest["run_metadata"]["target_contamination_set"]["target_set_id"] == "controlled_injected_derived_v1"
+    assert len(trials) == 8
+    for trial in trials:
+        TrialLog.model_validate(trial)
+        assert trial["schema_version"] == "logging_v2"
+        assert trial["evaluation_law_id"] == "law-online-v1"
+        assert trial["target_set_id"] == "controlled_injected_derived_v1"
+        assert trial["checkpoint_ref"] is None
+        assert trial["checkpoint_index"] == 0
+        assert trial["pair_id"] == ":".join(
+            [trial["trajectory_pair_id"], str(trial["checkpoint_index"]), trial["sample_id"]]
+        )
+
+    no_memory_rows = [trial for trial in trials if trial["baseline"] == "no_memory"]
+    assert {trial["memory_update_mode"] for trial in no_memory_rows} == {"not_applicable"}
+
+    rag_rows = [trial for trial in trials if trial["baseline"] == "retrieval_rag"]
+    assert {trial["memory_update_mode"] for trial in rag_rows} == {"enabled"}
+    assert len({trial["pair_id"] for trial in rag_rows if trial["backbone"] == "replay"}) == 1
+    assert len({trial["pair_id"] for trial in rag_rows}) == 2
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (lambda config: config.pop("evaluation"), "logging_v2 requires evaluation"),
+        (lambda config: config["evaluation"].update(regime="stage"), "invalid evaluation.regime"),
+        (lambda config: config["memory"].update(update_mode="disabled"), "memory.update_mode"),
+        (
+            lambda config: config.update(checkpoint_ref={"checkpoint_id": "ckpt-1"}),
+            "checkpoint_ref.checkpoint_trial_index",
+        ),
+        (lambda config: config.update(baselines=["full_history"]), "frozen.*memory-writing"),
+    ],
+)
+def test_phase11_frozen_and_law_validation_fail_closed_before_run_dir(
+    tmp_path, monkeypatch, mutate, message
+) -> None:
+    sample_path = _write_game24_sample(tmp_path)
+    corpus_path = _write_minimal_corpus(tmp_path, [])
+    monkeypatch.chdir(tmp_path)
+    config = _phase11_config(tmp_path, sample_path, corpus_path)
+    config["evaluation"]["regime"] = "frozen"
+    config["evaluation"]["evaluation_law_id"] = "law-frozen-v1"
+    config["evaluation"]["checkpoint_policy_id"] = "checkpoint-policy-v1"
+    config["checkpoint_ref"] = {
+        "checkpoint_id": "ckpt-1",
+        "checkpoint_trial_index": 0,
+        "checkpoint_memory_hash": "abc123",
+        "checkpoint_source_run_id": "source-run",
+    }
+    mutate(config)
+
+    class UnexpectedClient:
+        def chat(self, messages, model, config):
+            raise AssertionError("provider should not be constructed or called")
+
+    with pytest.raises(SystemExit, match=message):
+        run_config(config, run_id="phase11_invalid_frozen", _client_override=UnexpectedClient())
+
+    assert not (tmp_path / "runs" / "phase11_invalid_frozen").exists()
+
+
+def _phase11_frozen_config(tmp_path, sample_path: str, corpus_path: str) -> dict[str, Any]:
+    config = _phase11_config(tmp_path, sample_path, corpus_path)
+    config["evaluation"]["regime"] = "frozen"
+    config["evaluation"]["evaluation_law_id"] = "law-frozen-v1"
+    config["evaluation"]["checkpoint_policy_id"] = "checkpoint-policy-v1"
+    config["baselines"] = ["no_memory", "retrieval_rag"]
+    config["arms"] = ["clean", "contaminated"]
+    config["checkpoint_ref"] = {
+        "checkpoint_id": "ckpt-1",
+        "checkpoint_trial_index": 7,
+        "checkpoint_memory_hash": "checkpoint-hash-abc123",
+        "checkpoint_source_run_id": "source-run-1",
+        "artifact_path": None,
+    }
+    config["replay"] = {"responses_by_sample": {"sample_1": "final: 6 / (1 - 3 / 4)"}}
+    return config
+
+
+def test_phase11_frozen_read_only_run_logs_checkpoint_context(
+    tmp_path, monkeypatch
+) -> None:
+    sample_path = _write_game24_sample(tmp_path)
+    corpus_path = _write_minimal_corpus(
+        tmp_path,
+        [
+            {
+                "entry_id": "game24_clean_001",
+                "task": "game24",
+                "memory_type": "memory_seed",
+                "content": "Use careful arithmetic grouping for Game24.",
+                "source": "test",
+                "clean_or_contaminated": "clean",
+                "contamination_class": "clean",
+                "lineage_status": "exact",
+                "lineage_basis": "seed",
+            },
+            {
+                "entry_id": "game24_injected_001",
+                "task": "game24",
+                "memory_type": "memory_seed",
+                "content": "Injected distractor: try simple addition first.",
+                "source": "test",
+                "clean_or_contaminated": "contaminated",
+                "paired_clean_entry_id": "game24_clean_001",
+                "contamination_class": "injected",
+                "lineage_status": "exact",
+                "lineage_basis": "seed",
+                "injected_root_ids": ["game24_injected_001"],
+            },
+        ],
+    )
+    monkeypatch.chdir(tmp_path)
+    config = _phase11_frozen_config(tmp_path, sample_path, corpus_path)
+
+    run_dir = run_config(config, run_id="phase11_frozen_read_only")
+
+    trials = [
+        json.loads(line)
+        for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    memory_events = (run_dir / "memory_events.jsonl").read_text(encoding="utf-8")
+    assert memory_events == ""
+
+    no_memory = [trial for trial in trials if trial["baseline"] == "no_memory"]
+    assert len(no_memory) == 1
+    assert no_memory[0]["memory_update_mode"] == "not_applicable"
+    assert no_memory[0]["checkpoint_ref"] is None
+    assert no_memory[0]["memory_write_event"] is None
+    assert no_memory[0]["memory_before"] == no_memory[0]["memory_after"] == []
+
+    rag_rows = [trial for trial in trials if trial["baseline"] == "retrieval_rag"]
+    assert {trial["arm"] for trial in rag_rows} == {"clean", "contaminated"}
+    for trial in rag_rows:
+        TrialLog.model_validate(trial)
+        assert trial["memory_update_mode"] == "disabled"
+        assert trial["checkpoint_ref"] == config["checkpoint_ref"]
+        assert trial["memory_write_event"] is None
+        assert trial["memory_before"] == trial["memory_after"]
+        assert trial["checkpoint_index"] == 0
+        assert trial["pair_id"] == ":".join(
+            [trial["trajectory_pair_id"], str(trial["checkpoint_index"]), trial["sample_id"]]
+        )
+
+
+def test_phase11_frozen_disabled_memory_drift_fails_closed(
+    tmp_path, monkeypatch
+) -> None:
+    sample_path = _write_game24_sample(tmp_path)
+    corpus_path = _write_minimal_corpus(
+        tmp_path,
+        [
+            {
+                "entry_id": "game24_clean_001",
+                "task": "game24",
+                "memory_type": "memory_seed",
+                "content": "Use careful arithmetic grouping for Game24.",
+                "source": "test",
+                "clean_or_contaminated": "clean",
+                "contamination_class": "clean",
+                "lineage_status": "exact",
+                "lineage_basis": "seed",
+            }
+        ],
+    )
+    monkeypatch.chdir(tmp_path)
+    config = _phase11_frozen_config(tmp_path, sample_path, corpus_path)
+    config["baselines"] = ["retrieval_rag"]
+    config["arms"] = ["clean"]
+    original_policy = cli.RetrievalRagPolicy
+
+    class MutatingRetrievalRagPolicy:
+        def run(self, *args, **kwargs):
+            result = original_policy().run(*args, **kwargs)
+            result["memory_after"] = [
+                *result["memory_after"],
+                {
+                    "entry_id": "illegal-frozen-write",
+                    "content": "mutated",
+                    "memory_type": "memory_seed",
+                    "clean_or_contaminated": "clean",
+                    "source_trial_id": None,
+                    "metadata": {},
+                },
+            ]
+            result["memory_write_event"] = {"type": "illegal_frozen_write"}
+            return result
+
+    monkeypatch.setattr(cli, "RetrievalRagPolicy", MutatingRetrievalRagPolicy)
+
+    with pytest.raises(SystemExit, match="frozen logging_v2 trial changed memory"):
+        run_config(config, run_id="phase11_frozen_drift")
+
+    assert not (tmp_path / "runs" / "phase11_frozen_drift").exists()
 
 
 def test_strict_failed_multicall_trial_keeps_answer_call_not_failed_curation(

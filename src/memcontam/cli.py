@@ -30,6 +30,7 @@ from memcontam.contamination.catalog import load_catalog
 from memcontam.logging.schema import (
     BadMemoryUptakeLabel,
     CallEvent,
+    CheckpointRef,
     ContaminationExposure,
     EvaluationLawSpec,
     FailureEvent,
@@ -42,7 +43,11 @@ from memcontam.logging.schema import (
     TargetContaminationSetSpec,
     TrialLog,
 )
-from memcontam.logging.provenance import compute_exposure_from_spans, normalize_memory_event
+from memcontam.logging.provenance import (
+    compute_exposure_from_spans,
+    compute_exposure_from_spans_v2,
+    normalize_memory_event,
+)
 from memcontam.logging.writer import RunLogWriter
 from memcontam.memory.bot_buffer import BotBufferIdentity, ThoughtTemplate
 from memcontam.memory.corpus import CorpusRecord, build_arm_corpus, load_corpus
@@ -109,6 +114,16 @@ FAITHFUL_BASELINES = {
     "dynamic_cheatsheet_optional",
     "dynamic_cheatsheet_rs_optional",
 }
+
+WRITING_BASELINES = {
+    "full_history",
+    "reflexion_style",
+    "bot_style",
+    "dynamic_cheatsheet_optional",
+    "dynamic_cheatsheet_rs_optional",
+}
+
+MEMORY_BASELINES = WRITING_BASELINES | {"retrieval_rag"}
 
 def validate_config(path: Path) -> None:
     config = load_config(path)
@@ -321,6 +336,36 @@ def _validate_phase11_config_sections(config: dict[str, Any]) -> None:
         config.get("target_contamination_set"),
         TargetContaminationSetSpec,
     )
+    _validate_phase11_runtime_config(config)
+
+
+def _validate_phase11_runtime_config(config: dict[str, Any]) -> None:
+    if "update_mode" in config.get("memory", {}):
+        raise SystemExit("logging_v2 does not accept memory.update_mode; use evaluation.regime")
+    regime = config["evaluation"]["regime"]
+    checkpoint_ref = config.get("checkpoint_ref")
+    if regime == "online":
+        if checkpoint_ref is not None:
+            raise SystemExit("online logging_v2 configs must not set checkpoint_ref")
+        return
+    if regime != "frozen":
+        return
+    invalid = sorted(set(config.get("baselines", [])) & WRITING_BASELINES)
+    if invalid:
+        raise SystemExit(f"frozen logging_v2 rejects memory-writing baselines: {', '.join(invalid)}")
+    unsupported = sorted(set(config.get("baselines", [])) - {"no_memory", "retrieval_rag"})
+    if unsupported:
+        raise SystemExit(f"frozen logging_v2 supports only no_memory and retrieval_rag: {', '.join(unsupported)}")
+    if checkpoint_ref is None:
+        raise SystemExit("frozen logging_v2 requires checkpoint_ref")
+    try:
+        CheckpointRef.model_validate(checkpoint_ref)
+    except ValueError as exc:
+        errors = getattr(exc, "errors", lambda: [])()
+        if errors:
+            loc = ".".join(str(part) for part in errors[0].get("loc", ()))
+            raise SystemExit(f"invalid checkpoint_ref.{loc}: {errors[0].get('msg')}") from exc
+        raise SystemExit(f"invalid checkpoint_ref: {exc}") from exc
 
 
 def _validate_typed_config_section(section: str, value: Any, model: Any) -> None:
@@ -544,6 +589,21 @@ def _records_for_baseline(
     ]
 
 
+def _apply_phase11_target_metadata(config: dict[str, Any], entries: list[MemoryEntry]) -> None:
+    if config.get("logging", {}).get("schema_version") != LOGGING_V2:
+        return
+    target_set = config["target_contamination_set"]
+    included = set(target_set["included_classes"])
+    require_exact = target_set["require_exact_lineage"]
+    for entry in entries:
+        contamination_class = entry.metadata.get("contamination_class")
+        entry.metadata["target_set_id"] = target_set["target_set_id"]
+        entry.metadata["is_target_contamination"] = (
+            contamination_class in included
+            and (not require_exact or entry.metadata.get("lineage_status") == "exact")
+        )
+
+
 def _bot_injection_entries(
     records: list[CorpusRecord], task_name: str, arm: str
 ) -> tuple[list[MemoryEntry], FilterTelemetry | None]:
@@ -561,11 +621,14 @@ def _entry_to_template(entry: MemoryEntry) -> ThoughtTemplate:
 
 
 def _template_to_entry(template: ThoughtTemplate) -> MemoryEntry:
+    contamination_class = template.metadata.get("contamination_class")
     return MemoryEntry(
         entry_id=template.entry_id,
         content=template.content,
         memory_type="thought_template",
-        clean_or_contaminated="clean",
+        clean_or_contaminated=(
+            "clean" if contamination_class in {None, "clean"} else "contaminated"
+        ),
         source_trial_id=template.source_trial_id,
         metadata=dict(template.metadata),
     )
@@ -602,6 +665,57 @@ def _legacy_method_call_messages(method_calls: list[Any]) -> list[dict[str, str]
 
 def _trial_id(run_id: str, task: Any, baseline: str, arm: str, model: str) -> str:
     return ":".join([run_id, task.task_name, task.sample_id, baseline, arm, model])
+
+
+def _phase11_trial_context(
+    config: dict[str, Any], task: Any, baseline: str, model: str, checkpoint_index: int
+) -> dict[str, Any]:
+    if config.get("logging", {}).get("schema_version") != LOGGING_V2:
+        return {}
+    trajectory_values = [
+        str(config.get("run", {}).get("sample_order_seed")),
+        str(config.get("run", {}).get("task_order_seed")),
+        task.task_name,
+        baseline,
+        model,
+    ]
+    checkpoint_ref = config.get("checkpoint_ref")
+    if checkpoint_ref is not None:
+        trajectory_values.append(str(checkpoint_ref.get("checkpoint_id")))
+    trajectory_pair_id = "traj:" + _hash_values(trajectory_values)[:16]
+    memory_update_mode = _phase11_memory_update_mode(config, baseline)
+    return {
+        "evaluation_law_id": config["evaluation"]["evaluation_law_id"],
+        "target_set_id": config["target_contamination_set"]["target_set_id"],
+        "memory_update_mode": memory_update_mode,
+        "trajectory_pair_id": trajectory_pair_id,
+        "checkpoint_index": checkpoint_index,
+        "pair_id": ":".join([trajectory_pair_id, str(checkpoint_index), task.sample_id]),
+        "checkpoint_ref": (
+            CheckpointRef.model_validate(checkpoint_ref)
+            if memory_update_mode == "disabled" and checkpoint_ref is not None
+            else None
+        ),
+    }
+
+
+def _phase11_memory_update_mode(config: dict[str, Any], baseline: str) -> str:
+    if baseline == "no_memory":
+        return "not_applicable"
+    if config["evaluation"]["regime"] == "frozen":
+        return "disabled"
+    if baseline in MEMORY_BASELINES:
+        return "enabled"
+    return "not_applicable"
+
+
+def _reject_frozen_memory_drift(result: dict[str, Any], phase11_context: dict[str, Any]) -> None:
+    if phase11_context.get("memory_update_mode") != "disabled":
+        return
+    if result.get("memory_write_event") is not None or result.get("memory_before", []) != result.get(
+        "memory_after", []
+    ):
+        raise SystemExit("frozen logging_v2 trial changed memory")
 
 
 def _event_context(metadata: RunMetadata, trial_id: str, trial_seq: int) -> dict[str, Any]:
@@ -730,6 +844,7 @@ def _faithful_result_trial(
     run_metadata: RunMetadata | None = None,
     call_events: list[CallEvent] | None = None,
     trial_id: str | None = None,
+    phase11_context: dict[str, Any] | None = None,
 ) -> TrialLog:
     trial_id = trial_id or _trial_id(run_id, task, baseline, arm, model)
     method_calls = result.get("method_calls", [])
@@ -766,11 +881,21 @@ def _faithful_result_trial(
             raise RuntimeError("faithful result has no answer_call_id")
         answer_call = _answer_call(method_calls, answer_call_id)
         prompt_messages = answer_call.messages
-        contamination_exposure = compute_exposure_from_spans(
-            answer_call_id,
-            answer_call.source_spans,
-            cast(Literal["clean", "contaminated", "contaminated_filter"], arm),
-        )
+        if run_metadata.schema_version == LOGGING_V2:
+            assert run_metadata.target_contamination_set is not None
+            contamination_exposure = compute_exposure_from_spans_v2(
+                answer_call_id,
+                answer_call.source_spans,
+                cast(Literal["clean", "contaminated", "contaminated_filter"], arm),
+                result.get("memory_before", []),
+                run_metadata.target_contamination_set,
+            )
+        else:
+            contamination_exposure = compute_exposure_from_spans(
+                answer_call_id,
+                answer_call.source_spans,
+                cast(Literal["clean", "contaminated", "contaminated_filter"], arm),
+            )
         telemetry = summarize_calls(call_events or [])
         metadata = result.get("metadata", {})
         schema_version = LOGGING_V1
@@ -778,6 +903,7 @@ def _faithful_result_trial(
         status = "succeeded"
         run_metadata_id = run_metadata.run_metadata_id
         strict_trial_seq = trial_order
+    phase11_context = phase11_context or {}
     return TrialLog(
         trial_id=trial_id,
         run_id=run_id,
@@ -815,12 +941,17 @@ def _faithful_result_trial(
         retry_count=telemetry["retry_count"],
         method_calls=method_calls,
         answer_call_id=answer_call_id,
-        schema_version=schema_version,
+        schema_version=(
+            cast(Literal["legacy", "logging_v1", "logging_v2"], run_metadata.schema_version)
+            if run_metadata is not None
+            else schema_version
+        ),
         stage=stage,
         status=status,
         run_metadata_id=run_metadata_id,
         trial_seq=strict_trial_seq,
         event_seq=0 if run_metadata is not None else None,
+        **phase11_context,
     )
 
 
@@ -840,6 +971,7 @@ def _failed_faithful_trial(
     filter_decision: FilterTelemetry | None,
     failure_id: str,
     error_type: str,
+    phase11_context: dict[str, Any] | None = None,
 ) -> TrialLog:
     if not method_calls:
         raise RuntimeError("failed faithful trial has no provider call")
@@ -860,11 +992,22 @@ def _failed_faithful_trial(
     if not isinstance(answer_call.call_id, str):
         raise RuntimeError("failed faithful trial has no answer call id")
     answer_call_id = answer_call.call_id
-    exposure = compute_exposure_from_spans(
-        answer_call_id,
-        answer_call.source_spans,
-        cast(Literal["clean", "contaminated", "contaminated_filter"], arm),
-    )
+    if metadata.schema_version == LOGGING_V2:
+        assert metadata.target_contamination_set is not None
+        exposure = compute_exposure_from_spans_v2(
+            answer_call_id,
+            answer_call.source_spans,
+            cast(Literal["clean", "contaminated", "contaminated_filter"], arm),
+            memory_before,
+            metadata.target_contamination_set,
+        )
+    else:
+        exposure = compute_exposure_from_spans(
+            answer_call_id,
+            answer_call.source_spans,
+            cast(Literal["clean", "contaminated", "contaminated_filter"], arm),
+        )
+    phase11_context = phase11_context or {}
     telemetry = summarize_calls(call_events)
     return TrialLog(
         trial_id=trial_id,
@@ -896,7 +1039,7 @@ def _failed_faithful_trial(
         token_usage=telemetry["token_usage"],
         retry_count=telemetry["retry_count"],
         error_type=error_type,
-        schema_version=LOGGING_V1,
+        schema_version=cast(Literal["legacy", "logging_v1", "logging_v2"], metadata.schema_version),
         stage=metadata.stage,
         status="failed",
         run_metadata_id=metadata.run_metadata_id,
@@ -904,6 +1047,7 @@ def _failed_faithful_trial(
         event_seq=0,
         answer_call_id=answer_call_id,
         failure_id=failure_id,
+        **phase11_context,
     )
 
 
@@ -939,7 +1083,11 @@ def _snapshot_memory_entries(snapshot: list[dict[str, Any]]) -> list[MemoryEntry
                 entry_id=entry["entry_id"],
                 content=entry["content"],
                 memory_type="thought_template",
-                clean_or_contaminated="clean",
+                clean_or_contaminated=(
+                    "clean"
+                    if entry.get("metadata", {}).get("contamination_class") in {None, "clean"}
+                    else "contaminated"
+                ),
                 source_trial_id=entry.get("source_trial_id"),
                 metadata=entry.get("metadata", {}),
             )
@@ -1035,7 +1183,7 @@ def _run_faithful_config(
             rows = _load_jsonl(Path(task_config["sample_path"]), task_config.get("limit"))
             if not rows:
                 raise SystemExit(f'empty replay input: {task_config["sample_path"]}')
-            for row in rows:
+            for checkpoint_index, row in enumerate(rows):
                 task = task_handler["build"](row)
                 for baseline in config["baselines"]:
                     if baseline not in FAITHFUL_BASELINES:
@@ -1047,15 +1195,20 @@ def _run_faithful_config(
                             memory_entries, filter_decision = build_arm_corpus(
                                 baseline_records, task_name, cast(Any, arm)
                             )
+                            _apply_phase11_target_metadata(config, memory_entries)
                             memory = MemoryState(entries=memory_entries)
                         else:
                             injection_entries, filter_decision = _bot_injection_entries(
                                 baseline_records, task_name, arm
                             )
+                            _apply_phase11_target_metadata(config, injection_entries)
                             memory = MemoryState(entries=[])
 
                         for model in config["models"]:
                             trial_id = _trial_id(run_id, task, baseline, arm, model)
+                            phase11_context = _phase11_trial_context(
+                                config, task, baseline, model, checkpoint_index
+                            )
                             call_events: list[CallEvent] = []
                             strict_context = (
                                 _event_context(run_metadata, trial_id, trial_order)
@@ -1074,6 +1227,10 @@ def _run_faithful_config(
                                 "baseline": baseline,
                                 "arm": arm,
                                 "model": model,
+                                "_logging_target_set_id": phase11_context.get("target_set_id"),
+                                "_logging_target_contamination_set": config.get(
+                                    "target_contamination_set"
+                                ),
                                 "_logging_trial_context": strict_context,
                                 "_logging_event_callback": record_call if writer is not None else None,
                             }
@@ -1173,10 +1330,17 @@ def _run_faithful_config(
                                         run_state.register_warmup_result(identity, event)
                                         bot_buffers[identity] = [
                                             MemoryEntry(
-                                                entry_id=entry["entry_id"],
-                                                content=entry["content"],
-                                                memory_type="thought_template",
-                                                clean_or_contaminated="clean",
+                                            entry_id=entry["entry_id"],
+                                            content=entry["content"],
+                                            memory_type="thought_template",
+                                            clean_or_contaminated=(
+                                                "clean"
+                                                if entry.get("metadata", {}).get(
+                                                    "contamination_class"
+                                                )
+                                                in {None, "clean"}
+                                                else "contaminated"
+                                            ),
                                                 source_trial_id=entry.get("source_trial_id"),
                                                 metadata=entry.get("metadata", {}),
                                             )
@@ -1211,6 +1375,7 @@ def _run_faithful_config(
                                         entries, filter_decision = build_arm_corpus(
                                             baseline_records, task_name, cast(Any, arm)
                                         )
+                                        _apply_phase11_target_metadata(config, entries)
                                         state[identity] = entries
                                         filter_decisions[identity] = filter_decision
                                     else:
@@ -1269,11 +1434,13 @@ def _run_faithful_config(
                                         filter_decision=filter_decision,
                                         failure_id=failure.failure_id,
                                         error_type=type(exc).__name__,
+                                        phase11_context=phase11_context,
                                     )
                                 )
                                 trial_order += 1
                                 continue
 
+                            _reject_frozen_memory_drift(result, phase11_context)
                             trial = _faithful_result_trial(
                                 config=config,
                                 run_id=run_id,
@@ -1290,6 +1457,7 @@ def _run_faithful_config(
                                 run_metadata=writer.run_metadata if writer is not None else None,
                                 call_events=call_events,
                                 trial_id=trial_id,
+                                phase11_context=phase11_context,
                             )
                             if writer is not None:
                                 answer_call = _answer_call(result["method_calls"], trial.answer_call_id or "")
@@ -1515,6 +1683,7 @@ def main() -> None:
     aggregate.add_argument("run_dir", type=Path)
     aggregate.add_argument("--stage", type=str, default=None)
     aggregate.add_argument("--allow-legacy", action="store_true")
+    aggregate.add_argument("--contract", choices=["phase10", "phase11"], default=None)
 
     args = parser.parse_args()
 
@@ -1531,6 +1700,7 @@ def main() -> None:
                     args.run_dir,
                     stage=args.stage,
                     allow_legacy=args.allow_legacy,
+                    contract=args.contract,
                 )
             )
         )
