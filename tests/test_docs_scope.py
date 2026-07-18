@@ -8,7 +8,11 @@ G0_DOC = ROOT / "docs" / "g0-baseline-fidelity-gate-v0.4.md"
 README = ROOT / "README.md"
 V05_DOC = ROOT / "docs" / "g0-baseline-fidelity-gate-v0.5.md"
 FOLLOWUP_DOC = ROOT / "docs" / "g0-dc-rs-reflexion-fidelity-followup.md"
+LOGGING_RELEASE_V072_DOC = ROOT / "docs" / "logging-audit-remediation-v0.7.2.md"
+PHASE11_CONTRACT_DOC = ROOT / "docs" / "logging-contract-v2-phase11.md"
+PHASE11_REPORT_DOC = ROOT / "docs" / "logging-audit-remediation-phase11.md"
 CONTRACT_CONFIG = ROOT / "configs" / "logging_contract_replay.yaml"
+PHASE11_CONFIG = ROOT / "configs" / "logging_contract_phase11_replay.yaml"
 FULL_MATRIX_CONFIG = ROOT / "configs" / "full_matrix.yaml"
 
 
@@ -422,3 +426,89 @@ def test_historical_v04_v05_reports_unchanged() -> None:
     assert result.stdout == "", (
         "Historical v0.4 and v0.5 reports must not be modified"
     )
+
+
+def test_phase11_docs_exist_and_name_executable_contract() -> None:
+    assert PHASE11_CONTRACT_DOC.is_file()
+    assert PHASE11_REPORT_DOC.is_file()
+    text = PHASE11_CONTRACT_DOC.read_text(encoding="utf-8")
+    for phrase in [
+        "configs/logging_contract_phase11_replay.yaml",
+        "--contract phase11",
+        "evaluation_law_id",
+        "target_set_id",
+        "B-star",
+        "LineageEdge",
+        "not_evaluable",
+        "No API-connected pilot was run.",
+        "not a full PROV-DM model",
+        "causal use",
+        "retrievable memory",
+    ]:
+        assert phrase in text, f"Phase-11 contract doc must contain {phrase!r}"
+
+
+def test_phase11_docs_forbid_scope_overclaims() -> None:
+    texts = [
+        PHASE11_CONTRACT_DOC.read_text(encoding="utf-8"),
+        PHASE11_REPORT_DOC.read_text(encoding="utf-8"),
+        README.read_text(encoding="utf-8"),
+    ]
+    forbidden = [
+        "v1 is Phase-11 evidence",
+        "v1 artifacts are Phase-11 evidence",
+        "replay gate is a pilot",
+        "replay gate is the main run",
+        "replay gate is a benchmark",
+        "approximate lineage is exact derivation",
+        "exposure is causal use",
+        "complete PROV-DM implementation",
+    ]
+    for text in texts:
+        for phrase in forbidden:
+            assert phrase not in text, f"docs must not contain overclaim: {phrase!r}"
+
+
+def test_phase11_report_is_unfilled_template() -> None:
+    text = PHASE11_REPORT_DOC.read_text(encoding="utf-8")
+    assert "report template" in text
+    assert "Status:** `TEMPLATE`" in text
+    assert "[ ] python -m pytest tests/test_phase11_logging_contract_gate.py -q" in text
+    assert "No API-connected pilot was run." in text
+
+
+def test_phase11_config_and_readme_links_are_current() -> None:
+    config = yaml.safe_load(PHASE11_CONFIG.read_text(encoding="utf-8"))
+    assert config["logging"]["schema_version"] == "logging_v2"
+    assert config["run"]["contract_level"] == "phase11"
+    readme = README.read_text(encoding="utf-8")
+    for path in [
+        "docs/logging-contract-v2-phase11.md",
+        "docs/logging-audit-remediation-phase11.md",
+        "configs/logging_contract_phase11_replay.yaml",
+    ]:
+        assert path in readme
+
+
+
+def test_v072_release_doc_exists_and_stays_within_scope() -> None:
+    assert LOGGING_RELEASE_V072_DOC.is_file()
+    text = LOGGING_RELEASE_V072_DOC.read_text(encoding="utf-8")
+    for phrase in [
+        "Tag:** `v0.7.2`",
+        "configs/logging_contract_phase11_replay.yaml",
+        "--contract phase11",
+        "No API-connected pilot was run.",
+        "not a live pilot, main run, benchmark result, or manuscript result",
+    ]:
+        assert phrase in text
+
+
+def test_phase11_readme_links_include_v072_release_doc() -> None:
+    readme = README.read_text(encoding="utf-8")
+    for path in [
+        "docs/logging-audit-remediation-v0.7.2.md",
+        "docs/logging-contract-v2-phase11.md",
+        "docs/logging-audit-remediation-phase11.md",
+    ]:
+        assert path in readme
