@@ -10,6 +10,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from memcontam.logging.schema import (
+    LOGGING_V2,
     CallEvent,
     FailureEvent,
     FilterEvent,
@@ -17,6 +18,7 @@ from memcontam.logging.schema import (
     MethodCall,
     RunMetadata,
     TrialLog,
+    _v2_target_entry_ids,
 )
 
 
@@ -280,6 +282,198 @@ def _validate_strict_consistency(
                     f"unsupported exposure in {run_metadata.stage} trial: {trial.trial_id}"
                 )
 
+    if run_metadata.schema_version == LOGGING_V2:
+        _validate_phase11_consistency(run_metadata, trials, calls, memory_events)
+
+
+def _entry_metadata(entry: dict[str, Any]) -> dict[str, Any]:
+    metadata = entry.get("metadata", {})
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def _contains_ancestor_closure(value: Any) -> str | None:
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            if "ancestor" in key and ("id" in key or "path" in key):
+                return key
+            nested_key = _contains_ancestor_closure(nested)
+            if nested_key is not None:
+                return nested_key
+    elif isinstance(value, list):
+        for nested in value:
+            nested_key = _contains_ancestor_closure(nested)
+            if nested_key is not None:
+                return nested_key
+    return None
+
+
+def _validate_phase11_consistency(
+    run_metadata: RunMetadata,
+    trials: list[TrialLog],
+    calls: list[CallEvent],
+    memory_events: list[MemoryEvent],
+) -> None:
+    evaluation_law = run_metadata.evaluation_law
+    target_set = run_metadata.target_contamination_set
+    if (
+        run_metadata.contract_level != "phase11"
+        or evaluation_law is None
+        or target_set is None
+    ):
+        raise SystemExit("logging_v2 requires phase11 run metadata contract")
+
+    def require_single(field: str, values: set[str]) -> None:
+        if len(values) != 1:
+            raise SystemExit(f"mixed {field}: {sorted(values)}")
+
+    require_single(
+        "evaluation_law_id",
+        {evaluation_law.evaluation_law_id} | {trial.evaluation_law_id or "<missing>" for trial in trials},
+    )
+    require_single(
+        "target_set_id",
+        {target_set.target_set_id} | {trial.target_set_id or "<missing>" for trial in trials},
+    )
+    for trial in trials:
+        expected_pair_id = ":".join(
+            [trial.trajectory_pair_id or "", str(trial.checkpoint_index), trial.sample_id]
+        )
+        if trial.pair_id != expected_pair_id:
+            raise SystemExit(f"pair_id mismatch for {trial.trial_id}: {trial.pair_id}")
+        for canonical_row in (trial.memory_before, trial.memory_after, trial.memory_write_event):
+            closure_key = _contains_ancestor_closure(canonical_row)
+            if closure_key is not None:
+                raise SystemExit(f"materialized ancestor closure {closure_key} in {trial.trial_id}")
+
+    entries: dict[str, dict[str, Any]] = {}
+    for trial in trials:
+        for entry in [*trial.memory_before, *trial.memory_after]:
+            entry_id = entry.get("entry_id")
+            if isinstance(entry_id, str):
+                entries.setdefault(entry_id, entry)
+
+    known_entry_ids: set[str] = set()
+    edges: dict[str, set[str]] = defaultdict(set)
+    events_by_trial: dict[str, list[MemoryEvent]] = defaultdict(list)
+    for event in memory_events:
+        events_by_trial[event.trial_id].append(event)
+    for trial in sorted(trials, key=lambda row: row.trial_seq or 0):
+        before_ids = {
+            entry["entry_id"]
+            for entry in trial.memory_before
+            if isinstance(entry.get("entry_id"), str)
+        }
+        after_ids = {
+            entry["entry_id"]
+            for entry in trial.memory_after
+            if isinstance(entry.get("entry_id"), str)
+        }
+        current_ids = known_entry_ids | before_ids
+        for event in events_by_trial[trial.trial_id]:
+            for edge in event.lineage_edges:
+                if edge.lineage_status != "exact":
+                    continue
+                if edge.child_entry_id not in after_ids:
+                    raise SystemExit(
+                        f"exact lineage child {edge.child_entry_id} is unknown in {trial.trial_id}"
+                    )
+                if edge.parent_entry_id not in current_ids:
+                    raise SystemExit(
+                        f"exact lineage parent {edge.parent_entry_id} is unknown in {trial.trial_id}"
+                    )
+                for root_id in edge.injected_root_ids:
+                    root = entries.get(root_id)
+                    if _entry_metadata(root or {}).get("contamination_class") != "injected":
+                        raise SystemExit(f"exact lineage root {root_id} is not an injected entry")
+                if not (edge.relation == "version_edge" and edge.lineage_basis == "version_edge"):
+                    edges[edge.child_entry_id].add(edge.parent_entry_id)
+        known_entry_ids.update(after_ids)
+
+    for entry_id, entry in entries.items():
+        metadata = _entry_metadata(entry)
+        if (
+            metadata.get("contamination_class") == "derived"
+            and metadata.get("lineage_status") == "exact"
+        ):
+            for root_id in metadata.get("injected_root_ids", []):
+                root = entries.get(root_id)
+                if _entry_metadata(root or {}).get("contamination_class") != "injected":
+                    raise SystemExit(f"exact derived entry {entry_id} has unknown root {root_id}")
+
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(entry_id: str) -> None:
+        if entry_id in visiting:
+            raise SystemExit(f"cyclic exact lineage edge at {entry_id}")
+        if entry_id in visited:
+            return
+        visiting.add(entry_id)
+        for parent_id in edges.get(entry_id, ()):
+            visit(parent_id)
+        visiting.remove(entry_id)
+        visited.add(entry_id)
+
+    for entry_id in tuple(edges):
+        visit(entry_id)
+
+    calls_by_id = {call.call_id: call for call in calls}
+    for trial in trials:
+        answer_call = calls_by_id.get(trial.answer_call_id or "")
+        if answer_call is None:
+            raise SystemExit(f"answer_call_id {trial.answer_call_id} not found in calls.jsonl")
+        source_entry_ids: list[str] = []
+        exposed_entry_ids: list[str] = []
+        exposed_root_ids: list[str] = []
+        for span in answer_call.source_spans:
+            if span.entry_id not in source_entry_ids:
+                source_entry_ids.append(span.entry_id)
+            expected_target = span.contamination_class in target_set.included_classes and (
+                not target_set.require_exact_lineage or span.lineage_status == "exact"
+            )
+            if span.is_target_contamination != expected_target:
+                raise SystemExit(f"answer span target membership mismatch: {span.entry_id}")
+        target_entry_ids = _v2_target_entry_ids(trial.memory_before, target_set)
+        for span in answer_call.source_spans:
+            if span.entry_id in target_entry_ids and span.is_target_contamination:
+                exposed_entry_ids.append(span.entry_id)
+                for root_id in span.injected_root_ids:
+                    if root_id not in exposed_root_ids:
+                        exposed_root_ids.append(root_id)
+        exposure = trial.contamination_exposure
+        if exposure.source_entry_ids != source_entry_ids or exposure.target_entry_ids != target_entry_ids:
+            raise SystemExit(f"answer exposure membership mismatch for {trial.trial_id}")
+        if exposure.status == "supported" and exposure.is_exposed:
+            if (
+                exposure.exposed_entry_ids != exposed_entry_ids
+                or exposure.exposed_source_ids != exposed_entry_ids
+                or exposure.exposed_injected_root_ids != exposed_root_ids
+            ):
+                raise SystemExit(f"answer exposure intersection mismatch for {trial.trial_id}")
+
+    if evaluation_law.regime == "online":
+        for trial in trials:
+            if trial.memory_update_mode not in {"enabled", "not_applicable"} or trial.checkpoint_ref:
+                raise SystemExit(f"online checkpoint/update mismatch: {trial.trial_id}")
+        return
+    if memory_events:
+        raise SystemExit("frozen run must not contain memory events")
+    checkpoints: list[dict[str, Any]] = []
+    for trial in trials:
+        if trial.memory_update_mode not in {"disabled", "not_applicable"}:
+            raise SystemExit(f"frozen checkpoint/update mismatch: {trial.trial_id}")
+        if trial.memory_update_mode == "disabled":
+            if trial.checkpoint_ref is None:
+                raise SystemExit(f"frozen checkpoint missing: {trial.trial_id}")
+            checkpoints.append(trial.checkpoint_ref.model_dump(mode="json"))
+        elif trial.checkpoint_ref is not None:
+            raise SystemExit(f"frozen checkpoint mismatch: {trial.trial_id}")
+        if trial.memory_before != trial.memory_after:
+            raise SystemExit(f"frozen memory snapshot changed: {trial.trial_id}")
+    if len({json.dumps(checkpoint, sort_keys=True) for checkpoint in checkpoints}) > 1:
+        checkpoint_ids = sorted(str(checkpoint["checkpoint_id"]) for checkpoint in checkpoints)
+        raise SystemExit(f"mixed frozen checkpoint_ref: {checkpoint_ids}")
+
 
 def _rate(numerator: int, denominator: int) -> float | str:
     return NOT_COMPUTED if denominator == 0 else numerator / denominator
@@ -538,27 +732,39 @@ def _metric_group(
     return metrics
 
 
-def _paired_degradation(trials_by_combo: dict[tuple[str, str, str], dict[str, list[TrialLog]]]) -> dict[tuple[str, str, str], float | str]:
+def _paired_degradation(
+    trials_by_combo: dict[tuple[str, str, str], dict[str, list[TrialLog]]],
+    *,
+    pair_field: str,
+) -> dict[tuple[str, str, str], float | str]:
     degradation_by_combo: dict[tuple[str, str, str], float | str] = {}
     for combo, arm_groups in trials_by_combo.items():
         clean_trials = arm_groups.get("clean", [])
         contaminated_trials = arm_groups.get("contaminated", [])
-        clean_sample_ids = {trial.sample_id for trial in clean_trials}
-        contaminated_sample_ids = {trial.sample_id for trial in contaminated_trials}
-        paired_sample_ids = clean_sample_ids & contaminated_sample_ids
-        if not paired_sample_ids:
+        clean_by_pair: dict[str, list[TrialLog]] = defaultdict(list)
+        contaminated_by_pair: dict[str, list[TrialLog]] = defaultdict(list)
+        for trial in clean_trials:
+            pair_id = getattr(trial, pair_field)
+            if isinstance(pair_id, str):
+                clean_by_pair[pair_id].append(trial)
+        for trial in contaminated_trials:
+            pair_id = getattr(trial, pair_field)
+            if isinstance(pair_id, str):
+                contaminated_by_pair[pair_id].append(trial)
+        if (
+            not clean_by_pair
+            or set(clean_by_pair) != set(contaminated_by_pair)
+            or any(len(rows) != 1 for rows in clean_by_pair.values())
+            or any(len(rows) != 1 for rows in contaminated_by_pair.values())
+        ):
             degradation_by_combo[combo] = NOT_COMPUTED
             continue
 
-        paired_clean = [
-            trial
-            for trial in clean_trials
-            if trial.sample_id in paired_sample_ids and trial.status != "failed" and trial.verifier_result
-        ]
+        paired_clean = [rows[0] for rows in clean_by_pair.values() if rows[0].status != "failed" and rows[0].verifier_result]
         paired_contaminated = [
-            trial
-            for trial in contaminated_trials
-            if trial.sample_id in paired_sample_ids and trial.status != "failed" and trial.verifier_result
+            rows[0]
+            for rows in contaminated_by_pair.values()
+            if rows[0].status != "failed" and rows[0].verifier_result
         ]
         if not paired_clean or not paired_contaminated:
             degradation_by_combo[combo] = NOT_COMPUTED
@@ -586,6 +792,7 @@ def aggregate_run(
     stage: str | None = None,
     *,
     allow_legacy: bool = False,
+    contract: str | None = None,
 ) -> dict:
     trials_path = run_dir / "trials.jsonl"
     if not trials_path.exists():
@@ -600,6 +807,12 @@ def aggregate_run(
         if status not in {"completed", "failed"}:
             raise SystemExit(f"strict run has unexpected status: {status}")
         run_metadata = RunMetadata.model_validate(manifest.get("run_metadata"))
+        if contract is not None and contract != run_metadata.contract_level:
+            raise SystemExit(
+                f"contract mismatch: requested {contract}, found {run_metadata.contract_level}"
+            )
+        if run_metadata.schema_version == LOGGING_V2 and contract != "phase11":
+            raise SystemExit("logging_v2 phase11 run requires --contract phase11")
         calls = _load_strict_calls(run_dir)
         failures = _load_strict_failures(run_dir)
         filters = _load_strict_filters(run_dir)
@@ -612,9 +825,12 @@ def aggregate_run(
         strict_calls_for_metrics = calls
         failures_for_metrics = failures
         run_status = status
+        contract_level = run_metadata.contract_level
     else:
         if stage is not None:
             raise SystemExit("--stage requires a strict run with run.json")
+        if contract is not None:
+            raise SystemExit("--contract requires a strict run with run.json")
         if not allow_legacy:
             raise SystemExit(
                 "legacy run directory detected; use --allow-legacy to aggregate legacy trials.jsonl-only runs"
@@ -623,6 +839,7 @@ def aggregate_run(
         strict_calls_for_metrics = None
         failures_for_metrics = None
         run_status = "legacy"
+        contract_level = None
 
     grouped: dict[tuple[str, str, str, str], list[TrialLog]] = defaultdict(list)
     combos: dict[tuple[str, str, str], dict[str, list[TrialLog]]] = defaultdict(lambda: defaultdict(list))
@@ -633,7 +850,10 @@ def aggregate_run(
         grouped[key].append(trial)
         combos[(trial.task_name, trial.baseline, trial.backbone)][trial.arm].append(trial)
 
-    degradation_by_combo = _paired_degradation(combos)
+    degradation_by_combo = _paired_degradation(
+        combos,
+        pair_field="pair_id" if contract_level == "phase11" else "sample_id",
+    )
     groups: list[dict[str, Any]] = []
     for key in sorted(grouped):
         task_name, baseline, arm, backbone = key
@@ -644,6 +864,14 @@ def aggregate_run(
             "arm": arm,
             "backbone": backbone,
         }
+        if contract_level == "phase11":
+            group.update(
+                {
+                    "evaluation_law_id": grouped[key][0].evaluation_law_id,
+                    "target_set_id": grouped[key][0].target_set_id,
+                    "contract_level": contract_level,
+                }
+            )
         group.update(
             _metric_group(
                 grouped[key],

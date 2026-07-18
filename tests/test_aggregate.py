@@ -12,6 +12,7 @@ import pytest
 from memcontam.logging.schema import (
     ContaminationExposure,
     LOGGING_V1,
+    LOGGING_V2,
     TrialLog,
     VerifierResult,
 )
@@ -87,7 +88,12 @@ def _write_trials_jsonl(run_dir: Path, rows: list[dict]) -> Path:
     return trials_path
 
 
-def _cli_aggregate(run_dir: Path, stage: str | None = None, allow_legacy: bool = False) -> subprocess.CompletedProcess[str]:
+def _cli_aggregate(
+    run_dir: Path,
+    stage: str | None = None,
+    allow_legacy: bool = False,
+    contract: str | None = None,
+) -> subprocess.CompletedProcess[str]:
     repo_root = Path(__file__).resolve().parents[1]
     env = os.environ.copy()
     env["PYTHONPATH"] = str(repo_root / "src")
@@ -96,6 +102,8 @@ def _cli_aggregate(run_dir: Path, stage: str | None = None, allow_legacy: bool =
         cmd.extend(["--stage", stage])
     if allow_legacy:
         cmd.append("--allow-legacy")
+    if contract is not None:
+        cmd.extend(["--contract", contract])
     return subprocess.run(
         cmd,
         cwd=repo_root,
@@ -703,6 +711,110 @@ def _strict_manifest(run_id: str = "run1", stage: str = "replay", status: str = 
         "ended_at": "2026-07-16T00:01:00Z",
         "counts": {"trials": 0, "calls": 0, "failures": 0, "filter_events": 0, "memory_events": 0},
     }
+
+
+def _phase11_manifest(
+    run_id: str = "run1", stage: str = "replay", regime: str = "online"
+) -> dict[str, Any]:
+    manifest = _strict_manifest(run_id, stage)
+    manifest["run_metadata"].update(
+        {
+            "schema_version": LOGGING_V2,
+            "contract_level": "phase11",
+            "evaluation_law": {
+                "evaluation_law_id": f"law-{regime}",
+                "regime": regime,
+                "task_law_id": "tasks-v1",
+                "inference_law_id": "replay-v1",
+            },
+            "target_contamination_set": {
+                "target_set_id": "target-v1",
+                "definition_version": "phase11-v1",
+                "included_classes": ["injected", "derived"],
+                "require_exact_lineage": True,
+            },
+        }
+    )
+    return manifest
+
+
+def _phase11_trial_row(
+    *,
+    arm: str,
+    trial_seq: int,
+    event_seq: int,
+    pair_id: str = "trajectory-1:0:s1",
+    trajectory_pair_id: str = "trajectory-1",
+    checkpoint_index: int = 0,
+    evaluation_law_id: str = "law-online",
+    target_set_id: str = "target-v1",
+    memory_update_mode: str = "not_applicable",
+    checkpoint_ref: dict[str, Any] | None = None,
+    **overrides: Any,
+) -> dict[str, Any]:
+    trial_id = f"run1:game24:s1:no_memory:{arm}:replay"
+    if memory_update_mode == "disabled":
+        trial_id = f"run1:game24:s1:retrieval_rag:{arm}:replay"
+    call_id = f"{trial_id}:call:1"
+    exposure = {
+        "condition": arm,
+        "status": "not_applicable" if arm == "clean" else "supported",
+        "is_exposed": None if arm == "clean" else False,
+        "answer_call_id": None if arm == "clean" else call_id,
+        "target_entry_ids": [],
+        "source_entry_ids": [],
+        "exposed_source_ids": [],
+        "exposure_mode": "clean" if arm == "clean" else "not_in_final_prompt",
+        "reason": "clean arm" if arm == "clean" else "target absent from final prompt",
+        "target_set_id": target_set_id,
+        "exposed_entry_ids": [],
+        "exposed_injected_root_ids": [],
+        "evidence_lineage_status": None,
+    }
+    if arm != "clean":
+        exposure["evidence_lineage_status"] = "exact"
+    return _strict_trial_row(
+        trial_seq=trial_seq,
+        event_seq=event_seq,
+        trial_id=trial_id,
+        baseline="retrieval_rag" if memory_update_mode == "disabled" else "no_memory",
+        arm=arm,
+        answer_call_id=call_id,
+        schema_version=LOGGING_V2,
+        evaluation_law_id=evaluation_law_id,
+        target_set_id=target_set_id,
+        memory_update_mode=memory_update_mode,
+        trajectory_pair_id=trajectory_pair_id,
+        checkpoint_index=checkpoint_index,
+        pair_id=pair_id,
+        checkpoint_ref=checkpoint_ref,
+        contamination_exposure=exposure,
+        **overrides,
+    )
+
+
+def _write_phase11_run(
+    run_dir: Path,
+    rows: list[dict[str, Any]],
+    *,
+    regime: str = "online",
+    memory_events: list[dict[str, Any]] | None = None,
+) -> None:
+    _write_run_json(run_dir, _phase11_manifest(regime=regime))
+    _write_jsonl(run_dir, "trials.jsonl", rows)
+    _write_jsonl(
+        run_dir,
+        "calls.jsonl",
+        [
+            _strict_call_event(
+                row["trial_id"], row["answer_call_id"], row["trial_seq"], row["event_seq"] + len(rows)
+            )
+            for row in rows
+        ],
+    )
+    _write_jsonl(run_dir, "failures.jsonl", [])
+    _write_jsonl(run_dir, "filter_events.jsonl", [])
+    _write_jsonl(run_dir, "memory_events.jsonl", memory_events or [])
 
 
 def _write_run_json(run_dir: Path, manifest: dict[str, Any]) -> None:
@@ -1394,3 +1506,244 @@ def test_legacy_aggregate_requires_allow_legacy_flag(tmp_path: Path) -> None:
     cli_result = _cli_aggregate(run_dir, allow_legacy=True)
     assert cli_result.returncode == 0
     assert json.loads(cli_result.stdout)["status"] == "legacy"
+
+
+def test_phase11_aggregate_uses_exact_pair_id_and_reports_context(tmp_path: Path) -> None:
+    run_dir = tmp_path / "runs" / "phase11_pairs"
+    run_dir.mkdir(parents=True)
+    rows = [
+        _phase11_trial_row(arm="clean", trial_seq=0, event_seq=1),
+        _phase11_trial_row(
+            arm="contaminated",
+            trial_seq=1,
+            event_seq=2,
+            verifier_result=VerifierResult(is_correct=False, reason="incorrect"),
+            raw_response="final: wrong",
+            parsed_answer="wrong",
+        ),
+        _phase11_trial_row(
+            arm="contaminated_filter",
+            trial_seq=2,
+            event_seq=3,
+            verifier_result=VerifierResult(is_correct=False, reason="incorrect"),
+            raw_response="final: wrong",
+            parsed_answer="wrong",
+        ),
+    ]
+    _write_phase11_run(run_dir, rows)
+
+    from memcontam.evaluation.aggregate import aggregate_run
+
+    result = aggregate_run(run_dir, stage="replay", contract="phase11")
+
+    assert {group["vanilla_to_contamination_degradation_rate"] for group in result["groups"]} == {1.0}
+    assert {
+        (group["evaluation_law_id"], group["target_set_id"], group["contract_level"])
+        for group in result["groups"]
+    } == {("law-online", "target-v1", "phase11")}
+    cli_result = _cli_aggregate(run_dir, stage="replay", contract="phase11")
+    assert cli_result.returncode == 0
+    assert json.loads(cli_result.stdout) == result
+
+
+def test_phase11_aggregate_traverses_direct_edge_parent_without_mutating_graph(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "runs" / "phase11_direct_edge_parent"
+    run_dir.mkdir(parents=True)
+    root = {
+        "entry_id": "root-1",
+        "content": "Injected root.",
+        "memory_type": "seed",
+        "clean_or_contaminated": "contaminated",
+        "metadata": {
+            "contamination_class": "injected",
+            "lineage_status": "exact",
+            "lineage_basis": "seed",
+            "direct_parent_ids": [],
+            "injected_root_ids": ["root-1"],
+        },
+    }
+    derived = {
+        "entry_id": "derived-1",
+        "content": "Derived entry.",
+        "memory_type": "note",
+        "clean_or_contaminated": "contaminated",
+        "source_trial_id": "trial-0",
+        "metadata": {
+            "contamination_class": "derived",
+            "lineage_status": "exact",
+            "lineage_basis": "recorded_parent",
+            "direct_parent_ids": ["root-1"],
+            "injected_root_ids": ["root-1"],
+        },
+    }
+    row = _phase11_trial_row(arm="contaminated", trial_seq=0, event_seq=2)
+    row.update(
+        {
+            "baseline": "full_history",
+            "memory_update_mode": "enabled",
+            "memory_before": [root],
+            "memory_after": [root, derived],
+            "memory_write_event": {"type": "append"},
+            "contamination_exposure": {
+                "condition": "contaminated",
+                "status": "supported",
+                "is_exposed": False,
+                "answer_call_id": row["answer_call_id"],
+                "target_entry_ids": ["root-1"],
+                "source_entry_ids": [],
+                "exposed_source_ids": [],
+                "exposure_mode": "not_in_final_prompt",
+                "reason": "target absent from final prompt",
+                "target_set_id": "target-v1",
+                "exposed_entry_ids": [],
+                "exposed_injected_root_ids": [],
+                "evidence_lineage_status": "exact",
+            },
+        }
+    )
+    event = _strict_memory_event(row["trial_id"], "memory-event-1", 0, 1, baseline="full_history")
+    event.update(
+        {
+            "after_entry_ids": ["root-1", "derived-1"],
+            "new_entry_ids": ["derived-1"],
+            "lineage_edges": [
+                {
+                    "child_entry_id": "derived-1",
+                    "parent_entry_id": "root-1",
+                    "relation": "derived_from",
+                    "lineage_status": "exact",
+                    "lineage_basis": "recorded_parent",
+                    "injected_root_ids": ["root-1"],
+                }
+            ],
+        }
+    )
+    _write_phase11_run(run_dir, [row], memory_events=[event])
+
+    from memcontam.evaluation.aggregate import aggregate_run
+
+    assert aggregate_run(run_dir, stage="replay", contract="phase11")["status"] == "completed"
+
+
+def test_phase11_aggregate_does_not_fall_back_to_sample_id_for_incomplete_pairs(tmp_path: Path) -> None:
+    run_dir = tmp_path / "runs" / "phase11_incomplete_pairs"
+    run_dir.mkdir(parents=True)
+    rows = [
+        _phase11_trial_row(arm="clean", trial_seq=0, event_seq=1),
+        _phase11_trial_row(
+            arm="contaminated",
+            trial_seq=1,
+            event_seq=2,
+            pair_id="trajectory-2:0:s1",
+            trajectory_pair_id="trajectory-2",
+            verifier_result=VerifierResult(is_correct=False, reason="incorrect"),
+            raw_response="final: wrong",
+            parsed_answer="wrong",
+        ),
+    ]
+    _write_phase11_run(run_dir, rows)
+
+    from memcontam.evaluation.aggregate import aggregate_run
+
+    result = aggregate_run(run_dir, stage="replay", contract="phase11")
+
+    assert {group["vanilla_to_contamination_degradation_rate"] for group in result["groups"]} == {
+        NOT_COMPUTED
+    }
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("evaluation_law_id", "other-law"), ("target_set_id", "other-target")],
+)
+def test_phase11_aggregate_rejects_mixed_manifest_context(
+    tmp_path: Path, field: str, value: str
+) -> None:
+    run_dir = tmp_path / "runs" / f"phase11_mixed_{field}"
+    run_dir.mkdir(parents=True)
+    rows = [
+        _phase11_trial_row(arm="clean", trial_seq=0, event_seq=1),
+        _phase11_trial_row(arm="contaminated", trial_seq=1, event_seq=2),
+    ]
+    rows[1][field] = value
+    if field == "target_set_id":
+        rows[1]["contamination_exposure"]["target_set_id"] = value
+    _write_phase11_run(run_dir, rows)
+
+    from memcontam.evaluation.aggregate import aggregate_run
+
+    with pytest.raises(SystemExit, match=f"{field}.*{value}"):
+        aggregate_run(run_dir, stage="replay", contract="phase11")
+
+
+def test_phase11_aggregate_rejects_bad_pair_identity(tmp_path: Path) -> None:
+    run_dir = tmp_path / "runs" / "phase11_bad_pair"
+    run_dir.mkdir(parents=True)
+    _write_phase11_run(
+        run_dir,
+        [
+            _phase11_trial_row(
+                arm="clean", trial_seq=0, event_seq=1, pair_id="not-a-deterministic-pair"
+            )
+        ],
+    )
+
+    from memcontam.evaluation.aggregate import aggregate_run
+
+    with pytest.raises(SystemExit, match="pair_id.*not-a-deterministic-pair"):
+        aggregate_run(run_dir, stage="replay", contract="phase11")
+
+
+def test_phase11_aggregate_rejects_frozen_checkpoint_mismatch(tmp_path: Path) -> None:
+    run_dir = tmp_path / "runs" / "phase11_frozen_checkpoint_mismatch"
+    run_dir.mkdir(parents=True)
+    first_checkpoint = {
+        "checkpoint_id": "checkpoint-1",
+        "checkpoint_trial_index": 0,
+        "checkpoint_memory_hash": "sha256:first",
+        "checkpoint_source_run_id": "source-run",
+    }
+    second_checkpoint = {**first_checkpoint, "checkpoint_id": "checkpoint-2"}
+    rows = [
+        _phase11_trial_row(
+            arm="clean",
+            trial_seq=0,
+            event_seq=1,
+            evaluation_law_id="law-frozen",
+            memory_update_mode="disabled",
+            checkpoint_ref=first_checkpoint,
+        ),
+        _phase11_trial_row(
+            arm="contaminated",
+            trial_seq=1,
+            event_seq=2,
+            evaluation_law_id="law-frozen",
+            memory_update_mode="disabled",
+            checkpoint_ref=second_checkpoint,
+        ),
+    ]
+    _write_phase11_run(run_dir, rows, regime="frozen")
+
+    from memcontam.evaluation.aggregate import aggregate_run
+
+    with pytest.raises(SystemExit, match="checkpoint.*checkpoint-2"):
+        aggregate_run(run_dir, stage="replay", contract="phase11")
+
+
+def test_phase11_contract_rejects_v1_strict_runs(tmp_path: Path) -> None:
+    run_dir = tmp_path / "runs" / "phase10_requested_as_phase11"
+    run_dir.mkdir(parents=True)
+    trial_id = "run1:game24:s1:no_memory:clean:replay"
+    _write_run_json(run_dir, _strict_manifest())
+    _write_jsonl(run_dir, "trials.jsonl", [_strict_trial_row(trial_seq=0, event_seq=1)])
+    _write_jsonl(run_dir, "calls.jsonl", [_strict_call_event(trial_id, f"{trial_id}:call:1", 0, 2)])
+    _write_jsonl(run_dir, "failures.jsonl", [])
+    _write_jsonl(run_dir, "filter_events.jsonl", [])
+    _write_jsonl(run_dir, "memory_events.jsonl", [])
+
+    from memcontam.evaluation.aggregate import aggregate_run
+
+    with pytest.raises(SystemExit, match="phase11"):
+        aggregate_run(run_dir, stage="replay", contract="phase11")
