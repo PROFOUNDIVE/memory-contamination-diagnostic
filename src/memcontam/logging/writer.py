@@ -8,12 +8,14 @@ from pathlib import Path
 from typing import Any, TextIO, TypeVar
 
 from memcontam.logging.schema import (
+    LOGGING_V2,
     CallEvent,
     FailureEvent,
     FilterEvent,
     MemoryEvent,
     RunMetadata,
     TrialLog,
+    _v2_target_entry_ids,
 )
 
 
@@ -41,7 +43,8 @@ class RunLogWriter:
         if os.path.lexists(self.run_dir):
             raise FileExistsError(f"final run path already exists: {self.run_dir}")
 
-        self.run_metadata = run_metadata
+        self.run_metadata = run_metadata.model_copy(deep=True)
+        self._frozen_checkpoint: dict[str, Any] | None = None
         temp_root = Path(tmp_dir) if tmp_dir is not None else self.run_dir.parent
         temp_root.mkdir(parents=True, exist_ok=True)
         self.temp_dir = Path(tempfile.mkdtemp(prefix=f"{self.run_dir.name}.tmp-", dir=temp_root))
@@ -51,7 +54,7 @@ class RunLogWriter:
         self._state = "running"
         self._counts = {count_name: 0 for count_name in self._STREAMS.values()}
         self._manifest = {
-            "run_metadata": run_metadata.model_dump(mode="json"),
+            "run_metadata": self.run_metadata.model_dump(mode="json"),
             "status": "running",
             "started_at": _timestamp(),
             "ended_at": None,
@@ -212,12 +215,80 @@ class RunLogWriter:
             raise ValueError("event run context does not match writer metadata")
         if event.stage != self.run_metadata.stage:
             raise ValueError("event stage does not match writer metadata")
+        if self.run_metadata.schema_version == LOGGING_V2 and isinstance(event, MemoryEvent):
+            evaluation_law = self.run_metadata.evaluation_law
+            if evaluation_law is not None and evaluation_law.regime == "frozen":
+                raise ValueError("frozen phase11 runs must not write memory events")
 
     def _validate_trial_context(self, trial: TrialLog) -> None:
         if trial.run_metadata_id != self.run_metadata.run_metadata_id or trial.run_id != self.run_metadata.run_id:
             raise ValueError("trial run context does not match writer metadata")
         if trial.stage != self.run_metadata.stage:
             raise ValueError("trial stage does not match writer metadata")
+        if trial.schema_version != self.run_metadata.schema_version:
+            raise ValueError("trial schema_version does not match writer metadata")
+        if self.run_metadata.schema_version != LOGGING_V2:
+            return
+
+        evaluation_law = self.run_metadata.evaluation_law
+        target_set = self.run_metadata.target_contamination_set
+        if evaluation_law is None or target_set is None:
+            raise ValueError("logging_v2 writer metadata requires phase11 contract context")
+        if trial.evaluation_law_id != evaluation_law.evaluation_law_id:
+            raise ValueError("trial evaluation_law_id does not match writer metadata")
+        if trial.target_set_id != target_set.target_set_id:
+            raise ValueError("trial target_set_id does not match writer metadata")
+        answer_call = next(
+            (call for call in trial.method_calls if call.call_id == trial.answer_call_id), None
+        )
+        if answer_call is None:
+            raise ValueError("logging_v2 trial answer_call_id must identify a method call")
+        for span in answer_call.source_spans:
+            expected_target = span.contamination_class in target_set.included_classes and (
+                not target_set.require_exact_lineage or span.lineage_status == "exact"
+            )
+            if span.is_target_contamination != expected_target:
+                raise ValueError("source span target membership does not match writer metadata")
+        target_entry_ids = _v2_target_entry_ids(trial.memory_before, target_set)
+        exposure = trial.contamination_exposure
+        if exposure.target_entry_ids != target_entry_ids:
+            raise ValueError("target_entry_ids do not match writer target set")
+        exposed_entry_ids = [
+            span.entry_id
+            for span in answer_call.source_spans
+            if span.entry_id in target_entry_ids and span.is_target_contamination
+        ]
+        if exposure.status == "supported":
+            if exposure.is_exposed:
+                if (
+                    exposure.exposed_entry_ids != exposed_entry_ids
+                    or exposure.exposed_source_ids != exposed_entry_ids
+                ):
+                    raise ValueError("exposed IDs do not match writer target set")
+            elif exposure.exposed_entry_ids or exposure.exposed_source_ids:
+                raise ValueError("negative exposure must not report exposed IDs")
+        expected_pair_id = ":".join(
+            [trial.trajectory_pair_id or "", str(trial.checkpoint_index), trial.sample_id]
+        )
+        if trial.pair_id != expected_pair_id:
+            raise ValueError(f"trial pair_id does not match trajectory/checkpoint/sample: {trial.pair_id}")
+        if evaluation_law.regime == "online":
+            if trial.memory_update_mode not in {"enabled", "not_applicable"} or trial.checkpoint_ref:
+                raise ValueError("online phase11 trial has frozen checkpoint/update context")
+            return
+        if trial.memory_update_mode not in {"disabled", "not_applicable"}:
+            raise ValueError("frozen phase11 trial has enabled memory updates")
+        if trial.memory_update_mode == "not_applicable":
+            if trial.checkpoint_ref is not None:
+                raise ValueError("frozen not_applicable trial must not include checkpoint_ref")
+            return
+        if trial.checkpoint_ref is None:
+            raise ValueError("frozen phase11 trial requires checkpoint_ref")
+        checkpoint = trial.checkpoint_ref.model_dump(mode="json")
+        if self._frozen_checkpoint is None:
+            self._frozen_checkpoint = checkpoint
+        elif checkpoint != self._frozen_checkpoint:
+            raise ValueError("frozen phase11 checkpoint_ref does not match writer metadata")
 
     def _next_event_seq(self) -> int:
         self._event_seq += 1
