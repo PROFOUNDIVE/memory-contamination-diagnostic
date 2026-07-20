@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+from pathlib import Path
 
 
 def test_baseline_execution_adapter_enforces_semantic_call_order_and_prompt_bytes() -> None:
@@ -12,6 +13,44 @@ def test_baseline_execution_adapter_enforces_semantic_call_order_and_prompt_byte
 
     assert callable(getattr(execution, "execute_baseline", None))
     assert callable(getattr(execution, "assert_prompt_bytes", None))
+
+
+def test_execute_baseline_delegates_to_existing_executor_methods() -> None:
+    from memcontam.baselines.execution import execute_baseline
+
+    class Adapter:
+        def execute(self, value: str) -> str:
+            return f"execute:{value}"
+
+    class Policy:
+        def run(self, value: str) -> str:
+            return f"run:{value}"
+
+    assert execute_baseline(Adapter(), "task") == "execute:task"
+    assert execute_baseline(Policy(), "task") == "run:task"
+
+
+def test_no_memory_prompt_matches_the_committed_prompt_fixture() -> None:
+    from memcontam.baselines.execution import assert_prompt_bytes
+    from memcontam.baselines.no_memory import NoMemoryPolicy
+    from memcontam.memory.stores import MemoryState
+    from memcontam.tasks.base import TaskInstance
+    from memcontam.tasks.dispatch import canonical_task_json
+
+    task = TaskInstance(
+        sample_id="sample-1",
+        task_name="game24",
+        input={"numbers": [1, 3, 4, 6], "target": 24},
+    )
+    assert_prompt_bytes(
+        Path(__file__).parent / "fixtures" / "prompts" / "no_memory_generate.json",
+        stage="no_memory_generate",
+        messages=NoMemoryPolicy().build_prompt(task, MemoryState()),
+        replacements={
+            "{{task_family}}": task.task_name,
+            "{{task_canonical}}": canonical_task_json(task),
+        },
+    )
 
 
 def test_full_history_adapter_uses_only_the_full_history_generate_semantic_stage() -> None:
