@@ -155,6 +155,11 @@ def _append_response(
         entry_id=entry_id,
         content=render_full_history(entry_id, FullHistoryPayload(str(task.input), raw_response)),
         memory_type="full_history_transcript",
+        clean_or_contaminated=(
+            "contaminated"
+            if any(record.clean_or_contaminated == "contaminated" for record in state.records)
+            else "clean"
+        ),
         source_trial_id=trial_id,
         metadata={"source_entry_ids": source_entry_ids},
     )
