@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from memcontam.baselines.contracts import CorpusIdentity
 from memcontam.logging.schema import ContaminationClass, LineageBasis, LineageStatus
-from memcontam.memory.filters import FilterTelemetry, drop_known_contaminated
+from memcontam.memory.filters import FilterTelemetry, filter_legacy_replay_entries
 from memcontam.memory.stores import MemoryEntry
 
 
@@ -317,5 +317,5 @@ def build_arm_corpus(
     entries = [_to_memory_entry(record) for record in selected]
 
     if arm == "contaminated_filter":
-        return drop_known_contaminated(entries)
+        return filter_legacy_replay_entries(entries)
     return entries, None

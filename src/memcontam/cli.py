@@ -58,7 +58,7 @@ from memcontam.config.resolution import resolve_run_config
 from memcontam.memory.bot_buffer import BotBufferIdentity, ThoughtTemplate
 from memcontam.memory.corpus import CorpusRecord, build_arm_corpus, load_corpus
 from memcontam.memory.embeddings import EmbeddingProvider, FakeEmbeddingProvider, SentenceTransformerProvider
-from memcontam.memory.filters import FilterTelemetry, drop_known_contaminated
+from memcontam.memory.filters import FilterTelemetry, filter_legacy_replay_entries
 from memcontam.memory.retrieval import retrieve_records
 from memcontam.memory.run_state import RunState
 from memcontam.memory.stores import MemoryEntry, MemoryState
@@ -197,7 +197,7 @@ def _memory_entries_for_arm(arm: str, baseline: str) -> tuple[list[MemoryEntry],
                 )
             )
     if arm == "contaminated_filter":
-        return drop_known_contaminated(entries)
+        return filter_legacy_replay_entries(entries)
     return entries, None
 
 
@@ -214,6 +214,48 @@ def _config_hash(config: dict[str, Any]) -> str:
 
 
 _STAGES = {"debug", "replay", "partial", "pilot", "main", "benchmark"}
+
+
+def _validate_protocol_gates(config: dict[str, Any]) -> None:
+    run_config = config.get("run", {})
+    live_smoke_enabled = config.get("live_smoke", {}).get("enabled", False)
+    stage = run_config.get("stage", "pilot" if live_smoke_enabled else "replay")
+    execution_class = run_config.get(
+        "execution_class",
+        "live" if live_smoke_enabled else "offline_contract_replay",
+    )
+    if _is_strict_config(config) and live_smoke_enabled:
+        return
+    try:
+        provider_config = ProviderConfig.from_run_config(config)
+        if stage in {"replay", "pilot", "main"}:
+            validate_provider_selection(
+                provider_config,
+                stage=stage,
+                execution_class=execution_class,
+            )
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
+    scientific_result = run_config.get("scientific_result", False)
+    scientific_gate_id = run_config.get("scientific_gate_id")
+    if not isinstance(scientific_result, bool):
+        raise SystemExit("run.scientific_result must be a boolean")
+    if scientific_gate_id is not None and (
+        not isinstance(scientific_gate_id, str) or not scientific_gate_id.strip()
+    ):
+        raise SystemExit("run.scientific_gate_id must be a non-empty string or null")
+    if scientific_result:
+        if stage == "replay":
+            raise SystemExit("replay runs cannot be scientific results")
+        if stage not in {"pilot", "main"} or scientific_gate_id is None:
+            raise SystemExit("scientific live runs require run.scientific_gate_id")
+        raise SystemExit("scientific runs require an accepted scientific gate")
+    elif scientific_gate_id is not None:
+        raise SystemExit("run.scientific_gate_id requires run.scientific_result=true")
+
+    if stage in {"pilot", "main"} and any(arm != "clean" for arm in config.get("arms", [])):
+        raise SystemExit("pilot/main runs accept only the clean arm")
 
 
 def _is_strict_config(config: dict[str, Any]) -> bool:
@@ -278,6 +320,7 @@ def _validate_run_config(config: dict[str, Any]) -> None:
     stage = run_config.get("stage", "replay")
     if stage not in _STAGES:
         raise SystemExit(f"unsupported run.stage: {stage}")
+    _validate_protocol_gates(config)
 
     faithful = _is_faithful_config(config)
     if not _is_strict_config(config):

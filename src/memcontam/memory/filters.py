@@ -32,7 +32,7 @@ def _content_hash(content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
-def drop_known_contaminated(
+def filter_legacy_replay_entries(
     entries: list[MemoryEntry],
 ) -> tuple[list[MemoryEntry], FilterTelemetry]:
     decisions: list[FilterDecisionItem] = []

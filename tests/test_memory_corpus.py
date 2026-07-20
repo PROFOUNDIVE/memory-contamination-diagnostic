@@ -13,7 +13,7 @@ from memcontam.memory.corpus import (
     build_arm_corpus,
     load_corpus,
 )
-from memcontam.memory.filters import drop_known_contaminated
+from memcontam.memory.oracle_qa import drop_known_contaminated
 from memcontam.memory.stores import MemoryEntry
 
 
