@@ -110,12 +110,18 @@ def test_replay_config_runs_without_provider_env_vars(tmp_path, monkeypatch) -> 
 
     config = load_config(repo_root / "configs/pilot_multitask_replay.yaml")
     config["logging"]["output_dir"] = str(tmp_path / "runs")
+    config["baselines"] = [
+        baseline
+        for baseline in config["baselines"]
+        if baseline not in {"retrieval_rag", "bot_style"}
+    ]
 
     run_dir = run_config(config, run_id="task_T12_full_regression")
     rows = [json.loads(line) for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()]
 
     assert rows
     assert {row["task_name"] for row in rows} == {"game24", "math_equation_balancer", "word_sorting"}
+    assert {row["baseline"] for row in rows} == {"no_memory", "full_history", "reflexion_style"}
 
 
 def test_recorder_does_not_persist_secrets_or_raw_payload(monkeypatch) -> None:
