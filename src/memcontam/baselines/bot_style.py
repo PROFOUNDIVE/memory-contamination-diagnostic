@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
-from memcontam.baselines.bot_read import DistilledProblem, distill_problem
+from memcontam.baselines.bot_read import DistilledProblem, distill_problem, retrieve_top_template
 from memcontam.baselines.bot_solve import parse_bot_solve_result, render_bot_solve_prompt
+from memcontam.memory.embeddings import FakeEmbeddingProvider
+from memcontam.memory.stores import MemoryState
 from memcontam.tasks.base import TaskInstance
 
 
@@ -24,6 +27,19 @@ def distill_thought_template(
 
 class BotStylePolicy:
     """BoT read-and-solve facade; thought-template writes are deferred to Task 8."""
+
+    def build_prompt(self, task: TaskInstance, memory: MemoryState) -> list[dict[str, str]]:
+        problem = DistilledProblem(
+            key_information=json.dumps(task.input, sort_keys=True),
+            restrictions="Follow the task constraints.",
+            distilled_task=f"Solve the {task.task_name} task.",
+        )
+        content, _ = render_bot_solve_prompt(
+            task,
+            problem,
+            retrieve_top_template(problem, memory.entries, FakeEmbeddingProvider()),
+        )
+        return [{"role": "user", "content": content}]
 
     def problem_distillation(
         self,

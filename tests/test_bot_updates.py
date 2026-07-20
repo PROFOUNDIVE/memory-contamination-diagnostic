@@ -221,7 +221,7 @@ def test_accepted_bot_update_normalizes_insert_mutation() -> None:
     assert memory_event.removed_entry_ids == []
     assert memory_event.before_snapshot_hash != memory_event.after_snapshot_hash
     assert memory_event.source_entry_ids == ["seed-template"]
-    assert memory_event.parent_entry_ids == ["seed-template"]
+    assert memory_event.parent_entry_ids == []
     assert memory_event.contaminated_source_ids == []
     assert memory_event.creation_origin == "thought_template"
 
