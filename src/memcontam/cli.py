@@ -1637,7 +1637,11 @@ def run_config(
                                 config={
                                     **config.get("replay", {}),
                                     "sample_id": task.sample_id,
-                                    "method_stage": "legacy_generate",
+                                    "method_stage": (
+                                        "full_history_generate"
+                                        if baseline == "full_history"
+                                        else "legacy_generate"
+                                    ),
                                 },
                             )
                             parsed_answer = _parse_answer(response.content)

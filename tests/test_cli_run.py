@@ -77,6 +77,17 @@ def _run_single_baseline(
     return rows[0]
 
 
+def test_full_history_legacy_replay_uses_its_semantic_stage(tmp_path, monkeypatch) -> None:
+    row = _run_single_baseline(
+        tmp_path,
+        monkeypatch,
+        "full_history",
+        "Use arithmetic grouping.",
+    )
+
+    assert [call["stage"] for call in row["method_calls"]] == ["full_history_generate"]
+
+
 def test_run_config_writes_replay_trial_log_jsonl(tmp_path) -> None:
     sample_path = tmp_path / "game24_one.jsonl"
     sample_path.write_text(
