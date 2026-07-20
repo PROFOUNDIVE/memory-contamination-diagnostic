@@ -1,13 +1,35 @@
 from __future__ import annotations
 
+import json
+from importlib import import_module
+from pathlib import Path
+from typing import cast
+
 import pytest
 
+from memcontam.baselines.reflexion_adapter import ReflexionAdapter, ReflexionState
 from memcontam.baselines.reflexion_style import ReflexionStylePolicy
 from memcontam.clients.replay import ReplayClient
 from memcontam.logging.provenance import compute_exposure_from_spans, normalize_memory_event
 from memcontam.logging.schema import MemoryEvent, MemoryItemLog, VerifierResult
 from memcontam.memory.stores import MemoryEntry, MemoryState
 from memcontam.tasks.base import TaskInstance
+
+
+def test_reflexion_contract_requires_structured_generation_and_authenticated_attempts() -> None:
+    module = __import__("memcontam.baselines.reflexion_style", fromlist=["*"])
+    fixture_dir = Path(__file__).parent / "fixtures/prompts"
+    generation_fixture = json.loads((fixture_dir / "reflexion_generate.json").read_text(encoding="utf-8"))
+    reflection_fixture = json.loads((fixture_dir / "reflexion_reflect.json").read_text(encoding="utf-8"))
+
+    assert getattr(module, "ReflectionGenerationResult", None) is not None
+    assert callable(getattr(module, "apply_keep_last_3", None))
+    assert generation_fixture["stage"] == "reflexion_generate"
+    assert reflection_fixture == {
+        "stage": "reflexion_reflect",
+        "schema": "ReflectionGenerationResult",
+        "strict_json": True,
+    }
 
 
 def _task() -> TaskInstance:
@@ -29,6 +51,241 @@ def _config(*, max_attempts: int | None = None) -> dict[str, object]:
     if max_attempts is not None:
         config["max_attempts"] = max_attempts
     return config
+
+
+def _reflection(text: str, used_ids: tuple[str, ...] = ()) -> str:
+    return json.dumps(
+        {
+            "mode": "corrective",
+            "failure_class": "incorrect_answer",
+            "reflection_text": text,
+            "explicitly_used_memory_ids": list(used_ids),
+        }
+    )
+
+
+def _adapter() -> ReflexionAdapter:
+    adapter = getattr(import_module("memcontam.baselines.reflexion_style"), "ReflexionAdapter", None)
+    assert adapter is not None
+    return adapter()
+
+
+def _state() -> ReflexionState:
+    state = getattr(import_module("memcontam.baselines.reflexion_style"), "ReflexionState", None)
+    assert state is not None
+    return state()
+
+
+def test_adapter_stores_terminal_reflection_after_two_authenticated_incorrect_attempts() -> None:
+    fixture = json.loads(
+        (
+            Path(__file__).parent
+            / "fixtures/replay/baseline_fidelity_v1/reflexion_style_failure_failure.json"
+        ).read_text(encoding="utf-8")
+    )
+    state = _state()
+    outcome = _adapter().execute(
+        _task(),
+        state,
+        client=ReplayClient(responses_by_sample={"sample_001": fixture["stages"]}),
+        model="replay",
+        config=_config(max_attempts=2),
+        verifier=lambda answer, _task: answer == "24",
+    )
+
+    assert outcome.status == "succeeded"
+    assert outcome.verifier_result is False
+    assert outcome.answer_call_id == outcome.method_calls[2].call_id
+    assert outcome.error_type is None
+    assert outcome.failure_disposition is None
+    assert outcome.scientific_ineligibility_reason is None
+    assert [call.stage for call in outcome.method_calls] == [
+        "reflexion_generate",
+        "reflexion_reflect",
+        "reflexion_generate",
+        "reflexion_reflect",
+    ]
+    assert [call.retry_count for call in outcome.method_calls] == [0, 0, 0, 0]
+    assert [attempt["attempt_index"] for attempt in outcome.metadata["reflexion_attempt_outcomes"]] == [
+        1,
+        2,
+    ]
+    assert [attempt["failure_class"] for attempt in outcome.metadata["reflexion_attempt_outcomes"]] == [
+        "incorrect_answer",
+        "incorrect_answer",
+    ]
+    assert len(outcome.metadata["reflexion_reflection_events"]) == 2
+    assert [entry.content for entry in state.reflections] == [
+        "Reflection: Retry carefully.",
+        "Reflection: Terminal reflection.",
+    ]
+
+
+def test_adapter_keeps_transport_retries_out_of_semantic_attempt_metadata() -> None:
+    fixture = json.loads(
+        (
+            Path(__file__).parent
+            / "fixtures/replay/baseline_fidelity_v1/reflexion_attempt2_transport_retry.json"
+        ).read_text(encoding="utf-8")
+    )
+    outcome = _adapter().execute(
+        _task(),
+        _state(),
+        client=ReplayClient(
+            responses_by_sample={
+                "sample_001": {
+                    **fixture["stages"],
+                    "reflexion_reflect": _reflection("Retry carefully."),
+                }
+            }
+        ),
+        model="replay",
+        config={**_config(max_attempts=2), "retry_count": fixture["transport_retry_count"]},
+        verifier=lambda answer, _task: answer == "24",
+    )
+
+    assert [call.retry_count for call in outcome.method_calls] == [3, 3, 3]
+    assert [attempt["attempt_index"] for attempt in outcome.metadata["reflexion_attempt_outcomes"]] == [
+        1,
+        2,
+    ]
+
+
+def test_adapter_stops_before_authentication_on_malformed_generation() -> None:
+    fixture = json.loads(
+        (
+            Path(__file__).parent
+            / "fixtures/replay/baseline_fidelity_v1/reflexion_invalid_generation.json"
+        ).read_text(encoding="utf-8")
+    )
+    state = _state()
+    outcome = _adapter().execute(
+        _task(),
+        state,
+        client=ReplayClient(responses_by_sample={"sample_001": {fixture["stage"]: fixture["response"]}}),
+        model="replay",
+        config=_config(max_attempts=2),
+        verifier=lambda answer, _task: False,
+    )
+
+    assert outcome.status == "failed"
+    assert outcome.failure_disposition == "reflexion_invalid_generation"
+    assert outcome.answer_call_id == outcome.method_calls[0].call_id
+    assert [call.stage for call in outcome.method_calls] == ["reflexion_generate"]
+    assert outcome.metadata["reflexion_attempt_outcomes"] == []
+    assert outcome.metadata["reflexion_reflection_events"] == []
+    assert state.reflections == []
+
+
+def test_adapter_stops_before_authentication_when_the_verifier_contract_fails() -> None:
+    state = _state()
+    outcome = _adapter().execute(
+        _task(),
+        state,
+        client=ReplayClient(responses=["final: wrong"]),
+        model="replay",
+        config=_config(max_attempts=2),
+        verifier=lambda answer, _task: cast(VerifierResult | bool, "not-a-boolean"),
+    )
+
+    assert outcome.status == "failed"
+    assert outcome.failure_disposition == "verifier_contract_failed"
+    assert [call.stage for call in outcome.method_calls] == ["reflexion_generate"]
+    assert outcome.metadata["reflexion_attempt_outcomes"] == []
+    assert outcome.metadata["reflexion_reflection_events"] == []
+    assert state.reflections == []
+
+
+def test_adapter_rejects_malformed_reflection_without_a_write_or_second_attempt() -> None:
+    state = _state()
+    outcome = _adapter().execute(
+        _task(),
+        state,
+        client=ReplayClient(
+            responses_by_sample={
+                "sample_001": {
+                    "reflexion_generate": ["final: wrong", "final: 4"],
+                    "reflexion_reflect": "not-json",
+                }
+            }
+        ),
+        model="replay",
+        config=_config(max_attempts=2),
+        verifier=lambda answer, _task: False,
+    )
+
+    assert outcome.status == "failed"
+    assert outcome.failure_disposition == "reflexion_invalid_reflection"
+    assert [call.stage for call in outcome.method_calls] == [
+        "reflexion_generate",
+        "reflexion_reflect",
+    ]
+    assert len(outcome.metadata["reflexion_attempt_outcomes"]) == 1
+    assert outcome.metadata["reflexion_reflection_events"] == []
+    assert outcome.memory_write_event is None
+    assert state.reflections == []
+
+
+def test_adapter_preserves_an_authenticated_reflection_when_retry_generation_is_malformed() -> None:
+    state = _state()
+    outcome = _adapter().execute(
+        _task(),
+        state,
+        client=ReplayClient(
+            responses_by_sample={
+                "sample_001": {
+                    "reflexion_generate": ["final: wrong", "not a final answer"],
+                    "reflexion_reflect": _reflection("Retry carefully."),
+                }
+            }
+        ),
+        model="replay",
+        config=_config(max_attempts=2),
+        verifier=lambda answer, _task: False,
+    )
+
+    assert outcome.status == "failed"
+    assert outcome.failure_disposition == "reflexion_invalid_generation"
+    assert len(outcome.metadata["reflexion_attempt_outcomes"]) == 1
+    assert len(outcome.metadata["reflexion_reflection_events"]) == 1
+    assert outcome.memory_write_event is not None
+    assert outcome.memory_write_event["status"] == "accepted"
+    assert [entry.content for entry in state.reflections] == ["Reflection: Retry carefully."]
+
+
+def test_adapter_keeps_only_last_three_reflections_and_uses_explicit_parents() -> None:
+    assert getattr(import_module("memcontam.baselines.reflexion_style"), "ReflexionState", None) is ReflexionState
+    state = ReflexionState(
+        reflections=[
+            MemoryEntry(entry_id="one", content="Reflection: one", memory_type="verbal_reflection"),
+            MemoryEntry(entry_id="two", content="Reflection: two", memory_type="verbal_reflection"),
+            MemoryEntry(entry_id="three", content="Reflection: three", memory_type="verbal_reflection"),
+            MemoryEntry(entry_id="four", content="Reflection: four", memory_type="verbal_reflection"),
+        ]
+    )
+    assert [entry.entry_id for entry in state.reflections] == ["two", "three", "four"]
+    outcome = _adapter().execute(
+        _task(),
+        state,
+        client=ReplayClient(
+            responses_by_sample={
+                "sample_001": {
+                    "reflexion_generate": ["final: wrong", "final: 4"],
+                    "reflexion_reflect": _reflection("five", ("two",)),
+                }
+            }
+        ),
+        model="replay",
+        config=_config(max_attempts=2),
+        verifier=lambda answer, _task: answer == "4",
+    )
+
+    assert [entry.entry_id for entry in state.reflections] == ["three", "four", state.reflections[-1].entry_id]
+    assert state.reflections[-1].metadata["direct_parent_ids"] == ["two"]
+    assert state.reflections[-1].metadata["memory_support_ids"] == ["two"]
+    assert state.reflections[-1].metadata["source_entry_ids"] == ["two"]
+    assert outcome.memory_write_event is not None
+    assert outcome.memory_write_event["parent_entry_ids"] == ["two"]
 
 
 def test_build_prompt_keeps_legacy_last_three_entries_behavior() -> None:
@@ -82,7 +339,12 @@ def test_run_success_generates_once_without_writing_and_uses_last_three_reflecti
     assert result["parsed_answer"] == "4"
     assert result["verifier_result"].is_correct is True
     assert [call.stage for call in result["method_calls"]] == ["reflexion_generate"]
-    assert result["memory_after"] == result["memory_before"]
+    assert [entry["entry_id"] for entry in result["memory_after"]] == [
+        "seed",
+        "middle",
+        "newer",
+        "latest",
+    ]
     assert result["memory_write_event"] is None
     assert result["retrieved_records"] == []
     assert result["retrieved_memory"] == []
@@ -118,7 +380,9 @@ def test_run_max_attempts_one_preserves_reflect_then_return_without_retry() -> N
         responses_by_sample={
             "sample_001": {
                 "reflexion_generate": ["final: incorrect"],
-                "reflexion_reflect": "  Re-check operator precedence.  ",
+                    "reflexion_reflect": _reflection(
+                        "Re-check operator precedence.", ("one", "two", "three")
+                    ),
             }
         }
     )
@@ -155,7 +419,7 @@ def test_run_max_attempts_one_preserves_reflect_then_return_without_retry() -> N
     assert appended.clean_or_contaminated == "contaminated"
     assert appended.source_trial_id == "run_001:math_equation_balancer:sample_001:reflexion_style:clean:replay"
     assert appended.metadata["parent_entry_ids"] == ["one", "two", "three"]
-    assert appended.metadata["source_entry_ids"] == ["two"]
+    assert appended.metadata["source_entry_ids"] == ["one", "two", "three"]
     assert appended.metadata["reflection_lineage"]["stage"] == "reflexion_reflect"
     assert result["memory_after"][-1] == appended.model_dump()
     assert result["memory_write_event"]["type"] == "reflexion_append"
@@ -188,7 +452,7 @@ def test_run_max_attempts_two_retries_same_sample_with_latest_three_memory_only(
         responses_by_sample={
             "sample_001": {
                 "reflexion_generate": ["final: incorrect", "final: 4"],
-                "reflexion_reflect": "Check the equation format.",
+                    "reflexion_reflect": _reflection("Check the equation format.", ("old", "one", "two")),
             }
         }
     )
@@ -235,7 +499,7 @@ def test_run_max_attempts_two_retries_same_sample_with_latest_three_memory_only(
     retry_span = next(
         span for span in result["method_calls"][-1].source_spans if span.entry_id == memory.entries[-1].entry_id
     )
-    assert retry_span.source_ids == ["contaminated-reflection"]
+    assert retry_span.source_ids == ["old", "one", "two"]
     assert retry_span.parent_ids == ["old", "one", "two"]
 
 
@@ -260,7 +524,7 @@ def test_retry_answer_span_reuses_exact_reflection_lineage() -> None:
         responses_by_sample={
             "sample_001": {
                 "reflexion_generate": ["final: incorrect", "final: 4"],
-                "reflexion_reflect": "Use the mitigation.",
+                    "reflexion_reflect": _reflection("Use the mitigation.", ("injected-reflection",)),
             }
         }
     )
@@ -333,7 +597,10 @@ def test_run_stops_after_failed_retry_without_second_reflection() -> None:
         responses_by_sample={
             "sample_001": {
                 "reflexion_generate": ["final: first", "final: second"],
-                "reflexion_reflect": "Try a different operation.",
+                "reflexion_reflect": [
+                    _reflection("Try a different operation."),
+                    _reflection("Terminal reflection."),
+                ],
             }
         }
     )
@@ -355,10 +622,12 @@ def test_run_stops_after_failed_retry_without_second_reflection() -> None:
         "reflexion_generate",
         "reflexion_reflect",
         "reflexion_generate",
+        "reflexion_reflect",
     ]
     assert result["final_response"] == "final: second"
     assert result["parsed_answer"] == "second"
     assert result["verifier_result"].is_correct is False
+    assert memory.entries[-1].content == "Reflection: Terminal reflection."
 
 
 def test_run_rejects_empty_failure_reflection_without_mutating_memory() -> None:
@@ -370,7 +639,7 @@ def test_run_rejects_empty_failure_reflection_without_mutating_memory() -> None:
         responses_by_sample={
             "sample_001": {
                 "reflexion_generate": "final: incorrect",
-                "reflexion_reflect": "  \n\t",
+                    "reflexion_reflect": "not-json",
             }
         }
     )
@@ -395,14 +664,10 @@ def test_run_rejects_empty_failure_reflection_without_mutating_memory() -> None:
     assert result["memory_after"] == result["memory_before"]
     assert result["retrieved_records"] == []
     assert result["retrieved_scores"] == []
-    assert result["memory_write_event"] == {
-        "type": "reflexion_append",
-        "status": "rejected_empty",
-        "fidelity_invalid": True,
-        "source_trial_id": "run_001:math_equation_balancer:sample_001:reflexion_style:clean:replay",
-        "parent_entry_ids": ["one"],
-        "source_entry_ids": [],
-    }
+    assert result["status"] == "failed"
+    assert result["failure_disposition"] == "reflexion_invalid_reflection"
+    assert result["verifier_result"].is_correct is False
+    assert result["memory_write_event"] is None
 
 
 def test_run_rejects_max_attempts_outside_one_or_two() -> None:
@@ -448,7 +713,7 @@ def test_accepted_reflection_memory_event_normalizes_append() -> None:
         responses_by_sample={
             "sample_001": {
                 "reflexion_generate": "final: incorrect",
-                "reflexion_reflect": "Check units.",
+                    "reflexion_reflect": _reflection("Check units.", ("one",)),
             }
         }
     )
@@ -478,7 +743,7 @@ def test_accepted_reflection_memory_event_normalizes_append() -> None:
     assert event.removed_entry_ids == []
     assert event.before_snapshot_hash != event.after_snapshot_hash
     assert event.parent_entry_ids == ["one"]
-    assert event.source_entry_ids == ["cont-1"]
+    assert event.source_entry_ids == ["one"]
     assert event.contaminated_source_ids == ["cont-1"]
     assert event.creation_origin == "reflexion_reflect"
 
@@ -492,7 +757,7 @@ def test_rejected_empty_reflection_memory_event_preserves_snapshot() -> None:
         responses_by_sample={
             "sample_001": {
                 "reflexion_generate": "final: incorrect",
-                "reflexion_reflect": "  \n\t",
+                    "reflexion_reflect": "not-json",
             }
         }
     )
@@ -513,17 +778,9 @@ def test_rejected_empty_reflection_memory_event_preserves_snapshot() -> None:
     source_trial_id = "run_001:math_equation_balancer:sample_001:reflexion_style:clean:replay"
     event = _normalize_reflexion_event(result, source_trial_id)
 
-    assert event is not None
-    assert event.status == "rejected"
-    assert event.operation == "append"
-    assert event.before_entry_ids == ["one"]
-    assert event.after_entry_ids == ["one"]
-    assert event.new_entry_ids == []
-    assert event.updated_entry_ids == []
-    assert event.removed_entry_ids == []
-    assert event.before_snapshot_hash == event.after_snapshot_hash
-    assert event.creation_origin is None
-    assert event.memory_version is None
+    assert result["status"] == "failed"
+    assert result["failure_disposition"] == "reflexion_invalid_reflection"
+    assert event is None
 
 
 def test_clean_ancestry_reflexion_mitigation_is_not_natural() -> None:

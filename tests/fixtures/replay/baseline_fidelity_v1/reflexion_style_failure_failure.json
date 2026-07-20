@@ -1,0 +1,1 @@
+{"stages":{"reflexion_generate":["final: wrong","final: still_wrong"],"reflexion_reflect":["{\"mode\":\"corrective\",\"failure_class\":\"incorrect_answer\",\"reflection_text\":\"Retry carefully.\",\"explicitly_used_memory_ids\":[]}","{\"mode\":\"corrective\",\"failure_class\":\"incorrect_answer\",\"reflection_text\":\"Terminal reflection.\",\"explicitly_used_memory_ids\":[]}"]}}

@@ -14,3 +14,7 @@ class MemoryEntry(BaseModel):
 
 class MemoryState(BaseModel):
     entries: list[MemoryEntry] = Field(default_factory=list)
+
+
+def apply_keep_last_3(entries: list[MemoryEntry]) -> list[MemoryEntry]:
+    return entries[-3:]
