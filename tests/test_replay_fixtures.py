@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -357,3 +358,19 @@ def test_followup_reflexion_retry_has_wrong_then_correct_generate() -> None:
     assert len(stages["reflexion_generate"]) == 2
     assert "1 + 1 + 1 + 1" in stages["reflexion_generate"][0]
     assert "6 / (1 - (3 / 4))" in stages["reflexion_generate"][1]
+
+
+def test_followup_reflexion_reflection_uses_the_strict_corrective_schema() -> None:
+    fixture = _load_yaml(FOLLOWUP_FIXTURE_PATH)
+
+    for stages in fixture["responses_by_sample"].values():
+        payload_text = stages.get("reflexion_reflect")
+        if payload_text is None:
+            continue
+        payload = json.loads(payload_text)
+        assert payload == {
+            "mode": "corrective",
+            "failure_class": "incorrect_answer",
+            "reflection_text": payload["reflection_text"],
+            "explicitly_used_memory_ids": [],
+        }
