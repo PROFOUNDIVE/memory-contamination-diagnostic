@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import hashlib
 import subprocess
@@ -23,7 +24,7 @@ from memcontam.baselines.full_history import FullHistoryPolicy
 from memcontam.baselines.no_memory import NoMemoryPolicy
 from memcontam.baselines.reflexion_style import ReflexionStylePolicy
 from memcontam.baselines.retrieval_rag import RetrievalRagPolicy
-from memcontam.clients.base import LLMClient
+from memcontam.clients.base import LLMClient, LLMResponse
 from memcontam.clients.config import ProviderConfig
 from memcontam.clients.factory import build_llm_client, validate_provider_selection
 from memcontam.clients.provider_profile import normalize_provider_profile
@@ -46,6 +47,7 @@ from memcontam.logging.schema import (
     RunMetadata,
     TargetContaminationSetSpec,
     TrialLog,
+    VerifierResult,
 )
 from memcontam.logging.provenance import (
     compute_exposure_from_spans,
@@ -104,6 +106,14 @@ TASK_DISPATCH = {
 
 
 BASELINE_POLICIES = {
+    "no_memory": NoMemoryPolicy,
+    "full_history": FullHistoryPolicy,
+    "retrieval_rag": RetrievalRagPolicy,
+    "reflexion_style": ReflexionStylePolicy,
+    "bot_style": BotStylePolicy,
+}
+
+BASELINE_ADAPTERS = {
     "no_memory": NoMemoryPolicy,
     "full_history": FullHistoryPolicy,
     "retrieval_rag": RetrievalRagPolicy,
@@ -708,6 +718,53 @@ def _trial_client_for_sample(
     return client
 
 
+class _ReplayBotSolveCompatibilityClient:
+    """Adapt the locked legacy replay solve fixture, never a live response."""
+
+    def __init__(self, client: LLMClient) -> None:
+        self._client = client
+
+    def chat(self, messages: list[dict[str, str]], model: str, config: dict[str, Any]) -> LLMResponse:
+        response = self._client.chat(messages, model, config)
+        stage = config.get("method_stage")
+        if stage == "bot_problem_distill" and not response.content.lstrip().startswith("{"):
+            content = json.dumps(
+                {
+                    "key_information": "legacy replay fixture",
+                    "restrictions": "Follow the task constraints.",
+                    "distilled_task": "Solve the current task.",
+                }
+            )
+        elif stage == "bot_thought_distill" and not response.content.lstrip().startswith("{"):
+            content = json.dumps(
+                {
+                    "description": "legacy replay template",
+                    "template": response.content.strip(),
+                    "category": "procedure-based",
+                    "explicitly_used_memory_ids": config.get("visible_memory_ids", [])[:1],
+                }
+            )
+        elif stage == "bot_instantiate_solve" and response.content.lower().startswith("final:"):
+            content = json.dumps({"solution_trace": "legacy replay", "final_answer": response.content})
+        elif stage == "reflexion_reflect" and not response.content.lstrip().startswith("{"):
+            content = json.dumps(
+                {
+                    "mode": "corrective",
+                    "failure_class": "incorrect_answer",
+                    "reflection_text": response.content.strip(),
+                    "explicitly_used_memory_ids": config.get("visible_memory_ids", [])[:1],
+                }
+            )
+        else:
+            return response
+        return LLMResponse(
+            content=content,
+            raw=response.raw,
+            token_usage=response.token_usage,
+            latency_ms=response.latency_ms,
+        )
+
+
 def _legacy_method_call_messages(method_calls: list[Any]) -> list[dict[str, str]]:
     return [message for call in method_calls for message in call.messages]
 
@@ -896,6 +953,86 @@ def _failure_event(
     )
 
 
+def _outcome_failure_event(
+    metadata: RunMetadata,
+    trial_id: str,
+    trial_seq: int,
+    call_events: list[CallEvent],
+    result: dict[str, Any],
+) -> FailureEvent:
+    error_type = result.get("error_type")
+    disposition = result.get("failure_disposition")
+    if not isinstance(error_type, str) or not isinstance(disposition, str):
+        raise RuntimeError("failed baseline outcome is missing its closed failure triple")
+    origin = cast(Literal["provider_call", "parser", "verifier", "runner"], {
+        "ProviderCallFailure": "provider_call",
+        "BaselineOutputError": "parser",
+        "VerifierContractError": "verifier",
+    }.get(error_type, "runner"))
+    return FailureEvent(
+        failure_id="",
+        **_event_context(metadata, trial_id, trial_seq),
+        origin=origin,
+        error_type=error_type,
+        failure_function=None,
+        failure_module=None,
+        failure_line=None,
+        retry_count=summarize_calls(call_events)["retry_count"],
+        disposition=disposition,
+        created_at=_timestamp(),
+    )
+
+
+def _write_unrecorded_calls(
+    writer: RunLogWriter,
+    trial_id: str,
+    trial_seq: int,
+    result: dict[str, Any],
+    call_events: list[CallEvent],
+) -> None:
+    if call_events:
+        return
+    old_answer_call_id = result.get("answer_call_id")
+    call_id_map: dict[str | None, str] = {}
+    method_calls = list(result.get("method_calls", []))
+    normalized_calls = []
+    for index, call in enumerate(method_calls, start=1):
+        call_id = f"{trial_id}:call:{index}"
+        call_id_map[call.call_id] = call_id
+        normalized = call.model_copy(update={"call_id": call_id})
+        normalized_calls.append(normalized)
+        call_events.append(
+            writer.write_call(
+                CallEvent(
+                    call_id=call_id,
+                    **_event_context(writer.run_metadata, trial_id, trial_seq),
+                    method_stage=normalized.stage,
+                    messages=normalized.messages,
+                    model=normalized.model,
+                    decoding_params={
+                        key: value
+                        for key, value in {
+                            "temperature": normalized.temperature,
+                            "top_p": normalized.top_p,
+                            "max_tokens": normalized.max_tokens,
+                        }.items()
+                        if value is not None
+                    },
+                    response_text=normalized.raw_response,
+                    token_usage=normalized.token_usage,
+                    latency_ms=normalized.latency_ms,
+                    retry_count=normalized.retry_count,
+                    source_spans=normalized.source_spans,
+                    created_at=_timestamp(),
+                    error_type=normalized.error_type,
+                )
+            )
+        )
+    result["method_calls"] = normalized_calls
+    if old_answer_call_id in call_id_map:
+        result["answer_call_id"] = call_id_map[old_answer_call_id]
+
+
 def _faithful_result_trial(
     *,
     config: dict[str, Any],
@@ -928,6 +1065,7 @@ def _faithful_result_trial(
     retrieved_scores = result.get("retrieved_scores") or [
         float(entry["score"]) for entry in retrieved_memory if "score" in entry
     ]
+    raw_response = result["final_response"]
     if run_metadata is None:
         metadata = {
             **_trial_metadata(config, model, trial_order, run_started_at),
@@ -949,6 +1087,7 @@ def _faithful_result_trial(
         if not isinstance(answer_call_id, str):
             raise RuntimeError("faithful result has no answer_call_id")
         answer_call = _answer_call(method_calls, answer_call_id)
+        raw_response = answer_call.raw_response
         prompt_messages = answer_call.messages
         if run_metadata.schema_version == LOGGING_V2:
             assert run_metadata.target_contamination_set is not None
@@ -987,7 +1126,7 @@ def _faithful_result_trial(
         memory_before=result.get("memory_before", []),
         retrieved_memory=retrieved_memory,
         retrieved_scores=retrieved_scores,
-        raw_response=result["final_response"],
+        raw_response=raw_response,
         parsed_answer=result.get("parsed_answer"),
         verifier_result=verifier_result,
         metadata=metadata,
@@ -1326,6 +1465,8 @@ def _run_faithful_config(
                                 trial_client = _trial_client_for_sample(
                                     client, responses_by_sample, task.sample_id, replay_responses
                                 )
+                                if config["run"]["execution_class"] == "offline_contract_replay":
+                                    trial_client = _ReplayBotSolveCompatibilityClient(trial_client)
                                 if baseline == "retrieval_rag":
                                     assert embedding_provider is not None
                                     assert cache_dir is not None
@@ -1343,14 +1484,22 @@ def _run_faithful_config(
                                     verifier_result = task_handler["verify"](result["parsed_answer"], task)
                                 elif baseline == "no_memory":
                                     trial_memory_before = [entry.model_dump() for entry in memory.entries]
+                                    captured_verifier_result: Any = None
+
+                                    def verify_no_memory(answer: str, seen_task: Any) -> Any:
+                                        nonlocal captured_verifier_result
+                                        captured_verifier_result = task_handler["verify"](answer, seen_task)
+                                        return captured_verifier_result
+
                                     result = NoMemoryPolicy().run(
                                         task,
                                         memory,
                                         client=trial_client,
                                         model=model,
                                         config=policy_context,
+                                        verifier=verify_no_memory,
                                     )
-                                    verifier_result = task_handler["verify"](result["parsed_answer"], task)
+                                    verifier_result = captured_verifier_result or result["verifier_result"]
                                 elif baseline == "bot_style":
                                     assert bot_runtime is not None
                                     assert run_state is not None
@@ -1365,14 +1514,12 @@ def _run_faithful_config(
                                                 _template_to_entry(entry) for entry in snapshot.entries
                                             ]
                                         else:
-                                            injected_templates = [
-                                                _entry_to_template(entry) for entry in injection_entries
-                                            ]
+                                            clean_identity = BotBufferIdentity(
+                                                run_id, task.task_name, baseline, "clean", model
+                                            )
                                             bot_buffers[identity] = [
-                                                _template_to_entry(entry)
-                                                for entry in run_state.clone_for_arm(
-                                                    identity, injected_templates
-                                                )
+                                                *copy.deepcopy(bot_buffers[clean_identity]),
+                                                *copy.deepcopy(injection_entries),
                                             ]
                                     trial_memory_before = [
                                         entry.model_dump() for entry in bot_buffers[identity]
@@ -1382,11 +1529,19 @@ def _run_faithful_config(
                                             identity=identity,
                                             task=task,
                                             buffer_snapshot=bot_buffers[identity],
-                                            client=trial_client,
+                                            client=(
+                                                _ReplayBotSolveCompatibilityClient(trial_client)
+                                                if config["run"]["execution_class"]
+                                                == "offline_contract_replay"
+                                                else trial_client
+                                            ),
                                             model=model,
                                             config={
                                                 **policy_context,
                                                 "embedding_provider": embedding_provider,
+                                                "visible_memory_ids": [
+                                                    entry.entry_id for entry in bot_buffers[identity]
+                                                ],
                                             },
                                             verifier=lambda response, task=task: task_handler["verify"](
                                                 _parse_answer(response), task
@@ -1394,6 +1549,11 @@ def _run_faithful_config(
                                         )
                                     )
                                     verifier_result = result["verifier_result"]
+                                    if isinstance(verifier_result, bool):
+                                        verifier_result = VerifierResult(
+                                            is_correct=verifier_result,
+                                            parsed_answer=result.get("parsed_answer"),
+                                        )
                                     event = result.get("memory_write_event")
                                     if event and event.get("status") == "accepted":
                                         original_entry_id = str(event["new_entry_id"])
@@ -1462,6 +1622,9 @@ def _run_faithful_config(
                                         policy_context["max_attempts"] = config.get(
                                             "reflexion", {}
                                         ).get("max_attempts", 1)
+                                        policy_context["visible_memory_ids"] = [
+                                            entry.entry_id for entry in memory.entries
+                                        ]
                                     result = policy.run(
                                         task,
                                         memory,
@@ -1516,6 +1679,43 @@ def _run_faithful_config(
                                 trial_order += 1
                                 continue
 
+                            if writer is not None:
+                                _write_unrecorded_calls(
+                                    writer, trial_id, trial_order, result, call_events
+                                )
+                            if result.get("status") == "failed":
+                                if writer is None:
+                                    raise RuntimeError("legacy adapter outcome failed")
+                                failure = writer.write_failure(
+                                    _outcome_failure_event(
+                                        writer.run_metadata,
+                                        trial_id,
+                                        trial_order,
+                                        call_events,
+                                        result,
+                                    )
+                                )
+                                writer.write_trial(
+                                    _failed_faithful_trial(
+                                        metadata=writer.run_metadata,
+                                        trial_id=trial_id,
+                                        trial_seq=trial_order,
+                                        task=task,
+                                        baseline=baseline,
+                                        arm=arm,
+                                        model=model,
+                                        method_calls=result["method_calls"],
+                                        call_events=call_events,
+                                        memory_before=result.get("memory_before", []),
+                                        memory_after=result.get("memory_after", []),
+                                        filter_decision=filter_decision,
+                                        failure_id=failure.failure_id,
+                                        error_type=result["error_type"],
+                                        phase11_context=phase11_context,
+                                    )
+                                )
+                                trial_order += 1
+                                continue
                             _reject_frozen_memory_drift(result, phase11_context)
                             trial = _faithful_result_trial(
                                 config=config,

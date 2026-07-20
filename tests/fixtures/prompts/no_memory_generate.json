@@ -1,0 +1,1 @@
+{"stage":"no_memory_generate","messages":[{"role":"system","content":"Solve the task. Use no persistent memory. Return only the final answer in the required task format."},{"role":"user","content":"Task family:\n{{task_family}}\n\nCurrent task:\n{{task_canonical}}"}]}

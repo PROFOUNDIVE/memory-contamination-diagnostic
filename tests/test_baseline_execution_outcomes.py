@@ -98,6 +98,30 @@ def test_full_history_parse_failure_uses_the_closed_output_failure_row() -> None
     assert failed.failure_disposition == "full_history_invalid_final_answer"
 
 
+def test_no_memory_adapter_fails_closed_on_empty_output_and_keeps_memory_read_only() -> None:
+    from memcontam.baselines.no_memory import NoMemoryAdapter
+    from memcontam.clients.base import LLMResponse
+    from memcontam.memory.stores import MemoryState
+    from memcontam.tasks.base import TaskInstance
+
+    class Client:
+        def chat(self, messages, model, config):
+            del messages, model, config
+            return LLMResponse(content="   ", raw={}, token_usage={}, latency_ms=0)
+
+    memory = MemoryState()
+    outcome = NoMemoryAdapter().execute(
+        TaskInstance(sample_id="sample-1", task_name="game24", input={}),
+        memory,
+        client=Client(),
+        model="replay",
+    )
+
+    assert outcome.status == "failed"
+    assert outcome.failure_disposition == "no_memory_invalid_final_answer"
+    assert outcome.memory_before == outcome.memory_after == ()
+
+
 def test_retrieval_rag_valid_incorrect_answer_is_a_success() -> None:
     from memcontam.baselines.retrieval_rag import RetrievalRagAdapter
     from memcontam.clients.base import LLMResponse

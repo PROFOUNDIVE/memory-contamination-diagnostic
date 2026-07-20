@@ -148,7 +148,10 @@ def _assert_direct_edge_contract(
 
 
 def _assert_online_phase11_contract(run_dir: Path) -> None:
-    assert {path.name for path in run_dir.iterdir()} == set(ARTIFACT_FILENAMES)
+    assert {path.name for path in run_dir.iterdir()} == set(ARTIFACT_FILENAMES) | {
+        "provider_profile.json",
+        "resolved_config.json",
+    }
     artifacts = _read_artifacts(run_dir)
     manifest = artifacts["manifest"]
     metadata = RunMetadata.model_validate(manifest["run_metadata"])

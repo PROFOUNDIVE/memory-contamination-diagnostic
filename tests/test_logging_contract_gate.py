@@ -117,7 +117,7 @@ def test_logging_contract_replay_emits_exact_strict_39_row_artifacts(tmp_path, m
     assert manifest_data["status"] == "completed"
     assert metadata.stage == "replay"
     assert metadata.schema_version == LOGGING_V1
-    assert metadata.provider == "replay"
+    assert metadata.provider.startswith("replay:")
     assert config["embedding"]["offline_fallback"] is True
     assert config["live_smoke"]["enabled"] is False
     assert manifest_data["counts"] == {
