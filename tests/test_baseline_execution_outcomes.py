@@ -84,3 +84,14 @@ def test_failed_outcome_requires_scientific_ineligibility_metadata() -> None:
     )
     with pytest.raises(ValueError, match="scientific_ineligibility_reason"):
         validate(failed, {})
+
+
+def test_full_history_parse_failure_uses_the_closed_output_failure_row() -> None:
+    failed = BaselineExecutionOutcome(
+        status="failed",
+        error_type="BaselineOutputError",
+        failure_disposition="full_history_invalid_final_answer",
+        scientific_ineligibility_reason="invalid_final_answer",
+    )
+
+    assert failed.failure_disposition == "full_history_invalid_final_answer"

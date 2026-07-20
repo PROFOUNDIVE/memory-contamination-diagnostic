@@ -1,0 +1,1 @@
+{"stage":"full_history_generate","history_record":"<BEGIN_HISTORY_RECORD id=\"{{entry_id}}\">\nTASK:\n{{task_input}}\n\nRESPONSE:\n{{raw_response}}\n<END_HISTORY_RECORD>"}
