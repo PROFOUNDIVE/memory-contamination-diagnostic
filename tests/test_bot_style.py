@@ -42,6 +42,21 @@ _SOLUTION_OUTPUT = json.dumps(
 )
 
 
+def test_bot_thought_distillation_compatibility_shim_uses_structured_solution_trace() -> None:
+    bot_style = importlib.import_module("memcontam.baselines.bot_style")
+    compatibility_shim = getattr(bot_style, "distill_thought_template", None)
+    task = TaskInstance(sample_id="game24_001", task_name="game24", input={"numbers": [1, 2, 3, 4]})
+
+    class ExplodingVerifier:
+        def __getattribute__(self, _name: str) -> object:
+            raise AssertionError("compatibility shim must not read verifier state")
+
+    assert callable(compatibility_shim)
+    assert compatibility_shim(task, _SOLUTION_OUTPUT, ExplodingVerifier(), None) == (
+        "Pair 1 + 3 and 2 + 4, then multiply the pair sums."
+    )
+
+
 def test_bot_problem_distill_accepts_only_the_three_field_schema() -> None:
     task = TaskInstance(
         sample_id="game24_001",

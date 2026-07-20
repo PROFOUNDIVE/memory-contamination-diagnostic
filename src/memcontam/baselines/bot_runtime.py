@@ -3,11 +3,11 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any, Callable, Literal
 
-from .bot_read import retrieve_top_template
-from .bot_solve import parse_bot_solve_result
-from .bot_style import BotStylePolicy
-from .common import parse_final_answer
-from .contracts import BaselineExecutionOutcome
+from memcontam.baselines.bot_read import retrieve_top_template
+from memcontam.baselines.bot_solve import parse_bot_solve_result
+from memcontam.baselines.bot_style import BotStylePolicy
+from memcontam.baselines.common import parse_final_answer
+from memcontam.baselines.contracts import BaselineExecutionOutcome
 from memcontam.clients.base import LLMClient
 from memcontam.clients.recording import MethodCallRecorder
 from memcontam.logging.schema import VerifierResult

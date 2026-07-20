@@ -2,14 +2,24 @@ from __future__ import annotations
 
 from typing import Any
 
-from .bot_read import DistilledProblem, distill_problem
-from .bot_solve import render_bot_solve_prompt
+from memcontam.baselines.bot_read import DistilledProblem, distill_problem
+from memcontam.baselines.bot_solve import parse_bot_solve_result, render_bot_solve_prompt
 from memcontam.tasks.base import TaskInstance
 
 
 _INSTANTIATION_INSTRUCTIONS = """\
 Apply the provided thought template to the distilled problem. Return only the requested JSON object.
 """
+
+
+def distill_thought_template(
+    task: TaskInstance,
+    raw_response: str,
+    verifier_result: Any,
+    retrieved_template: dict[str, Any] | None,
+) -> str:
+    del task, verifier_result, retrieved_template
+    return parse_bot_solve_result(raw_response).solution_trace
 
 
 class BotStylePolicy:

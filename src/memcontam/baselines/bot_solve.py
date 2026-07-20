@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from .bot_read import DistilledProblem, FALLBACK_THOUGHT_TEMPLATE
+from memcontam.baselines.bot_read import DistilledProblem, FALLBACK_THOUGHT_TEMPLATE
 from memcontam.baselines.contracts import NonEmptyStr
 from memcontam.logging.provenance import PromptSourcePart, build_prompt_with_sources
 from memcontam.memory.stores import MemoryEntry
