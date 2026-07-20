@@ -62,10 +62,18 @@ def validate_parent_graph(
     *,
     admitted_envelopes: Sequence[MemoryCardEnvelope] = (),
 ) -> None:
-    issues = _parent_issues(envelopes, admitted_envelopes)
+    current_envelopes = tuple(envelopes)
+    if (
+        len(current_envelopes) != sum(
+            isinstance(envelope, MemoryCardEnvelope) for envelope in current_envelopes
+        )
+        or len({envelope.entry_id for envelope in current_envelopes}) != len(current_envelopes)
+    ):
+        raise AdmissionGraphError("invalid_schema")
+    issues = _parent_issues(current_envelopes, admitted_envelopes)
     if issues:
         raise AdmissionGraphError(next(iter(issues.values())))
-    if _cycle_entry_ids(envelopes):
+    if _cycle_entry_ids(current_envelopes):
         raise AdmissionGraphError("cycle")
 
 
@@ -76,9 +84,9 @@ def evaluate_entry_admission(
 
 
 def evaluate_admission_graph(
-    entries: Sequence[tuple[MemoryCard, MemoryCardEnvelope]], context: AdmissionContext
+    entries: Sequence[object], context: AdmissionContext
 ) -> tuple[AdmissionDecision, ...]:
-    pairs = tuple(entries)
+    pairs = tuple(_entry_pair(entry) for entry in entries)
     envelopes = tuple(envelope for _, envelope in pairs)
     schema_issues = _schema_issues(pairs)
     candidate_ids = frozenset(
@@ -90,6 +98,26 @@ def evaluate_admission_graph(
         if isinstance(envelope, MemoryCardEnvelope)
     )
     issues = dict(schema_issues)
+    admitted_entries = tuple(
+        envelope
+        for envelope in context.admitted_envelopes
+        if isinstance(envelope, MemoryCardEnvelope)
+    )
+    if (
+        len(admitted_entries) != len(context.admitted_envelopes)
+        or len({envelope.entry_id for envelope in admitted_entries}) != len(admitted_entries)
+    ):
+        issues.update(
+            {
+                envelope.entry_id: "invalid_schema"
+                for envelope in envelopes
+                if isinstance(envelope, MemoryCardEnvelope)
+            }
+        )
+    admitted_ids = {envelope.entry_id for envelope in admitted_entries}
+    for envelope in envelopes:
+        if isinstance(envelope, MemoryCardEnvelope) and envelope.entry_id in admitted_ids:
+            issues[envelope.entry_id] = "invalid_schema"
 
     for envelope in envelopes:
         if not isinstance(envelope, MemoryCardEnvelope) or envelope.entry_id in issues:
@@ -109,7 +137,6 @@ def evaluate_admission_graph(
         issues[entry_id] = "cycle"
 
     by_id = {envelope.entry_id: envelope for envelope in envelopes if isinstance(envelope, MemoryCardEnvelope)}
-    admitted_ids = {envelope.entry_id for envelope in context.admitted_envelopes}
     decisions: dict[str, AdmissionDecision] = {}
 
     def evaluate(entry_id: str) -> AdmissionDecision:
@@ -140,7 +167,7 @@ def evaluate_admission_graph(
 
 
 def _schema_issues(
-    entries: Sequence[tuple[MemoryCard, MemoryCardEnvelope]],
+    entries: Sequence[tuple[object, object]],
 ) -> dict[str, str]:
     issues: dict[str, str] = {}
     seen_ids: set[str] = set()
@@ -153,9 +180,13 @@ def _schema_issues(
 
 
 def _parent_issues(
-    envelopes: Sequence[MemoryCardEnvelope], admitted_envelopes: Sequence[MemoryCardEnvelope]
+    envelopes: Sequence[object], admitted_envelopes: Sequence[MemoryCardEnvelope]
 ) -> dict[str, str]:
-    all_envelopes = (*admitted_envelopes, *envelopes)
+    all_envelopes = tuple(
+        envelope
+        for envelope in (*admitted_envelopes, *envelopes)
+        if isinstance(envelope, MemoryCardEnvelope)
+    )
     by_id = {envelope.entry_id: envelope for envelope in all_envelopes}
     issues: dict[str, str] = {}
     for envelope in envelopes:
@@ -172,7 +203,7 @@ def _parent_issues(
     return issues
 
 
-def _cycle_entry_ids(envelopes: Sequence[MemoryCardEnvelope]) -> frozenset[str]:
+def _cycle_entry_ids(envelopes: Sequence[object]) -> frozenset[str]:
     candidate_ids = {envelope.entry_id for envelope in envelopes if isinstance(envelope, MemoryCardEnvelope)}
     parents = {
         envelope.entry_id: tuple(parent for parent in envelope.declared_parent_ids if parent in candidate_ids)
@@ -240,6 +271,12 @@ def _entry_id(card: object, envelope: object) -> str:
     if isinstance(card, MemoryCard) and isinstance(card.card_id, str):
         return card.card_id
     return ""
+
+
+def _entry_pair(entry: object) -> tuple[object, object]:
+    if isinstance(entry, tuple) and len(entry) == 2:
+        return entry
+    return None, None
 
 
 def _identifier_tuple(value: object) -> bool:

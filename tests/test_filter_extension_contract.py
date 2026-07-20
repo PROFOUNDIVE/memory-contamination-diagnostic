@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import sys
+from typing import cast
+
+import pytest
 
 from memcontam.memory.cards import MemoryCard, MemoryCardEnvelope
 
@@ -137,4 +141,43 @@ def test_evaluator_rejects_cycles_without_mutating_entries_or_reading_hidden_met
     }
     assert [card.metadata for card, _ in source_entries] == original_metadata
     assert tuple(envelope for _, envelope in source_entries) == original_envelopes
-    assert "memcontam.cli" not in admission.__dict__.values()
+    assert "memcontam.cli" not in sys.modules
+
+
+def test_evaluator_fails_closed_for_a_malformed_envelope() -> None:
+    admission = importlib.import_module("memcontam.memory.admission")
+    card, _ = _entry("malformed")
+
+    decisions = admission.evaluate_admission_graph(
+        ((card, cast(MemoryCardEnvelope, object())),), _context(admission)
+    )
+
+    assert decisions == (admission.AdmissionDecision("malformed", False, "invalid_schema"),)
+
+
+def test_evaluator_fails_closed_for_malformed_entry_shapes() -> None:
+    admission = importlib.import_module("memcontam.memory.admission")
+    malformed_pair = cast(tuple[MemoryCard, MemoryCardEnvelope], (object(),))
+
+    decisions = admission.evaluate_admission_graph((malformed_pair,), _context(admission))
+
+    assert decisions == (admission.AdmissionDecision("", False, "invalid_schema"),)
+
+
+def test_evaluator_rejects_duplicate_ids_in_current_and_admitted_graphs() -> None:
+    admission = importlib.import_module("memcontam.memory.admission")
+    first = _entry("duplicate", order_key=1)
+    second = _entry("duplicate", order_key=2)
+
+    current_decisions = admission.evaluate_admission_graph((first, second), _context(admission))
+    prior_decision = admission.evaluate_entry_admission(
+        second[0], second[1], _context(admission, prior=(first[1],))
+    )
+
+    assert current_decisions == (
+        admission.AdmissionDecision("duplicate", False, "invalid_schema"),
+        admission.AdmissionDecision("duplicate", False, "invalid_schema"),
+    )
+    assert prior_decision == admission.AdmissionDecision("duplicate", False, "invalid_schema")
+    with pytest.raises(admission.AdmissionGraphError, match="invalid_schema"):
+        admission.validate_parent_graph((first[1], second[1]))
