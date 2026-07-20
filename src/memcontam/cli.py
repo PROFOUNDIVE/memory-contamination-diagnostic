@@ -1197,6 +1197,7 @@ def _failed_faithful_trial(
     failure_disposition: str | None = None,
     scientific_ineligibility_reason: str | None = None,
     phase11_context: dict[str, Any] | None = None,
+    memory_write_event: dict[str, Any] | None = None,
 ) -> TrialLog:
     if not method_calls:
         raise RuntimeError("failed faithful trial has no provider call")
@@ -1266,7 +1267,7 @@ def _failed_faithful_trial(
         parsed_answer=None,
         verifier_result=None,
         metadata=failure_metadata,
-        memory_write_event=None,
+        memory_write_event=memory_write_event,
         memory_after=memory_after,
         method_calls=method_calls,
         contamination_exposure=exposure,
@@ -1736,29 +1737,44 @@ def _run_faithful_config(
                                         result,
                                     )
                                 )
-                                writer.write_trial(
-                                    _failed_faithful_trial(
-                                        metadata=writer.run_metadata,
-                                        trial_id=trial_id,
-                                        trial_seq=trial_order,
-                                        task=task,
-                                        baseline=baseline,
-                                        arm=arm,
-                                        model=model,
-                                        method_calls=result["method_calls"],
-                                        call_events=call_events,
-                                        memory_before=result.get("memory_before", []),
-                                        memory_after=result.get("memory_after", []),
-                                        filter_decision=filter_decision,
-                                        failure_id=failure.failure_id,
-                                        error_type=result["error_type"],
-                                        failure_disposition=result["failure_disposition"],
-                                        scientific_ineligibility_reason=result[
-                                            "scientific_ineligibility_reason"
-                                        ],
-                                        phase11_context=phase11_context,
-                                    )
+                                trial = _failed_faithful_trial(
+                                    metadata=writer.run_metadata,
+                                    trial_id=trial_id,
+                                    trial_seq=trial_order,
+                                    task=task,
+                                    baseline=baseline,
+                                    arm=arm,
+                                    model=model,
+                                    method_calls=result["method_calls"],
+                                    call_events=call_events,
+                                    memory_before=result.get("memory_before", []),
+                                    memory_after=result.get("memory_after", []),
+                                    memory_write_event=result.get("memory_write_event"),
+                                    filter_decision=filter_decision,
+                                    failure_id=failure.failure_id,
+                                    error_type=result["error_type"],
+                                    failure_disposition=result["failure_disposition"],
+                                    scientific_ineligibility_reason=result[
+                                        "scientific_ineligibility_reason"
+                                    ],
+                                    phase11_context=phase11_context,
                                 )
+                                memory_event = normalize_memory_event(
+                                    baseline,
+                                    trial_id,
+                                    _snapshot_memory_entries(result.get("memory_before", [])),
+                                    _snapshot_memory_entries(result.get("memory_after", [])),
+                                    result.get("memory_write_event"),
+                                )
+                                if memory_event is not None:
+                                    writer.write_memory(
+                                        memory_event.model_copy(
+                                            update=_event_context(
+                                                writer.run_metadata, trial_id, trial_order
+                                            )
+                                        )
+                                    )
+                                writer.write_trial(trial)
                                 trial_order += 1
                                 continue
                             _reject_frozen_memory_drift(result, phase11_context)

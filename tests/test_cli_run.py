@@ -1669,6 +1669,51 @@ def test_strict_faithful_runner_continues_after_provider_and_verifier_failures(
     assert trials[-1]["verifier_result"]["is_correct"] is True
 
 
+def test_strict_bot_verifier_failure_persists_admitted_memory_write(tmp_path, monkeypatch) -> None:
+    sample_path = _write_game24_sample(tmp_path)
+    corpus_path = _write_minimal_corpus(tmp_path, [])
+    monkeypatch.chdir(tmp_path)
+    config = _strict_no_memory_config(tmp_path, sample_path, corpus_path)
+    config["baselines"] = ["bot_style"]
+    config["replay"] = {
+        "fixture_version": "fixture-v1",
+        "responses": [
+            (
+                '{"key_information":"numbers = [1, 3, 4, 6]",'
+                '"restrictions":"Use each number once.","distilled_task":"Construct 24."}'
+            ),
+            (
+                '{"solution_trace":"Pair 1 + 3 and 2 + 4.",'
+                '"final_answer":"final: (1 + 3) * (2 + 4) = 24"}'
+            ),
+            (
+                '{"description":"Build factor pairs.","template":"Pair factors first.",'
+                '"category":"procedure-based","explicitly_used_memory_ids":[]}'
+            ),
+        ],
+    }
+
+    def failing_verify(*_args):
+        raise RuntimeError("verifier unavailable")
+
+    monkeypatch.setitem(cli.TASK_DISPATCH["game24"], "verify", failing_verify)
+    run_dir = run_config(config, run_id="strict_bot_verifier_failure")
+
+    trial = json.loads((run_dir / "trials.jsonl").read_text(encoding="utf-8"))
+    failure = json.loads((run_dir / "failures.jsonl").read_text(encoding="utf-8"))
+    memory_event = json.loads((run_dir / "memory_events.jsonl").read_text(encoding="utf-8"))
+
+    assert trial["status"] == "failed"
+    assert trial["error_type"] == "VerifierContractError"
+    assert trial["failure_id"] == failure["failure_id"]
+    assert trial["memory_write_event"] is not None
+    assert trial["memory_write_event"]["source_outcome"] is None
+    assert trial["memory_after"][-1]["metadata"]["source_outcome"] is None
+    assert memory_event["trial_id"] == trial["trial_id"]
+    assert memory_event["source_trial_id"] == trial["trial_id"]
+    assert memory_event["new_entry_ids"] == [trial["memory_after"][-1]["entry_id"]]
+
+
 def _strict_no_memory_config(tmp_path, sample_path: str, corpus_path: str) -> dict[str, Any]:
     return {
         "run": {
