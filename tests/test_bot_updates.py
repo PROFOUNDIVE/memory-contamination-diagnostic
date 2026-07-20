@@ -1,283 +1,74 @@
 from __future__ import annotations
 
-from memcontam.clients.replay import ReplayClient
-from memcontam.logging.provenance import normalize_memory_event
-from memcontam.memory.bot_buffer import (
-    BotBufferIdentity,
-    BotBufferRegistry,
-    ThoughtTemplate,
-    maybe_update,
-)
-from memcontam.memory.embeddings import FakeEmbeddingProvider
+import pytest
+
+from memcontam.baselines.bot_write import BoTTemplatePayload
+from memcontam.memory.bot_buffer import evaluate_native_novelty
 from memcontam.memory.stores import MemoryEntry
 
 
-def _identity() -> BotBufferIdentity:
-    return BotBufferIdentity("run1", "game24", "bot_style", "clean", "replay")
-
-
-def _candidate(content: str = "Solved by isolating a denominator close to one.") -> ThoughtTemplate:
-    return ThoughtTemplate(
-        entry_id="candidate:trial-1",
-        content=content,
-        source_trial_id="trial-1",
-        source_entry_ids=["seed-template"],
-        metadata={"raw_response": "final: 6 / (1 - 3 / 4)"},
+def _candidate() -> BoTTemplatePayload:
+    return BoTTemplatePayload(
+        description="Create a denominator before the final division.",
+        template="Use complements to build a useful denominator.",
+        category="procedure-based",
+        explicitly_used_memory_ids=(),
     )
 
 
-def test_verified_novel_solution_updates_buffer() -> None:
-    registry = BotBufferRegistry()
-    identity = _identity()
-    registry.insert(
-        identity,
-        ThoughtTemplate(
-            entry_id="bot-template:old",
-            content="For 24, first make a small fraction, then multiply.",
-            source_trial_id="trial-old",
-        ),
-    )
-    client = ReplayClient(
-        responses_by_sample={
-            "sample-1": {
-                "bot_thought_distill": "Use denominator complements before final division.",
-                "bot_novelty_decide": "True - the denominator-complement strategy is distinct.",
-            }
-        }
+def _entry(description: str = "Build factor pairs before combining values.") -> MemoryEntry:
+    return MemoryEntry(
+        entry_id="existing-template",
+        content="Do not use this content for novelty.",
+        memory_type="thought_template",
+        clean_or_contaminated="clean",
+        metadata={"description": description},
     )
 
-    event = maybe_update(
-        registry,
-        identity,
-        _candidate(),
-        None,
-        client,
-        "replay",
-        {
-            "sample_id": "sample-1",
-            "verifier_result": {"is_correct": True},
-            "embedding_provider": FakeEmbeddingProvider(vector_dimension=8),
-        },
-    )
 
-    snapshot = registry.snapshot(identity)
-    assert len(snapshot) == 2
-    assert snapshot[-1].content == "Use denominator complements before final division."
-    assert snapshot[-1].source_trial_id == "trial-1"
-    assert snapshot[-1].source_entry_ids == ["seed-template"]
-    assert event["status"] == "accepted"
-    assert event["event_type"] == "bot_write"
-    assert event["candidate_content"] == _candidate().content
-    assert event["distilled_content"] == snapshot[-1].content
-    assert event["source_trial_id"] == "trial-1"
-    assert event["source_entry_ids"] == ["seed-template"]
-    assert event["top_existing_entry_id"] == "bot-template:old"
-    assert isinstance(event["top_similarity"], float)
-    assert event["novelty_decision_response"].startswith("True")
-    assert event["new_entry_id"] == snapshot[-1].entry_id
+def test_empty_bot_buffer_admits_template_without_model_decision() -> None:
+    decision = evaluate_native_novelty(_candidate(), [])
+
+    assert decision.admitted is True
+    assert decision.compared_entry_id is None
+    assert decision.top_similarity is None
 
 
-def test_failed_trial_does_not_update_buffer() -> None:
-    registry = BotBufferRegistry()
-    identity = _identity()
-    client = ReplayClient(
-        responses_by_sample={
-            "sample-1": {
-                "bot_thought_distill": "This response must not be consumed.",
-                "bot_novelty_decide": "True",
-            }
-        }
-    )
+def test_bot_buffer_uses_description_similarity_below_threshold() -> None:
+    encoded_documents: list[str] = []
 
-    event = maybe_update(
-        registry,
-        identity,
-        _candidate(),
-        None,
-        client,
-        "replay",
-        {"sample_id": "sample-1", "verifier_result": {"is_correct": False}},
-    )
+    class BelowThresholdProvider:
+        metadata = {}
 
-    assert registry.snapshot(identity) == ()
-    assert event["status"] == "rejected"
-    assert event["event_type"] == "bot_write_rejected"
-    assert event["reject_reason"] == "verifier_failed"
-    assert event["candidate_content"] == _candidate().content
-    assert client._stage_indices == {}
+        def encode_query(self, text: str) -> list[float]:
+            del text
+            return [1.0, 0.0]
+
+        def encode_document(self, text: str) -> list[float]:
+            encoded_documents.append(text)
+            return [0.699, (1 - 0.699**2) ** 0.5]
+
+    decision = evaluate_native_novelty(_candidate(), [_entry()], BelowThresholdProvider())
+
+    assert decision.admitted is True
+    assert decision.compared_entry_id == "existing-template"
+    assert decision.top_similarity == pytest.approx(0.699)
+    assert encoded_documents == ["Build factor pairs before combining values."]
 
 
-def test_duplicate_template_is_rejected() -> None:
-    registry = BotBufferRegistry()
-    identity = _identity()
-    registry.insert(
-        identity,
-        ThoughtTemplate(
-            entry_id="bot-template:old",
-            content="Use denominator complements before final division.",
-            source_trial_id="trial-old",
-        ),
-    )
-    client = ReplayClient(
-        responses_by_sample={
-            "sample-1": {
-                "bot_thought_distill": "Use denominator complements before final division.",
-                "bot_novelty_decide": "False - same template.",
-            }
-        }
-    )
+def test_bot_buffer_rejects_description_similarity_at_threshold() -> None:
+    class EqualityProvider:
+        metadata = {}
 
-    event = maybe_update(
-        registry,
-        identity,
-        _candidate(),
-        None,
-        client,
-        "replay",
-        {
-            "sample_id": "sample-1",
-            "verifier_result": {"is_correct": True},
-            "embedding_provider": FakeEmbeddingProvider(vector_dimension=8),
-        },
-    )
+        def encode_query(self, text: str) -> list[float]:
+            del text
+            return [1.0, 0.0]
 
-    assert len(registry.snapshot(identity)) == 1
-    assert event["status"] == "rejected"
-    assert event["event_type"] == "bot_write_rejected"
-    assert event["reject_reason"] == "novelty_rejected"
-    assert event["top_existing_entry_id"] == "bot-template:old"
-    assert event["novelty_decision_response"].startswith("False")
+        def encode_document(self, text: str) -> list[float]:
+            del text
+            return [0.7, (1 - 0.7**2) ** 0.5]
 
+    decision = evaluate_native_novelty(_candidate(), [_entry()], EqualityProvider())
 
-def _templates_to_entries(templates: tuple[ThoughtTemplate, ...]) -> list[MemoryEntry]:
-    return [
-        MemoryEntry(
-            entry_id=t.entry_id,
-            content=t.content,
-            memory_type="thought_template",
-            clean_or_contaminated="clean",
-            source_trial_id=t.source_trial_id,
-            metadata={
-                "source_entry_ids": list(t.source_entry_ids),
-                "raw_response": t.metadata.get("raw_response", ""),
-            },
-        )
-        for t in templates
-    ]
-
-
-def test_accepted_bot_update_normalizes_insert_mutation() -> None:
-    registry = BotBufferRegistry()
-    identity = _identity()
-    registry.insert(
-        identity,
-        ThoughtTemplate(
-            entry_id="bot-template:old",
-            content="For 24, first make a small fraction, then multiply.",
-            source_trial_id="trial-old",
-        ),
-    )
-    client = ReplayClient(
-        responses_by_sample={
-            "sample-1": {
-                "bot_thought_distill": "Use denominator complements before final division.",
-                "bot_novelty_decide": "True - the denominator-complement strategy is distinct.",
-            }
-        }
-    )
-    before = _templates_to_entries(registry.snapshot(identity))
-
-    event = maybe_update(
-        registry,
-        identity,
-        _candidate(),
-        None,
-        client,
-        "replay",
-        {
-            "sample_id": "sample-1",
-            "verifier_result": {"is_correct": True},
-            "embedding_provider": FakeEmbeddingProvider(vector_dimension=8),
-        },
-    )
-
-    after = _templates_to_entries(registry.snapshot(identity))
-    memory_event = normalize_memory_event(
-        "bot_style",
-        "trial-1",
-        before,
-        after,
-        event,
-    )
-
-    assert memory_event is not None
-    assert memory_event.status == "accepted"
-    assert memory_event.operation == "insert"
-    assert memory_event.baseline == "bot_style"
-    assert memory_event.source_trial_id == "trial-1"
-    assert memory_event.before_entry_ids == ["bot-template:old"]
-    assert len(memory_event.after_entry_ids) == 2
-    assert memory_event.new_entry_ids == [event["new_entry_id"]]
-    assert memory_event.removed_entry_ids == []
-    assert memory_event.before_snapshot_hash != memory_event.after_snapshot_hash
-    assert memory_event.source_entry_ids == ["seed-template"]
-    assert memory_event.parent_entry_ids == []
-    assert memory_event.contaminated_source_ids == []
-    assert memory_event.creation_origin == "thought_template"
-
-
-def test_rejected_bot_update_preserves_snapshot_and_reports_no_new_entries() -> None:
-    registry = BotBufferRegistry()
-    identity = _identity()
-    registry.insert(
-        identity,
-        ThoughtTemplate(
-            entry_id="bot-template:old",
-            content="Use denominator complements before final division.",
-            source_trial_id="trial-old",
-        ),
-    )
-    client = ReplayClient(
-        responses_by_sample={
-            "sample-1": {
-                "bot_thought_distill": "Use denominator complements before final division.",
-                "bot_novelty_decide": "False - same template.",
-            }
-        }
-    )
-    before = _templates_to_entries(registry.snapshot(identity))
-
-    event = maybe_update(
-        registry,
-        identity,
-        _candidate(),
-        None,
-        client,
-        "replay",
-        {
-            "sample_id": "sample-1",
-            "verifier_result": {"is_correct": True},
-            "embedding_provider": FakeEmbeddingProvider(vector_dimension=8),
-        },
-    )
-
-    after = _templates_to_entries(registry.snapshot(identity))
-    memory_event = normalize_memory_event(
-        "bot_style",
-        "trial-1",
-        before,
-        after,
-        event,
-    )
-
-    assert memory_event is not None
-    assert memory_event.status == "rejected"
-    assert memory_event.operation == "insert"
-    assert memory_event.before_entry_ids == ["bot-template:old"]
-    assert memory_event.after_entry_ids == ["bot-template:old"]
-    assert memory_event.new_entry_ids == []
-    assert memory_event.updated_entry_ids == []
-    assert memory_event.removed_entry_ids == []
-    assert memory_event.before_snapshot_hash == memory_event.after_snapshot_hash
-    assert memory_event.creation_origin is None
-    assert memory_event.memory_version is None
+    assert decision.admitted is False
+    assert decision.top_similarity == pytest.approx(0.7)
