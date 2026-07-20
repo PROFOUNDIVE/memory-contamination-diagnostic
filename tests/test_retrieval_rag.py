@@ -3,11 +3,14 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from typing import Any
 
 import pytest
 
-from memcontam.baselines.retrieval_rag import run_faithful_rag
+from memcontam.baselines.retrieval_rag import (
+    RetrievalDocumentPayload,
+    RetrievalRagAdapter,
+    render_retrieved_documents,
+)
 from memcontam.clients.replay import ReplayClient
 from memcontam.logging.provenance import compute_exposure_from_spans
 from memcontam.logging.schema import PromptSourceSpan
@@ -15,6 +18,7 @@ from memcontam.memory.embeddings import EmbeddingProvider, FakeEmbeddingProvider
 from memcontam.memory.retrieval import DenseIndex
 from memcontam.memory.stores import MemoryEntry, MemoryState
 from memcontam.tasks.base import TaskInstance
+from memcontam.tasks.dispatch import canonical_task_json
 
 
 def _entry(entry_id: str, content: str, *, source: str = "fixture", contaminated: bool = False) -> MemoryEntry:
@@ -77,15 +81,7 @@ def test_dense_index_rejects_nan_vectors(tmp_path: Path) -> None:
         DenseIndex([_entry("doc-1", "alpha")], provider=BadProvider(2), cache_dir=tmp_path)
 
 
-def _legacy_generation_message(task: TaskInstance, records: list[Any]) -> dict[str, str]:
-    context = "\n".join(
-        f"rank={record.rank} document_id={record.document_id} score={record.score:.6f}\n{record.text}"
-        for record in records
-    )
-    return {"role": "user", "content": f"Retrieved memory:\n{context}\n\nSolve: {task.input}"}
-
-
-def test_run_faithful_rag_records_answer_source_spans(tmp_path: Path) -> None:
+def test_retrieval_rag_adapter_records_answer_source_spans(tmp_path: Path) -> None:
     entries = [
         _entry("doc-1", "alpha beta gamma"),
         _entry("doc-2", "alpha beta delta"),
@@ -94,28 +90,37 @@ def test_run_faithful_rag_records_answer_source_spans(tmp_path: Path) -> None:
     task = _task()
     client = ReplayClient(responses_by_sample={"s-1": {"rag_generate": "final: answer"}})
 
-    result = run_faithful_rag(
+    outcome = RetrievalRagAdapter().execute(
         task,
         memory,
         client=client,
         model="gpt-4o",
         config={"sample_id": "s-1"},
-        top_k=2,
         embedding_provider=FakeEmbeddingProvider(vector_dimension=8),
         cache_dir=tmp_path,
     )
 
-    assert len(result["method_calls"]) == 1
-    call = result["method_calls"][0]
+    assert len(outcome.method_calls) == 1
+    call = outcome.method_calls[0]
     assert call.stage == "rag_generate"
     assert call.call_id is not None
-    assert result["answer_call_id"] == call.call_id
+    assert outcome.answer_call_id == call.call_id
     assert len(call.source_spans) == 2
-    expected_message = _legacy_generation_message(task, result["retrieved_records"])
+    expected_message = {
+        "role": "user",
+        "content": (
+            "Retrieved documents:\n"
+            + render_retrieved_documents(
+                RetrievalDocumentPayload(record.text) for record in call.retrieved_records
+            )
+            + "\n\nCurrent task:\n"
+            + canonical_task_json(task)
+        ),
+    }
     assert call.messages == [expected_message]
 
     content = call.messages[0]["content"]
-    for span, record in zip(call.source_spans, result["retrieved_records"]):
+    for span, record in zip(call.source_spans, call.retrieved_records):
         assert isinstance(span, PromptSourceSpan)
         assert span.message_index == 0
         assert content[span.start:span.end] == record.text
@@ -145,30 +150,34 @@ def test_rag_contaminated_not_retrieved_is_not_in_final_prompt(tmp_path: Path) -
             return [0.0, 1.0, 0.0, 0.0]
 
     entries = [
-        _entry("clean-1", "clean relevant content"),
+        _entry("clean-1", "clean relevant content one"),
+        _entry("clean-2", "clean relevant content two"),
+        _entry("clean-3", "clean relevant content three"),
         _entry("cont-1", "contaminated content", contaminated=True),
     ]
     memory = MemoryState(entries=entries)
     task = _task()
     client = ReplayClient(responses_by_sample={"s-1": {"rag_generate": "final: answer"}})
 
-    result = run_faithful_rag(
+    outcome = RetrievalRagAdapter().execute(
         task,
         memory,
         client=client,
         model="gpt-4o",
         config={"sample_id": "s-1"},
-        top_k=1,
         embedding_provider=_ControlledProvider(),
         cache_dir=tmp_path,
     )
 
-    assert len(result["retrieved_records"]) == 1
-    assert result["retrieved_records"][0].document_id == "clean-1"
-    call = result["method_calls"][0]
+    call = outcome.method_calls[0]
+    assert [record.document_id for record in call.retrieved_records] == [
+        "clean-1",
+        "clean-2",
+        "clean-3",
+    ]
     assert all(span.clean_or_contaminated == "clean" for span in call.source_spans)
     exposure = compute_exposure_from_spans(
-        result["answer_call_id"], call.source_spans, "contaminated"
+        outcome.answer_call_id, call.source_spans, "contaminated"
     )
     assert exposure.status == "supported"
     assert exposure.is_exposed is False
