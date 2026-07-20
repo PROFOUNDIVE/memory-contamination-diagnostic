@@ -1,16 +1,30 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
 from memcontam.baselines import retrieval_rag
+from memcontam.baselines.contracts import CorpusIdentity
 from memcontam.baselines.retrieval_rag import RetrievalRagPolicy
 from memcontam.clients.base import LLMResponse
 from memcontam.memory.embeddings import FakeEmbeddingProvider
 from memcontam.memory.retrieval import DenseIndex
 from memcontam.memory.stores import MemoryEntry, MemoryState
+from memcontam.tasks.dispatch import canonical_task_json
 from memcontam.tasks.base import TaskInstance
+
+
+def test_rag_contract_exposes_single_adapter_and_canonical_query_renderer() -> None:
+    adapter = getattr(retrieval_rag, "RetrievalRagAdapter", None)
+    assert adapter is not None
+    assert callable(adapter().execute)
+    assert not hasattr(adapter(), "run")
+    assert not hasattr(adapter(), "build_prompt")
+    assert callable(getattr(retrieval_rag, "render_retrieved_documents", None))
+    assert not hasattr(RetrievalRagPolicy(), "build_prompt")
+    assert not hasattr(retrieval_rag, "run_faithful_rag")
 
 
 class _FakeClient:
@@ -47,41 +61,73 @@ def _task() -> TaskInstance:
     )
 
 
-def test_faithful_rag_prompt_matches_logged_top_k(tmp_path: Path) -> None:
+def _corpus_identity(task: TaskInstance) -> CorpusIdentity:
+    return CorpusIdentity(
+        manifest_id="fixture-corpus",
+        corpus_version="v1",
+        task_family=task.task_name,
+        embedding_provider_identity="fake-deterministic-embedding@local",
+    )
+
+
+def _fixture(name: str) -> dict:
+    return json.loads(
+        (Path(__file__).parent / "fixtures" / name).read_text(encoding="utf-8")
+    )
+
+
+def test_retrieval_rag_uses_canonical_top_three_text_only_prompt(tmp_path: Path) -> None:
     provider = FakeEmbeddingProvider(vector_dimension=8)
     entries = [
         _entry("doc-a", "Use multiplication before addition."),
         _entry("doc-b", "Try factor pairs that reach twenty four."),
         _entry("doc-c", "Sort words alphabetically."),
+        _entry("doc-d", "Keep intermediate values exact."),
     ]
     memory = MemoryState(entries=entries)
     expected_records = DenseIndex(entries, provider=provider, cache_dir=tmp_path / "expected").retrieve(
-        str(_task().input), 2
+        canonical_task_json(_task()), 3
     )
-    client = _FakeClient()
+    prompt_fixture = _fixture("prompts/rag_generate.json")
+    replay_fixture = _fixture("replay/baseline_fidelity_v1/retrieval_rag.json")
+    client = _FakeClient(replay_fixture["response"])
 
-    result = RetrievalRagPolicy().run(
+    outcome = retrieval_rag.RetrievalRagAdapter().execute(
         _task(),
         memory,
         client=client,
         model="replay-model",
-        config={"top_k": 2, "temperature": 0.0, "sample_id": "game24_1"},
+        config={"top_k": 1, "temperature": 0.0, "sample_id": "game24_1"},
         embedding_provider=provider,
+        corpus_identity=_corpus_identity(_task()),
         cache_dir=tmp_path / "actual",
+        verifier=lambda answer, task: False,
     )
 
-    assert result["final_response"] == "final: 24"
-    assert result["parsed_answer"] == "24"
-    assert result["retrieved_records"] == expected_records
-    assert result["memory_before"] == [entry.model_dump() for entry in entries]
-    assert result["memory_after"] == result["memory_before"]
-    assert result["memory_write_event"] is None
-    assert result["metadata"] == {
+    assert outcome.status == "succeeded"
+    assert outcome.final_response == replay_fixture["response"]
+    assert outcome.parsed_answer == "24"
+    assert outcome.verifier_result is False
+    entries_by_id = {entry.entry_id: entry for entry in entries}
+    assert outcome.retrieved_memory == tuple(
+        entries_by_id[record.document_id].model_dump() for record in expected_records
+    )
+    assert outcome.retrieved_scores == tuple(record.score for record in expected_records)
+    assert outcome.memory_before == tuple(entry.model_dump() for entry in entries)
+    assert outcome.memory_after == outcome.memory_before
+    assert outcome.memory_write_event is None
+    assert outcome.metadata == {
         "corpus_hash": expected_records[0].corpus_hash,
         "embedding_model_id": provider.metadata["model_id"],
         "embedding_revision": provider.metadata["revision"],
         "embedding_library_version": provider.metadata["embedding_library_version"],
-        "top_k": 2,
+        "top_k": replay_fixture["top_k"],
+        "corpus_identity": {
+            "manifest_id": "fixture-corpus",
+            "corpus_version": "v1",
+            "task_family": "game24",
+            "embedding_provider_identity": "fake-deterministic-embedding@local",
+        },
     }
 
     assert len(client.calls) == 1
@@ -89,33 +135,93 @@ def test_faithful_rag_prompt_matches_logged_top_k(tmp_path: Path) -> None:
     assert model == "replay-model"
     assert config["method_stage"] == "rag_generate"
     prompt = messages[0]["content"]
+    assert prompt == (
+        prompt_fixture["documents_header"]
+        + "\n\n".join(record.text for record in expected_records)
+        + prompt_fixture["task_header"]
+        + canonical_task_json(_task())
+    )
     for record in expected_records:
-        assert f"rank={record.rank}" in prompt
-        assert f"document_id={record.document_id}" in prompt
-        assert f"score={record.score:.6f}" in prompt
         assert record.text in prompt
+    for forbidden in ("rank=", "document_id=", "score=", "source=", "metadata="):
+        assert forbidden not in prompt
+    assert len(outcome.method_calls) == 1
+    assert outcome.method_calls[0].stage == "rag_generate"
+    assert outcome.method_calls[0].messages == messages
+    assert outcome.method_calls[0].retrieved_records == expected_records
 
-    assert len(result["method_calls"]) == 1
-    assert result["method_calls"][0].stage == "rag_generate"
-    assert result["method_calls"][0].messages == messages
-    assert result["method_calls"][0].retrieved_records == expected_records
 
-
-def test_faithful_rag_does_not_fallback_to_proxy_retrieval(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_retrieval_rag_retrieval_failure_uses_the_closed_taxonomy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     class BrokenDenseIndex:
         def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def retrieve(self, query: str, k: int) -> list[object]:
             raise RuntimeError("dense index unavailable")
 
-    monkeypatch.setattr(retrieval_rag, "DenseIndex", BrokenDenseIndex)
+    adapter_module = pytest.importorskip("memcontam.baselines.retrieval_rag_adapter")
+    monkeypatch.setattr(adapter_module, "DenseIndex", BrokenDenseIndex)
     client = _FakeClient()
+    failure_fixture = _fixture("replay/baseline_fidelity_v1/rag_failure_taxonomy.json")
 
-    with pytest.raises(RuntimeError, match="dense index unavailable"):
-        RetrievalRagPolicy().run(
-            _task(),
-            MemoryState(entries=[_entry("doc-a", "content")]),
-            client=client,
-            model="replay-model",
-            config={"top_k": 1},
-        )
+    result = RetrievalRagPolicy().run(
+        _task(),
+        MemoryState(entries=[_entry("doc-a", "content")]),
+        client=client,
+        model="replay-model",
+        embedding_provider=FakeEmbeddingProvider(),
+        corpus_identity=_corpus_identity(_task()),
+    )
 
+    assert result["status"] == "failed"
+    assert result["error_type"] == failure_fixture["error_type"]
+    assert result["failure_disposition"] == failure_fixture["failure_disposition"]
+    assert result["scientific_ineligibility_reason"] == failure_fixture[
+        "scientific_ineligibility_reason"
+    ]
     assert client.calls == []
+
+
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        (
+            "stale dense index cache: manifest does not match corpus/provider",
+            ("CorpusContractError", "rag_manifest_invalid", "manifest_invalid"),
+        ),
+        (
+            "dimension mismatch for document doc-a: query has 8, document has 16",
+            (
+                "EmbeddingContractError",
+                "rag_embedding_dimension_mismatch",
+                "embedding_dimension_mismatch",
+            ),
+        ),
+    ],
+)
+def test_retrieval_rag_index_contract_failures_keep_their_exact_taxonomy(
+    monkeypatch: pytest.MonkeyPatch, message: str, expected: tuple[str, str, str]
+) -> None:
+    class BrokenDenseIndex:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            raise ValueError(message)
+
+    adapter_module = pytest.importorskip("memcontam.baselines.retrieval_rag_adapter")
+    monkeypatch.setattr(adapter_module, "DenseIndex", BrokenDenseIndex)
+
+    outcome = retrieval_rag.RetrievalRagAdapter().execute(
+        _task(),
+        MemoryState(entries=[_entry("doc-a", "content")]),
+        client=_FakeClient(),
+        model="replay-model",
+        embedding_provider=FakeEmbeddingProvider(),
+        corpus_identity=_corpus_identity(_task()),
+    )
+
+    assert (
+        outcome.error_type,
+        outcome.failure_disposition,
+        outcome.scientific_ineligibility_reason,
+    ) == expected

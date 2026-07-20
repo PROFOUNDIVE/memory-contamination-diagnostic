@@ -94,3 +94,15 @@ def test_logging_validation_rejects_unknown_failure_triples() -> None:
                 "scientific_ineligibility_reason": "provider_call_failed",
             }
         )
+
+
+def test_rag_retrieval_failure_row_is_accepted_only_with_its_exact_triple() -> None:
+    contracts = importlib.import_module("memcontam.baselines.contracts")
+
+    contracts.validate_failure_triple(
+        "RetrievalContractError", "rag_retrieval_failed", "retrieval_failed"
+    )
+    with pytest.raises(ValueError, match="failure triple"):
+        contracts.validate_failure_triple(
+            "EmbeddingContractError", "rag_retrieval_failed", "retrieval_failed"
+        )

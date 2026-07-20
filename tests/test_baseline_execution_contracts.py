@@ -19,3 +19,12 @@ def test_full_history_adapter_uses_only_the_full_history_generate_semantic_stage
 
     assert callable(FullHistoryAdapter().execute)
     assert not hasattr(FullHistoryAdapter(), "run")
+
+
+def test_retrieval_rag_adapter_uses_only_the_rag_generate_semantic_stage() -> None:
+    from memcontam.baselines.retrieval_rag import RetrievalRagAdapter
+
+    adapter = RetrievalRagAdapter()
+    assert callable(adapter.execute)
+    assert not hasattr(adapter, "run")
+    assert not hasattr(adapter, "build_prompt")

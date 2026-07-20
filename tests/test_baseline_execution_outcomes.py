@@ -95,3 +95,31 @@ def test_full_history_parse_failure_uses_the_closed_output_failure_row() -> None
     )
 
     assert failed.failure_disposition == "full_history_invalid_final_answer"
+
+
+def test_retrieval_rag_valid_incorrect_answer_is_a_success() -> None:
+    from memcontam.baselines.retrieval_rag import RetrievalRagAdapter
+    from memcontam.clients.base import LLMResponse
+    from memcontam.memory.embeddings import FakeEmbeddingProvider
+    from memcontam.memory.stores import MemoryState
+    from memcontam.tasks.base import TaskInstance
+
+    class Client:
+        def chat(self, messages: list[dict[str, str]], model: str, config: dict) -> LLMResponse:
+            return LLMResponse(content="final: wrong", raw={}, token_usage={}, latency_ms=0)
+
+    task = TaskInstance(sample_id="sample-1", task_name="game24", input={"numbers": [1, 3, 4, 6]})
+    outcome = RetrievalRagAdapter().execute(
+        task,
+        MemoryState(),
+        client=Client(),
+        model="replay",
+        embedding_provider=FakeEmbeddingProvider(),
+        verifier=lambda answer, seen_task: False,
+    )
+
+    assert outcome.status == "succeeded"
+    assert outcome.verifier_result is False
+    assert outcome.error_type is None
+    assert outcome.failure_disposition is None
+    assert outcome.memory_write_event is None
