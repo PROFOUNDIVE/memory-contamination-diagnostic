@@ -4,6 +4,7 @@ import argparse
 import json
 import hashlib
 import subprocess
+import tempfile
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,7 +23,9 @@ from memcontam.baselines.no_memory import NoMemoryPolicy
 from memcontam.baselines.reflexion_style import ReflexionStylePolicy
 from memcontam.baselines.retrieval_rag import RetrievalRagPolicy
 from memcontam.clients.base import LLMClient
-from memcontam.clients.openai_compatible import OpenAICompatibleClient
+from memcontam.clients.config import ProviderConfig
+from memcontam.clients.factory import build_llm_client, validate_provider_selection
+from memcontam.clients.provider_profile import normalize_provider_profile
 from memcontam.clients.recording import MethodCallRecorder, summarize_calls
 from memcontam.clients.replay import ReplayClient
 from memcontam.evaluation.aggregate import aggregate_run
@@ -49,6 +52,8 @@ from memcontam.logging.provenance import (
     normalize_memory_event,
 )
 from memcontam.logging.writer import RunLogWriter
+from memcontam.logging.audit_artifacts import write_provider_profile_atomic, write_resolved_config_atomic
+from memcontam.config.resolution import resolve_run_config
 from memcontam.memory.bot_buffer import BotBufferIdentity, ThoughtTemplate
 from memcontam.memory.corpus import CorpusRecord, build_arm_corpus, load_corpus
 from memcontam.memory.embeddings import EmbeddingProvider, FakeEmbeddingProvider, SentenceTransformerProvider
@@ -241,7 +246,7 @@ def _run_metadata(config: dict[str, Any], run_id: str, run_started_at: str) -> R
         run_id=run_id,
         git_commit=_git_commit(),
         config_hash=_config_hash(config),
-        provider=run_config["provider"],
+        provider=f"{run_config['provider']}:{run_config['provider_profile_id']}",
         model_snapshots=dict(run_config["model_snapshots"]),
         query_date=run_started_at[:10],
         start_date=run_started_at[:10],
@@ -1128,6 +1133,7 @@ def _run_faithful_config(
     repeated_failure_tracker: _RepeatedFailureTracker,
     run_metadata: RunMetadata | None = None,
     run_dir: Path | None = None,
+    audit_dir: Path | None = None,
 ) -> None:
     writer: RunLogWriter | None = None
     trial_file = None
@@ -1135,6 +1141,10 @@ def _run_faithful_config(
         if run_dir is None:
             raise ValueError("strict faithful run requires final run directory")
         writer = RunLogWriter(run_dir, run_metadata)
+        if audit_dir is not None:
+            for filename in ("provider_profile.json", "resolved_config.json"):
+                (audit_dir / filename).replace(writer.temp_dir / filename)
+            audit_dir.rmdir()
     else:
         trials_path.parent.mkdir(parents=True, exist_ok=True)
         trial_file = trials_path.open("w", encoding="utf-8")
@@ -1516,32 +1526,53 @@ def run_config(
 ) -> Path:
     _validate_run_id(run_id)
     _validate_run_config(config)
+    provider_config = ProviderConfig.from_run_config(config)
+    profile = normalize_provider_profile(
+        provider_config,
+        served_models=config["models"],
+        model_snapshots=config.get("run", {}).get("model_snapshots", {}),
+    )
+    config = resolve_run_config(config, provider_profile=profile)
+    run_config = config["run"]
+    replay_config = config.get("replay", {})
+    replay_responses = replay_config.get("responses")
+    try:
+        validate_provider_selection(
+            provider_config,
+            stage=run_config["stage"],
+            execution_class=run_config["execution_class"],
+        )
+        client: LLMClient = (
+            _client_override
+            if _client_override is not None
+            else build_llm_client(
+                provider_config,
+                stage=run_config["stage"],
+                execution_class=run_config["execution_class"],
+                replay_responses=replay_responses,
+            )
+        )
+    except (RuntimeError, ValueError) as exc:
+        raise SystemExit(str(exc)) from exc
     output_dir = Path(config.get("logging", {}).get("output_dir", "runs"))
     run_dir = output_dir / run_id
     if run_dir.exists():
         raise FileExistsError(f"final run path already exists: {run_dir}")
     trials_path = run_dir / "trials.jsonl"
 
-    replay_config = config.get("replay", {})
-    replay_responses = replay_config.get("responses")
-    live_smoke_enabled = config.get("live_smoke", {}).get("enabled", False)
-    if live_smoke_enabled and _client_override is None:
-        live_smoke = config.get("live_smoke", {})
-        api_key_env = live_smoke.get("api_key_env", "OPENAI_API_KEY")
-        try:
-            client: LLMClient = OpenAICompatibleClient(
-                base_url=live_smoke.get("base_url"),
-                api_key_env=api_key_env,
-            )
-        except RuntimeError as exc:
-            raise SystemExit(str(exc)) from exc
-    elif _client_override is not None:
-        client = _client_override
-    else:
-        client = ReplayClient(replay_responses)
     responses_by_sample = replay_config.get("responses_by_sample", {})
     run_started_at = datetime.now(timezone.utc).isoformat()
     repeated_failure_tracker = _RepeatedFailureTracker()
+    audit_dir: Path | None = None
+    if _is_strict_config(config):
+        output_dir.mkdir(parents=True, exist_ok=True)
+        audit_dir = Path(tempfile.mkdtemp(prefix=f"{run_id}.audit-", dir=output_dir))
+        write_provider_profile_atomic(audit_dir, profile)
+        write_resolved_config_atomic(audit_dir, config)
+    else:
+        run_dir.mkdir(parents=True)
+        write_provider_profile_atomic(run_dir, profile)
+        write_resolved_config_atomic(run_dir, config)
     if _is_faithful_config(config):
         run_metadata = _run_metadata(config, run_id, run_started_at) if _is_strict_config(config) else None
         _run_faithful_config(
@@ -1555,10 +1586,11 @@ def run_config(
             repeated_failure_tracker,
             run_metadata=run_metadata,
             run_dir=run_dir if run_metadata is not None else None,
+            audit_dir=audit_dir,
         )
         print(f"wrote replay trials: {trials_path}")
         return run_dir
-    run_dir.mkdir(parents=True)
+    run_dir.mkdir(parents=True, exist_ok=True)
     with trials_path.open("w", encoding="utf-8") as f:
         trial_order = 0
         for task_config in config["tasks"]:

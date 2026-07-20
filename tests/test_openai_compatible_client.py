@@ -8,6 +8,7 @@ import openai
 import pytest
 
 from memcontam.clients import openai_compatible as openai_compatible_module
+from memcontam.clients.config import ProviderConfig
 from memcontam.clients.openai_compatible import OpenAICompatibleClient
 from memcontam.clients.base import LLMResponse
 from memcontam.clients.recording import MethodCallRecorder
@@ -35,9 +36,18 @@ class _FakeChatCompletions:
 
 
 class _FakeOpenAI:
-    def __init__(self, *, api_key: str, base_url: str | None) -> None:
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        base_url: str | None,
+        timeout: int | None = None,
+        max_retries: int | None = None,
+    ) -> None:
         self.api_key = api_key
         self.base_url = base_url
+        self.timeout = timeout
+        self.max_retries = max_retries
         self.chat = SimpleNamespace(completions=_FakeChatCompletions())
 
 
@@ -46,7 +56,15 @@ def test_openai_compatible_client_mocked_chat(monkeypatch) -> None:
     monkeypatch.setattr(openai_compatible_module, "OpenAI", _FakeOpenAI)
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
-    client = OpenAICompatibleClient(base_url="https://example.invalid/v1", api_key_env="OPENAI_API_KEY")
+    client = OpenAICompatibleClient(
+        ProviderConfig(
+            provider="openai_compatible",
+            base_url="https://example.invalid/v1",
+            api_key_env="OPENAI_API_KEY",
+            timeout_seconds=30,
+            max_retries=2,
+        )
+    )
     response = client.chat([{"role": "user", "content": "solve"}], model="gpt-4o", config={})
 
     assert isinstance(response, LLMResponse)
@@ -60,7 +78,7 @@ def test_openai_compatible_client_missing_api_key_raises_runtime_error(monkeypat
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
     with pytest.raises(RuntimeError, match="missing API key env var"):
-        OpenAICompatibleClient(base_url=None, api_key_env="OPENAI_API_KEY")
+        OpenAICompatibleClient(ProviderConfig(provider="openai_compatible", api_key_env="OPENAI_API_KEY"))
 
 
 def test_openai_compatible_client_uses_custom_api_key_env(monkeypatch) -> None:
@@ -70,12 +88,17 @@ def test_openai_compatible_client_uses_custom_api_key_env(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_COMPATIBLE_API_KEY", "custom-key")
 
     client = OpenAICompatibleClient(
-        base_url="https://example.invalid/v1",
-        api_key_env="OPENAI_COMPATIBLE_API_KEY",
+        ProviderConfig(
+            provider="openai_compatible",
+            base_url="https://example.invalid/v1",
+            api_key_env="OPENAI_COMPATIBLE_API_KEY",
+        )
     )
 
     assert client.client.api_key == "custom-key"
     assert client.client.base_url == "https://example.invalid/v1"
+    assert client.client.timeout is None
+    assert client.client.max_retries is None
 
 
 def test_replay_config_runs_without_provider_env_vars(tmp_path, monkeypatch) -> None:
@@ -100,7 +123,13 @@ def test_recorder_does_not_persist_secrets_or_raw_payload(monkeypatch) -> None:
     monkeypatch.setattr(openai_compatible_module, "OpenAI", _FakeOpenAI)
     monkeypatch.setenv("OPENAI_API_KEY", "live-secret-key")
 
-    inner = OpenAICompatibleClient(base_url="https://example.invalid/v1", api_key_env="OPENAI_API_KEY")
+    inner = OpenAICompatibleClient(
+        ProviderConfig(
+            provider="openai_compatible",
+            base_url="https://example.invalid/v1",
+            api_key_env="OPENAI_API_KEY",
+        )
+    )
     events = []
     recorder = MethodCallRecorder(
         inner,
