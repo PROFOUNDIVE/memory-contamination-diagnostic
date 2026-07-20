@@ -8,7 +8,6 @@ import pytest
 
 from memcontam.baselines.bot_style import BotStylePolicy
 from memcontam.clients.replay import ReplayClient
-from memcontam.logging.schema import VerifierResult
 from memcontam.memory.bot_buffer import BotBufferIdentity
 from memcontam.memory.stores import MemoryEntry, MemoryState
 from memcontam.tasks.base import TaskInstance
@@ -17,7 +16,6 @@ from memcontam.tasks.base import TaskInstance
 BotRuntime = importlib.import_module("memcontam.baselines.bot_runtime").BotRuntime
 
 
-@pytest.mark.skip(reason="Task 8 owns native thought-transition helpers")
 def test_bot_contract_requires_structured_thought_before_verifier() -> None:
     runtime = importlib.import_module("memcontam.baselines.bot_runtime")
 
@@ -40,6 +38,25 @@ _SOLUTION_OUTPUT = json.dumps(
         "final_answer": "final: (1 + 3) * (2 + 4) = 24",
     }
 )
+
+
+def _thought_output(*, used_ids: list[str] | None = None) -> str:
+    return json.dumps(
+        {
+            "description": "Build factor-pair subexpressions before combining all numbers.",
+            "template": "Create useful factors before combining intermediate values.",
+            "category": "procedure-based",
+            "explicitly_used_memory_ids": used_ids or [],
+        }
+    )
+
+
+class _AdmittingEmbeddingProvider:
+    def encode_query(self, text: str) -> list[float]:
+        return [1.0, 0.0] if text.startswith("{") else [0.0, 1.0]
+
+    def encode_document(self, _text: str) -> list[float]:
+        return [1.0, 0.0]
 
 
 def test_bot_thought_distillation_compatibility_shim_uses_structured_solution_trace() -> None:
@@ -197,7 +214,6 @@ def test_bot_build_prompt_uses_structured_solve_contract() -> None:
     assert "solution_trace, final_answer" in prompt[0]["content"]
 
 
-@pytest.mark.skip(reason="Task 8 owns thought distillation, novelty, and write admission")
 def test_bot_runtime_runs_reference_order_and_updates() -> None:
     task = TaskInstance(
         sample_id="game24_001",
@@ -223,8 +239,7 @@ def test_bot_runtime_runs_reference_order_and_updates() -> None:
             "game24_001": {
                 "bot_problem_distill": _DISTILLATION_OUTPUT,
                 "bot_instantiate_solve": _SOLUTION_OUTPUT,
-                "bot_thought_distill": "Build factor-pair subexpressions before combining all numbers.",
-                "bot_novelty_decide": "True",
+                "bot_thought_distill": _thought_output(used_ids=["tpl_001"]),
             }
         }
     )
@@ -235,31 +250,36 @@ def test_bot_runtime_runs_reference_order_and_updates() -> None:
         buffer_snapshot=memory_before,
         client=client,
         model="gpt-4o",
-        config={"sample_id": "game24_001", "temperature": 0},
-        verifier=lambda response: VerifierResult(
-            is_correct=True, parsed_answer="(1 + 3) * (2 + 4)", reason="ok"
-        ),
+        config={
+            "sample_id": "game24_001",
+            "temperature": 0,
+            "embedding_provider": _AdmittingEmbeddingProvider(),
+        },
+        verifier=lambda response: response == "(1 + 3) * (2 + 4) = 24",
     )
 
-    assert result["final_response"] == _SOLUTION_OUTPUT
-    assert result["parsed_answer"] == "(1 + 3) * (2 + 4)"
-    assert result["verifier_result"].is_correct is True
-    assert result["retrieved_template"]["entry_id"] == "tpl_001"
-    assert [call.stage for call in result["method_calls"]] == [
+    assert result.final_response == "final: (1 + 3) * (2 + 4) = 24"
+    assert result.parsed_answer == "(1 + 3) * (2 + 4) = 24"
+    assert result.verifier_result is True
+    assert result.retrieved_memory[0]["entry_id"] == "tpl_001"
+    assert [call.stage for call in result.method_calls] == [
         "bot_problem_distill",
         "bot_instantiate_solve",
         "bot_thought_distill",
-        "bot_novelty_decide",
     ]
-    assert [entry["entry_id"] for entry in result["memory_before"]] == ["tpl_001"]
-    assert len(result["memory_after"]) == 2
-    assert result["memory_write_event"]["status"] == "accepted"
-    assert result["memory_write_event"]["new_entry_id"] == result["memory_after"][-1]["entry_id"]
-    assert result["metadata"]["bot_buffer_identity"] == identity.__dict__
-    answer_call = result["method_calls"][1]
-    assert result["answer_call_id"] == answer_call.call_id
+    assert [entry["entry_id"] for entry in result.memory_before] == ["tpl_001"]
+    assert len(result.memory_after) == 2
+    assert result.memory_write_event["status"] == "accepted"
+    assert result.memory_write_event["new_entry_id"] == result.memory_after[-1]["entry_id"]
+    assert result.memory_write_event["source_outcome"] is True
+    assert result.metadata["bot_buffer_identity"] == identity.__dict__
+    written = result.memory_after[-1]
+    assert written["metadata"]["direct_parent_ids"] == ["tpl_001"]
+    assert written["metadata"]["memory_support_ids"] == ["tpl_001"]
+    answer_call = result.method_calls[1]
+    assert result.answer_call_id == answer_call.call_id
     assert answer_call.stage == "bot_instantiate_solve"
-    assert [call.source_spans for call in result["method_calls"] if call is not answer_call] == [[], [], []]
+    assert [call.source_spans for call in result.method_calls if call is not answer_call] == [[], []]
     assert len(answer_call.source_spans) == 1
     span = answer_call.source_spans[0]
     assert answer_call.messages[1]["content"][span.start : span.end] == (
@@ -267,10 +287,12 @@ def test_bot_runtime_runs_reference_order_and_updates() -> None:
     )
     assert span.source_ids == ["template-source"]
     assert span.parent_ids == ["template-parent"]
+    thought_call = result.method_calls[2]
+    assert "Pair 1 + 3 and 2 + 4" in thought_call.messages[1]["content"]
+    assert "final: (1 + 3) * (2 + 4) = 24" in thought_call.messages[1]["content"]
 
 
-@pytest.mark.skip(reason="Task 8 owns verifier ordering after native write admission")
-def test_bot_runtime_failed_verifier_stops_update() -> None:
+def test_bot_runtime_valid_incorrect_answer_keeps_frozen_admission() -> None:
     task = TaskInstance(
         sample_id="game24_001",
         task_name="game24",
@@ -290,8 +312,8 @@ def test_bot_runtime_failed_verifier_stops_update() -> None:
         responses_by_sample={
             "game24_001": {
                 "bot_problem_distill": _DISTILLATION_OUTPUT,
-                "bot_instantiate_solve": "final: model claims success but verifier rejects it",
-                "bot_thought_distill": "must not be consumed",
+                "bot_instantiate_solve": _SOLUTION_OUTPUT,
+                "bot_thought_distill": _thought_output(),
             }
         }
     )
@@ -302,22 +324,26 @@ def test_bot_runtime_failed_verifier_stops_update() -> None:
         buffer_snapshot=memory_before,
         client=client,
         model="gpt-4o",
-        config={"sample_id": "game24_001", "temperature": 0},
-        verifier=lambda response: VerifierResult(
-            is_correct=False, parsed_answer=response, reason="verifier_failed"
-        ),
+        config={
+            "sample_id": "game24_001",
+            "temperature": 0,
+            "embedding_provider": _AdmittingEmbeddingProvider(),
+        },
+        verifier=lambda _response: False,
     )
 
-    assert result["verifier_result"].is_correct is False
-    assert result["memory_after"] == result["memory_before"]
-    assert result["memory_write_event"] is None
-    assert [call.stage for call in result["method_calls"]] == [
+    assert result.status == "succeeded"
+    assert result.verifier_result is False
+    assert len(result.memory_after) == len(result.memory_before) + 1
+    assert result.memory_write_event["status"] == "accepted"
+    assert result.memory_write_event["source_outcome"] is False
+    assert [call.stage for call in result.method_calls] == [
         "bot_problem_distill",
         "bot_instantiate_solve",
+        "bot_thought_distill",
     ]
 
 
-@pytest.mark.skip(reason="Task 8 owns attributed template writeback")
 def test_bot_template_answer_and_accepted_write_keep_exact_lineage() -> None:
     task = TaskInstance(
         sample_id="game24_001",
@@ -345,8 +371,7 @@ def test_bot_template_answer_and_accepted_write_keep_exact_lineage() -> None:
             "game24_001": {
                 "bot_problem_distill": _DISTILLATION_OUTPUT,
                 "bot_instantiate_solve": _SOLUTION_OUTPUT,
-                "bot_thought_distill": "A distinct reusable template.",
-                "bot_novelty_decide": "True",
+                "bot_thought_distill": _thought_output(used_ids=["injected-template"]),
             }
         }
     )
@@ -360,20 +385,96 @@ def test_bot_template_answer_and_accepted_write_keep_exact_lineage() -> None:
         config={
             "sample_id": "game24_001",
             "_logging_target_set_id": "controlled_injected_derived_v1",
+            "embedding_provider": _AdmittingEmbeddingProvider(),
         },
-        verifier=lambda _response: VerifierResult(is_correct=True, parsed_answer="24"),
+        verifier=lambda _response: True,
     )
 
-    answer_span = result["method_calls"][1].source_spans[0]
-    written = result["memory_after"][-1]
+    answer_span = result.method_calls[1].source_spans[0]
+    written = result.memory_after[-1]
     assert answer_span.contamination_class == "injected"
     assert answer_span.injected_root_ids == ["injected-template"]
     assert answer_span.lineage_status == "exact"
     assert answer_span.target_set_id == "controlled_injected_derived_v1"
     assert answer_span.is_target_contamination is True
     assert written["metadata"]["direct_parent_ids"] == ["injected-template"]
+    assert written["metadata"]["memory_support_ids"] == ["injected-template"]
     assert written["metadata"]["injected_root_ids"] == ["injected-template"]
     assert written["metadata"]["contamination_class"] == "derived"
+
+
+def test_bot_novelty_rejects_threshold_equality_without_model_call() -> None:
+    runtime = importlib.import_module("memcontam.baselines.bot_runtime")
+    bot_write = importlib.import_module("memcontam.baselines.bot_write")
+    candidate = bot_write.BoTTemplatePayload(
+        description="candidate description",
+        template="candidate template",
+        category="procedure-based",
+        explicitly_used_memory_ids=(),
+    )
+    existing = MemoryEntry(
+        entry_id="existing-template",
+        content="existing template",
+        memory_type="thought_template",
+        clean_or_contaminated="clean",
+        metadata={"description": "existing description"},
+    )
+
+    class EqualityProvider:
+        metadata = {}
+
+        def encode_query(self, text: str) -> list[float]:
+            del text
+            return [1.0, 0.0]
+
+        def encode_document(self, text: str) -> list[float]:
+            del text
+            return [0.7, (1 - 0.7**2) ** 0.5]
+
+    decision = runtime.evaluate_native_novelty(candidate, [existing], EqualityProvider())
+
+    assert decision.admitted is False
+    assert decision.top_similarity == pytest.approx(0.7)
+    assert decision.compared_entry_id == "existing-template"
+
+
+def test_bot_verifier_contract_failure_keeps_admitted_transition() -> None:
+    task = TaskInstance(
+        sample_id="game24_001",
+        task_name="game24",
+        input={"numbers": [1, 2, 3, 4], "target": 24},
+    )
+    client = ReplayClient(
+        responses_by_sample={
+            "game24_001": {
+                "bot_problem_distill": _DISTILLATION_OUTPUT,
+                "bot_instantiate_solve": _SOLUTION_OUTPUT,
+                "bot_thought_distill": _thought_output(),
+            }
+        }
+    )
+
+    def failing_verifier(_response: str) -> bool:
+        raise RuntimeError("verifier unavailable")
+
+    result = BotRuntime().run(
+        identity=BotBufferIdentity("run_t12", "game24", "bot_style", "clean", "gpt-4o"),
+        task=task,
+        buffer_snapshot=[],
+        client=client,
+        model="gpt-4o",
+        config={"sample_id": "game24_001"},
+        verifier=failing_verifier,
+    )
+
+    assert result.status == "failed"
+    assert result.error_type == "VerifierContractError"
+    assert result.failure_disposition == "verifier_contract_failed"
+    assert result.verifier_result is None
+    assert len(result.memory_after) == 1
+    assert result.memory_write_event["status"] == "accepted"
+    assert result.memory_write_event["source_outcome"] is None
+    assert result.memory_after[0]["metadata"]["source_outcome"] is None
 
 
 def test_bot_runtime_retrieves_after_distillation_and_reuses_template() -> None:
@@ -397,6 +498,7 @@ def test_bot_runtime_retrieves_after_distillation_and_reuses_template() -> None:
             "game24_001": {
                 "bot_problem_distill": _DISTILLATION_OUTPUT,
                 "bot_instantiate_solve": _SOLUTION_OUTPUT,
+                "bot_thought_distill": _thought_output(),
             }
         }
     )
@@ -419,9 +521,6 @@ def test_bot_runtime_retrieves_after_distillation_and_reuses_template() -> None:
             events.append(("solve", kwargs["retrieved"]["entry_id"]))
             return super().template_instantiation_solve(*args, **kwargs)
 
-    def verifier_must_not_run(_response: str) -> VerifierResult:
-        raise AssertionError("verifier must not run")
-
     result = BotRuntime(policy=RecordingPolicy()).run(
         identity=identity,
         task=task,
@@ -433,7 +532,7 @@ def test_bot_runtime_retrieves_after_distillation_and_reuses_template() -> None:
             "temperature": 0,
             "embedding_provider": RecordingProvider(),
         },
-        verifier=verifier_must_not_run,
+        verifier=lambda _response: True,
     )
 
     bot_read = importlib.import_module("memcontam.baselines.bot_read")
@@ -454,4 +553,5 @@ def test_bot_runtime_retrieves_after_distillation_and_reuses_template() -> None:
             ),
         ),
         ("solve", "tpl_001"),
+        ("retrieve", "Build factor-pair subexpressions before combining all numbers."),
     ]
