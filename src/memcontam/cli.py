@@ -15,7 +15,13 @@ import yaml
 
 from memcontam.baselines.bot_style import BotStylePolicy, distill_thought_template
 from memcontam.baselines.bot_runtime import BotRuntime
-from memcontam.baselines.contracts import BaselineExecutionOutcome
+from memcontam.baselines.contracts import (
+    BaselineExecutionOutcome,
+    ErrorType,
+    FailureDisposition,
+    ScientificIneligibilityReason,
+    validate_failure_triple,
+)
 from memcontam.baselines.dynamic_cheatsheet_optional import (
     DynamicCheatsheetOptionalPolicy,
     DynamicCheatsheetRetrievalSynthesisPolicy,
@@ -1188,6 +1194,8 @@ def _failed_faithful_trial(
     filter_decision: FilterTelemetry | None,
     failure_id: str,
     error_type: str,
+    failure_disposition: str | None = None,
+    scientific_ineligibility_reason: str | None = None,
     phase11_context: dict[str, Any] | None = None,
 ) -> TrialLog:
     if not method_calls:
@@ -1226,6 +1234,19 @@ def _failed_faithful_trial(
         )
     phase11_context = phase11_context or {}
     telemetry = summarize_calls(call_events)
+    failure_metadata = {}
+    if failure_disposition is not None or scientific_ineligibility_reason is not None:
+        if not isinstance(failure_disposition, str) or not isinstance(scientific_ineligibility_reason, str):
+            raise RuntimeError("failed baseline outcome is missing its closed failure triple")
+        validate_failure_triple(
+            cast(ErrorType, error_type),
+            cast(FailureDisposition, failure_disposition),
+            cast(ScientificIneligibilityReason, scientific_ineligibility_reason),
+        )
+        failure_metadata = {
+            "failure_disposition": failure_disposition,
+            "scientific_ineligibility_reason": scientific_ineligibility_reason,
+        }
     return TrialLog(
         trial_id=trial_id,
         run_id=metadata.run_id,
@@ -1244,7 +1265,7 @@ def _failed_faithful_trial(
         raw_response=None,
         parsed_answer=None,
         verifier_result=None,
-        metadata={},
+        metadata=failure_metadata,
         memory_write_event=None,
         memory_after=memory_after,
         method_calls=method_calls,
@@ -1731,6 +1752,10 @@ def _run_faithful_config(
                                         filter_decision=filter_decision,
                                         failure_id=failure.failure_id,
                                         error_type=result["error_type"],
+                                        failure_disposition=result["failure_disposition"],
+                                        scientific_ineligibility_reason=result[
+                                            "scientific_ineligibility_reason"
+                                        ],
                                         phase11_context=phase11_context,
                                     )
                                 )
