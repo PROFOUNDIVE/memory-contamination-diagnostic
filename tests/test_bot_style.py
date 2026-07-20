@@ -1,44 +1,48 @@
 from __future__ import annotations
 
 import importlib
+import importlib.util
+import json
 
 import pytest
 
 from memcontam.baselines.bot_style import BotStylePolicy
+from memcontam.baselines.bot_read import DistilledProblem, build_distilled_query
 from memcontam.clients.replay import ReplayClient
 from memcontam.logging.schema import VerifierResult
 from memcontam.memory.bot_buffer import BotBufferIdentity
-from memcontam.memory.stores import MemoryEntry, MemoryState
+from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
 
 
 BotRuntime = importlib.import_module("memcontam.baselines.bot_runtime").BotRuntime
 
 
-_DISTILLATION_OUTPUT = """Distilled Information:
+def test_bot_contract_requires_structured_thought_before_verifier() -> None:
+    runtime = importlib.import_module("memcontam.baselines.bot_runtime")
 
-1. Key information:
-numbers = [1, 2, 3, 4], target = 24
-
-2. Restriction:
-Use each given number exactly once.
-
-3. Distilled task:
-Construct an arithmetic expression using all numbers that evaluates to the target.
-
-4. Python transformation:
-numbers = [1, 2, 3, 4]
-target = 24
-
-5. Answer form:
-Output a single arithmetic expression prefixed with 'final: '.
-"""
+    assert callable(getattr(runtime, "freeze_native_transition", None))
+    assert callable(getattr(runtime, "materialize_frozen_transition", None))
 
 
-_SOLUTION_OUTPUT = "final: (1 + 3) * (2 + 4) = 24"
+_DISTILLATION_OUTPUT = json.dumps(
+    {
+        "key_information": "numbers = [1, 2, 3, 4], target = 24",
+        "restrictions": "Use each given number exactly once.",
+        "distilled_task": "Construct an arithmetic expression using all numbers that evaluates to the target.",
+    }
+)
 
 
-def test_bot_runs_distill_retrieve_instantiate_solve() -> None:
+_SOLUTION_OUTPUT = json.dumps(
+    {
+        "solution_trace": "Pair 1 + 3 and 2 + 4, then multiply the pair sums.",
+        "final_answer": "final: (1 + 3) * (2 + 4) = 24",
+    }
+)
+
+
+def test_bot_problem_distill_accepts_only_the_three_field_schema() -> None:
     task = TaskInstance(
         sample_id="game24_001",
         task_name="game24",
@@ -52,40 +56,13 @@ def test_bot_runs_distill_retrieve_instantiate_solve() -> None:
             }
         }
     )
-    memory = MemoryState(
-        entries=[
-            MemoryEntry(
-                entry_id="tpl_001",
-                content="Look for factor pairs of 24 and build subexpressions that create them.",
-                memory_type="thought_template",
-                clean_or_contaminated="clean",
-                source_trial_id="prev_trial_1",
-            ),
-            MemoryEntry(
-                entry_id="tpl_002",
-                content="Sort words alphabetically and preserve duplicates.",
-                memory_type="thought_template",
-                clean_or_contaminated="clean",
-                source_trial_id="prev_trial_2",
-            ),
-        ]
-    )
-    policy = BotStylePolicy()
-    base_config = {"sample_id": "game24_001", "temperature": 0}
+    assert importlib.util.find_spec("memcontam.baselines.bot_read") is not None
+    bot_read = importlib.import_module("memcontam.baselines.bot_read")
+    distilled = bot_read.distill_problem(task, client, "gpt-4o", {"sample_id": "game24_001"})
 
-    distilled = policy.problem_distillation(task, client, "gpt-4o", dict(base_config))
-
-    assert distilled["key_information"] == "numbers = [1, 2, 3, 4], target = 24"
-    assert "exactly once" in distilled["restriction"]
-    assert "arithmetic expression" in distilled["distilled_task"]
-    assert "numbers = [1, 2, 3, 4]" in distilled["python_transformation"]
-    assert "final:" in distilled["answer_form"]
-
-    solution = policy.template_instantiation_solve(
-        task, distilled, memory, client, "gpt-4o", dict(base_config)
-    )
-
-    assert solution == _SOLUTION_OUTPUT
+    assert distilled.key_information == "numbers = [1, 2, 3, 4], target = 24"
+    assert "exactly once" in distilled.restrictions
+    assert "arithmetic expression" in distilled.distilled_task
 
 
 def test_bot_rejects_malformed_problem_distillation() -> None:
@@ -98,20 +75,100 @@ def test_bot_rejects_malformed_problem_distillation() -> None:
         responses_by_sample={
             "math_001": {
                 "bot_problem_distill": (
-                    "Distilled Information:\n\n"
-                    "1. Key information:\nexpression = '1 + 2 * 3'\n\n"
-                    "3. Distilled task:\nCompute the value.\n\n"
-                    "5. Answer form:\nfinal: <number>\n"
+                    '{"key_information":"expression = 1 + 2 * 3",'
+                    '"distilled_task":"Compute the value.",'
+                    '"answer_form":"final: <number>"}'
                 ),
             }
         }
     )
-    policy = BotStylePolicy()
+    assert importlib.util.find_spec("memcontam.baselines.bot_read") is not None
+    bot_read = importlib.import_module("memcontam.baselines.bot_read")
 
-    with pytest.raises(ValueError, match="Restriction|Python transformation"):
-        policy.problem_distillation(
-            task, client, "gpt-4o", {"sample_id": "math_001"}
+    with pytest.raises(ValueError, match="restrictions"):
+        bot_read.distill_problem(task, client, "gpt-4o", {"sample_id": "math_001"})
+
+
+def test_bot_retrieve_uses_distilled_query_and_accepts_threshold_equality() -> None:
+    assert importlib.util.find_spec("memcontam.baselines.bot_read") is not None
+    bot_read = importlib.import_module("memcontam.baselines.bot_read")
+    problem = bot_read.DistilledProblem(
+        key_information="numbers = [1, 2, 3, 4]",
+        restrictions="Use each number once.",
+        distilled_task="Construct an expression for 24.",
+    )
+    entries = [
+        MemoryEntry(
+            entry_id="tpl_001",
+            content="Build useful pairs before combining them.",
+            memory_type="thought_template",
+            clean_or_contaminated="clean",
         )
+    ]
+    queries = []
+
+    class ThresholdProvider:
+        def encode_query(self, query):
+            queries.append(query)
+            return [1.0, 0.0]
+
+        def encode_document(self, _description):
+            return [0.7, (1 - 0.7**2) ** 0.5]
+
+    retrieved = bot_read.retrieve_top_template(problem, entries, ThresholdProvider())
+
+    assert retrieved["entry_id"] == "tpl_001"
+    assert retrieved["score"] == pytest.approx(0.7)
+    assert queries == [bot_read.build_distilled_query(problem)]
+
+
+def test_bot_retrieve_below_threshold_uses_fixed_fallback() -> None:
+    assert importlib.util.find_spec("memcontam.baselines.bot_read") is not None
+    bot_read = importlib.import_module("memcontam.baselines.bot_read")
+    bot_solve = importlib.import_module("memcontam.baselines.bot_solve")
+    problem = bot_read.DistilledProblem(
+        key_information="x = 3",
+        restrictions="Return a number.",
+        distilled_task="Double x.",
+    )
+    entries = [
+        MemoryEntry(
+            entry_id="tpl_001",
+            content="Ignore this weak match.",
+            memory_type="thought_template",
+            clean_or_contaminated="clean",
+        )
+    ]
+
+    class BelowThresholdProvider:
+        def encode_query(self, _query):
+            return [1.0, 0.0]
+
+        def encode_document(self, _description):
+            return [0.699, (1 - 0.699**2) ** 0.5]
+
+    retrieved = bot_read.retrieve_top_template(problem, entries, BelowThresholdProvider())
+    prompt, source_spans = bot_solve.render_bot_solve_prompt(
+        TaskInstance(sample_id="sample", task_name="math_equation_balancer", input={"input": "3 + 3"}),
+        problem,
+        retrieved,
+    )
+
+    assert retrieved is None
+    assert bot_read.FALLBACK_THOUGHT_TEMPLATE in prompt
+    assert source_spans == []
+
+
+def test_bot_solve_requires_trace_and_final_answer_without_verifier() -> None:
+    assert importlib.util.find_spec("memcontam.baselines.bot_solve") is not None
+    bot_solve = importlib.import_module("memcontam.baselines.bot_solve")
+
+    result = bot_solve.parse_bot_solve_result(_SOLUTION_OUTPUT)
+
+    assert result.solution_trace.startswith("Pair 1 + 3")
+    assert result.final_answer == "final: (1 + 3) * (2 + 4) = 24"
+    with pytest.raises(ValueError):
+        bot_solve.parse_bot_solve_result('{"final_answer":"24"}')
 
 
 def test_bot_runtime_runs_reference_order_and_updates() -> None:
@@ -333,6 +390,9 @@ def test_bot_runtime_retrieves_after_distillation_and_reuses_template() -> None:
             events.append(("solve", kwargs["retrieved"]["entry_id"]))
             return super().template_instantiation_solve(*args, **kwargs)
 
+    def verifier_must_not_run(_response: str) -> VerifierResult:
+        raise AssertionError("verifier must not run")
+
     result = BotRuntime(policy=RecordingPolicy()).run(
         identity=identity,
         task=task,
@@ -344,14 +404,23 @@ def test_bot_runtime_retrieves_after_distillation_and_reuses_template() -> None:
             "temperature": 0,
             "embedding_provider": RecordingProvider(),
         },
-        verifier=lambda response: VerifierResult(
-            is_correct=False, parsed_answer=response, reason="skip_update"
-        ),
+        verifier=verifier_must_not_run,
     )
 
-    assert result["retrieved_template"]["entry_id"] == "tpl_001"
+    assert result.retrieved_memory[0]["entry_id"] == "tpl_001"
     assert events == [
         ("distill", None),
-        ("retrieve", str(task.input)),
+        (
+            "retrieve",
+            build_distilled_query(
+                DistilledProblem(
+                    key_information="numbers = [1, 2, 3, 4], target = 24",
+                    restrictions="Use each given number exactly once.",
+                    distilled_task=(
+                        "Construct an arithmetic expression using all numbers that evaluates to the target."
+                    ),
+                )
+            ),
+        ),
         ("solve", "tpl_001"),
     ]

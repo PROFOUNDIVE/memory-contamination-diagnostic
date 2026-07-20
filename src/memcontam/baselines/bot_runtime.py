@@ -1,26 +1,19 @@
 from __future__ import annotations
 
-import hashlib
 from dataclasses import asdict
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
-from memcontam.baselines.bot_style import (
-    BotStylePolicy,
-    _retrieve_top1_template,
-    distill_thought_template,
-)
+from .bot_read import retrieve_top_template
+from .bot_solve import parse_bot_solve_result
+from .bot_style import BotStylePolicy
+from .common import parse_final_answer
+from .contracts import BaselineExecutionOutcome
 from memcontam.clients.base import LLMClient
 from memcontam.clients.recording import MethodCallRecorder
-from memcontam.logging.provenance import phase11_lineage_metadata
 from memcontam.logging.schema import VerifierResult
-from memcontam.memory.bot_buffer import (
-    BotBufferIdentity,
-    BotBufferRegistry,
-    ThoughtTemplate,
-    maybe_update,
-)
+from memcontam.memory.bot_buffer import BotBufferIdentity
 from memcontam.memory.embeddings import FakeEmbeddingProvider
-from memcontam.memory.stores import MemoryEntry, MemoryState
+from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
 
 
@@ -40,140 +33,82 @@ class BotRuntime:
         client: LLMClient,
         model: str,
         config: dict[str, Any],
-        verifier: Verifier,
-    ) -> dict[str, Any]:
+        verifier: Verifier | None = None,
+    ) -> BaselineExecutionOutcome:
+        del verifier
         call_config = {**config, "sample_id": config.get("sample_id", task.sample_id)}
-        trial_id = ":".join(
-            [identity.run_id, task.task_name, task.sample_id, identity.baseline, identity.arm, model]
-        )
-        recorder = MethodCallRecorder(
-            client,
-            event_callback=call_config.get("_logging_event_callback"),
-            trial_context={**call_config.get("_logging_trial_context", {}), "trial_id": trial_id},
-        )
-        memory = MemoryState(entries=list(buffer_snapshot))
-        embedding_provider = call_config.get("embedding_provider", FakeEmbeddingProvider())
+        recorder = MethodCallRecorder(client)
+        memory_before = tuple(entry.model_dump() for entry in buffer_snapshot)
+        metadata = {"bot_buffer_identity": asdict(identity)}
 
-        distilled = self.policy.problem_distillation(task, recorder, model, call_config)
-        retrieved = _retrieve_top1_template(
-            str(task.input), memory.entries, provider=embedding_provider
+        try:
+            distilled = self.policy.problem_distillation(task, recorder, model, call_config)
+        except ValueError:
+            return self._failure_outcome(
+                recorder, memory_before, metadata, "bot_invalid_problem_distillation", None
+            )
+
+        metadata["distilled_problem"] = distilled.model_dump()
+        retrieved = retrieve_top_template(
+            distilled,
+            buffer_snapshot,
+            call_config.get("embedding_provider", FakeEmbeddingProvider()),
         )
-        final_response = self.policy.template_instantiation_solve(
-            task, distilled, memory, recorder, model, call_config, retrieved=retrieved
+        raw_solve = self.policy.template_instantiation_solve(
+            task, distilled, recorder, model, call_config, retrieved=retrieved
         )
         answer_call_id = recorder.get_records()[-1].call_id
-        verifier_result = verifier(final_response)
-        memory_before = [_memory_entry_dict(entry) for entry in buffer_snapshot]
-
-        memory_write_event = None
-        memory_after = memory_before
-        if verifier_result.is_correct:
-            registry = BotBufferRegistry()
-            for entry in buffer_snapshot:
-                registry.insert(identity, _entry_to_template(entry))
-            candidate = _candidate_template(
-                task, final_response, verifier_result, retrieved, call_config
-            )
-            memory_write_event = maybe_update(
-                registry,
-                identity,
-                candidate,
-                retrieved["memory_entry"] if retrieved else None,
+        try:
+            solve_result = parse_bot_solve_result(raw_solve)
+        except ValueError:
+            return self._failure_outcome(
                 recorder,
-                model,
-                {
-                    **call_config,
-                    "verifier_result": verifier_result,
-                    "embedding_provider": embedding_provider,
-                },
+                memory_before,
+                metadata,
+                "bot_invalid_solve_result",
+                answer_call_id,
+                raw_solve,
             )
-            memory_after = [_template_dict(entry) for entry in registry.snapshot(identity)]
 
-        return {
-            "final_response": final_response,
-            "parsed_answer": verifier_result.parsed_answer,
-            "verifier_result": verifier_result,
-            "retrieved_template": _retrieved_template_dict(retrieved),
-            "method_calls": recorder.get_records(),
-            "memory_before": memory_before,
-            "memory_after": memory_after,
-            "memory_write_event": memory_write_event,
-            "answer_call_id": answer_call_id,
-            "metadata": {
-                "bot_buffer_identity": asdict(identity),
-                "distilled_problem": distilled,
-            },
-        }
-
-
-def _entry_to_template(entry: MemoryEntry) -> ThoughtTemplate:
-    return ThoughtTemplate(
-        entry_id=entry.entry_id,
-        content=entry.content,
-        source_trial_id=entry.source_trial_id or "unknown",
-        metadata=dict(entry.metadata),
-    )
-
-
-def _candidate_template(
-    task: TaskInstance,
-    final_response: str,
-    verifier_result: VerifierResult,
-    retrieved: dict[str, Any] | None,
-    config: dict[str, Any],
-) -> ThoughtTemplate:
-    trial_id = f"{task.task_name}:{task.sample_id}"
-    content = distill_thought_template(task, final_response, verifier_result, retrieved)
-    source_entry_ids = [retrieved["entry_id"]] if retrieved else []
-    entry_id = f"bot_candidate:{hashlib.sha256((trial_id + final_response).encode()).hexdigest()[:12]}"
-    direct_parent_ids = [retrieved["entry_id"]] if retrieved else []
-    metadata = {
-        "raw_response": final_response,
-        "distillation_source": "bot_runtime",
-        "direct_parent_ids": direct_parent_ids,
-    }
-    candidate_entry = MemoryEntry(
-        entry_id=entry_id,
-        content=content,
-        memory_type="thought_template",
-        clean_or_contaminated="clean",
-        source_trial_id=trial_id,
-        metadata=metadata,
-    )
-    parent_entries = [retrieved["memory_entry"]] if retrieved else []
-    candidate_entry.metadata.update(
-        phase11_lineage_metadata(
-            candidate_entry,
-            parent_entries,
-            config.get("_logging_target_contamination_set")
-            or config.get("_logging_target_set_id"),
+        metadata["solution_trace"] = solve_result.solution_trace
+        return BaselineExecutionOutcome(
+            status="succeeded",
+            final_response=solve_result.final_answer,
+            parsed_answer=parse_final_answer(solve_result.final_answer),
+            answer_call_id=answer_call_id,
+            method_calls=tuple(recorder.get_records()),
+            memory_before=memory_before,
+            memory_after=memory_before,
+            retrieved_memory=(retrieved["memory_entry"].model_dump(),) if retrieved else (),
+            retrieved_scores=(retrieved["score"],) if retrieved else (),
+            metadata=metadata,
         )
-    )
-    return ThoughtTemplate(
-        entry_id=entry_id,
-        content=content,
-        source_trial_id=trial_id,
-        source_entry_ids=source_entry_ids,
-        metadata=candidate_entry.metadata,
-    )
 
-
-def _memory_entry_dict(entry: MemoryEntry) -> dict[str, Any]:
-    return entry.model_dump()
-
-
-def _template_dict(entry: ThoughtTemplate) -> dict[str, Any]:
-    data = asdict(entry)
-    if entry.accepted_at is not None:
-        data["accepted_at"] = entry.accepted_at.isoformat()
-    return data
-
-
-def _retrieved_template_dict(retrieved: dict[str, Any] | None) -> dict[str, Any] | None:
-    if retrieved is None:
-        return None
-    return {
-        "entry_id": retrieved["entry_id"],
-        "content": retrieved["content"],
-        "score": retrieved["score"],
-    }
+    @staticmethod
+    def _failure_outcome(
+        recorder: MethodCallRecorder,
+        memory_before: tuple[dict[str, Any], ...],
+        metadata: dict[str, Any],
+        failure_disposition: Literal[
+            "bot_invalid_problem_distillation", "bot_invalid_solve_result"
+        ],
+        answer_call_id: str | None,
+        final_response: str | None = None,
+    ) -> BaselineExecutionOutcome:
+        reason: Literal["invalid_problem_distillation", "invalid_solve_result"] = (
+            "invalid_problem_distillation"
+            if failure_disposition == "bot_invalid_problem_distillation"
+            else "invalid_solve_result"
+        )
+        return BaselineExecutionOutcome(
+            status="failed",
+            final_response=final_response,
+            answer_call_id=answer_call_id,
+            method_calls=tuple(recorder.get_records()),
+            memory_before=memory_before,
+            memory_after=memory_before,
+            error_type="BaselineOutputError",
+            failure_disposition=failure_disposition,
+            scientific_ineligibility_reason=reason,
+            metadata=metadata,
+        )

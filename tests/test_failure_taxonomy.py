@@ -106,3 +106,18 @@ def test_rag_retrieval_failure_row_is_accepted_only_with_its_exact_triple() -> N
         contracts.validate_failure_triple(
             "EmbeddingContractError", "rag_retrieval_failed", "retrieval_failed"
         )
+
+
+def test_bot_invalid_problem_and_solve_rows_require_their_exact_triples() -> None:
+    contracts = importlib.import_module("memcontam.baselines.contracts")
+
+    contracts.validate_failure_triple(
+        "BaselineOutputError", "bot_invalid_problem_distillation", "invalid_problem_distillation"
+    )
+    contracts.validate_failure_triple(
+        "BaselineOutputError", "bot_invalid_solve_result", "invalid_solve_result"
+    )
+    with pytest.raises(ValueError, match="failure triple"):
+        contracts.validate_failure_triple(
+            "BaselineOutputError", "bot_invalid_solve_result", "invalid_problem_distillation"
+        )

@@ -28,3 +28,14 @@ def test_retrieval_rag_adapter_uses_only_the_rag_generate_semantic_stage() -> No
     assert callable(adapter.execute)
     assert not hasattr(adapter, "run")
     assert not hasattr(adapter, "build_prompt")
+
+
+def test_bot_problem_and_instantiate_stages_have_strict_read_and_solve_contracts() -> None:
+    bot_read = importlib.import_module("memcontam.baselines.bot_read")
+    bot_solve = importlib.import_module("memcontam.baselines.bot_solve")
+
+    assert callable(bot_read.distill_problem)
+    assert callable(bot_read.build_distilled_query)
+    assert callable(bot_read.retrieve_top_template)
+    assert callable(bot_solve.render_bot_solve_prompt)
+    assert callable(bot_solve.parse_bot_solve_result)

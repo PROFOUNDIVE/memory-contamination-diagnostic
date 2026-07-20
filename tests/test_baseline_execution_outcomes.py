@@ -6,6 +6,7 @@ import importlib.util
 import pytest
 
 from memcontam.baselines.contracts import BaselineExecutionOutcome
+from memcontam.logging.schema import VerifierResult
 
 
 def test_baseline_execution_outcome_retains_failed_evidence_and_valid_incorrect_success() -> None:
@@ -122,4 +123,63 @@ def test_retrieval_rag_valid_incorrect_answer_is_a_success() -> None:
     assert outcome.verifier_result is False
     assert outcome.error_type is None
     assert outcome.failure_disposition is None
+    assert outcome.memory_write_event is None
+
+
+def test_bot_invalid_solve_returns_closed_failure_without_verifier_or_write() -> None:
+    from memcontam.baselines.bot_runtime import BotRuntime
+    from memcontam.clients.replay import ReplayClient
+    from memcontam.memory.bot_buffer import BotBufferIdentity
+    from memcontam.memory.stores import MemoryEntry
+    from memcontam.tasks.base import TaskInstance
+
+    task = TaskInstance(
+        sample_id="sample-1", task_name="game24", input={"numbers": [1, 2, 3, 4], "target": 24}
+    )
+    client = ReplayClient(
+        responses_by_sample={
+            "sample-1": {
+                "bot_problem_distill": (
+                    '{"key_information":"numbers = [1, 2, 3, 4]",'
+                    '"restrictions":"Use each number once.",'
+                    '"distilled_task":"Construct 24."}'
+                ),
+                "bot_instantiate_solve": '{"final_answer":"24"}',
+                "bot_thought_distill": "must not be consumed",
+            }
+        }
+    )
+    verifier_calls = []
+
+    def verifier_must_not_run(answer: str) -> VerifierResult:
+        verifier_calls.append(answer)
+        return VerifierResult(is_correct=False, parsed_answer=answer, reason="must_not_run")
+
+    entry = MemoryEntry(
+        entry_id="tpl-1",
+        content="Build pairs.",
+        memory_type="thought_template",
+        clean_or_contaminated="clean",
+    )
+
+    outcome = BotRuntime().run(
+        identity=BotBufferIdentity("run", "game24", "bot_style", "clean", "replay"),
+        task=task,
+        buffer_snapshot=[entry],
+        client=client,
+        model="replay",
+        config={"sample_id": "sample-1"},
+        verifier=verifier_must_not_run,
+    )
+
+    assert outcome.status == "failed"
+    assert outcome.error_type == "BaselineOutputError"
+    assert outcome.failure_disposition == "bot_invalid_solve_result"
+    assert outcome.scientific_ineligibility_reason == "invalid_solve_result"
+    assert verifier_calls == []
+    assert [call.stage for call in outcome.method_calls] == [
+        "bot_problem_distill",
+        "bot_instantiate_solve",
+    ]
+    assert outcome.memory_after == outcome.memory_before
     assert outcome.memory_write_event is None
