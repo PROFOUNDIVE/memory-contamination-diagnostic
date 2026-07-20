@@ -39,3 +39,19 @@ def test_bot_problem_and_instantiate_stages_have_strict_read_and_solve_contracts
     assert callable(bot_read.retrieve_top_template)
     assert callable(bot_solve.render_bot_solve_prompt)
     assert callable(bot_solve.parse_bot_solve_result)
+
+
+def test_bot_thought_distillation_contract_requires_structured_template_payload() -> None:
+    bot_write = importlib.import_module("memcontam.baselines.bot_write")
+
+    assert callable(bot_write.distill_thought_template)
+    assert callable(bot_write.validate_explicitly_used_memory_ids)
+    result = bot_write.TemplateDistillationResult.model_validate(
+        {
+            "description": "Arithmetic factorization method.",
+            "template": "Create factors before combining terms.",
+            "category": "procedure-based",
+            "explicitly_used_memory_ids": ["template-1"],
+        }
+    )
+    assert result.explicitly_used_memory_ids == ("template-1",)
