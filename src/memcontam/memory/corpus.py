@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from memcontam.baselines.contracts import CorpusIdentity
 from memcontam.logging.schema import ContaminationClass, LineageBasis, LineageStatus
 from memcontam.memory.filters import FilterTelemetry, drop_known_contaminated
 from memcontam.memory.stores import MemoryEntry
@@ -46,6 +48,41 @@ _FORBIDDEN_ANSWER_SUBSTRINGS = frozenset(
 
 class CorpusValidationError(ValueError):
     pass
+
+
+class CorpusManifest(BaseModel):
+    manifest_id: str
+    corpus_version: str
+    content_hash: str
+
+
+def corpus_content_hash(records: list["CorpusRecord"]) -> str:
+    payload = json.dumps(
+        [record.model_dump(mode="json") for record in records],
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return "sha256:" + hashlib.sha256(payload).hexdigest()
+
+
+def trusted_corpus_card(
+    records: list["CorpusRecord"],
+    *,
+    manifest: CorpusManifest | None,
+    task_family: str,
+    embedding_provider_identity: str,
+) -> CorpusIdentity:
+    if manifest is None:
+        raise ValueError("corpus manifest is required")
+    _ValidatedCorpus(records)
+    if manifest.content_hash != corpus_content_hash(records):
+        raise ValueError("manifest content_hash does not match corpus content")
+    return CorpusIdentity(
+        manifest_id=manifest.manifest_id,
+        corpus_version=manifest.corpus_version,
+        task_family=task_family,
+        embedding_provider_identity=embedding_provider_identity,
+    )
 
 
 def _assert_no_leakage(text: str, entry_id: str) -> None:

@@ -4,6 +4,8 @@ from dataclasses import fields
 import importlib
 import importlib.util
 
+from memcontam.memory import corpus, retrieval
+
 
 def test_corpus_identity_has_one_shared_definition() -> None:
     assert importlib.util.find_spec("memcontam.baselines.contracts"), (
@@ -20,3 +22,5 @@ def test_corpus_identity_has_one_shared_definition() -> None:
         "task_family",
         "embedding_provider_identity",
     ]
+    assert corpus.CorpusIdentity is identity
+    assert retrieval.CorpusIdentity is identity

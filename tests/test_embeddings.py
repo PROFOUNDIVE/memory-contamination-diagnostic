@@ -7,6 +7,7 @@ import pytest
 
 from memcontam.memory import embeddings
 from memcontam.memory.embeddings import (
+    BgeM3EmbeddingProvider,
     FakeEmbeddingProvider,
     SentenceTransformerProvider,
     normalized_dot_top_k,
@@ -90,3 +91,43 @@ def test_cached_sentence_transformer_provider_smoke(tmp_path) -> None:
     vector = provider.encode_query("cached model smoke")
     assert _norm(vector) == pytest.approx(1.0)
     assert provider.metadata["vector_dimension"] == len(vector)
+
+
+def test_bge_m3_provider_pins_identity_dimension_and_normalization(monkeypatch) -> None:
+    class PinnedSentenceTransformer:
+        def __init__(self, **kwargs):  # noqa: ANN003
+            self.kwargs = kwargs
+            self.encode_kwargs: dict[str, object] | None = None
+
+        def encode(self, _texts, **kwargs):  # noqa: ANN001, ANN003
+            self.encode_kwargs = kwargs
+            return [[1.0] * BgeM3EmbeddingProvider.VECTOR_DIMENSION]
+
+    monkeypatch.setattr(embeddings, "SentenceTransformer", PinnedSentenceTransformer)
+
+    provider = BgeM3EmbeddingProvider(cache_folder="cache")
+
+    assert provider.model.kwargs["model_name_or_path"] == "BAAI/bge-m3"
+    assert provider.model.kwargs["revision"] == "5617a9f61b028005a4858fdac845db406aefb181"
+    assert provider.model.encode_kwargs == {
+        "batch_size": 32,
+        "normalize_embeddings": True,
+        "convert_to_numpy": False,
+        "show_progress_bar": False,
+    }
+    assert provider.metadata["vector_dimension"] == 1024
+    assert provider.metadata["normalize_embeddings"] is True
+
+
+def test_bge_m3_provider_rejects_wrong_dimension(monkeypatch) -> None:
+    class WrongDimensionSentenceTransformer:
+        def __init__(self, **_kwargs):  # noqa: ANN003
+            pass
+
+        def encode(self, _texts, **_kwargs):  # noqa: ANN001, ANN003
+            return [[1.0, 0.0]]
+
+    monkeypatch.setattr(embeddings, "SentenceTransformer", WrongDimensionSentenceTransformer)
+
+    with pytest.raises(ValueError, match="expected dimension 1024"):
+        BgeM3EmbeddingProvider()

@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 from typing import TypedDict
 
+from memcontam.baselines.contracts import CorpusIdentity
 from memcontam.logging.schema import RetrievalRecord
 from memcontam.memory.embeddings import EmbeddingProvider
 from memcontam.memory.embeddings import FakeEmbeddingProvider
@@ -36,9 +37,13 @@ class DenseIndex:
         *,
         provider: EmbeddingProvider | None = None,
         cache_dir: str | Path = "data/embedding_cache",
+        corpus_identity: CorpusIdentity | None = None,
     ) -> None:
+        if provider is None:
+            raise ValueError("DenseIndex requires an explicit embedding provider")
         self.entries = list(entries)
-        self.provider = provider or FakeEmbeddingProvider()
+        self.provider = provider
+        self.corpus_identity = corpus_identity
         self.cache_dir = Path(cache_dir)
         self.manifest_path = self.cache_dir / "dense_index_manifest.json"
         self.vectors_path = self.cache_dir / "dense_index_vectors.json"
@@ -142,6 +147,8 @@ def _legacy_record(record: RetrievalRecord, entry: MemoryEntry) -> RetrievedReco
 
 def _manifest(entries: list[MemoryEntry], provider: EmbeddingProvider) -> dict[str, object]:
     metadata = provider.metadata
+    if metadata.get("normalize_embeddings", True) is not True:
+        raise ValueError("embedding provider must use normalized embeddings")
     vector_dimension = metadata["vector_dimension"]
     if not isinstance(vector_dimension, int):
         raise ValueError("embedding provider vector_dimension must be an int")

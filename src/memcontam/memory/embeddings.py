@@ -21,9 +21,11 @@ class EmbeddingProvider(Protocol):
     def encode_document(self, text: str) -> list[float]: ...
 
 
-class SentenceTransformerProvider:
-    MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
-    REVISION = "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
+class BgeM3EmbeddingProvider:
+    MODEL_ID = "BAAI/bge-m3"
+    REVISION = "5617a9f61b028005a4858fdac845db406aefb181"
+    VECTOR_DIMENSION = 1024
+    NORMALIZE_EMBEDDINGS = True
 
     def __init__(
         self,
@@ -48,11 +50,17 @@ class SentenceTransformerProvider:
                 f"failed to load {self.MODEL_ID} at revision {self.REVISION} from cache "
                 f"{self.cache_folder or '<default>'} in {mode} mode"
             ) from exc
+        dimension = len(self.encode_query("dimension probe"))
+        if dimension != self.VECTOR_DIMENSION:
+            raise ValueError(
+                f"{self.MODEL_ID} expected dimension {self.VECTOR_DIMENSION}, got {dimension}"
+            )
         self._metadata = {
             "model_id": self.MODEL_ID,
             "revision": self.REVISION,
             "embedding_library_version": _package_version("sentence-transformers"),
-            "vector_dimension": len(self.encode_query("dimension probe")),
+            "vector_dimension": dimension,
+            "normalize_embeddings": self.NORMALIZE_EMBEDDINGS,
         }
 
     @property
@@ -69,7 +77,7 @@ class SentenceTransformerProvider:
         encoded = self.model.encode(
             [text],
             batch_size=self.batch_size,
-            normalize_embeddings=True,
+            normalize_embeddings=self.NORMALIZE_EMBEDDINGS,
             convert_to_numpy=False,
             show_progress_bar=False,
         )
@@ -77,6 +85,9 @@ class SentenceTransformerProvider:
         if hasattr(first, "tolist"):
             first = first.tolist()
         return _normalize_vector([float(value) for value in first], "embedding")
+
+
+SentenceTransformerProvider = BgeM3EmbeddingProvider
 
 
 class FakeEmbeddingProvider:
@@ -89,6 +100,7 @@ class FakeEmbeddingProvider:
             "revision": "local",
             "embedding_library_version": "fake",
             "vector_dimension": vector_dimension,
+            "normalize_embeddings": True,
         }
 
     @property
