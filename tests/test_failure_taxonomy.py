@@ -79,3 +79,18 @@ def test_closed_failure_taxonomy_has_every_canonical_row_and_rejects_unknown_val
     )
     with pytest.raises(ValueError, match="unknown failure disposition"):
         contracts.validate_failure_triple("ProviderCallFailure", "unknown", "provider_call_failed")
+
+
+def test_logging_validation_rejects_unknown_failure_triples() -> None:
+    validation = importlib.import_module("memcontam.logging.validation")
+    validate = getattr(validation, "validate_failure_metadata", None)
+    assert callable(validate)
+
+    with pytest.raises(ValueError, match="failure triple"):
+        validate(
+            {
+                "error_type": "BaselineOutputError",
+                "failure_disposition": "provider_call_failed",
+                "scientific_ineligibility_reason": "provider_call_failed",
+            }
+        )

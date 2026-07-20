@@ -5,6 +5,8 @@ import importlib.util
 
 import pytest
 
+from memcontam.baselines.contracts import BaselineExecutionOutcome
+
 
 def test_baseline_execution_outcome_retains_failed_evidence_and_valid_incorrect_success() -> None:
     assert importlib.util.find_spec("memcontam.baselines.contracts"), (
@@ -67,3 +69,18 @@ def test_baseline_execution_outcome_retains_failed_evidence_and_valid_incorrect_
     assert provider_failure.failure_disposition == "provider_call_failed"
     with pytest.raises(ValueError, match="failure triple"):
         contracts.ProviderCallFailure(error_type="BaselineOutputError")
+
+
+def test_failed_outcome_requires_scientific_ineligibility_metadata() -> None:
+    validation = importlib.import_module("memcontam.logging.validation")
+    validate = getattr(validation, "validate_outcome_metadata", None)
+    assert callable(validate)
+
+    failed = BaselineExecutionOutcome(
+        status="failed",
+        error_type="ProviderCallFailure",
+        failure_disposition="provider_call_failed",
+        scientific_ineligibility_reason="provider_call_failed",
+    )
+    with pytest.raises(ValueError, match="scientific_ineligibility_reason"):
+        validate(failed, {})

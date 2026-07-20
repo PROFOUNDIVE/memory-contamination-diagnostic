@@ -17,6 +17,7 @@ from memcontam.logging.schema import (
     PromptSourceSpan,
     TargetContaminationSetSpec,
 )
+from memcontam.logging.validation import normalize_direct_parent_ids, validate_outcome_metadata
 from memcontam.memory.stores import MemoryEntry
 
 
@@ -102,21 +103,16 @@ def normalize_memory_event(
             f"{status} memory event must not change snapshot hash"
         )
 
-    parent_entry_ids = _string_list(memory_write_event.get("parent_entry_ids"))
+    parent_entry_ids = normalize_direct_parent_ids(memory_write_event)
     source_entry_ids = _string_list(memory_write_event.get("source_entry_ids"))
     contaminated_source_ids = _string_list(
         memory_write_event.get("source_contaminated_entry_ids")
     )
 
-    # BoT records ``source_entry_ids`` but not ``parent_entry_ids``; treat the
-    # source IDs as parents for the normalized event.
-    if not parent_entry_ids and source_entry_ids:
-        parent_entry_ids = list(source_entry_ids)
-
-    # Fallback to new-entry metadata for lineage fields the baseline event did
-    # not carry explicitly.
+    # Only recorded direct-parent evidence can populate exact parents. Source
+    # evidence and updater context remain source evidence.
     if not parent_entry_ids and new_ids:
-        parent_entry_ids = _union_metadata_field(memory_after, new_ids, "parent_entry_ids")
+        parent_entry_ids = _union_direct_parent_ids(memory_after, new_ids)
     if not source_entry_ids and new_ids:
         source_entry_ids = _union_metadata_field(memory_after, new_ids, "source_entry_ids")
     if not contaminated_source_ids and new_ids:
@@ -244,6 +240,14 @@ def _union_metadata_field(
     return result
 
 
+def _union_direct_parent_ids(entries: list[MemoryEntry], entry_ids: list[str]) -> list[str]:
+    result: list[str] = []
+    for entry in entries:
+        if entry.entry_id in entry_ids:
+            _extend_unique(result, normalize_direct_parent_ids(entry.metadata))
+    return result
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -290,7 +294,7 @@ def canonical_lineage_for_entry(
         return CanonicalLineage("clean", [], "unavailable", "none", [])
 
     metadata = entry.metadata
-    direct_parent_ids = _string_list(metadata.get("direct_parent_ids"))
+    direct_parent_ids = normalize_direct_parent_ids(metadata)
     declared_roots = _string_list(metadata.get("injected_root_ids"))
     declared_status = metadata.get("lineage_status")
     declared_basis = metadata.get("lineage_basis")
@@ -404,6 +408,53 @@ def canonical_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
         for key, value in metadata.items()
         if key != "ancestor_ids" and not key.startswith("ancestor_")
     }
+
+
+def baseline_outcome_to_logging_v2(outcome: Any) -> dict[str, Any]:
+    """Map shared baseline evidence into existing ``logging_v2`` destinations."""
+    from memcontam.baselines.contracts import BaselineExecutionOutcome
+
+    if not isinstance(outcome, BaselineExecutionOutcome):
+        raise TypeError("logging_v2 persistence requires BaselineExecutionOutcome")
+
+    metadata = dict(outcome.metadata)
+    trial: dict[str, Any] = {"status": outcome.status}
+    for source_field, destination_field in (
+        ("final_response", "raw_response"),
+        ("parsed_answer", "parsed_answer"),
+        ("verifier_result", "verifier_result"),
+        ("answer_call_id", "answer_call_id"),
+    ):
+        value = getattr(outcome, source_field)
+        if value is not None:
+            trial[destination_field] = value
+    for field_name in (
+        "method_calls",
+        "memory_before",
+        "memory_after",
+        "retrieved_memory",
+        "retrieved_scores",
+        "memory_write_event",
+    ):
+        value = getattr(outcome, field_name)
+        if value not in ((), None):
+            trial[field_name] = list(value) if isinstance(value, tuple) else value
+
+    failure: dict[str, str] | None = None
+    if outcome.status == "failed":
+        if (
+            outcome.error_type is None
+            or outcome.failure_disposition is None
+            or outcome.scientific_ineligibility_reason is None
+        ):
+            raise ValueError("failed outcome requires one complete failure triple")
+        metadata["failure_disposition"] = outcome.failure_disposition
+        metadata["scientific_ineligibility_reason"] = outcome.scientific_ineligibility_reason
+        trial["error_type"] = outcome.error_type
+        failure = {"error_type": outcome.error_type, "disposition": outcome.failure_disposition}
+    validate_outcome_metadata(outcome, metadata)
+    trial["metadata"] = metadata
+    return {"trial": trial, "failure": failure}
 
 
 def _parent_lineage(
