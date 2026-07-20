@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import fields
 import importlib
 import importlib.util
 
@@ -13,3 +14,9 @@ def test_corpus_identity_has_one_shared_definition() -> None:
     identity = getattr(contracts, "CorpusIdentity", None)
     assert identity is not None
     assert identity.__module__ == "memcontam.baselines.contracts"
+    assert [field.name for field in fields(identity)] == [
+        "manifest_id",
+        "corpus_version",
+        "task_family",
+        "embedding_provider_identity",
+    ]

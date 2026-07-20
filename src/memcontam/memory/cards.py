@@ -17,10 +17,16 @@ class MemoryCard:
 
 @dataclass(frozen=True)
 class MemoryCardEnvelope:
-    card: MemoryCard
-    parent_card_ids: tuple[NonEmptyStr, ...] = ()
-    declared_support_ids: tuple[NonEmptyStr, ...] = ()
-    metadata: dict[str, Any] = field(default_factory=dict)
+    entry_id: str
+    semantic_kind: str
+    writer_id: str
+    writer_event_id: str
+    trial_log_support_ids: tuple[str, ...]
+    memory_support_ids: tuple[str, ...]
+    declared_parent_ids: tuple[str, ...]
+    source_trial_id: str | None
+    source_outcome: bool | None
+    order_key: int | str
 
     def __post_init__(self) -> None:
-        require_declared_parent_support(self.parent_card_ids, self.declared_support_ids)
+        require_declared_parent_support(self.memory_support_ids, self.declared_parent_ids)

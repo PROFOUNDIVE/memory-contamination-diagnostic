@@ -37,4 +37,33 @@ def test_baseline_execution_outcome_retains_failed_evidence_and_valid_incorrect_
     assert incorrect.failure_disposition is None
 
     with pytest.raises(ValueError, match="succeeded"):
-        outcome(status="succeeded", error_type="provider")
+        outcome(status="succeeded", error_type="ProviderCallFailure")
+
+    with pytest.raises(ValueError, match="complete failure triple"):
+        outcome(status="failed")
+
+    failed = outcome(
+        status="failed",
+        method_calls=(),
+        memory_before=(),
+        memory_after=(),
+        retrieved_memory=(),
+        retrieved_scores=(),
+        error_type="ProviderCallFailure",
+        failure_disposition="provider_call_failed",
+        scientific_ineligibility_reason="provider_call_failed",
+    )
+    assert failed.method_calls == ()
+    assert failed.memory_before == ()
+    with pytest.raises(ValueError, match="failure triple"):
+        outcome(
+            status="failed",
+            error_type="BaselineOutputError",
+            failure_disposition="provider_call_failed",
+            scientific_ineligibility_reason="provider_call_failed",
+        )
+
+    provider_failure = contracts.ProviderCallFailure(error_type="ProviderCallFailure")
+    assert provider_failure.failure_disposition == "provider_call_failed"
+    with pytest.raises(ValueError, match="failure triple"):
+        contracts.ProviderCallFailure(error_type="BaselineOutputError")

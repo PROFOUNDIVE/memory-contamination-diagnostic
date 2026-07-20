@@ -4,7 +4,7 @@ import copy
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from memcontam.baselines.contracts import StreamIdentity, StreamPairKey, stream_pair_key
 from memcontam.memory.bot_buffer import BotBufferIdentity, BotBufferRegistry, ThoughtTemplate
@@ -113,11 +113,13 @@ class RunState:
 def _snapshot_key(identity: BotBufferIdentity) -> StreamPairKey:
     return stream_pair_key(
         StreamIdentity(
-            identity.run_id,
-            identity.task_name,
-            identity.baseline,
-            identity.arm,
-            identity.backbone,
+            run_id=identity.run_id,
+            task_family=identity.task_name,
+            baseline=cast(
+                Literal["full_history", "bot_style", "reflexion_style"], identity.baseline
+            ),
+            arm=cast(Literal["clean", "contaminated", "contaminated_filter"], identity.arm),
+            backbone=identity.backbone,
         )
     )
 

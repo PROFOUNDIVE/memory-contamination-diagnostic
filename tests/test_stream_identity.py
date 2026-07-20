@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import fields
 import importlib
 import importlib.util
 
@@ -16,6 +17,19 @@ def test_stream_identity_isolated_by_arm_but_cross_arm_pairs_share_pair_key() ->
     assert identity is not None
     assert pair_key is not None
     assert callable(to_pair_key)
+    assert [field.name for field in fields(identity)] == [
+        "run_id",
+        "task_family",
+        "baseline",
+        "arm",
+        "backbone",
+    ]
+    assert [field.name for field in fields(pair_key)] == [
+        "run_id",
+        "task_family",
+        "baseline",
+        "backbone",
+    ]
     clean = identity("run", "game24", "full_history", "clean", "replay")
     contaminated = identity("run", "game24", "full_history", "contaminated", "replay")
     assert clean != contaminated

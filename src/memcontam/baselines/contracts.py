@@ -20,13 +20,12 @@ SEMANTIC_STAGES = (
 )
 
 ErrorType = Literal[
-    "parser",
-    "retrieval",
-    "embedding",
-    "corpus",
-    "configuration",
-    "provider",
-    "verifier",
+    "BaselineOutputError",
+    "RetrievalContractError",
+    "EmbeddingContractError",
+    "CorpusContractError",
+    "ProviderCallFailure",
+    "VerifierContractError",
 ]
 FailureDisposition = Literal[
     "no_memory_invalid_final_answer",
@@ -47,31 +46,51 @@ FailureDisposition = Literal[
 ]
 ScientificIneligibilityReason = Literal[
     "invalid_final_answer",
-    "invalid_intermediate_output",
-    "retrieval_failure",
-    "embedding_failure",
-    "corpus_manifest_failure",
-    "configuration_failure",
-    "provider_failure",
-    "verifier_contract_failure",
+    "retrieval_failed",
+    "embedding_failed",
+    "manifest_invalid",
+    "embedding_dimension_mismatch",
+    "embedding_provider_unpinned",
+    "invalid_problem_distillation",
+    "invalid_solve_result",
+    "invalid_thought_distillation",
+    "invalid_reflexion_generation",
+    "invalid_reflection",
+    "provider_call_failed",
+    "verifier_contract_failed",
 ]
 
 FAILURE_TAXONOMY: dict[FailureDisposition, tuple[ErrorType, ScientificIneligibilityReason]] = {
-    "no_memory_invalid_final_answer": ("parser", "invalid_final_answer"),
-    "full_history_invalid_final_answer": ("parser", "invalid_final_answer"),
-    "rag_invalid_final_answer": ("parser", "invalid_final_answer"),
-    "rag_retrieval_failed": ("retrieval", "retrieval_failure"),
-    "rag_embedding_failed": ("embedding", "embedding_failure"),
-    "rag_manifest_invalid": ("corpus", "corpus_manifest_failure"),
-    "rag_embedding_dimension_mismatch": ("embedding", "embedding_failure"),
-    "rag_embedding_provider_unpinned": ("configuration", "configuration_failure"),
-    "bot_invalid_problem_distillation": ("parser", "invalid_intermediate_output"),
-    "bot_invalid_solve_result": ("parser", "invalid_intermediate_output"),
-    "bot_invalid_thought_distillation": ("parser", "invalid_intermediate_output"),
-    "reflexion_invalid_generation": ("parser", "invalid_intermediate_output"),
-    "reflexion_invalid_reflection": ("parser", "invalid_intermediate_output"),
-    "provider_call_failed": ("provider", "provider_failure"),
-    "verifier_contract_failed": ("verifier", "verifier_contract_failure"),
+    "no_memory_invalid_final_answer": ("BaselineOutputError", "invalid_final_answer"),
+    "full_history_invalid_final_answer": ("BaselineOutputError", "invalid_final_answer"),
+    "rag_invalid_final_answer": ("BaselineOutputError", "invalid_final_answer"),
+    "rag_retrieval_failed": ("RetrievalContractError", "retrieval_failed"),
+    "rag_embedding_failed": ("EmbeddingContractError", "embedding_failed"),
+    "rag_manifest_invalid": ("CorpusContractError", "manifest_invalid"),
+    "rag_embedding_dimension_mismatch": (
+        "EmbeddingContractError",
+        "embedding_dimension_mismatch",
+    ),
+    "rag_embedding_provider_unpinned": (
+        "EmbeddingContractError",
+        "embedding_provider_unpinned",
+    ),
+    "bot_invalid_problem_distillation": (
+        "BaselineOutputError",
+        "invalid_problem_distillation",
+    ),
+    "bot_invalid_solve_result": ("BaselineOutputError", "invalid_solve_result"),
+    "bot_invalid_thought_distillation": (
+        "BaselineOutputError",
+        "invalid_thought_distillation",
+    ),
+    "reflexion_invalid_generation": (
+        "BaselineOutputError",
+        "invalid_reflexion_generation",
+    ),
+    "reflexion_invalid_reflection": ("BaselineOutputError", "invalid_reflection"),
+    "provider_call_failed": ("ProviderCallFailure", "provider_call_failed"),
+    "verifier_contract_failed": ("VerifierContractError", "verifier_contract_failed"),
 }
 CANONICAL_FAILURE_MAPPING = FAILURE_TAXONOMY
 
@@ -88,52 +107,52 @@ def validate_failure_triple(
         raise ValueError(f"failure triple does not match {failure_disposition!r}")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, order=True)
 class StreamIdentity:
-    run_id: NonEmptyStr
-    task_name: NonEmptyStr
-    baseline: NonEmptyStr
-    arm: NonEmptyStr
-    backbone: NonEmptyStr
+    run_id: str
+    task_family: str
+    baseline: Literal["full_history", "bot_style", "reflexion_style"]
+    arm: Literal["clean", "contaminated", "contaminated_filter"]
+    backbone: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, order=True)
 class StreamPairKey:
-    run_id: NonEmptyStr
-    task_name: NonEmptyStr
-    baseline: NonEmptyStr
-    backbone: NonEmptyStr
+    run_id: str
+    task_family: str
+    baseline: Literal["full_history", "bot_style", "reflexion_style"]
+    backbone: str
 
 
 def stream_pair_key(identity: StreamIdentity) -> StreamPairKey:
     return StreamPairKey(
         identity.run_id,
-        identity.task_name,
+        identity.task_family,
         identity.baseline,
         identity.backbone,
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, order=True)
 class CorpusIdentity:
-    corpus_hash: NonEmptyStr
-    embedding_model_id: NonEmptyStr
-    embedding_revision: NonEmptyStr
-    embedding_library_version: NonEmptyStr
+    manifest_id: str
+    corpus_version: str
+    task_family: str
+    embedding_provider_identity: str
 
 
-@dataclass
+@dataclass(frozen=True)
 class BaselineExecutionOutcome:
     status: Literal["succeeded", "failed"]
     final_response: str | None = None
     parsed_answer: str | None = None
     verifier_result: Any | None = None
     answer_call_id: str | None = None
-    method_calls: list[Any] = field(default_factory=list)
-    memory_before: list[dict[str, Any]] = field(default_factory=list)
-    memory_after: list[dict[str, Any]] = field(default_factory=list)
-    retrieved_memory: list[dict[str, Any]] = field(default_factory=list)
-    retrieved_scores: list[float] = field(default_factory=list)
+    method_calls: tuple[Any, ...] = ()
+    memory_before: tuple[dict[str, Any], ...] = ()
+    memory_after: tuple[dict[str, Any], ...] = ()
+    retrieved_memory: tuple[dict[str, Any], ...] = ()
+    retrieved_scores: tuple[float, ...] = ()
     memory_write_event: dict[str, Any] | None = None
     error_type: ErrorType | None = None
     failure_disposition: FailureDisposition | None = None
@@ -150,9 +169,7 @@ class BaselineExecutionOutcome:
             if any(value is not None for value in failure_values):
                 raise ValueError("succeeded outcome cannot carry failure evidence")
             return
-        if any(value is not None for value in failure_values) and not all(
-            value is not None for value in failure_values
-        ):
+        if not all(value is not None for value in failure_values):
             raise ValueError("failed outcome requires a complete failure triple")
         if (
             self.error_type is not None
@@ -168,10 +185,10 @@ class BaselineExecutionOutcome:
 
 @dataclass(frozen=True)
 class ProviderCallFailure:
-    error_type: ErrorType
+    error_type: Literal["ProviderCallFailure"] = "ProviderCallFailure"
     message: str | None = None
     failure_disposition: FailureDisposition = "provider_call_failed"
-    scientific_ineligibility_reason: ScientificIneligibilityReason = "provider_failure"
+    scientific_ineligibility_reason: ScientificIneligibilityReason = "provider_call_failed"
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
