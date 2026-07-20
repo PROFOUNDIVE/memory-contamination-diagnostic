@@ -14,6 +14,7 @@ import yaml
 
 from memcontam.baselines.bot_style import BotStylePolicy, distill_thought_template
 from memcontam.baselines.bot_runtime import BotRuntime
+from memcontam.baselines.contracts import BaselineExecutionOutcome
 from memcontam.baselines.dynamic_cheatsheet_optional import (
     DynamicCheatsheetOptionalPolicy,
     DynamicCheatsheetRetrievalSynthesisPolicy,
@@ -714,6 +715,26 @@ def _phase11_memory_update_mode(config: dict[str, Any], baseline: str) -> str:
     return "not_applicable"
 
 
+def _outcome_result_dict(outcome: BaselineExecutionOutcome) -> dict[str, Any]:
+    return {
+        "status": outcome.status,
+        "final_response": outcome.final_response,
+        "parsed_answer": outcome.parsed_answer,
+        "verifier_result": outcome.verifier_result,
+        "answer_call_id": outcome.answer_call_id,
+        "method_calls": list(outcome.method_calls),
+        "memory_before": list(outcome.memory_before),
+        "memory_after": list(outcome.memory_after),
+        "retrieved_memory": list(outcome.retrieved_memory),
+        "retrieved_scores": list(outcome.retrieved_scores),
+        "memory_write_event": outcome.memory_write_event,
+        "error_type": outcome.error_type,
+        "failure_disposition": outcome.failure_disposition,
+        "scientific_ineligibility_reason": outcome.scientific_ineligibility_reason,
+        "metadata": dict(outcome.metadata),
+    }
+
+
 def _reject_frozen_memory_drift(result: dict[str, Any], phase11_context: dict[str, Any]) -> None:
     if phase11_context.get("memory_update_mode") != "disabled":
         return
@@ -1313,19 +1334,21 @@ def _run_faithful_config(
                                     trial_memory_before = [
                                         entry.model_dump() for entry in bot_buffers[identity]
                                     ]
-                                    result = bot_runtime.run(
-                                        identity=identity,
-                                        task=task,
-                                        buffer_snapshot=bot_buffers[identity],
-                                        client=trial_client,
-                                        model=model,
-                                        config={
-                                            **policy_context,
-                                            "embedding_provider": embedding_provider,
-                                        },
-                                        verifier=lambda response, task=task: task_handler["verify"](
-                                            _parse_answer(response), task
-                                        ),
+                                    result = _outcome_result_dict(
+                                        bot_runtime.run(
+                                            identity=identity,
+                                            task=task,
+                                            buffer_snapshot=bot_buffers[identity],
+                                            client=trial_client,
+                                            model=model,
+                                            config={
+                                                **policy_context,
+                                                "embedding_provider": embedding_provider,
+                                            },
+                                            verifier=lambda response, task=task: task_handler["verify"](
+                                                _parse_answer(response), task
+                                            ),
+                                        )
                                     )
                                     verifier_result = result["verifier_result"]
                                     event = result.get("memory_write_event")

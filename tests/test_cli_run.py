@@ -845,6 +845,27 @@ def test_is_faithful_config_accepts_explicit_mode_and_rejects_unknown_mode() -> 
         })
 
 
+def test_baseline_outcome_conversion_preserves_read_only_bot_result() -> None:
+    from memcontam.baselines.contracts import BaselineExecutionOutcome
+
+    outcome = BaselineExecutionOutcome(
+        status="succeeded",
+        final_response="final: 24",
+        parsed_answer="24",
+        method_calls=("call-1",),
+        memory_before=({"entry_id": "template-1"},),
+        memory_after=({"entry_id": "template-1"},),
+        metadata={"solution_trace": "Combine factors."},
+    )
+
+    result = cli._outcome_result_dict(outcome)
+
+    assert result["final_response"] == "final: 24"
+    assert result["method_calls"] == ["call-1"]
+    assert result["memory_after"] == result["memory_before"]
+    assert result["memory_write_event"] is None
+
+
 _MAIN_BASELINES = [
     "no_memory",
     "full_history",
