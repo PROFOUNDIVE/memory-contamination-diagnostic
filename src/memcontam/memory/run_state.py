@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from memcontam.baselines.contracts import StreamIdentity, StreamPairKey, stream_pair_key
 from memcontam.memory.bot_buffer import BotBufferIdentity, BotBufferRegistry, ThoughtTemplate
 
 
@@ -40,7 +41,7 @@ class RunState:
         self._registry = BotBufferRegistry()
         self._warmup_sample_ids: dict[BotBufferIdentity, list[str]] = {}
         self._accepted_template_ids: dict[BotBufferIdentity, list[str]] = {}
-        self._clean_snapshots: dict[tuple[str, str, str, str], WarmupSnapshot] = {}
+        self._clean_snapshots: dict[StreamPairKey, WarmupSnapshot] = {}
         self._arm_metadata: dict[BotBufferIdentity, dict[str, Any]] = {}
 
     def register_warmup_result(
@@ -109,8 +110,16 @@ class RunState:
         return copy.deepcopy(self._arm_metadata.get(identity, {}))
 
 
-def _snapshot_key(identity: BotBufferIdentity) -> tuple[str, str, str, str]:
-    return identity.run_id, identity.task_name, identity.baseline, identity.backbone
+def _snapshot_key(identity: BotBufferIdentity) -> StreamPairKey:
+    return stream_pair_key(
+        StreamIdentity(
+            identity.run_id,
+            identity.task_name,
+            identity.baseline,
+            identity.arm,
+            identity.backbone,
+        )
+    )
 
 
 def _snapshot_hash(entries: tuple[ThoughtTemplate, ...]) -> str:
