@@ -183,3 +183,55 @@ def test_bot_invalid_solve_returns_closed_failure_without_verifier_or_write() ->
     ]
     assert outcome.memory_after == outcome.memory_before
     assert outcome.memory_write_event is None
+
+
+def test_bot_invalid_thought_distillation_returns_closed_failure_without_verifier_or_write() -> None:
+    from memcontam.baselines.bot_runtime import BotRuntime
+    from memcontam.clients.replay import ReplayClient
+    from memcontam.memory.bot_buffer import BotBufferIdentity
+    from memcontam.tasks.base import TaskInstance
+
+    task = TaskInstance(
+        sample_id="sample-1", task_name="game24", input={"numbers": [1, 2, 3, 4], "target": 24}
+    )
+    client = ReplayClient(
+        responses_by_sample={
+            "sample-1": {
+                "bot_problem_distill": (
+                    '{"key_information":"numbers = [1, 2, 3, 4]",'
+                    '"restrictions":"Use each number once.",'
+                    '"distilled_task":"Construct 24."}'
+                ),
+                "bot_instantiate_solve": (
+                    '{"solution_trace":"Build pairs.","final_answer":"final: 24"}'
+                ),
+                "bot_thought_distill": '{"description":""}',
+            }
+        }
+    )
+    verifier_calls: list[str] = []
+
+    outcome = BotRuntime().run(
+        identity=BotBufferIdentity("run", "game24", "bot_style", "clean", "replay"),
+        task=task,
+        buffer_snapshot=[],
+        client=client,
+        model="replay",
+        config={"sample_id": "sample-1"},
+        verifier=lambda answer: verifier_calls.append(answer) or True,
+    )
+
+    assert outcome.status == "failed"
+    assert outcome.error_type == "BaselineOutputError"
+    assert outcome.failure_disposition == "bot_invalid_thought_distillation"
+    assert outcome.scientific_ineligibility_reason == "invalid_thought_distillation"
+    assert outcome.verifier_result is None
+    assert verifier_calls == []
+    assert outcome.memory_after == outcome.memory_before
+    assert outcome.memory_write_event is not None
+    assert outcome.memory_write_event["status"] == "rejected_invalid_distillation"
+    assert [call.stage for call in outcome.method_calls] == [
+        "bot_problem_distill",
+        "bot_instantiate_solve",
+        "bot_thought_distill",
+    ]
