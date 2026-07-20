@@ -271,7 +271,7 @@ def _validate_protocol_gates(config: dict[str, Any]) -> None:
 def _is_strict_config(config: dict[str, Any]) -> bool:
     return (
         config.get("logging", {}).get("schema_version") in {LOGGING_V1, LOGGING_V2}
-        and config.get("run", {}).get("mode") == "faithful"
+        and _is_faithful_config(config)
     )
 
 
@@ -624,8 +624,17 @@ def _is_faithful_config(config: dict[str, Any]) -> bool:
     if run_mode == "faithful":
         _validate_reflexion_config(config)
         return True
-    if run_mode is not None and run_mode != "legacy":
+    if run_mode == "legacy":
+        if {"retrieval_rag", "bot_style"}.intersection(config.get("baselines", [])):
+            raise SystemExit("legacy run.mode does not support retrieval_rag or bot_style")
+        return False
+    if run_mode is not None:
         raise SystemExit(f"unsupported run.mode: {run_mode}")
+    if (
+        {"retrieval_rag", "bot_style"}.intersection(config.get("baselines", []))
+        and config.get("arms", []) == ["clean"]
+    ):
+        return True
     return bool(config.get("embedding", {}).get("corpus_path") and config.get("bot_state"))
 
 
@@ -1353,7 +1362,12 @@ def _run_faithful_config(
         trial_file = trials_path.open("w", encoding="utf-8")
 
     try:
-        corpus_records = load_corpus(Path(_corpus_path(config)))
+        corpus_records = (
+            load_corpus(Path(_corpus_path(config)))
+            if "corpus_path" in config.get("memory", {})
+            or "corpus_path" in config.get("embedding", {})
+            else []
+        )
         needs_embedding = any(
             baseline in {"retrieval_rag", "bot_style", "dynamic_cheatsheet_rs_optional"}
             for baseline in config["baselines"]
@@ -1362,8 +1376,14 @@ def _run_faithful_config(
         embedding_provider: EmbeddingProvider | None = None
         cache_dir: Path | None = None
         if needs_embedding:
-            embedding_provider = _embedding_provider(config)
-            cache_dir = Path(config["embedding"].get("cache_path", "data/embedding_cache")) / run_id
+            embedding_provider = (
+                FakeEmbeddingProvider()
+                if not config.get("embedding") and config.get("arms", []) == ["clean"]
+                else _embedding_provider(config)
+            )
+            cache_dir = Path(
+                config.get("embedding", {}).get("cache_path", "data/embedding_cache")
+            ) / run_id
 
         run_state: RunState | None = None
         bot_runtime: BotRuntime | None = None
@@ -1477,7 +1497,7 @@ def _run_faithful_config(
                                         client=trial_client,
                                         model=model,
                                         config=policy_context,
-                                        top_k=config["embedding"].get("top_k"),
+                                        top_k=config.get("embedding", {}).get("top_k"),
                                         embedding_provider=embedding_provider,
                                         cache_dir=cache_dir / task_name / arm,
                                     )
@@ -1996,11 +2016,14 @@ def main() -> None:
     elif args.command == "aggregate":
         if not args.run_dir.exists():
             raise SystemExit(f"run dir not found: {args.run_dir}")
+        stage = args.stage
+        if stage is None and (args.run_dir / "run.json").exists():
+            stage = RunLogWriter.read_manifest(args.run_dir)["run_metadata"]["stage"]
         print(
             json.dumps(
                 aggregate_run(
                     args.run_dir,
-                    stage=args.stage,
+                    stage=stage,
                     allow_legacy=args.allow_legacy,
                     contract=args.contract,
                 )

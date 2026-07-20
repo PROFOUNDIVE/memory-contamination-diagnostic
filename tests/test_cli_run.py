@@ -259,6 +259,24 @@ def test_clean_multitask_replay_ignores_catalog(tmp_path, monkeypatch) -> None:
         assert row["contamination_exposure"]["source_entry_ids"] == []
 
 
+def test_pilot_replay_dispatches_rag_without_legacy_prompt(tmp_path, monkeypatch) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(repo_root)
+    config = load_config(repo_root / "configs/pilot_multitask_replay.yaml")
+    config["logging"]["output_dir"] = str(tmp_path / "runs")
+    config["models"] = ["gpt4o"]
+    config["tasks"] = [{**config["tasks"][0], "limit": 1}]
+    config["baselines"] = ["retrieval_rag"]
+
+    assert cli._is_faithful_config(config)
+    run_dir = run_config(config, run_id="pilot_rag_adapter")
+    row = json.loads((run_dir / "trials.jsonl").read_text(encoding="utf-8"))
+
+    assert (run_dir / "run.json").exists()
+    assert row["baseline"] == "retrieval_rag"
+    assert [call["stage"] for call in row["method_calls"]] == ["rag_generate"]
+
+
 def test_run_config_replay_mode_ignores_missing_provider_env_vars(tmp_path, monkeypatch) -> None:
     sample_path = tmp_path / "game24_one.jsonl"
     sample_path.write_text(
