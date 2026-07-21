@@ -8,6 +8,7 @@ from memcontam.logging.provenance import compute_exposure_from_spans, normalize_
 from memcontam.logging.schema import VerifierResult
 from memcontam.memory.stores import MemoryEntry, MemoryState
 from memcontam.tasks.base import TaskInstance
+from memcontam.tasks.dispatch import canonical_task_json
 
 
 class _QueuedClient:
@@ -66,14 +67,23 @@ def _config() -> dict[str, str]:
     }
 
 
-def _pair(entry_id: str, input_text: str, output_text: str) -> MemoryEntry:
+def _pair(
+    entry_id: str,
+    input_text: str,
+    generated_output: str,
+    parsed_answer: str = "prior parsed answer",
+) -> MemoryEntry:
     return MemoryEntry(
         entry_id=entry_id,
         content=input_text,
         memory_type="dc_rs_io_pair",
         clean_or_contaminated="clean",
         source_trial_id=f"prior:{entry_id}",
-        metadata={"output_text": output_text, "provenance": "PROVENANCE_SECRET"},
+        metadata={
+            "generated_output": generated_output,
+            "parsed_answer": parsed_answer,
+            "provenance": "PROVENANCE_SECRET",
+        },
     )
 
 
@@ -126,8 +136,9 @@ def test_dc_rs_zero_candidates_synthesizes_before_generation_and_appends_afterwa
     assert memory.entries == [_cheatsheet()]
 
     appended = next(entry for entry in result["memory_after"] if entry["memory_type"] == "dc_rs_io_pair")
-    assert appended["content"] == str(_task().input)
-    assert appended["metadata"]["output_text"] == "current output"
+    assert appended["content"] == canonical_task_json(_task())
+    assert appended["metadata"]["generated_output"] == "final: current output"
+    assert appended["metadata"]["parsed_answer"] == "current output"
     assert appended["entry_id"].startswith("dc_rs_pair:run-1:game24:sample-1:")
     assert appended["entry_id"] not in [record.document_id for record in result["retrieved_records"]]
     assert "current output" not in _prompt_text(client)
@@ -152,7 +163,8 @@ def test_dc_rs_derived_cheatsheet_keeps_synthesis_lineage_in_answer_prompt(tmp_p
                 clean_or_contaminated="contaminated",
                 source_trial_id="prior:contaminated-pair",
                 metadata={
-                    "output_text": "prior contaminated output",
+                    "generated_output": "prior contaminated output",
+                    "parsed_answer": "prior contaminated output",
                     "parent_entry_ids": ["pair-parent"],
                     "source_entry_ids": ["contaminated-origin"],
                 },
@@ -189,7 +201,8 @@ def test_dc_rs_synthesized_answer_span_records_exact_source_parents(tmp_path) ->
         memory_type="dc_rs_io_pair",
         clean_or_contaminated="contaminated",
         metadata={
-            "output_text": "prior injected output",
+            "generated_output": "prior injected output",
+            "parsed_answer": "prior injected output",
             "contamination_class": "injected",
             "injected_root_ids": ["injected-pair"],
             "lineage_status": "exact",
@@ -266,12 +279,12 @@ def test_dc_rs_retrieves_all_available_pairs_up_to_three(
 
     assert [record.document_id for record in result["retrieved_records"]] == expected_ids
     assert provider.documents == [pair.content for pair in pairs]
-    assert provider.queries == [str(_task().input)]
+    assert provider.queries == [canonical_task_json(_task())]
     synthesis_prompt = client.calls[0][0][0]["content"]
     for pair in pairs:
         assert pair.content in synthesis_prompt
-        assert pair.metadata["output_text"] in synthesis_prompt
-        assert pair.metadata["output_text"] not in provider.documents
+        assert pair.metadata["generated_output"] in synthesis_prompt
+        assert pair.metadata["generated_output"] not in provider.documents
 
 
 def test_dc_rs_top_three_breaks_ties_by_entry_id_and_recovers_outputs(tmp_path) -> None:
@@ -354,7 +367,7 @@ def test_dc_rs_prompts_exclude_labels_provenance_and_other_identity_pairs(tmp_pa
     assert "OWN_INPUT" in prompts
     assert "OWN_OUTPUT" in prompts
     assert other_identity_pair.content not in prompts
-    assert other_identity_pair.metadata["output_text"] not in prompts
+    assert other_identity_pair.metadata["generated_output"] not in prompts
     for forbidden in [
         "GOLD_SECRET",
         "CONTAMINATION_SECRET",
@@ -439,3 +452,134 @@ def test_dc_rs_malformed_synthesis_still_appends_pair(
     assert event.new_entry_ids == [e.entry_id for e in after if e.memory_type == "dc_rs_io_pair"]
     assert event.removed_entry_ids == []
     assert event.before_snapshot_hash != event.after_snapshot_hash
+
+
+def test_dc_rs_synthesizes_raw_solution_history_and_generates_from_cheatsheet_only(tmp_path) -> None:
+    raw_prior_output = "STRATEGY_MARKER: make a factor table\nCODE_MARKER: for candidate in options"
+    memory = MemoryState(entries=[_cheatsheet(), _pair("prior", "PRIOR_INPUT", raw_prior_output)])
+    client = _QueuedClient(
+        [
+            "<cheatsheet>synthesized transferable strategy</cheatsheet>",
+            "Reasoning for the current task\nfinal: current final answer",
+        ]
+    )
+
+    result = _policy(_TieEmbeddingProvider(), tmp_path).run(
+        _task(), memory, client=client, model="replay", config=_config(), verifier=_verifier
+    )
+
+    synthesis_prompt = client.calls[0][0][0]["content"]
+    generation_prompt = client.calls[1][0][0]["content"]
+    appended = next(
+        entry
+        for entry in result["memory_after"]
+        if entry["entry_id"].startswith("dc_rs_pair:")
+    )
+    assert raw_prior_output in synthesis_prompt
+    assert "prior parsed answer" not in synthesis_prompt
+    assert canonical_task_json(_task()) in synthesis_prompt
+    assert "current final answer" not in synthesis_prompt
+    assert "synthesized transferable strategy" in generation_prompt
+    assert raw_prior_output not in generation_prompt
+    assert appended["content"] == canonical_task_json(_task())
+    assert appended["metadata"]["generated_output"] == "Reasoning for the current task\nfinal: current final answer"
+    assert appended["metadata"]["parsed_answer"] == "current final answer"
+
+
+def test_dc_rs_synthesis_lineage_excludes_nonretrieved_contaminated_pairs(tmp_path) -> None:
+    outside_pair = _pair("z-outside", "OUTSIDE_INPUT", "OUTSIDE_OUTPUT")
+    outside_pair.clean_or_contaminated = "contaminated"
+    outside_pair.metadata.update(
+        {"parent_entry_ids": ["outside-parent"], "source_entry_ids": ["outside-origin"]}
+    )
+    memory = MemoryState(
+        entries=[
+            _cheatsheet(),
+            _pair("alpha", "ALPHA_INPUT", "ALPHA_OUTPUT"),
+            _pair("bravo", "BRAVO_INPUT", "BRAVO_OUTPUT"),
+            _pair("charlie", "CHARLIE_INPUT", "CHARLIE_OUTPUT"),
+            outside_pair,
+        ]
+    )
+    client = _QueuedClient(["<cheatsheet>new cheatsheet</cheatsheet>", "final: current output"])
+
+    result = _policy(_TieEmbeddingProvider(), tmp_path).run(
+        _task(), memory, client=client, model="replay", config=_config(), verifier=_verifier
+    )
+
+    synthesized = next(
+        entry for entry in result["memory_after"] if entry["memory_type"] == "dynamic_cheatsheet"
+    )
+    appended = next(
+        entry
+        for entry in result["memory_after"]
+        if entry["entry_id"].startswith("dc_rs_pair:")
+    )
+    assert [record.document_id for record in result["retrieved_records"]] == [
+        "alpha",
+        "bravo",
+        "charlie",
+    ]
+    assert "OUTSIDE_OUTPUT" not in client.calls[0][0][0]["content"]
+    assert "outside-origin" not in synthesized["metadata"]["source_entry_ids"]
+    assert "outside-parent" not in synthesized["metadata"]["parent_entry_ids"]
+    assert "outside-origin" not in appended["metadata"]["source_entry_ids"]
+    assert "outside-parent" not in appended["metadata"]["parent_entry_ids"]
+
+
+def test_dc_rs_invalid_final_answer_retains_raw_pair_before_parser_failure(tmp_path) -> None:
+    def verifier_must_not_run(_answer: str, _task: TaskInstance) -> VerifierResult:
+        pytest.fail("verifier must not run after invalid final-answer parsing")
+
+    raw_response = "Reasoning without a final marker"
+    result = _policy(_TieEmbeddingProvider(), tmp_path).run(
+        _task(),
+        MemoryState(entries=[_cheatsheet()]),
+        client=_QueuedClient(["<cheatsheet>new cheatsheet</cheatsheet>", raw_response]),
+        model="replay",
+        config=_config(),
+        verifier=verifier_must_not_run,
+    )
+
+    appended = next(entry for entry in result["memory_after"] if entry["memory_type"] == "dc_rs_io_pair")
+    assert result["status"] == "failed"
+    assert result["failure_disposition"] == "dc_rs_invalid_final_answer"
+    assert result["scientific_ineligibility_reason"] == "invalid_final_answer"
+    assert result["parsed_answer"] is None
+    assert appended["metadata"]["generated_output"] == raw_response
+    assert appended["metadata"]["parsed_answer"] is None
+    assert result["memory_write_event"]["synthesis_update"]["status"] == "replaced"
+
+
+def test_dc_rs_verifier_failure_retains_synthesized_state_and_appended_pair(tmp_path) -> None:
+    def raising_verifier(_answer: str, _task: TaskInstance) -> VerifierResult:
+        raise RuntimeError("verifier unavailable")
+
+    result = _policy(_TieEmbeddingProvider(), tmp_path).run(
+        _task(),
+        MemoryState(entries=[_cheatsheet()]),
+        client=_QueuedClient(["<cheatsheet>new cheatsheet</cheatsheet>", "final: current output"]),
+        model="replay",
+        config=_config(),
+        verifier=raising_verifier,
+    )
+
+    appended = next(entry for entry in result["memory_after"] if entry["memory_type"] == "dc_rs_io_pair")
+    assert result["status"] == "failed"
+    assert result["failure_disposition"] == "verifier_contract_failed"
+    assert result["memory_write_event"]["synthesis_update"]["status"] == "replaced"
+    assert appended["metadata"]["generated_output"] == "final: current output"
+    assert appended["metadata"]["parsed_answer"] == "current output"
+
+
+def test_dc_rs_requires_an_explicit_shared_embedding_provider(tmp_path) -> None:
+    policy_class = dynamic_cheatsheet_optional.DynamicCheatsheetRetrievalSynthesisPolicy
+
+    with pytest.raises(ValueError, match="explicit shared embedding provider"):
+        policy_class(cache_dir=tmp_path).run(
+            _task(),
+            MemoryState(entries=[_cheatsheet()]),
+            client=_QueuedClient([]),
+            model="replay",
+            config=_config(),
+        )

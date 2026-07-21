@@ -10,6 +10,7 @@ import pytest
 EXPECTED_FAILURE_TAXONOMY = {
     "no_memory_invalid_final_answer": ("BaselineOutputError", "invalid_final_answer"),
     "full_history_invalid_final_answer": ("BaselineOutputError", "invalid_final_answer"),
+    "dc_rs_invalid_final_answer": ("BaselineOutputError", "invalid_final_answer"),
     "rag_invalid_final_answer": ("BaselineOutputError", "invalid_final_answer"),
     "rag_retrieval_failed": ("RetrievalContractError", "retrieval_failed"),
     "rag_embedding_failed": ("EmbeddingContractError", "embedding_failed"),
@@ -105,6 +106,18 @@ def test_rag_retrieval_failure_row_is_accepted_only_with_its_exact_triple() -> N
     with pytest.raises(ValueError, match="failure triple"):
         contracts.validate_failure_triple(
             "EmbeddingContractError", "rag_retrieval_failed", "retrieval_failed"
+        )
+
+
+def test_dc_rs_invalid_final_answer_requires_its_exact_closed_failure_triple() -> None:
+    contracts = importlib.import_module("memcontam.baselines.contracts")
+
+    contracts.validate_failure_triple(
+        "BaselineOutputError", "dc_rs_invalid_final_answer", "invalid_final_answer"
+    )
+    with pytest.raises(ValueError, match="failure triple"):
+        contracts.validate_failure_triple(
+            "BaselineOutputError", "dc_rs_invalid_final_answer", "provider_call_failed"
         )
 
 

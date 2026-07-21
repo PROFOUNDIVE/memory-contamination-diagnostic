@@ -34,6 +34,7 @@ ErrorType = Literal[
 FailureDisposition = Literal[
     "no_memory_invalid_final_answer",
     "full_history_invalid_final_answer",
+    "dc_rs_invalid_final_answer",
     "rag_invalid_final_answer",
     "rag_retrieval_failed",
     "rag_embedding_failed",
@@ -67,6 +68,7 @@ ScientificIneligibilityReason = Literal[
 FAILURE_TAXONOMY: dict[FailureDisposition, tuple[ErrorType, ScientificIneligibilityReason]] = {
     "no_memory_invalid_final_answer": ("BaselineOutputError", "invalid_final_answer"),
     "full_history_invalid_final_answer": ("BaselineOutputError", "invalid_final_answer"),
+    "dc_rs_invalid_final_answer": ("BaselineOutputError", "invalid_final_answer"),
     "rag_invalid_final_answer": ("BaselineOutputError", "invalid_final_answer"),
     "rag_retrieval_failed": ("RetrievalContractError", "retrieval_failed"),
     "rag_embedding_failed": ("EmbeddingContractError", "embedding_failed"),

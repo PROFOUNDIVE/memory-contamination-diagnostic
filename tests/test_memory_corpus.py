@@ -142,6 +142,27 @@ def _valid_dc_rs_record(
     }
 
 
+def _valid_v2_dc_rs_record(
+    entry_id: str,
+    task: str = "game24",
+    content: str = '{"input":{"numbers":[1,2,3,3],"target":9},"sample_id":"warmup","task_name":"game24"}',
+    generated_output: str = "Strategy: preserve intermediate values. Code: enumerate candidates.",
+    parsed_answer: str | None = "candidate expression",
+) -> dict:
+    return {
+        "entry_id": entry_id,
+        "task": task,
+        "target_baselines": ["dynamic_cheatsheet_rs_optional"],
+        "memory_type": "dc_rs_io_pair",
+        "content": content,
+        "generated_output": generated_output,
+        "parsed_answer": parsed_answer,
+        "source": "baseline-fidelity-v2-dc-rs-contract",
+        "clean_or_contaminated": "clean",
+        "paired_clean_entry_id": None,
+    }
+
+
 def test_corpus_rejects_invalid_or_answer_leaking_records() -> None:
     base = [
         _valid_clean_record("clean_game24_001"),
@@ -314,6 +335,31 @@ def test_dc_rs_io_pair_rejects_leaking_output_text() -> None:
             load_corpus(path)
         assert "dc_rs_clean_game24_005" in str(exc.value)
         assert "final:" in str(exc.value)
+
+
+def test_dc_rs_v2_pair_preserves_raw_generated_output_and_separate_parsed_answer() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        path = _write_fixture(Path(tmp), [_valid_v2_dc_rs_record("dc_rs_v2_game24_001")])
+        record = load_corpus(path)[0]
+        entries, _ = build_arm_corpus([record], "game24", "clean")
+
+    assert record.generated_output == "Strategy: preserve intermediate values. Code: enumerate candidates."
+    assert record.parsed_answer == "candidate expression"
+    assert record.output_text is None
+    assert entries[0].metadata["generated_output"] == record.generated_output
+    assert entries[0].metadata["parsed_answer"] == record.parsed_answer
+
+
+def test_dc_rs_legacy_output_text_is_readable_but_rejected_as_v2_raw_evidence() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        record = load_corpus(
+            _write_fixture(Path(tmp), [_valid_dc_rs_record("dc_rs_legacy_game24_001")])
+        )[0]
+
+    assert record.output_text == "1 + 2 + 3 + 3"
+    assert record.generated_output is None
+    with pytest.raises(CorpusValidationError, match="generated_output"):
+        record.require_dc_rs_v2_evidence()
 
 
 def test_non_dc_rs_records_parse_without_output_text() -> None:

@@ -129,6 +129,8 @@ class CorpusRecord(BaseModel):
     memory_type: str
     content: str
     output_text: str | None = None
+    generated_output: str | None = None
+    parsed_answer: str | None = None
     source: str
     clean_or_contaminated: Literal["clean", "contaminated"]
     paired_clean_entry_id: str | None = None
@@ -183,12 +185,21 @@ class CorpusRecord(BaseModel):
                 raise ValueError(
                     f"record {self.entry_id!r} dc_rs_io_pair requires non-empty content"
                 )
-            if self.output_text is None or not self.output_text.strip():
+            if self.generated_output is None and (
+                self.output_text is None or not self.output_text.strip()
+            ):
                 raise ValueError(
-                    f"record {self.entry_id!r} dc_rs_io_pair requires non-empty output_text"
+                    f"record {self.entry_id!r} dc_rs_io_pair requires generated_output or non-empty output_text"
                 )
         self._validate_phase11_seed_provenance()
         return self
+
+    def require_dc_rs_v2_evidence(self) -> str:
+        if self.memory_type != "dc_rs_io_pair" or self.generated_output is None:
+            raise CorpusValidationError(
+                f"record {self.entry_id!r} V2 dc_rs_io_pair requires generated_output"
+            )
+        return self.generated_output
 
     def _validate_phase11_seed_provenance(self) -> None:
         has_phase11_fields = any(
@@ -295,8 +306,11 @@ def _to_memory_entry(record: CorpusRecord) -> MemoryEntry:
     }
     if record.paired_clean_entry_id is not None:
         metadata["paired_clean_entry_id"] = record.paired_clean_entry_id
-    if record.memory_type == "dc_rs_io_pair" and record.output_text is not None:
-        metadata["output_text"] = record.output_text
+    if record.memory_type == "dc_rs_io_pair":
+        for field_name in ("output_text", "generated_output", "parsed_answer"):
+            value = getattr(record, field_name)
+            if value is not None:
+                metadata[field_name] = value
     for field_name in (
         "contamination_class",
         "lineage_status",

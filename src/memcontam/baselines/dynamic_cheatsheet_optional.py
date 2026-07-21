@@ -5,9 +5,16 @@ from __future__ import annotations
 import hashlib
 import tempfile
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 from uuid import uuid4
 
+from memcontam.baselines.common import parse_final_answer
+from memcontam.baselines.contracts import (
+    BaselineExecutionOutcome,
+    ErrorType,
+    FailureDisposition,
+    ScientificIneligibilityReason,
+)
 from memcontam.clients.base import LLMClient
 from memcontam.clients.recording import MethodCallRecorder
 from memcontam.logging.provenance import (
@@ -23,6 +30,7 @@ from memcontam.memory.embeddings import EmbeddingProvider
 from memcontam.memory.retrieval import DenseIndex
 from memcontam.memory.stores import MemoryEntry, MemoryState
 from memcontam.tasks.base import TaskInstance
+from memcontam.tasks.dispatch import canonical_task_json
 
 
 Verifier = Callable[[str, TaskInstance], VerifierResult]
@@ -48,13 +56,16 @@ class DynamicCheatsheetRetrievalSynthesisPolicy:
         config: dict[str, Any] | None = None,
         verifier: Verifier | None = None,
     ) -> dict[str, Any]:
+        if self.embedding_provider is None:
+            raise ValueError("DC-RS requires an explicit shared embedding provider")
         call_config = {**(config or {}), "sample_id": (config or {}).get("sample_id", task.sample_id)}
         trial_id = _trial_id(task, call_config, model)
         memory_before = [entry.model_dump() for entry in memory.entries]
         pair_entries = [entry for entry in memory.entries if entry.memory_type == "dc_rs_io_pair"]
         cheatsheet_entries = [entry for entry in memory.entries if _is_cheatsheet(entry)]
         cheatsheet = _dc_rs_cheatsheet(cheatsheet_entries)
-        retrieved_records = self._retrieve_pairs(task.input, pair_entries, trial_id)
+        canonical_task = canonical_task_json(task)
+        retrieved_records = self._retrieve_pairs(canonical_task, pair_entries, trial_id)
         pairs_by_id = {entry.entry_id: entry for entry in pair_entries}
         retrieved_pairs = [pairs_by_id[record.document_id] for record in retrieved_records]
         recorder = MethodCallRecorder(
@@ -64,7 +75,7 @@ class DynamicCheatsheetRetrievalSynthesisPolicy:
         )
 
         synthesis_message, synthesis_spans = _synthesis_message_with_sources(
-            task, cheatsheet_entries, retrieved_pairs
+            canonical_task, cheatsheet_entries, retrieved_pairs
         )
         synthesized = recorder.chat(
             [synthesis_message],
@@ -78,7 +89,7 @@ class DynamicCheatsheetRetrievalSynthesisPolicy:
         synthesis_call = recorder.get_records()[-1]
         updated_cheatsheet, parser_status = _extract_cheatsheet(synthesized.content, cheatsheet)
         generation_message, generation_spans = _dc_rs_generation_message(
-            task,
+            canonical_task,
             updated_cheatsheet,
             synthesis_call.call_id,
             synthesis_call.source_spans,
@@ -94,27 +105,22 @@ class DynamicCheatsheetRetrievalSynthesisPolicy:
             },
         )
         answer_call_id = recorder.get_records()[-1].call_id
-        parsed_answer = _parse_answer(generated.content)
-        verifier_result = (
-            verifier(parsed_answer, task)
-            if verifier is not None
-            else _default_verifier(parsed_answer)
-        )
-
         method_calls = recorder.get_records()
         method_calls[0].retrieved_records = retrieved_records
-        lineage = _lineage(memory.entries)
+        synthesis_lineage = _lineage([*cheatsheet_entries, *retrieved_pairs])
         if parser_status == "accepted":
             replacement = MemoryEntry(
                 entry_id=f"dc_rs_cheatsheet:{trial_id}",
                 content=updated_cheatsheet,
                 memory_type="dynamic_cheatsheet",
                 clean_or_contaminated=(
-                    "contaminated" if lineage["source_contaminated_entry_ids"] else "clean"
+                    "contaminated"
+                    if synthesis_lineage["source_contaminated_entry_ids"]
+                    else "clean"
                 ),
                 source_trial_id=trial_id,
                 metadata={
-                    **lineage,
+                    **synthesis_lineage,
                     "direct_parent_ids": _span_entry_ids(synthesis_call.source_spans),
                 },
             )
@@ -133,18 +139,21 @@ class DynamicCheatsheetRetrievalSynthesisPolicy:
             memory_after_entries = list(memory.entries)
             synthesis_update = {"status": "preserved", "parser_status": parser_status}
 
+        generation_lineage = _lineage_from_spans(generation_spans)
         pair = MemoryEntry(
             entry_id=f"dc_rs_pair:{trial_id}",
-            content=str(task.input),
+            content=canonical_task,
             memory_type="dc_rs_io_pair",
             clean_or_contaminated=(
-                "contaminated" if lineage["source_contaminated_entry_ids"] else "clean"
+                "contaminated"
+                if generation_lineage["source_contaminated_entry_ids"]
+                else "clean"
             ),
             source_trial_id=trial_id,
             metadata={
-                **lineage,
-                "output_text": parsed_answer,
-                "direct_parent_ids": _span_entry_ids(synthesis_call.source_spans),
+                **generation_lineage,
+                "generated_output": generated.content,
+                "parsed_answer": None,
             },
         )
         pair.metadata.update(
@@ -165,37 +174,73 @@ class DynamicCheatsheetRetrievalSynthesisPolicy:
             "pair_appended": {
                 "entry_id": pair.entry_id,
                 "source_trial_id": trial_id,
-                "parent_entry_ids": lineage["parent_entry_ids"],
-                "source_entry_ids": lineage["source_entry_ids"],
-                "source_contaminated_entry_ids": lineage["source_contaminated_entry_ids"],
+                "parent_entry_ids": generation_lineage["parent_entry_ids"],
+                "source_entry_ids": generation_lineage["source_entry_ids"],
+                "source_contaminated_entry_ids": generation_lineage[
+                    "source_contaminated_entry_ids"
+                ],
             },
         }
-        return {
-            "final_response": generated.content,
-            "parsed_answer": parsed_answer,
-            "verifier_result": verifier_result,
-            "retrieved_records": retrieved_records,
-            "retrieved_memory": [
-                {**record.model_dump(), "entry_id": record.document_id} for record in retrieved_records
-            ],
-            "retrieved_scores": [record.score for record in retrieved_records],
-            "method_calls": method_calls,
-            "memory_before": memory_before,
-            "memory_after": [entry.model_dump() for entry in memory_after_entries],
-            "memory_write_event": event,
-            "answer_call_id": answer_call_id,
-            "metadata": {},
-        }
+        try:
+            parsed_answer = parse_final_answer(generated.content)
+        except ValueError:
+            return _dc_rs_result(
+                status="failed",
+                final_response=generated.content,
+                answer_call_id=answer_call_id,
+                method_calls=method_calls,
+                memory_before=memory_before,
+                memory_after=memory_after_entries,
+                memory_write_event=event,
+                retrieved_records=retrieved_records,
+                error_type="BaselineOutputError",
+                failure_disposition="dc_rs_invalid_final_answer",
+                scientific_ineligibility_reason="invalid_final_answer",
+            )
+        pair.metadata["parsed_answer"] = parsed_answer
+        try:
+            verifier_result = (
+                verifier(parsed_answer, task)
+                if verifier is not None
+                else _default_verifier(parsed_answer)
+            )
+        except Exception:
+            return _dc_rs_result(
+                status="failed",
+                final_response=generated.content,
+                parsed_answer=parsed_answer,
+                answer_call_id=answer_call_id,
+                method_calls=method_calls,
+                memory_before=memory_before,
+                memory_after=memory_after_entries,
+                memory_write_event=event,
+                retrieved_records=retrieved_records,
+                error_type="VerifierContractError",
+                failure_disposition="verifier_contract_failed",
+                scientific_ineligibility_reason="verifier_contract_failed",
+            )
+        return _dc_rs_result(
+            status="succeeded",
+            final_response=generated.content,
+            parsed_answer=parsed_answer,
+            verifier_result=verifier_result,
+            answer_call_id=answer_call_id,
+            method_calls=method_calls,
+            memory_before=memory_before,
+            memory_after=memory_after_entries,
+            memory_write_event=event,
+            retrieved_records=retrieved_records,
+        )
 
     def _retrieve_pairs(
-        self, task_input: dict, pair_entries: list[MemoryEntry], trial_id: str
+        self, task_input: str, pair_entries: list[MemoryEntry], trial_id: str
     ) -> list[Any]:
         k = min(3, len(pair_entries))
         if self.cache_dir is None:
             with tempfile.TemporaryDirectory() as cache_dir:
                 return DenseIndex(
                     pair_entries, provider=self.embedding_provider, cache_dir=cache_dir
-                ).retrieve(str(task_input), k)
+                ).retrieve(task_input, k)
         cache_key = hashlib.sha256(
             "\0".join([trial_id, *(entry.entry_id for entry in pair_entries)]).encode("utf-8")
         ).hexdigest()
@@ -203,7 +248,7 @@ class DynamicCheatsheetRetrievalSynthesisPolicy:
             pair_entries,
             provider=self.embedding_provider,
             cache_dir=Path(self.cache_dir) / cache_key,
-        ).retrieve(str(task_input), k)
+        ).retrieve(task_input, k)
 
 
 class DynamicCheatsheetOptionalPolicy:
@@ -349,6 +394,21 @@ def _lineage(entries: list[MemoryEntry]) -> dict[str, list[str]]:
     }
 
 
+def _lineage_from_spans(spans: list[Any]) -> dict[str, list[str]]:
+    source_ids, _, clean_or_contaminated = source_lineage_from_spans(spans)
+    direct_parent_ids: list[str] = []
+    for span in spans:
+        _extend_unique(direct_parent_ids, span.direct_parent_ids)
+    return {
+        "parent_entry_ids": direct_parent_ids,
+        "source_entry_ids": source_ids,
+        "source_contaminated_entry_ids": (
+            source_ids if clean_or_contaminated == "contaminated" else []
+        ),
+        "source_trial_ids": [],
+    }
+
+
 def _trial_id(task: TaskInstance, config: dict[str, Any], model: str) -> str:
     return (
         f"{config.get('run_id', 'unknown_run')}:{task.task_name}:{task.sample_id}:"
@@ -401,24 +461,26 @@ def _dc_rs_cheatsheet(entries: list[MemoryEntry]) -> str:
 
 
 def _synthesis_message(
-    task: TaskInstance, cheatsheet: str, pairs: list[MemoryEntry]
+    canonical_task: str, cheatsheet: str, pairs: list[MemoryEntry]
 ) -> dict[str, str]:
     prior_pairs = "\n\n".join(
-        f"Prior input:\n{entry.content}\n\nPrior output:\n{entry.metadata['output_text']}"
+        f"Prior input:\n{entry.content}\n\nRaw generated solution:\n{_generated_output(entry)}"
         for entry in pairs
     )
     return {
         "role": "user",
         "content": (
-            f"Existing cheatsheet:\n{cheatsheet}\n\nRetrieved prior input/output pairs:\n"
-            f"{prior_pairs}\n\nCurrent task input:\n{task.input}\n\n"
-            "Return exactly one <cheatsheet>...</cheatsheet> block for solving the current task."
+            f"Existing cheatsheet:\n{cheatsheet}\n\nRetrieved prior input/raw generated solution pairs:\n"
+            f"{prior_pairs}\n\nCurrent task:\n{canonical_task}\n\n"
+            "Return exactly one <cheatsheet>...</cheatsheet> block. Rewrite a complete, compact, "
+            "generalizable cheatsheet: retain useful transferable guidance, correct errors, remove "
+            "task-specific or invalid guidance, and deduplicate repeated guidance."
         ),
     }
 
 
 def _synthesis_message_with_sources(
-    task: TaskInstance,
+    canonical_task: str,
     cheatsheet_entries: list[MemoryEntry],
     pairs: list[MemoryEntry],
 ) -> tuple[dict[str, str], list[Any]]:
@@ -427,32 +489,34 @@ def _synthesis_message_with_sources(
         if index:
             parts.append("\n")
         parts.append(PromptSourcePart(entry.content, entry))
-    parts.append("\n\nRetrieved prior input/output pairs:\n")
+    parts.append("\n\nRetrieved prior input/raw generated solution pairs:\n")
     for index, entry in enumerate(pairs):
         if index:
             parts.append("\n\n")
         parts.append(
             PromptSourcePart(
-                f"Prior input:\n{entry.content}\n\nPrior output:\n{entry.metadata['output_text']}",
+                f"Prior input:\n{entry.content}\n\nRaw generated solution:\n{_generated_output(entry)}",
                 entry,
             )
         )
     parts.append(
-        f"\n\nCurrent task input:\n{task.input}\n\n"
-        "Return exactly one <cheatsheet>...</cheatsheet> block for solving the current task."
+        f"\n\nCurrent task:\n{canonical_task}\n\n"
+        "Return exactly one <cheatsheet>...</cheatsheet> block. Rewrite a complete, compact, "
+        "generalizable cheatsheet: retain useful transferable guidance, correct errors, remove "
+        "task-specific or invalid guidance, and deduplicate repeated guidance."
     )
     content, spans = build_prompt_with_sources(parts, message_index=0)
     return {"role": "user", "content": content}, spans
 
 
 def _dc_rs_generation_message(
-    task: TaskInstance,
+    canonical_task: str,
     cheatsheet: str,
     synthesis_call_id: str | None,
     synthesis_spans: list[Any],
     target_set_id: str | None = None,
 ) -> tuple[dict[str, str], list[Any]]:
-    prefix = f"Task input: {task.input}\n\nCheatsheet:\n"
+    prefix = f"Current task:\n{canonical_task}\n\nCheatsheet:\n"
     suffix = "\n\nSolve the task and respond in the normal harness format: final: <answer>."
     if not cheatsheet or synthesis_call_id is None:
         return {"role": "user", "content": prefix + cheatsheet + suffix}, []
@@ -497,6 +561,67 @@ def _dc_rs_generation_message(
             ),
         )
     ]
+
+
+def _generated_output(entry: MemoryEntry) -> str:
+    output = entry.metadata.get("generated_output")
+    if not isinstance(output, str):
+        raise ValueError(f"V2 DC-RS pair {entry.entry_id!r} requires generated_output")
+    return output
+
+
+def _dc_rs_result(
+    *,
+    status: Literal["succeeded", "failed"],
+    final_response: str,
+    answer_call_id: str | None,
+    method_calls: list[Any],
+    memory_before: list[dict[str, Any]],
+    memory_after: list[MemoryEntry],
+    memory_write_event: dict[str, Any],
+    retrieved_records: list[Any],
+    parsed_answer: str | None = None,
+    verifier_result: VerifierResult | None = None,
+    error_type: ErrorType | None = None,
+    failure_disposition: FailureDisposition | None = None,
+    scientific_ineligibility_reason: ScientificIneligibilityReason | None = None,
+) -> dict[str, Any]:
+    outcome = BaselineExecutionOutcome(
+        status=status,
+        final_response=final_response,
+        parsed_answer=parsed_answer,
+        verifier_result=verifier_result,
+        answer_call_id=answer_call_id,
+        method_calls=tuple(method_calls),
+        memory_before=tuple(memory_before),
+        memory_after=tuple(entry.model_dump() for entry in memory_after),
+        retrieved_memory=tuple(
+            {**record.model_dump(), "entry_id": record.document_id} for record in retrieved_records
+        ),
+        retrieved_scores=tuple(record.score for record in retrieved_records),
+        memory_write_event=memory_write_event,
+        error_type=error_type,
+        failure_disposition=failure_disposition,
+        scientific_ineligibility_reason=scientific_ineligibility_reason,
+    )
+    return {
+        "status": outcome.status,
+        "final_response": outcome.final_response,
+        "parsed_answer": outcome.parsed_answer,
+        "verifier_result": outcome.verifier_result,
+        "retrieved_records": retrieved_records,
+        "retrieved_memory": list(outcome.retrieved_memory),
+        "retrieved_scores": list(outcome.retrieved_scores),
+        "method_calls": list(outcome.method_calls),
+        "memory_before": list(outcome.memory_before),
+        "memory_after": list(outcome.memory_after),
+        "memory_write_event": outcome.memory_write_event,
+        "answer_call_id": outcome.answer_call_id,
+        "error_type": outcome.error_type,
+        "failure_disposition": outcome.failure_disposition,
+        "scientific_ineligibility_reason": outcome.scientific_ineligibility_reason,
+        "metadata": outcome.metadata,
+    }
 
 
 def _span_entry_ids(spans: list[Any]) -> list[str]:
