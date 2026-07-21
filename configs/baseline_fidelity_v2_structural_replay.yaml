@@ -55,9 +55,9 @@ target_contamination_set:
   require_exact_lineage: true
 
 memory:
-  corpus_path: data/memory/catalog_v3.jsonl
-  corpus_version: memory_catalog_v3
-  corpus_manifest_path: data/memory/catalog_v3.manifest.json
+  corpus_path: data/memory/baseline_fidelity_v2_contract_corpus.jsonl
+  corpus_version: baseline_fidelity_v2_contract_corpus
+  corpus_manifest_path: data/memory/baseline_fidelity_v2_contract_corpus.manifest.json
 
 embedding:
   mode: test_double
@@ -67,8 +67,8 @@ embedding:
   offline_fallback: true
   top_k: 3
   normalize: true
-  corpus_path: data/memory/catalog_v3.jsonl
-  corpus_version: memory_catalog_v3
+  corpus_path: data/memory/baseline_fidelity_v2_contract_corpus.jsonl
+  corpus_version: baseline_fidelity_v2_contract_corpus
 
 full_history:
   mode: context_bounded_pair_atomic

@@ -9,6 +9,7 @@ from memcontam.baselines import retrieval_rag
 from memcontam.baselines.contracts import CorpusIdentity
 from memcontam.baselines.retrieval_rag import RetrievalRagPolicy
 from memcontam.clients.base import LLMResponse
+from memcontam.cli import load_config, run_config
 from memcontam.memory.embeddings import FakeEmbeddingProvider
 from memcontam.memory.retrieval import DenseIndex
 from memcontam.memory.stores import MemoryEntry, MemoryState
@@ -122,6 +123,11 @@ def test_retrieval_rag_uses_canonical_top_three_text_only_prompt(tmp_path: Path)
         "embedding_revision": provider.metadata["revision"],
         "embedding_library_version": provider.metadata["embedding_library_version"],
         "top_k": replay_fixture["top_k"],
+        "effective_k": 3,
+        "similarity": "normalized_dot_product",
+        "normalization": True,
+        "retrieval_unit": "document",
+        "query_serialization_version": "canonical_task_json_v1",
         "corpus_identity": {
             "manifest_id": "fixture-corpus",
             "corpus_version": "v1",
@@ -134,7 +140,11 @@ def test_retrieval_rag_uses_canonical_top_three_text_only_prompt(tmp_path: Path)
     messages, model, config = client.calls[0]
     assert model == "replay-model"
     assert config["method_stage"] == "rag_generate"
-    prompt = messages[0]["content"]
+    assert messages[0] == {
+        "role": "system",
+        "content": prompt_fixture["system_instruction"],
+    }
+    prompt = messages[1]["content"]
     assert prompt == (
         prompt_fixture["documents_header"]
         + "\n\n".join(record.text for record in expected_records)
@@ -225,3 +235,19 @@ def test_retrieval_rag_index_contract_failures_keep_their_exact_taxonomy(
         outcome.failure_disposition,
         outcome.scientific_ineligibility_reason,
     ) == expected
+
+
+def test_v2_runner_passes_a_non_empty_task_bound_corpus_to_rag(tmp_path: Path) -> None:
+    config = load_config(Path("configs/baseline_fidelity_v2_structural_replay.yaml"))
+    config["logging"]["output_dir"] = str(tmp_path / "runs")
+    config["embedding"]["cache_path"] = str(tmp_path / "cache")
+    run_dir = run_config(config, run_id="task-bound-rag-corpus")
+    trials = [
+        json.loads(line)
+        for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    rag_trial = next(trial for trial in trials if trial["baseline"] == "retrieval_rag")
+
+    assert rag_trial["status"] == "succeeded"
+    assert len(rag_trial["retrieved_memory"]) == 3
+    assert rag_trial["metadata"]["corpus_identity"]["task_family"] == "game24"

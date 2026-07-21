@@ -1428,21 +1428,23 @@ def _run_faithful_config(
                 Path(config.get("embedding", {}).get("cache_path", "data/embedding_cache")) / run_id
             )
         corpus_identities = {}
-        if "retrieval_rag" in config["baselines"]:
+        is_v2_fidelity_run = validate_fidelity_contract(config)
+        if "retrieval_rag" in config["baselines"] and is_v2_fidelity_run:
             manifest_path = config.get("memory", {}).get("corpus_manifest_path")
-            if manifest_path is not None:
-                assert embedding_provider is not None
-                manifest = load_corpus_manifest(Path(manifest_path))
-                provider_identity = embedding_provider_identity(embedding_provider)
-                corpus_identities = {
-                    task_config["name"]: build_trusted_corpus_identity(
-                        corpus_records,
-                        manifest=manifest,
-                        task_family=task_config["name"],
-                        embedding_provider_identity=provider_identity,
-                    )
-                    for task_config in config["tasks"]
-                }
+            if not isinstance(manifest_path, str) or not manifest_path.strip():
+                raise SystemExit("memory.corpus_manifest_path is required for retrieval_rag")
+            assert embedding_provider is not None
+            manifest = load_corpus_manifest(Path(manifest_path))
+            provider_identity = embedding_provider_identity(embedding_provider)
+            corpus_identities = {
+                task_config["name"]: build_trusted_corpus_identity(
+                    corpus_records,
+                    manifest=manifest,
+                    task_family=task_config["name"],
+                    embedding_provider_identity=provider_identity,
+                )
+                for task_config in config["tasks"]
+            }
 
         run_state: RunState | None = None
         bot_runtime: BotRuntime | None = None
@@ -1525,6 +1527,7 @@ def _run_faithful_config(
                                 ),
                                 "_logging_trial_context": strict_context,
                                 "_logging_event_callback": record_call if writer is not None else None,
+                                "_require_corpus_identity": is_v2_fidelity_run,
                             }
                             trial_memory_before: list[dict[str, Any]] | None = None
                             if writer is not None and filter_decision is not None:
@@ -1561,7 +1564,11 @@ def _run_faithful_config(
                                         corpus_identity=corpus_identities.get(task_name),
                                         cache_dir=cache_dir / task_name / arm,
                                     )
-                                    verifier_result = task_handler["verify"](result["parsed_answer"], task)
+                                    verifier_result = (
+                                        task_handler["verify"](result["parsed_answer"], task)
+                                        if result["status"] == "succeeded"
+                                        else None
+                                    )
                                 elif baseline == "no_memory":
                                     trial_memory_before = [entry.model_dump() for entry in memory.entries]
                                     captured_verifier_result: Any = None
@@ -1816,6 +1823,7 @@ def _run_faithful_config(
                                 writer.write_trial(trial)
                                 trial_order += 1
                                 continue
+                            assert verifier_result is not None
                             _reject_frozen_memory_drift(result, phase11_context)
                             trial = _faithful_result_trial(
                                 config=config,
