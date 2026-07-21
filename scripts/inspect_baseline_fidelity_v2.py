@@ -3,11 +3,16 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
 
-from memcontam.logging.schema import CallEvent, FailureEvent, MemoryEvent, TrialLog
+from memcontam.logging.schema import CallEvent, FailureEvent, FilterEvent, MemoryEvent, TrialLog
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SEMANTIC_CALL_FIXTURES = ROOT / "tests" / "fixtures" / "baseline_fidelity_v2_semantic_call_hashes.json"
 
 
 def _json(path: Path) -> dict[str, Any]:
@@ -38,6 +43,7 @@ def inspect_run(run_dir: Path) -> dict[str, Any]:
         "trials.jsonl",
         "calls.jsonl",
         "failures.jsonl",
+        "filter_events.jsonl",
         "memory_events.jsonl",
     ]
     for filename in required:
@@ -52,11 +58,18 @@ def inspect_run(run_dir: Path) -> dict[str, Any]:
     trials = _jsonl(run_dir / "trials.jsonl", TrialLog)
     calls = _jsonl(run_dir / "calls.jsonl", CallEvent)
     failures = _jsonl(run_dir / "failures.jsonl", FailureEvent)
+    filters = _jsonl(run_dir / "filter_events.jsonl", FilterEvent)
     memory_events = _jsonl(run_dir / "memory_events.jsonl", MemoryEvent)
     if resolved.get("run", {}).get("fidelity_gate_layer") != "source_contract":
         reasons.append("resolved config is not an F1B source-contract run")
     counts = manifest.get("counts", {})
-    expected_counts = {"trials": len(trials), "calls": len(calls), "failures": len(failures), "memory_events": len(memory_events)}
+    expected_counts = {
+        "trials": len(trials),
+        "calls": len(calls),
+        "failures": len(failures),
+        "filter_events": len(filters),
+        "memory_events": len(memory_events),
+    }
     for name, actual in expected_counts.items():
         if counts.get(name) != actual:
             reasons.append(f"run count {name}={counts.get(name)!r} != {actual}")
@@ -64,11 +77,8 @@ def inspect_run(run_dir: Path) -> dict[str, Any]:
     calls_by_id = {call.call_id: call for call in calls}
     failures_by_id = {failure.failure_id: failure for failure in failures}
     events_by_trial = {event.trial_id: event for event in memory_events}
-    expected_prompt_hashes = {
-        fixture["stage"]: (fixture["messages_sha256"], fixture.get("sample_id"))
-        for path in (Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "prompts" / "baseline_fidelity_v2").glob("*.json")
-        for fixture in [_json(path)]
-    }
+    filters_by_trial = {event.trial_id: event for event in filters}
+    expected_prompt_hashes = _json(SEMANTIC_CALL_FIXTURES)
     trial_call_ids = [call.call_id for trial in trials for call in trial.method_calls if call.call_id]
     if len(trial_call_ids) != len(set(trial_call_ids)) or set(trial_call_ids) != set(calls_by_id):
         reasons.append("calls.jsonl does not exactly join trial method calls")
@@ -79,6 +89,7 @@ def inspect_run(run_dir: Path) -> dict[str, Any]:
         method_call_ids = {call.call_id for call in trial.method_calls}
         if trial.answer_call_id not in method_call_ids or trial.answer_call_id not in calls_by_id:
             reasons.append(f"{trial.trial_id}: answer-call join failed")
+        stage_counts: dict[str, int] = {}
         for call in trial.method_calls:
             event = calls_by_id.get(call.call_id)
             if event is None:
@@ -86,14 +97,12 @@ def inspect_run(run_dir: Path) -> dict[str, Any]:
                 continue
             if event.messages != call.messages or event.source_spans != call.source_spans:
                 reasons.append(f"{trial.trial_id}: call payload differs from calls.jsonl")
-            expected_fixture = expected_prompt_hashes.get(call.stage)
-            if expected_fixture is not None and expected_fixture[1] == trial.sample_id:
-                expected_hash = expected_fixture[0]
-                prompt_bytes = json.dumps(call.messages, sort_keys=True, separators=(",", ":")).replace(
-                    trial.run_id, "{{run_id}}"
-                )
-                if hashlib.sha256(prompt_bytes.encode("utf-8")).hexdigest() != expected_hash:
-                    reasons.append(f"{trial.trial_id}: prompt bytes differ from {call.stage} fixture")
+            stage_counts[call.stage] = stage_counts.get(call.stage, 0) + 1
+            key = _semantic_call_key(trial, call.stage, stage_counts[call.stage])
+            expected_hash = expected_prompt_hashes.pop(key, None)
+            actual_hash = _prompt_hash(call.messages, trial.run_id)
+            if expected_hash != actual_hash:
+                reasons.append(f"{trial.trial_id}: prompt bytes differ from {key} fixture")
             _check_spans(trial, call, reasons)
         if trial.status == "failed":
             failure = failures_by_id.get(trial.failure_id or "")
@@ -113,13 +122,39 @@ def inspect_run(run_dir: Path) -> dict[str, Any]:
                 reasons.append(f"{trial.trial_id}: RAG did not retrieve top-3")
             if changed or trial.memory_write_event is not None:
                 reasons.append(f"{trial.trial_id}: RAG is not read-only")
+        if trial.filter_decision is None and trial.trial_id in filters_by_trial:
+            reasons.append(f"{trial.trial_id}: unexpected filter event")
     changed_trial_ids = {trial.trial_id for trial in trials if trial.memory_before != trial.memory_after}
     if not changed_trial_ids.issubset(events_by_trial) or not set(events_by_trial).issubset(
         {trial.trial_id for trial in trials}
     ):
         reasons.append("memory_events.jsonl does not join changed trial state")
-    report = {"overall": "pass" if not reasons else "fail", "trials": len(trials), "calls": len(calls), "failures": len(failures), "memory_events": len(memory_events), "reasons": reasons}
+    if not set(filters_by_trial).issubset({trial.trial_id for trial in trials}):
+        reasons.append("filter_events.jsonl references an unknown trial")
+    if expected_prompt_hashes:
+        reasons.append(f"unmatched semantic prompt fixtures: {sorted(expected_prompt_hashes)}")
+    report = {
+        "overall": "pass" if not reasons else "fail",
+        "trials": len(trials),
+        "calls": len(calls),
+        "failures": len(failures),
+        "filter_events": len(filters),
+        "memory_events": len(memory_events),
+        "reasons": reasons,
+    }
     return report
+
+
+def _semantic_call_key(trial: TrialLog, stage: str, stage_index: int) -> str:
+    return ":".join([trial.task_name, trial.sample_id, trial.baseline, stage, str(stage_index)])
+
+
+def _prompt_hash(messages: list[dict[str, str]], run_id: str) -> str:
+    prompt_bytes = json.dumps(messages, sort_keys=True, separators=(",", ":")).replace(
+        run_id, "{{run_id}}"
+    )
+    prompt_bytes = re.sub(r"\b[0-9a-f]{32}\b", "{{entry_id}}", prompt_bytes)
+    return hashlib.sha256(prompt_bytes.encode("utf-8")).hexdigest()
 
 
 def _check_spans(trial: TrialLog, call: Any, reasons: list[str]) -> None:

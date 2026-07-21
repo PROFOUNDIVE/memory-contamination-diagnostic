@@ -394,7 +394,7 @@ def test_run_success_generates_once_without_writing_and_uses_last_three_reflecti
         ]
     )
     client = ReplayClient(
-        responses_by_sample={"sample_001": {"reflexion_generate": " final: 4 "}}
+        responses_by_sample={"sample_001": {"reflexion_generate": "FINAL: 4"}}
     )
 
     def verify(*args: object) -> VerifierResult:
@@ -410,7 +410,7 @@ def test_run_success_generates_once_without_writing_and_uses_last_three_reflecti
         verifier=verify,
     )
 
-    assert result["final_response"] == " final: 4 "
+    assert result["final_response"] == "FINAL: 4"
     assert result["parsed_answer"] == "4"
     assert result["verifier_result"].is_correct is True
     assert [call.stage for call in result["method_calls"]] == ["reflexion_generate"]

@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -12,7 +13,7 @@ import yaml
 
 import memcontam.cli as cli
 from memcontam.evaluation.aggregate import aggregate_run
-from memcontam.logging.schema import CallEvent, FailureEvent, MemoryEvent, TrialLog
+from memcontam.logging.schema import CallEvent, FailureEvent, FilterEvent, MemoryEvent, TrialLog
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,7 +21,7 @@ CONFIG_PATH = ROOT / "configs" / "baseline_fidelity_v2_source_contract_replay.ya
 FIXTURE_PATH = ROOT / "data" / "replay" / "baseline_fidelity_v2_source_contract.yaml"
 INSPECTOR = ROOT / "scripts" / "inspect_baseline_fidelity_v2.py"
 MANIFEST = ROOT / "scripts" / "build_bfv2_evidence_manifest.py"
-PROMPT_FIXTURES = ROOT / "tests" / "fixtures" / "prompts" / "baseline_fidelity_v2"
+SEMANTIC_CALL_FIXTURES = ROOT / "tests" / "fixtures" / "baseline_fidelity_v2_semantic_call_hashes.json"
 
 
 def test_f1b_config_loads_the_committed_stage_native_fixture() -> None:
@@ -46,6 +47,29 @@ def _inspect(run_dir: Path, output: Path | None = None) -> subprocess.CompletedP
     return subprocess.run(command, cwd=ROOT, text=True, capture_output=True, check=False)
 
 
+def _semantic_call_hashes(trials: list[TrialLog]) -> dict[str, str]:
+    hashes: dict[str, str] = {}
+    for trial in trials:
+        stage_counts: dict[str, int] = {}
+        for call in trial.method_calls:
+            stage_counts[call.stage] = stage_counts.get(call.stage, 0) + 1
+            key = ":".join(
+                [
+                    trial.task_name,
+                    trial.sample_id,
+                    trial.baseline,
+                    call.stage,
+                    str(stage_counts[call.stage]),
+                ]
+            )
+            rendered = json.dumps(call.messages, sort_keys=True, separators=(",", ":")).replace(
+                trial.run_id, "{{run_id}}"
+            )
+            rendered = re.sub(r"\b[0-9a-f]{32}\b", "{{entry_id}}", rendered)
+            hashes[key] = hashlib.sha256(rendered.encode("utf-8")).hexdigest()
+    return hashes
+
+
 def test_f1b_replay_parses_artifacts_locks_prompt_bytes_and_rejects_mutations(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -56,11 +80,13 @@ def test_f1b_replay_parses_artifacts_locks_prompt_bytes_and_rejects_mutations(
     trials = _rows(run_dir, "trials.jsonl", TrialLog)
     calls = _rows(run_dir, "calls.jsonl", CallEvent)
     failures = _rows(run_dir, "failures.jsonl", FailureEvent)
+    filters = _rows(run_dir, "filter_events.jsonl", FilterEvent)
     memory_events = _rows(run_dir, "memory_events.jsonl", MemoryEvent)
 
     assert len(trials) == 18
     assert len(calls) == 32
     assert len(failures) == 5
+    assert len(filters) == 0
     assert len(memory_events) == 10
     assert aggregate_run(run_dir, stage="replay", contract="phase11")["n_trials"] == len(trials)
     assert any(
@@ -81,21 +107,9 @@ def test_f1b_replay_parses_artifacts_locks_prompt_bytes_and_rejects_mutations(
     )
     assert any(call.retrieved_records for trial in trials if trial.baseline == "retrieval_rag" for call in trial.method_calls)
     assert any(trial.baseline == "dynamic_cheatsheet_rs_optional" for trial in trials)
-
-    expected_hashes = {
-        json.loads(path.read_text(encoding="utf-8"))["stage"]: json.loads(
-            path.read_text(encoding="utf-8")
-        )["messages_sha256"]
-        for path in PROMPT_FIXTURES.glob("*.json")
-    }
-    fixture_calls = [call for call in calls if "game24_pilot_001" in call.trial_id]
-    for call in fixture_calls:
-        expected = expected_hashes.get(call.method_stage)
-        if expected is not None:
-            rendered = json.dumps(call.messages, sort_keys=True, separators=(",", ":")).replace(
-                "bfv2-source-contract-replay-test", "{{run_id}}"
-            )
-            assert hashlib.sha256(rendered.encode("utf-8")).hexdigest() == expected
+    assert _semantic_call_hashes(trials) == json.loads(
+        SEMANTIC_CALL_FIXTURES.read_text(encoding="utf-8")
+    )
 
     inspector_output = tmp_path / "inspector.json"
     result = _inspect(run_dir, inspector_output)
@@ -109,6 +123,37 @@ def test_f1b_replay_parses_artifacts_locks_prompt_bytes_and_rejects_mutations(
     rows[0]["method_calls"][0]["messages"][0]["content"] += "!"
     (prompt_mutation / "trials.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
     assert _inspect(prompt_mutation).returncode == 1
+
+    unlocked_prompt_mutation = tmp_path / "unlocked-prompt-mutation"
+    shutil.copytree(run_dir, unlocked_prompt_mutation)
+    rows = [
+        json.loads(line)
+        for line in (unlocked_prompt_mutation / "trials.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    row = next(
+        row
+        for row in rows
+        if row["sample_id"] == "game24_pilot_003" and row["baseline"] == "no_memory"
+    )
+    row["method_calls"][0]["messages"][0]["content"] += "!"
+    call_id = row["method_calls"][0]["call_id"]
+    (unlocked_prompt_mutation / "trials.jsonl").write_text(
+        "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
+    )
+    call_rows = [
+        json.loads(line)
+        for line in (unlocked_prompt_mutation / "calls.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    next(call for call in call_rows if call["call_id"] == call_id)["messages"][0]["content"] += "!"
+    (unlocked_prompt_mutation / "calls.jsonl").write_text(
+        "".join(json.dumps(call) + "\n" for call in call_rows), encoding="utf-8"
+    )
+    assert _inspect(unlocked_prompt_mutation).returncode == 1
+
+    filter_mutation = tmp_path / "filter-mutation"
+    shutil.copytree(run_dir, filter_mutation)
+    (filter_mutation / "filter_events.jsonl").write_text('{"not":"a filter event"}\n', encoding="utf-8")
+    assert _inspect(filter_mutation).returncode == 1
 
     span_mutation = tmp_path / "span-mutation"
     shutil.copytree(run_dir, span_mutation)
@@ -129,5 +174,14 @@ def test_f1b_replay_parses_artifacts_locks_prompt_bytes_and_rejects_mutations(
     assert manifest_result.returncode == 0, manifest_result.stdout + manifest_result.stderr
     artifact_hashes = json.loads(evidence_manifest.read_text(encoding="utf-8"))["artifacts"]
     assert str(run_dir / "trials.jsonl") in artifact_hashes
+    assert str(run_dir / "filter_events.jsonl") in artifact_hashes
     assert str(FIXTURE_PATH) in artifact_hashes
     assert any("baseline_fidelity_v2" in path for path in artifact_hashes)
+    manifest = json.loads(evidence_manifest.read_text(encoding="utf-8"))
+    assert manifest["commit"]
+    assert manifest["plan"]["sha256"]
+    assert manifest["versions"]["prompt_version"] == "baseline_fidelity_v2"
+    assert manifest["embedding_identity"]
+    assert manifest["corpus_identity"]
+    assert manifest["commands"] == [{"command": "inspect_baseline_fidelity_v2", "exit_code": 0}]
+    assert "filter_events.jsonl" in manifest["strict_streams"]

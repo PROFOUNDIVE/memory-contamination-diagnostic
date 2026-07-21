@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from memcontam.baselines.common import parse_final_answer
 from memcontam.baselines.contracts import (
     BaselineExecutionOutcome,
     ErrorType,
@@ -267,11 +268,10 @@ class ReflexionAdapter:
 
 
 def _parse_generation(response: str) -> str | None:
-    stripped = response.strip()
-    if not stripped.lower().startswith("final:"):
+    try:
+        return parse_final_answer(response)
+    except ValueError:
         return None
-    answer = stripped.split(":", 1)[1].strip()
-    return answer or None
 
 
 def _parse_reflection(response: str, visible_entries: list[MemoryEntry]) -> ReflectionPayload | None:

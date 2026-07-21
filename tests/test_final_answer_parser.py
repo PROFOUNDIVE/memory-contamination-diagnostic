@@ -10,6 +10,51 @@ def test_parses_one_case_insensitive_final_line_after_reasoning() -> None:
     assert parse_final_answer("Work through the arithmetic.\nFINAL: 24\n") == "24"
 
 
+def test_reflexion_accepts_the_shared_terminal_final_answer_form() -> None:
+    from memcontam.baselines.reflexion_adapter import ReflexionAdapter, ReflexionState
+    from memcontam.clients.replay import ReplayClient
+    from memcontam.tasks.base import TaskInstance
+
+    outcome = ReflexionAdapter().execute(
+        TaskInstance(sample_id="sample-1", task_name="game24", input={}),
+        ReflexionState(),
+        client=ReplayClient(responses=["Work through the arithmetic.\nFINAL: 24\n"]),
+        model="replay",
+        verifier=lambda answer, task: answer == "24" and task.task_name == "game24",
+    )
+
+    assert outcome.status == "succeeded"
+    assert outcome.parsed_answer == "24"
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        "final: 24\nfinal: 25",
+        "final: 24\nMore reasoning",
+    ],
+)
+def test_reflexion_rejects_the_shared_invalid_final_answer_forms(response: str) -> None:
+    from memcontam.baselines.reflexion_adapter import ReflexionAdapter, ReflexionState
+    from memcontam.clients.replay import ReplayClient
+    from memcontam.tasks.base import TaskInstance
+
+    state = ReflexionState()
+    outcome = ReflexionAdapter().execute(
+        TaskInstance(sample_id="sample-1", task_name="game24", input={}),
+        state,
+        client=ReplayClient(responses=[response]),
+        model="replay",
+        verifier=lambda answer, task: answer == "24" and task.task_name == "game24",
+    )
+
+    assert outcome.status == "failed"
+    assert outcome.failure_disposition == "reflexion_invalid_generation"
+    assert outcome.parsed_answer is None
+    assert len(outcome.method_calls) == 1
+    assert state.reflections == []
+
+
 @pytest.mark.parametrize(
     "response",
     [

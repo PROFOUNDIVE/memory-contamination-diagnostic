@@ -59,7 +59,7 @@ evidence report.
 | `data/replay/baseline_fidelity_v2_source_contract.yaml` | `1e44286a31791a73ffeadf0cec7db0c2fd75a14f14421b96fcae3633e44d97f7` |
 | `data/memory/baseline_fidelity_v2_contract_corpus.jsonl` | `b608b1694bc4250a4d0e79400357ef8d01c76fe498b20cf45e76004cd01d30a7` |
 | `data/memory/baseline_fidelity_v2_contract_corpus.manifest.json` | `839e84ff0b0394abd36f0b1ac89f6b56219348b3f7b4572e0daecc58630bcd3c` |
-| `scripts/inspect_baseline_fidelity_v2.py` | `785ed2c8856f1eb75f0cf5a3ebc47079e42a2638322331903ac70594522ca20b` |
+| `scripts/inspect_baseline_fidelity_v2.py` | `8f16ad86d665595c99dae0ec4de2464ed27d885050e84ed61c1312123a665a4b` |
 | `scripts/verify_bge_m3_fidelity.py` | `48574cdce33b244c0eff1754ab00430d8ae42236b2734395f8a11b94628f0cdf` |
 | `scripts/report_baseline_resource_usage.py` | `30cd8f5da1c32d7ae3bdf353d39552c1745b0a515dfab02768f825d7aebfc0ec` |
 
