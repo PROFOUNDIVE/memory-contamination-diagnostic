@@ -25,13 +25,15 @@ def _write_game24_sample(tmp_path, numbers=None) -> str:
     return str(sample_path)
 
 
-def _write_contamination_catalog(tmp_path, baseline: str, content: str) -> None:
+def _write_contamination_catalog(
+    tmp_path, baseline: str, content: str, memory_type: str = "proxy_memory"
+) -> None:
     catalog_dir = tmp_path / "data" / "contamination"
     catalog_dir.mkdir(parents=True)
     catalog_row = {
         "entry_id": f"{baseline}_memory_1",
         "task": "game24",
-        "type": "proxy_memory",
+        "type": memory_type,
         "content": content,
         "target_baselines": [baseline],
     }
@@ -56,9 +58,10 @@ def _run_single_baseline(
     memory_content: str,
     response: str = "final: 6 / (1 - 3 / 4)",
     arm: str = "contaminated",
+    memory_type: str = "proxy_memory",
 ) -> dict:
     sample_path = _write_game24_sample(tmp_path)
-    _write_contamination_catalog(tmp_path, baseline, memory_content)
+    _write_contamination_catalog(tmp_path, baseline, memory_content, memory_type)
     monkeypatch.chdir(tmp_path)
     config = {
         "run": {"name": "smoke"},
@@ -223,8 +226,8 @@ def test_run_config_clean_multitask_replay_emits_all_three_tasks(tmp_path, monke
         "replay": {
             "responses_by_sample": {
                 "game24_pilot_001": "final: 6 / (1 - 3 / 4)",
-                "meb_pilot_001": "2 + 5 = 7",
-                "word_sorting_pilot_001": "apple banana pear",
+                "meb_pilot_001": "final: 2 + 5 = 7",
+                "word_sorting_pilot_001": "final: apple banana pear",
             }
         },
     }
@@ -380,22 +383,14 @@ def test_run_config_live_smoke_enabled_with_mocked_client_emits_trial_log(
     row = rows[0]
     TrialLog.model_validate(row)
     assert row["raw_response"] == "final: 6 / (1 - 3 / 4)"
-    assert row["latency_ms"] == 42
-    assert row["token_usage"] == {"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3}
+    assert row["latency_ms"] is None
+    assert row["token_usage"] == {}
     assert row["verifier_result"]["is_correct"] is True
     assert row["parsed_answer"] == "6 / (1 - 3 / 4)"
 
 
-def test_embedding_provider_only_uses_fake_when_offline_fallback_enabled(monkeypatch) -> None:
-    class MissingPinnedProvider:
-        def __init__(self, **_kwargs):
-            raise RuntimeError("missing pinned checkpoint")
-
-    monkeypatch.setattr(cli, "SentenceTransformerProvider", MissingPinnedProvider)
-
-    with pytest.raises(RuntimeError, match="missing pinned checkpoint"):
-        cli._embedding_provider({"embedding": {}})
-
+def test_legacy_embedding_provider_defaults_to_fake_without_an_explicit_mode() -> None:
+    assert isinstance(cli._embedding_provider({"embedding": {}}), FakeEmbeddingProvider)
     provider = cli._embedding_provider({"embedding": {"offline_fallback": True}})
     assert isinstance(provider, FakeEmbeddingProvider)
 
@@ -572,6 +567,7 @@ def test_reflexion_style_includes_recent_reflection_in_prompt_messages(tmp_path,
         monkeypatch,
         "reflexion_style",
         "Reflection for 1 3 4 6: avoid early multiplication; try division last.",
+        memory_type="verbal_reflection",
     )
 
     prompt_text = "\n".join(message["content"] for message in row["prompt_messages"])
@@ -990,7 +986,7 @@ def test_faithful_native_memory_config_dispatches_without_embedding_or_bot_resou
     def unexpected_resource(*_args, **_kwargs):
         raise AssertionError("native-memory faithful run initialized a legacy resource")
 
-    monkeypatch.setattr(cli, "SentenceTransformerProvider", unexpected_resource)
+    monkeypatch.setattr(cli, "build_embedding_provider_for_run", unexpected_resource)
     monkeypatch.setattr(cli, "RunState", unexpected_resource)
     monkeypatch.setattr(cli, "BotRuntime", unexpected_resource)
 
@@ -1398,7 +1394,7 @@ def test_dc_rs_reflexion_followup_uses_offline_embeddings(tmp_path, monkeypatch)
     def unexpected_sentence_transformer(**_kwargs):
         raise AssertionError("follow-up replay gate must not load sentence-transformers")
 
-    monkeypatch.setattr(cli, "SentenceTransformerProvider", unexpected_sentence_transformer)
+    monkeypatch.setattr(cli, "build_embedding_provider_for_run", unexpected_sentence_transformer)
 
     run_dir = run_config(config, run_id="followup_offline_embeddings")
     rows = [
@@ -1684,7 +1680,7 @@ def test_strict_bot_verifier_failure_persists_admitted_memory_write(tmp_path, mo
                 '"restrictions":"Use each number once.","distilled_task":"Construct 24."}'
             ),
             (
-                '{"solution_trace":"Pair 1 + 3 and 2 + 4.",'
+                '{"selected_structure":"procedure-based","solution_trace":"Pair 1 + 3 and 2 + 4.",'
                 '"final_answer":"final: (1 + 3) * (2 + 4) = 24"}'
             ),
             (

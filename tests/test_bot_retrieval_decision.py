@@ -12,6 +12,7 @@ from memcontam.clients.replay import ReplayClient
 from memcontam.memory.bot_buffer import BotBufferIdentity
 from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
+from memcontam.tasks.dispatch import canonical_task_json
 
 
 def _problem():
@@ -137,6 +138,36 @@ def test_miss_prompt_renders_all_coarse_structures_and_requires_a_selection() ->
     assert "programming-based" in prompt
     assert "selected_structure, solution_trace, final_answer" in prompt
     assert source_spans == []
+
+
+def test_bot_v2_prompts_render_the_canonical_task_contract() -> None:
+    bot_read = importlib.import_module("memcontam.baselines.bot_read")
+    bot_solve = importlib.import_module("memcontam.baselines.bot_solve")
+    task = TaskInstance(
+        sample_id="sample",
+        task_name="game24",
+        input={"target": 24, "numbers": [1, 2, 3, 4]},
+        verifier_spec={"gold": "must-not-render"},
+    )
+    messages: list[dict[str, str]] = []
+
+    class RecordingClient:
+        def chat(self, request_messages, *_args):  # noqa: ANN001
+            messages.extend(request_messages)
+            return LLMResponse(content=_problem().model_dump_json(), raw={}, token_usage={})
+
+    problem = bot_read.distill_problem(task, RecordingClient(), "replay", {})
+    solve_prompt, _ = bot_solve.render_bot_solve_prompt(
+        task,
+        problem,
+        bot_read.BoTRetrievalDecision("empty_buffer", None, None, 0.7),
+    )
+
+    canonical_task = canonical_task_json(task)
+    assert canonical_task in messages[-1]["content"]
+    assert canonical_task in solve_prompt
+    assert str(task.input) not in messages[-1]["content"]
+    assert str(task.input) not in solve_prompt
 
 
 def test_matched_retrieval_rejects_a_coarse_fallback_selection() -> None:

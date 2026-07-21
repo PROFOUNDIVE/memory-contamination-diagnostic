@@ -349,7 +349,7 @@ def build_arm_corpus(
             record
             for record in task_records
             if record.clean_or_contaminated == "contaminated"
-            and record.paired_clean_entry_id in clean_ids
+            and (record.paired_clean_entry_id is None or record.paired_clean_entry_id in clean_ids)
         ]
         selected = clean_records + corrupted_records
     else:

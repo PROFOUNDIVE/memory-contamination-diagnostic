@@ -57,7 +57,13 @@ class EmbeddingContract:
             )
             if configured != expected_value:
                 raise ValueError(f"pinned_semantic embedding.{field} must be {expected_value!r}")
-        return cls(mode, **expected)
+        return cls(
+            mode,
+            model_id=BgeM3EmbeddingProvider.MODEL_ID,
+            revision=BgeM3EmbeddingProvider.REVISION,
+            vector_dimension=BgeM3EmbeddingProvider.VECTOR_DIMENSION,
+            normalize_embeddings=BgeM3EmbeddingProvider.NORMALIZE_EMBEDDINGS,
+        )
 
 
 def validate_embedding_execution_policy(

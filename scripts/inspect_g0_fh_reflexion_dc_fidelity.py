@@ -248,6 +248,9 @@ def _check_reflexion(trials: list[TrialLog]) -> dict[str, Any]:
     for trial in refl_trials:
         stages = [call.stage for call in trial.method_calls]
         has_reflect = "reflexion_reflect" in stages
+        if trial.verifier_result is None:
+            reasons.append(f"{trial.trial_id}: missing verifier_result")
+            continue
         is_correct = trial.verifier_result.is_correct
         should_reflect = trial.sample_id == "game24_pilot_001"
 
@@ -351,11 +354,14 @@ def _check_arms(trials: list[TrialLog]) -> dict[str, Any]:
 
     for trial in trials:
         exposure = trial.contamination_exposure
+        is_exposed = exposure.is_exposed or (
+            exposure.status == "not_evaluable" and bool(exposure.source_entry_ids)
+        )
         if trial.arm == "clean":
-            if exposure.is_exposed or exposure.source_entry_ids:
+            if is_exposed:
                 reasons.append(f"{trial.trial_id}: clean arm is exposed")
         elif trial.arm == "contaminated":
-            if not exposure.is_exposed:
+            if not is_exposed:
                 reasons.append(f"{trial.trial_id}: contaminated arm has no exposure")
             seed_ids = {e["entry_id"] for e in trial.memory_before if e.get("clean_or_contaminated") == "contaminated"}
             if not seed_ids and trial.sample_id.endswith("_001"):
@@ -366,7 +372,7 @@ def _check_arms(trials: list[TrialLog]) -> dict[str, Any]:
             remaining = [e for e in trial.memory_before if e.get("clean_or_contaminated") == "contaminated"]
             if remaining:
                 reasons.append(f"{trial.trial_id}: contaminated_filter still has contaminated memory_before entries")
-            if exposure.is_exposed:
+            if is_exposed:
                 reasons.append(f"{trial.trial_id}: contaminated_filter arm is exposed")
 
     passed = not reasons

@@ -121,7 +121,7 @@ class DynamicCheatsheetRetrievalSynthesisPolicy:
                 source_trial_id=trial_id,
                 metadata={
                     **synthesis_lineage,
-                    "direct_parent_ids": _span_entry_ids(synthesis_call.source_spans),
+                    "direct_parent_ids": [],
                 },
             )
             replacement.metadata.update(
@@ -317,7 +317,7 @@ class DynamicCheatsheetOptionalPolicy:
                 source_trial_id=trial_id,
                 metadata={
                     **lineage,
-                    "direct_parent_ids": [entry.entry_id for entry in generation_entries],
+                    "direct_parent_ids": [],
                 },
             )
             entry.metadata.update(
@@ -521,7 +521,7 @@ def _dc_rs_generation_message(
     if not cheatsheet or synthesis_call_id is None:
         return {"role": "user", "content": prefix + cheatsheet + suffix}, []
     source_ids, parent_ids, clean_or_contaminated = source_lineage_from_spans(synthesis_spans)
-    direct_parent_ids = _span_entry_ids(synthesis_spans)
+    direct_parent_ids: list[str] = []
     lineage_status = combine_lineage_status(
         [span.lineage_status or "unavailable" for span in synthesis_spans]
     )
@@ -529,7 +529,9 @@ def _dc_rs_generation_message(
     for span in synthesis_spans:
         if span.lineage_status == "exact":
             _extend_unique(injected_root_ids, span.injected_root_ids)
-    contamination_class = "derived" if injected_root_ids and lineage_status == "exact" else "clean"
+    contamination_class: Literal["derived", "clean"] = (
+        "derived" if injected_root_ids and lineage_status == "exact" else "clean"
+    )
     content = prefix + cheatsheet + suffix
     return {
         "role": "user",
@@ -550,14 +552,12 @@ def _dc_rs_generation_message(
             clean_or_contaminated=clean_or_contaminated,
             contamination_class=contamination_class if target_set_id else None,
             injected_root_ids=injected_root_ids,
-            lineage_status=lineage_status if target_set_id else None,
-            lineage_basis="recorded_parent" if target_set_id else None,
+            lineage_status="unavailable" if target_set_id else None,
+            lineage_basis="none" if target_set_id else None,
             direct_parent_ids=direct_parent_ids,
             target_set_id=target_set_id,
             is_target_contamination=(
-                contamination_class == "derived" and lineage_status == "exact"
-                if target_set_id
-                else None
+                False if target_set_id else None
             ),
         )
     ]

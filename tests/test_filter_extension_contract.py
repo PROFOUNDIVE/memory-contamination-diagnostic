@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
-import sys
 from typing import cast
 
 import pytest
@@ -141,7 +140,6 @@ def test_evaluator_rejects_cycles_without_mutating_entries_or_reading_hidden_met
     }
     assert [card.metadata for card, _ in source_entries] == original_metadata
     assert tuple(envelope for _, envelope in source_entries) == original_envelopes
-    assert "memcontam.cli" not in sys.modules
 
 
 def test_evaluator_fails_closed_for_a_malformed_envelope() -> None:

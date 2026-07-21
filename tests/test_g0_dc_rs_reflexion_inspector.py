@@ -230,7 +230,7 @@ def _write_run(run_dir: Path, rows: list[dict[str, Any]]) -> None:
         "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
     )
     (run_dir / "aggregate.json").write_text(
-        json.dumps(aggregate_run(run_dir)), encoding="utf-8"
+        json.dumps(aggregate_run(run_dir, allow_legacy=True)), encoding="utf-8"
     )
 
 

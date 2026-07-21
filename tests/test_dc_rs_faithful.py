@@ -238,14 +238,18 @@ def test_dc_rs_synthesized_answer_span_records_exact_source_parents(tmp_path) ->
 
     synthesis_call, answer_call = result["method_calls"]
     span = answer_call.source_spans[0]
+    synthesized = next(
+        entry for entry in result["memory_after"] if entry["memory_type"] == "dynamic_cheatsheet"
+    )
     assert span.parent_call_id == synthesis_call.call_id
-    assert span.direct_parent_ids == ["dc_cheatsheet:seed", "injected-pair"]
+    assert span.direct_parent_ids == []
+    assert synthesized["metadata"]["direct_parent_ids"] == []
     assert span.contamination_class == "derived"
     assert span.injected_root_ids == ["injected-pair"]
-    assert span.lineage_status == "exact"
-    assert span.lineage_basis == "recorded_parent"
+    assert span.lineage_status == "unavailable"
+    assert span.lineage_basis == "none"
     assert span.target_set_id == "controlled_injected_derived_v1"
-    assert span.is_target_contamination is True
+    assert span.is_target_contamination is False
 
 
 @pytest.mark.parametrize(

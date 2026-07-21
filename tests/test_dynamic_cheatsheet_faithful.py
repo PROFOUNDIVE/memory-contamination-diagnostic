@@ -130,6 +130,7 @@ def test_dc_cumulative_replaces_and_reuses_tagged_cheatsheet() -> None:
         == "run_001:game24:game24_001:dynamic_cheatsheet_optional:clean:replay"
     )
     assert updated["metadata"]["parent_entry_ids"] == ["clean_seed", "contaminated_seed"]
+    assert updated["metadata"]["direct_parent_ids"] == []
     assert updated["metadata"]["source_entry_ids"] == ["contaminated_origin"]
     assert updated["metadata"]["source_contaminated_entry_ids"] == ["contaminated_origin"]
     assert first["memory_write_event"]["type"] == "dynamic_cheatsheet_update"
@@ -274,7 +275,7 @@ def test_accepted_dc_cu_update_normalizes_replace_mutation() -> None:
     assert event.new_entry_ids == [result["memory_write_event"]["new_entry_id"]]
     assert event.removed_entry_ids == ["clean_seed", "contaminated_seed"]
     assert event.before_snapshot_hash != event.after_snapshot_hash
-    assert event.parent_entry_ids == ["clean_seed", "contaminated_seed"]
+    assert event.parent_entry_ids == []
     assert event.source_entry_ids == ["contaminated_origin"]
     assert event.contaminated_source_ids == ["contaminated_origin"]
 

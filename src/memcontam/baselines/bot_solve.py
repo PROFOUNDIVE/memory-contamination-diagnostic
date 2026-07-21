@@ -14,6 +14,7 @@ from memcontam.baselines.contracts import NonEmptyStr
 from memcontam.logging.provenance import PromptSourcePart, build_prompt_with_sources
 from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
+from memcontam.tasks.dispatch import canonical_task_json
 
 
 class BoTSolveResult(BaseModel):
@@ -38,7 +39,7 @@ def render_bot_solve_prompt(
     )
     suffix = (
         "\n\nTask input:\n"
-        f"{task.input}\n\n"
+        f"{canonical_task_json(task)}\n\n"
         "Return only strict unfenced JSON with exactly these non-empty string fields: "
         "selected_structure, solution_trace, final_answer."
     )

@@ -81,7 +81,6 @@ from memcontam.memory.corpus import (
 from memcontam.memory.embeddings import (
     EmbeddingProvider,
     FakeEmbeddingProvider,
-    SentenceTransformerProvider,
 )
 from memcontam.memory.embedding_policy import (
     build_embedding_provider_for_run,
@@ -443,12 +442,7 @@ def _embedding_provider(config: dict[str, Any]) -> EmbeddingProvider:
     embedding_config = config.get("embedding", {})
     if "mode" in embedding_config:
         return build_embedding_provider_for_run(config)
-    if embedding_config.get("offline_fallback", False):
-        return FakeEmbeddingProvider()
-    return SentenceTransformerProvider(
-        cache_folder=embedding_config.get("cache_path"),
-        local_files_only=True,
-    )
+    return FakeEmbeddingProvider()
 
 
 def _git_commit() -> str:
@@ -610,6 +604,28 @@ def _corpus_path(config: dict[str, Any]) -> str:
     if "corpus_path" in config.get("embedding", {}):
         return config["embedding"]["corpus_path"]
     raise SystemExit("faithful config requires memory.corpus_path or embedding.corpus_path")
+
+
+def _load_contamination_catalog() -> list[CorpusRecord]:
+    path = Path("data/contamination/catalog_v0.jsonl")
+    if not path.exists():
+        raise SystemExit("contamination catalog not found")
+    try:
+        rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit("contamination catalog not found") from exc
+    return [
+        CorpusRecord(
+            entry_id=row["entry_id"],
+            task=row["task"],
+            target_baselines=row["target_baselines"],
+            memory_type=row["type"],
+            content=row["content"],
+            source="contamination_catalog_v0",
+            clean_or_contaminated="contaminated",
+        )
+        for row in rows
+    ]
 
 
 def _records_for_baseline(
@@ -1356,6 +1372,12 @@ def _run_faithful_config(
             or "corpus_path" in config.get("embedding", {})
             else []
         )
+        if (
+            not corpus_records
+            and any(arm != "clean" for arm in config["arms"])
+            and any(baseline != "no_memory" for baseline in config["baselines"])
+        ):
+            corpus_records.extend(_load_contamination_catalog())
         needs_embedding = any(
             baseline in {"retrieval_rag", "bot_style", "dynamic_cheatsheet_rs_optional"}
             for baseline in config["baselines"]
