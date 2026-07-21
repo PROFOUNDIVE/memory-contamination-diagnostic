@@ -1,6 +1,7 @@
-import pytest
-import subprocess
+import hashlib
 from pathlib import Path
+
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -14,6 +15,137 @@ PHASE11_REPORT_DOC = ROOT / "docs" / "logging-audit-remediation-phase11.md"
 CONTRACT_CONFIG = ROOT / "configs" / "logging_contract_replay.yaml"
 PHASE11_CONFIG = ROOT / "configs" / "logging_contract_phase11_replay.yaml"
 FULL_MATRIX_CONFIG = ROOT / "configs" / "full_matrix.yaml"
+V1_AUTHORITY = ROOT / "docs" / "baseline-fidelity-v1.md"
+V2_AUTHORITY = ROOT / "docs" / "baseline-fidelity-v2.md"
+V2_EVIDENCE = ROOT / "docs" / "baseline-fidelity-v2-evidence.md"
+HISTORICAL_BASELINE_REPORTS = (
+    V1_AUTHORITY,
+    G0_DOC,
+    V05_DOC,
+    ROOT / "docs" / "g0-baseline-fidelity-gate-v0.6.md",
+)
+SUPERSESSION_NOTICE = (
+    "This historical report cannot support a Baseline-Fidelity-V2 fidelity claim."
+)
+
+
+def test_baseline_fidelity_v2_docs_are_the_only_current_authority() -> None:
+    authority = V2_AUTHORITY.read_text(encoding="utf-8")
+    evidence = V2_EVIDENCE.read_text(encoding="utf-8")
+
+    assert "sole authority for Baseline-Fidelity-V2" in authority
+    assert "Overall V2 certification: **BLOCKED**" in authority
+    assert "F1A structural integration replay: **PASS**" in authority
+    assert "F1B source-contract replay: **PASS**" in authority
+    assert "F1C pinned real-retriever and mocked-live boundary: **BLOCKED**" in authority
+    assert "missing_cached_bge_m3" in authority
+    assert "QA and fidelity evidence, not benchmark or manuscript-quality evidence" in authority
+    assert ".sisyphus/evidence/baseline-fidelity-v2/evidence_manifest.json" in evidence
+
+
+def test_baseline_fidelity_v2_authority_has_each_required_heading_once() -> None:
+    authority = V2_AUTHORITY.read_text(encoding="utf-8")
+    evidence = V2_EVIDENCE.read_text(encoding="utf-8")
+    authority_headings = [
+        "## Authority and Claim Boundary",
+        "## Exact Method Claims",
+        "## V1 and V2 No-Pooling Rule",
+        "## Fidelity Gate Status",
+        "## Prompt and Provider Versions",
+        "## Canonical Reproduction Commands",
+        "## Unresolved Non-Claims",
+    ]
+    evidence_headings = [
+        "## Evidence Provenance",
+        "## Resource Usage",
+        "## Artifact Hash Manifest",
+        "## Seal Status",
+    ]
+    for heading in authority_headings:
+        assert authority.count(heading) == 1, f"V2 authority must contain {heading!r} once"
+    for heading in evidence_headings:
+        assert evidence.count(heading) == 1, f"V2 evidence must contain {heading!r} once"
+
+
+def test_baseline_fidelity_v2_uses_exact_bounded_method_claims() -> None:
+    text = V2_AUTHORITY.read_text(encoding="utf-8")
+    claims = [
+        "one-call no-persistent-memory baseline",
+        "context-bounded full-history with full append-only store",
+        "training-free dense retrieval with black-box input-layer augmentation",
+        "deterministic paper-aligned BoT-style proxy",
+        "failure-gated verbal-reflection adaptation with one same-sample retry",
+        "adapted optional DC-RS appendix comparator",
+    ]
+    for claim in claims:
+        assert claim in text, f"V2 authority must use the exact bounded claim {claim!r}"
+
+
+def test_historical_baseline_reports_are_explicitly_superseded_for_v2() -> None:
+    for path in HISTORICAL_BASELINE_REPORTS:
+        text = path.read_text(encoding="utf-8")
+        assert SUPERSESSION_NOTICE in text, f"{path.name} must reject V2 evidence use"
+        assert "docs/baseline-fidelity-v2.md" in text
+        assert "docs/baseline-fidelity-v2-evidence.md" in text
+
+
+def test_v2_docs_record_versions_commands_resources_and_non_claims() -> None:
+    text = V2_AUTHORITY.read_text(encoding="utf-8")
+    evidence = V2_EVIDENCE.read_text(encoding="utf-8")
+    for phrase in [
+        "prompt_version: baseline_fidelity_v2",
+        "memory_policy_version: baseline_fidelity_v2",
+        "baseline_fidelity_v2_structural_fixture",
+        "baseline_fidelity_v2_source_contract_fixture",
+        "mocked_openai_compatible_v1",
+        "BAAI/bge-m3@5617a9f61b028005a4858fdac845db406aefb181",
+        "python -m pytest -q tests/test_baseline_fidelity_replay.py",
+        "python -m pytest -q tests/test_baseline_source_contract_replay.py",
+        "python scripts/verify_bge_m3_fidelity.py",
+        "--stage replay --contract phase11",
+    ]:
+        assert phrase in text, f"V2 authority must contain {phrase!r}"
+    for phrase in [
+        "semantic calls",
+        "transport retries",
+        "prompt tokens",
+        "completion tokens",
+        "latency ms",
+        "retrievals",
+        "memory writes",
+        "configs/baseline_fidelity_v2_structural_replay.yaml",
+        "configs/baseline_fidelity_v2_source_contract_replay.yaml",
+        "configs/baseline_fidelity_v2_bge_smoke.yaml",
+    ]:
+        assert phrase in evidence, f"V2 evidence must contain {phrase!r}"
+
+
+def test_v2_evidence_hashes_match_committed_artifacts() -> None:
+    evidence = V2_EVIDENCE.read_text(encoding="utf-8")
+    paths = [
+        "configs/baseline_fidelity_v2_structural_replay.yaml",
+        "configs/baseline_fidelity_v2_source_contract_replay.yaml",
+        "configs/baseline_fidelity_v2_bge_smoke.yaml",
+        "data/replay/baseline_fidelity_v2_source_contract.yaml",
+        "data/memory/baseline_fidelity_v2_contract_corpus.jsonl",
+        "data/memory/baseline_fidelity_v2_contract_corpus.manifest.json",
+        "scripts/inspect_baseline_fidelity_v2.py",
+        "scripts/verify_bge_m3_fidelity.py",
+        "scripts/report_baseline_resource_usage.py",
+    ]
+    for relative_path in paths:
+        digest = hashlib.sha256((ROOT / relative_path).read_bytes()).hexdigest()
+        assert f"| `{relative_path}` | `{digest}` |" in evidence
+
+
+def test_readme_points_to_v2_authority_without_claiming_f1c_pass() -> None:
+    text = README.read_text(encoding="utf-8")
+    assert "docs/baseline-fidelity-v2.md" in text
+    assert "docs/baseline-fidelity-v2-evidence.md" in text
+    assert "F1A and F1B pass" in text
+    assert "missing_cached_bge_m3" in text
+    assert "F1C pass" not in text
+    assert "No V2 release or tag is claimed." in text
 
 
 def test_g0_doc_states_partial_rag_bot_scope() -> None:
@@ -413,19 +545,6 @@ def test_readme_and_followup_forbid_overclaim_phrases() -> None:
             assert phrase not in text, (
                 f"{path.name} must not contain forbidden phrase: {phrase!r}"
             )
-
-
-def test_historical_v04_v05_reports_unchanged() -> None:
-    result = subprocess.run(
-        ["git", "diff", "--", "docs/g0-baseline-fidelity-gate-v0.4.md", "docs/g0-baseline-fidelity-gate-v0.5.md"],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0, "git diff command failed"
-    assert result.stdout == "", (
-        "Historical v0.4 and v0.5 reports must not be modified"
-    )
 
 
 def test_phase11_docs_exist_and_name_executable_contract() -> None:

@@ -6,7 +6,21 @@ All claims below are for **faithful adapted baselines**, not complete reproducti
 
 ---
 
-## Release roadmap
+## Baseline Fidelity V2 Authority
+
+[`docs/baseline-fidelity-v2.md`](docs/baseline-fidelity-v2.md) is the sole authority for
+Baseline-Fidelity-V2. [`docs/baseline-fidelity-v2-evidence.md`](docs/baseline-fidelity-v2-evidence.md)
+records its evidence provenance, resource usage, and artifact hashes. Older V1 and G0
+reports are historical and can't support a V2 fidelity claim.
+
+F1A and F1B pass as offline, non-scientific QA gates. The F1C gate is implemented with
+pinned BGE-M3 cache-only semantics and mocked OpenAI-compatible answer dispatch. This
+checkout lacks the required BGE-M3 revision, so the verifier reports
+`missing_cached_bge_m3` and overall V2 certification remains blocked. Replay evidence
+isn't benchmark, manuscript-quality, causal, or production contamination evidence.
+No V2 release or tag is claimed.
+
+## Historical Release Roadmap
 
 | Tag | Scope | Baselines | Key features |
 |---|---|---|---|
@@ -198,7 +212,7 @@ See [`docs/g0-baseline-fidelity-gate-v0.5.md`](docs/g0-baseline-fidelity-gate-v0
 
 ## v0.4 Faithful Adapted RAG/BoT Baselines
 
-`v0.4` is the current partial G0 baseline-fidelity pass for `retrieval_rag` and `bot_style`.
+`v0.4` is the historical partial G0 baseline-fidelity pass for `retrieval_rag` and `bot_style`.
 
 - `retrieval_rag` is wired to the pinned learned encoder `sentence-transformers/all-MiniLM-L6-v2` at revision `1110a243fdf4706b3f48f1d95db1a4f5529b4d41`, the versioned corpus `data/memory/catalog_v1.jsonl`, exact top-k retrieval, and full provenance records that are aligned with the prompt and trial metadata. The default production path requires that pinned checkpoint in the local cache; the canonical offline replay config explicitly sets `embedding.offline_fallback: true` to substitute deterministic fake embeddings for network-free QA. RAG is read-only and emits no memory write events.
 - `bot_style` runs the five reference-aligned stages (`bot_problem_distill`, `bot_instantiate_solve`, `bot_thought_distill`, `bot_novelty_decide`) and uses the same configured embedding provider for top-1 template retrieval, then persists the meta-buffer keyed by `(run_id, task_name, baseline, arm, backbone)`, accepting verified-success templates only with novelty-gated insertion.
@@ -288,15 +302,18 @@ The bundled config emits 90 replay trial rows:
 
 ## Documentation
 
+- Baseline-Fidelity-V2 authority: [`docs/baseline-fidelity-v2.md`](docs/baseline-fidelity-v2.md)
+- Baseline-Fidelity-V2 evidence provenance: [`docs/baseline-fidelity-v2-evidence.md`](docs/baseline-fidelity-v2-evidence.md)
+- Historical Baseline-Fidelity-V1 authority: [`docs/baseline-fidelity-v1.md`](docs/baseline-fidelity-v1.md)
 - v0.7.2 Phase-11 logging release report: [`docs/logging-audit-remediation-v0.7.2.md`](docs/logging-audit-remediation-v0.7.2.md)
 - v0.7 logging audit remediation report: [`docs/logging-audit-remediation-v0.7.md`](docs/logging-audit-remediation-v0.7.md)
 - v0.7 strict offline logging operator contract: [`docs/logging-contract-v1.md`](docs/logging-contract-v1.md)
 - Phase-11 `logging_v2` operator contract: [`docs/logging-contract-v2-phase11.md`](docs/logging-contract-v2-phase11.md)
 - Phase-11 remediation report template: [`docs/logging-audit-remediation-phase11.md`](docs/logging-audit-remediation-phase11.md)
-- v0.6 stricter Reflexion retry fidelity report: [`docs/g0-baseline-fidelity-gate-v0.6.md`](docs/g0-baseline-fidelity-gate-v0.6.md)
+- Historical v0.6 stricter Reflexion retry fidelity report: [`docs/g0-baseline-fidelity-gate-v0.6.md`](docs/g0-baseline-fidelity-gate-v0.6.md)
 - v0.5+ DC-RS and Reflexion same-sample retry follow-up report: [`docs/g0-dc-rs-reflexion-fidelity-followup.md`](docs/g0-dc-rs-reflexion-fidelity-followup.md)
-- v0.5 G0 full pass report: [`docs/g0-baseline-fidelity-gate-v0.5.md`](docs/g0-baseline-fidelity-gate-v0.5.md)
-- v0.4 G0 partial pass report: [`docs/g0-baseline-fidelity-gate-v0.4.md`](docs/g0-baseline-fidelity-gate-v0.4.md)
+- Historical v0.5 G0 full pass report: [`docs/g0-baseline-fidelity-gate-v0.5.md`](docs/g0-baseline-fidelity-gate-v0.5.md)
+- Historical v0.4 G0 partial pass report: [`docs/g0-baseline-fidelity-gate-v0.4.md`](docs/g0-baseline-fidelity-gate-v0.4.md)
 - v0.3 G0 partial pass report: [`docs/g0-baseline-fidelity-gate-v0.3.md`](docs/g0-baseline-fidelity-gate-v0.3.md)
 - v0.2 G0 gap analysis: [`docs/g0-baseline-fidelity-gate-v0.2.md`](docs/g0-baseline-fidelity-gate-v0.2.md)
 - v0.2 technical notes: [`docs/replay-qa-demo-v0.2.md`](docs/replay-qa-demo-v0.2.md)

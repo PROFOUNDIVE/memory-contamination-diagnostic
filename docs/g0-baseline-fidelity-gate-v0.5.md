@@ -1,5 +1,7 @@
 # G0 Baseline Fidelity Gate — v0.5 Faithful Full-History, Reflexion, and Dynamic Cheatsheet Baselines
 
+> **Superseded for V2:** This historical report cannot support a Baseline-Fidelity-V2 fidelity claim. The sole V2 authority is [`docs/baseline-fidelity-v2.md`](baseline-fidelity-v2.md), with evidence provenance in [`docs/baseline-fidelity-v2-evidence.md`](baseline-fidelity-v2-evidence.md).
+
 **Tag:** `v0.5`  
 **Repo:** `memory-contamination-diagnostic`  
 **Scope:** full G0 pass for `full_history`, `reflexion_style`, and `dynamic_cheatsheet_optional` over the locked 3-task pilot set  
@@ -11,7 +13,7 @@
 
 ## Release status
 
-`v0.5` documents the repository research-artifact release that raises three native-memory baselines from legacy stubs to faithful adapted runtimes. The `pyproject.toml` version remains `0.1.0`; no Python package is published. The intended Git tag is `v0.5`, created only after final review and explicit approval.
+`v0.5` historically documented the repository research-artifact work that raised three native-memory baselines from legacy stubs to faithful adapted runtimes. The `pyproject.toml` version remained `0.1.0`; no Python package was published. This report recorded an intended `v0.5` Git tag, but it does not establish that a tag or release exists.
 
 The replay evidence in this report is a fidelity/QA artifact, not benchmark/manuscript evidence. Model labels are replay labels. Live runs keep the same stage structure and require their own provider snapshots.
 

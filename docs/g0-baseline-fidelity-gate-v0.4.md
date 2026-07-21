@@ -1,5 +1,7 @@
 # G0 Baseline Fidelity Gate — v0.4 Faithful Adapted RAG/BoT Baselines
 
+> **Superseded for V2:** This historical report cannot support a Baseline-Fidelity-V2 fidelity claim. The sole V2 authority is [`docs/baseline-fidelity-v2.md`](baseline-fidelity-v2.md), with evidence provenance in [`docs/baseline-fidelity-v2-evidence.md`](baseline-fidelity-v2-evidence.md).
+
 **Tag:** `v0.4`  
 **Repo:** `memory-contamination-diagnostic`  
 **Scope:** partial G0 pass for `retrieval_rag` and `bot_style` only  

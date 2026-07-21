@@ -1,5 +1,7 @@
 # Baseline Fidelity V1
 
+> **Superseded for V2:** This historical report cannot support a Baseline-Fidelity-V2 fidelity claim. The sole V2 authority is [`docs/baseline-fidelity-v2.md`](baseline-fidelity-v2.md), with evidence provenance in [`docs/baseline-fidelity-v2-evidence.md`](baseline-fidelity-v2-evidence.md).
+
 This file is the sole authoritative Baseline-Fidelity-V1 contract. It describes the
 implemented `baseline_fidelity_v1` policy and its Phase-11-compatible extension seams.
 Older baseline reports remain historical evidence, not alternate specifications.

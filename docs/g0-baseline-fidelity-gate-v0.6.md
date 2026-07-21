@@ -1,5 +1,7 @@
 # G0 Baseline Fidelity Gate — v0.6 Stricter Reflexion Retry Fidelity
 
+> **Superseded for V2:** This historical report cannot support a Baseline-Fidelity-V2 fidelity claim. The sole V2 authority is [`docs/baseline-fidelity-v2.md`](baseline-fidelity-v2.md), with evidence provenance in [`docs/baseline-fidelity-v2-evidence.md`](baseline-fidelity-v2-evidence.md).
+
 **Tag:** `v0.6`  
 **Repo:** `memory-contamination-diagnostic`  
 **Scope:** tightened same-sample retry control flow for `reflexion_style` plus the existing `dynamic_cheatsheet_rs_optional` optional appendix comparator over the locked 3-task pilot set  
@@ -22,7 +24,7 @@ The canonical replay evidence run emits `108 trial rows` and `174 native method 
 
 ## Release status
 
-`v0.6` is the current repository research-artifact release. It supersedes the post-`v0.5` follow-up by narrowing the Reflexion retry prompt contract; `v0.5` remains the historical full G0 baseline-fidelity pass for `full_history`, `reflexion_style`, and `dynamic_cheatsheet_optional`. The `pyproject.toml` version remains `0.1.0`; no Python package is published. The intended Git tag is `v0.6`, created only after final review and explicit approval.
+`v0.6` historically documented research-artifact work that superseded the post-`v0.5` follow-up by narrowing the Reflexion retry prompt contract. `v0.5` was the earlier historical G0 report for `full_history`, `reflexion_style`, and `dynamic_cheatsheet_optional`. The `pyproject.toml` version remained `0.1.0`; no Python package was published. This report recorded an intended `v0.6` Git tag, but it does not establish that a tag or release exists.
 
 The replay evidence in this report is a fidelity/QA artifact, not benchmark/manuscript evidence. Model labels are replay labels. Live runs keep the same stage structure and require their own provider snapshots.
 
