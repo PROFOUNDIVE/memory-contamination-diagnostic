@@ -7,14 +7,23 @@ import hashlib
 import subprocess
 import tempfile
 import traceback
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, cast
 
 import yaml
 
-from memcontam.baselines.bot_style import BotStylePolicy, distill_thought_template
 from memcontam.baselines.bot_runtime import BotRuntime
+from memcontam.baselines.execution import execute_baseline
+from memcontam.baselines.full_history import FullHistoryState
+from memcontam.baselines.full_history_adapter import FullHistoryAdapter
+from memcontam.baselines.full_history import FullHistoryPolicy
+from memcontam.baselines.no_memory import NoMemoryAdapter, NoMemoryPolicy
+from memcontam.baselines.reflexion_adapter import ReflexionAdapter, ReflexionState
+from memcontam.baselines.reflexion_style import ReflexionStylePolicy
+from memcontam.baselines.retrieval_rag import RetrievalRagPolicy
+from memcontam.baselines.retrieval_rag_adapter import RetrievalRagAdapter
 from memcontam.baselines.contracts import (
     BaselineExecutionOutcome,
     ErrorType,
@@ -26,18 +35,13 @@ from memcontam.baselines.dynamic_cheatsheet_optional import (
     DynamicCheatsheetOptionalPolicy,
     DynamicCheatsheetRetrievalSynthesisPolicy,
 )
-from memcontam.baselines.full_history import FullHistoryPolicy
-from memcontam.baselines.no_memory import NoMemoryPolicy
-from memcontam.baselines.reflexion_style import ReflexionStylePolicy
-from memcontam.baselines.retrieval_rag import RetrievalRagPolicy
 from memcontam.clients.base import LLMClient, LLMResponse
 from memcontam.clients.config import ProviderConfig
 from memcontam.clients.factory import build_llm_client, validate_provider_selection
 from memcontam.clients.provider_profile import normalize_provider_profile
-from memcontam.clients.recording import MethodCallRecorder, summarize_calls
+from memcontam.clients.recording import summarize_calls
 from memcontam.clients.replay import ReplayClient
 from memcontam.evaluation.aggregate import aggregate_run
-from memcontam.contamination.catalog import load_catalog
 from memcontam.logging.schema import (
     BadMemoryUptakeLabel,
     CallEvent,
@@ -84,8 +88,7 @@ from memcontam.memory.embedding_policy import (
     embedding_provider_identity,
     validate_embedding_execution_policy,
 )
-from memcontam.memory.filters import FilterTelemetry, filter_legacy_replay_entries
-from memcontam.memory.retrieval import retrieve_records
+from memcontam.memory.filters import FilterTelemetry
 from memcontam.memory.run_state import RunState
 from memcontam.memory.stores import MemoryEntry, MemoryState
 from memcontam.tasks.game24 import build_instance as build_game24_instance
@@ -129,20 +132,12 @@ TASK_DISPATCH = {
 }
 
 
-BASELINE_POLICIES = {
-    "no_memory": NoMemoryPolicy,
-    "full_history": FullHistoryPolicy,
-    "retrieval_rag": RetrievalRagPolicy,
-    "reflexion_style": ReflexionStylePolicy,
-    "bot_style": BotStylePolicy,
-}
-
 BASELINE_ADAPTERS = {
-    "no_memory": NoMemoryPolicy,
-    "full_history": FullHistoryPolicy,
-    "retrieval_rag": RetrievalRagPolicy,
-    "reflexion_style": ReflexionStylePolicy,
-    "bot_style": BotStylePolicy,
+    "no_memory": NoMemoryAdapter,
+    "full_history": FullHistoryAdapter,
+    "retrieval_rag": RetrievalRagAdapter,
+    "reflexion_style": ReflexionAdapter,
+    "bot_style": BotRuntime,
 }
 
 FAITHFUL_BASELINES = {
@@ -206,40 +201,6 @@ def _validate_run_id(run_id: str) -> None:
     run_path = Path(run_id)
     if run_path.is_absolute() or ".." in run_path.parts or len(run_path.parts) != 1:
         raise SystemExit(f"invalid run id: {run_id}")
-
-
-def _memory_entries_for_arm(arm: str, baseline: str) -> tuple[list[MemoryEntry], FilterTelemetry | None]:
-    if arm == "clean":
-        return [], None
-    catalog_path = Path("data/contamination/catalog_v0.jsonl")
-    if not catalog_path.exists():
-        raise SystemExit(f"contamination catalog not found: {catalog_path}")
-    entries = []
-    for item in load_catalog(catalog_path):
-        if baseline in item.get("target_baselines", []):
-            entries.append(
-                MemoryEntry(
-                    entry_id=item["entry_id"],
-                    content=item["content"],
-                    memory_type=item["type"],
-                    clean_or_contaminated="contaminated",
-                    metadata={
-                        "task": item.get("task"),
-                        "arm": arm,
-                        "contamination_type": item.get("contamination_type", item["type"]),
-                    },
-                )
-            )
-    if arm == "contaminated_filter":
-        return filter_legacy_replay_entries(entries)
-    return entries, None
-
-
-def _retrieved_memory(baseline: str, task_input: dict[str, Any], memory: MemoryState) -> tuple[list[dict[str, Any]], list[float]]:
-    if baseline not in {"retrieval_rag", "bot_style"}:
-        return [], []
-    retrieved = retrieve_records(str(task_input), memory.entries, k=1 if baseline == "bot_style" else 3)
-    return [record["memory_entry"].model_dump() for record in retrieved], [record["score"] for record in retrieved]
 
 
 def _config_hash(config: dict[str, Any]) -> str:
@@ -566,41 +527,6 @@ def _contamination_exposure(
     )
 
 
-def _bot_memory_writeback(
-    trial_id: str,
-    task: Any,
-    raw_response: str,
-    verifier_result: Any,
-    retrieved_memory: list[dict[str, Any]],
-    memory: MemoryState,
-) -> dict[str, Any]:
-    source_entry_ids = [entry_id for entry in retrieved_memory if (entry_id := _entry_id(entry))]
-    new_entry_id = f"bot_template:{hashlib.sha256(trial_id.encode('utf-8')).hexdigest()[:12]}"
-    memory.entries.append(
-        MemoryEntry(
-            entry_id=new_entry_id,
-            content=distill_thought_template(
-                task,
-                raw_response,
-                verifier_result,
-                retrieved_memory[0] if retrieved_memory else None,
-            ),
-            memory_type="thought_template",
-            clean_or_contaminated="clean",
-            source_trial_id=trial_id,
-            metadata={"distillation_source": "bot_writeback"},
-        )
-    )
-    return {
-        "event_type": "bot_write",
-        "baseline": "bot_style",
-        "parent_trial_id": trial_id,
-        "source_entry_ids": source_entry_ids,
-        "new_entry_id": new_entry_id,
-        "update_reason": "distilled_thought_template_from_problem_solution_pair",
-    }
-
-
 def _bad_memory_uptake_label(arm: str, exposure: ContaminationExposure) -> BadMemoryUptakeLabel:
     if arm == "clean" or not exposure.source_entry_ids:
         return "not_applicable"
@@ -751,16 +677,12 @@ def _trial_client_for_sample(
 ) -> LLMClient:
     if isinstance(client, ReplayClient) and sample_id not in responses_by_sample and not replay_responses:
         raise SystemExit(f"missing replay response for sample: {sample_id}")
-    if sample_id in responses_by_sample and isinstance(responses_by_sample[sample_id], dict):
-        return ReplayClient(responses_by_sample={sample_id: responses_by_sample[sample_id]})
     if sample_id in responses_by_sample:
-        return ReplayClient([responses_by_sample[sample_id]])
+        return ReplayClient(responses_by_sample={sample_id: responses_by_sample[sample_id]})
     return client
 
 
-class _ReplayBotSolveCompatibilityClient:
-    """Adapt the locked legacy replay solve fixture, never a live response."""
-
+class _V1ReplayFixtureClient:
     def __init__(self, client: LLMClient) -> None:
         self._client = client
 
@@ -1249,7 +1171,7 @@ def _failed_faithful_trial(
         (call for call in reversed(method_calls) if call.stage in answer_stages[baseline]), None
     )
     if answer_call is None:
-        raise RuntimeError("failed faithful trial has no answer-stage provider call")
+        answer_call = method_calls[-1]
     if not isinstance(answer_call.call_id, str):
         raise RuntimeError("failed faithful trial has no answer call id")
     answer_call_id = answer_call.call_id
@@ -1457,7 +1379,6 @@ def _run_faithful_config(
             }
 
         run_state: RunState | None = None
-        bot_runtime: BotRuntime | None = None
         bot_buffers: dict[BotBufferIdentity, list[MemoryEntry]] | None = None
         if needs_bot:
             run_state = RunState(
@@ -1469,7 +1390,6 @@ def _run_faithful_config(
                     for row in _load_jsonl(Path(task_config["sample_path"]), task_config.get("limit"))
                 ],
             )
-            bot_runtime = BotRuntime()
             bot_buffers = {}
 
         transcript_states: dict[tuple[str, ...], list[MemoryEntry]] = {}
@@ -1538,8 +1458,20 @@ def _run_faithful_config(
                                 "_logging_trial_context": strict_context,
                                 "_logging_event_callback": record_call if writer is not None else None,
                                 "_require_corpus_identity": is_v2_fidelity_run,
+                                "_require_stage_keyed_replay": (
+                                    is_v2_fidelity_run
+                                    and baseline
+                                    in {
+                                        "bot_style",
+                                        "reflexion_style",
+                                        "dynamic_cheatsheet_optional",
+                                        "dynamic_cheatsheet_rs_optional",
+                                    }
+                                ),
                             }
                             trial_memory_before: list[dict[str, Any]] | None = None
+                            result: dict[str, Any] = {}
+                            verifier_result: Any = None
                             if writer is not None and filter_decision is not None:
                                 writer.write_filter(
                                     _filter_event(
@@ -1557,28 +1489,53 @@ def _run_faithful_config(
                                 trial_client = _trial_client_for_sample(
                                     client, responses_by_sample, task.sample_id, replay_responses
                                 )
-                                if config["run"]["execution_class"] == "offline_contract_replay":
-                                    trial_client = _ReplayBotSolveCompatibilityClient(trial_client)
+                                if (
+                                    not is_v2_fidelity_run
+                                    and config["run"]["execution_class"] == "offline_contract_replay"
+                                ):
+                                    trial_client = _V1ReplayFixtureClient(trial_client)
                                 if baseline == "retrieval_rag":
                                     assert embedding_provider is not None
                                     assert cache_dir is not None
                                     trial_memory_before = [entry.model_dump() for entry in memory.entries]
-                                    result = RetrievalRagPolicy().run(
+                                    executor = (
+                                        BASELINE_ADAPTERS[baseline]()
+                                        if is_v2_fidelity_run
+                                        else RetrievalRagPolicy()
+                                    )
+                                    execution = execute_baseline(
+                                        executor,
                                         task,
                                         memory,
                                         client=trial_client,
                                         model=model,
                                         config=policy_context,
-                                        top_k=config.get("embedding", {}).get("top_k"),
+                                        **(
+                                            {}
+                                            if is_v2_fidelity_run
+                                            else {"top_k": config.get("embedding", {}).get("top_k")}
+                                        ),
                                         embedding_provider=embedding_provider,
                                         corpus_identity=corpus_identities.get(task_name),
                                         cache_dir=cache_dir / task_name / arm,
+                                        verifier=lambda answer, seen_task: task_handler["verify"](
+                                            answer, seen_task
+                                        ),
                                     )
-                                    verifier_result = (
-                                        task_handler["verify"](result["parsed_answer"], task)
-                                        if result["status"] == "succeeded"
-                                        else None
-                                    )
+                                    if is_v2_fidelity_run:
+                                        result = _outcome_result_dict(execution)
+                                        verifier_result = (
+                                            task_handler["verify"](result["parsed_answer"], task)
+                                            if result["status"] == "succeeded"
+                                            else None
+                                        )
+                                    else:
+                                        result = execution
+                                        verifier_result = (
+                                            task_handler["verify"](result["parsed_answer"], task)
+                                            if result["status"] == "succeeded"
+                                            else None
+                                        )
                                 elif baseline == "no_memory":
                                     trial_memory_before = [entry.model_dump() for entry in memory.entries]
                                     captured_verifier_result: Any = None
@@ -1588,7 +1545,12 @@ def _run_faithful_config(
                                         captured_verifier_result = task_handler["verify"](answer, seen_task)
                                         return captured_verifier_result
 
-                                    result = NoMemoryPolicy().run(
+                                    execution = execute_baseline(
+                                        (
+                                            BASELINE_ADAPTERS[baseline]()
+                                            if is_v2_fidelity_run
+                                            else NoMemoryPolicy()
+                                        ),
                                         task,
                                         memory,
                                         client=trial_client,
@@ -1596,9 +1558,13 @@ def _run_faithful_config(
                                         config=policy_context,
                                         verifier=verify_no_memory,
                                     )
-                                    verifier_result = captured_verifier_result or result["verifier_result"]
+                                    if is_v2_fidelity_run:
+                                        result = _outcome_result_dict(execution)
+                                        verifier_result = captured_verifier_result or execution.verifier_result
+                                    else:
+                                        result = execution
+                                        verifier_result = result["verifier_result"]
                                 elif baseline == "bot_style":
-                                    assert bot_runtime is not None
                                     assert run_state is not None
                                     assert bot_buffers is not None
                                     identity = BotBufferIdentity(
@@ -1621,17 +1587,20 @@ def _run_faithful_config(
                                     trial_memory_before = [
                                         entry.model_dump() for entry in bot_buffers[identity]
                                     ]
+                                    captured_verifier_result: Any = None
+
+                                    def verify_bot(answer: str) -> Any:
+                                        nonlocal captured_verifier_result
+                                        captured_verifier_result = task_handler["verify"](answer, task)
+                                        return captured_verifier_result
+
                                     result = _outcome_result_dict(
-                                        bot_runtime.run(
+                                        execute_baseline(
+                                            BASELINE_ADAPTERS[baseline](),
                                             identity=identity,
                                             task=task,
                                             buffer_snapshot=bot_buffers[identity],
-                                            client=(
-                                                _ReplayBotSolveCompatibilityClient(trial_client)
-                                                if config["run"]["execution_class"]
-                                                == "offline_contract_replay"
-                                                else trial_client
-                                            ),
+                                            client=trial_client,
                                             model=model,
                                             config={
                                                 **policy_context,
@@ -1640,17 +1609,10 @@ def _run_faithful_config(
                                                     entry.entry_id for entry in bot_buffers[identity]
                                                 ],
                                             },
-                                            verifier=lambda response, task=task: task_handler["verify"](
-                                                _parse_answer(response), task
-                                            ),
+                                            verifier=verify_bot,
                                         )
                                     )
-                                    verifier_result = result["verifier_result"]
-                                    if isinstance(verifier_result, bool):
-                                        verifier_result = VerifierResult(
-                                            is_correct=verifier_result,
-                                            parsed_answer=result.get("parsed_answer"),
-                                        )
+                                    verifier_result = captured_verifier_result or result["verifier_result"]
                                     event = result.get("memory_write_event")
                                     if event and event.get("status") == "accepted":
                                         original_entry_id = str(event["new_entry_id"])
@@ -1681,12 +1643,11 @@ def _run_faithful_config(
                                         ]
                                 else:
                                     identity = (run_id, task_name, baseline, arm, model)
+                                    policy: Any | None = None
                                     if baseline == "full_history":
                                         state = transcript_states
-                                        policy = FullHistoryPolicy()
                                     elif baseline == "reflexion_style":
                                         state = reflection_states
-                                        policy = ReflexionStylePolicy()
                                     elif baseline == "dynamic_cheatsheet_rs_optional":
                                         assert embedding_provider is not None
                                         state = dc_rs_states
@@ -1719,24 +1680,104 @@ def _run_faithful_config(
                                         policy_context["visible_memory_ids"] = [
                                             entry.entry_id for entry in memory.entries
                                         ]
-                                    result = policy.run(
-                                        task,
-                                        memory,
-                                        client=trial_client,
-                                        model=model,
-                                        config=(
-                                            {**policy_context, **config.get("full_history", {})}
-                                            if baseline == "full_history"
-                                            else policy_context
-                                        ),
-                                        verifier=lambda response, task: task_handler["verify"](
-                                            _parse_answer(response), task
-                                        ),
-                                    )
-                                    verifier_result = result["verifier_result"]
-                                    state[identity] = [
-                                        MemoryEntry(**entry) for entry in result["memory_after"]
-                                    ]
+                                    captured_verifier_result: Any = None
+
+                                    def verify_native(answer: str, seen_task: Any) -> Any:
+                                        nonlocal captured_verifier_result
+                                        captured_verifier_result = task_handler["verify"](answer, seen_task)
+                                        return captured_verifier_result
+
+                                    if baseline == "full_history":
+                                        if is_v2_fidelity_run:
+                                            native_state = FullHistoryState(records=memory.entries)
+                                            outcome = execute_baseline(
+                                                BASELINE_ADAPTERS[baseline](),
+                                                task,
+                                                native_state,
+                                                client=trial_client,
+                                                model=model,
+                                                config={**policy_context, **config.get("full_history", {})},
+                                                verifier=verify_native,
+                                            )
+                                            state[identity] = native_state.records
+                                        else:
+                                            result = FullHistoryPolicy().run(
+                                                task,
+                                                memory,
+                                                client=trial_client,
+                                                model=model,
+                                                config={**policy_context, **config.get("full_history", {})},
+                                                verifier=verify_native,
+                                            )
+                                            verifier_result = result["verifier_result"]
+                                            state[identity] = [
+                                                MemoryEntry(**entry) for entry in result["memory_after"]
+                                            ]
+                                            outcome = None
+                                    elif baseline == "reflexion_style":
+                                        if is_v2_fidelity_run:
+                                            native_state = ReflexionState(
+                                                reflections=[
+                                                    entry
+                                                    for entry in memory.entries
+                                                    if entry.memory_type == "verbal_reflection"
+                                                ]
+                                            )
+                                            outcome = execute_baseline(
+                                                BASELINE_ADAPTERS[baseline](),
+                                                task,
+                                                native_state,
+                                                client=trial_client,
+                                                model=model,
+                                                config=policy_context,
+                                                verifier=verify_native,
+                                            )
+                                            memory_after = [
+                                                entry
+                                                for entry in memory.entries
+                                                if entry.memory_type != "verbal_reflection"
+                                            ] + native_state.reflections
+                                            outcome = replace(
+                                                outcome,
+                                                memory_before=tuple(trial_memory_before),
+                                                memory_after=tuple(
+                                                    entry.model_dump() for entry in memory_after
+                                                ),
+                                            )
+                                            state[identity] = memory_after
+                                        else:
+                                            result = ReflexionStylePolicy().run(
+                                                task,
+                                                memory,
+                                                client=trial_client,
+                                                model=model,
+                                                config=policy_context,
+                                                verifier=verify_native,
+                                            )
+                                            verifier_result = result["verifier_result"]
+                                            state[identity] = [
+                                                MemoryEntry(**entry) for entry in result["memory_after"]
+                                            ]
+                                            outcome = None
+                                    else:
+                                        assert policy is not None
+                                        result = execute_baseline(
+                                            policy,
+                                            task,
+                                            memory,
+                                            client=trial_client,
+                                            model=model,
+                                            config=policy_context,
+                                            verifier=verify_native,
+                                        )
+                                        verifier_result = result["verifier_result"]
+                                        state[identity] = [
+                                            MemoryEntry(**entry) for entry in result["memory_after"]
+                                        ]
+                                        outcome = None
+                                    if outcome is not None:
+                                        result = _outcome_result_dict(outcome)
+                                        verifier_result = captured_verifier_result or outcome.verifier_result
                             except Exception as exc:
                                 if writer is None:
                                     raise
@@ -1833,6 +1874,11 @@ def _run_faithful_config(
                                 writer.write_trial(trial)
                                 trial_order += 1
                                 continue
+                            if isinstance(verifier_result, bool):
+                                verifier_result = VerifierResult(
+                                    is_correct=verifier_result,
+                                    parsed_answer=result.get("parsed_answer"),
+                                )
                             assert verifier_result is not None
                             _reject_frozen_memory_drift(result, phase11_context)
                             trial = _faithful_result_trial(
@@ -1957,133 +2003,22 @@ def run_config(
         run_dir.mkdir(parents=True)
         write_provider_profile_atomic(run_dir, profile)
         write_resolved_config_atomic(run_dir, config)
-    if _is_faithful_config(config):
-        run_metadata = _run_metadata(config, run_id, run_started_at) if _is_strict_config(config) else None
-        _run_faithful_config(
-            config,
-            run_id,
-            client,
-            replay_responses,
-            responses_by_sample,
-            trials_path,
-            run_started_at,
-            repeated_failure_tracker,
-            run_metadata=run_metadata,
-            run_dir=run_dir if run_metadata is not None else None,
-            audit_dir=audit_dir,
-        )
-        print(f"wrote replay trials: {trials_path}")
-        return run_dir
-    run_dir.mkdir(parents=True, exist_ok=True)
-    with trials_path.open("w", encoding="utf-8") as f:
-        trial_order = 0
-        for task_config in config["tasks"]:
-            task_name = task_config["name"]
-            if task_name not in TASK_DISPATCH:
-                raise SystemExit(f"unsupported task for replay spine: {task_name}")
-            task_handler = TASK_DISPATCH[task_name]
-            rows = _load_jsonl(Path(task_config["sample_path"]), task_config.get("limit"))
-            if not rows:
-                raise SystemExit(f'empty replay input: {task_config["sample_path"]}')
-            for row in rows:
-                task = task_handler["build"](row)
-                for baseline in config["baselines"]:
-                    if baseline not in BASELINE_POLICIES:
-                        raise SystemExit(f"unsupported baseline: {baseline}")
-                    policy = BASELINE_POLICIES[baseline]()
-                    for arm in _valid_arms_for_baseline(baseline, config["arms"]):
-                        memory_entries, filter_decision = _memory_entries_for_arm(arm, baseline)
-                        memory = MemoryState(entries=memory_entries)
-                        memory_before = [entry.model_dump() for entry in memory.entries]
-                        retrieved_memory, retrieved_scores = _retrieved_memory(baseline, task.input, memory)
-                        contamination_exposure = _contamination_exposure(
-                            arm, memory_before, retrieved_memory
-                        )
-                        prompt_messages = policy.build_prompt(task, memory)
-                        for model in config["models"]:
-                            if isinstance(client, ReplayClient) and task.sample_id not in responses_by_sample and not replay_responses:
-                                raise SystemExit(
-                                    f"missing replay response for sample: {task.sample_id}"
-                                )
-                            trial_client = (
-                                ReplayClient([responses_by_sample[task.sample_id]])
-                                if task.sample_id in responses_by_sample
-                                else client
-                            )
-                            trial_id = _trial_id(run_id, task, baseline, arm, model)
-                            recorder = MethodCallRecorder(
-                                trial_client,
-                                trial_context={"trial_id": trial_id},
-                            )
-                            response = recorder.chat(
-                                prompt_messages,
-                                model=model,
-                                config={
-                                    **config.get("replay", {}),
-                                    "sample_id": task.sample_id,
-                                    "method_stage": (
-                                        "full_history_generate"
-                                        if baseline == "full_history"
-                                        else "legacy_generate"
-                                    ),
-                                },
-                            )
-                            parsed_answer = _parse_answer(response.content)
-                            verifier_result = task_handler["verify"](parsed_answer, task)
-                            memory_write_event = (
-                                _bot_memory_writeback(
-                                    trial_id,
-                                    task,
-                                    response.content,
-                                    verifier_result,
-                                    retrieved_memory,
-                                    memory,
-                                )
-                                if baseline == "bot_style"
-                                else None
-                            )
-                            arm_literal = cast(Literal["clean", "contaminated", "contaminated_filter"], arm)
-                            trial = TrialLog(
-                                trial_id=trial_id,
-                                run_id=run_id,
-                                task_name=task.task_name,
-                                sample_id=task.sample_id,
-                                baseline=baseline,
-                                arm=arm_literal,
-                                backbone=model,
-                                input=task.input,
-                                gold_or_verifier_spec=task.verifier_spec,
-                                prompt_messages=prompt_messages,
-                                memory_before=memory_before,
-                                retrieved_memory=retrieved_memory,
-                                retrieved_scores=retrieved_scores,
-                                raw_response=response.content,
-                                parsed_answer=verifier_result.parsed_answer,
-                                verifier_result=verifier_result,
-                                metadata=_trial_metadata(config, model, trial_order, run_started_at),
-                                filter_decision=cast(dict[str, Any] | None, filter_decision),
-                                contamination_exposure=contamination_exposure,
-                                bad_memory_uptake_label=_bad_memory_uptake_label(
-                                    arm, contamination_exposure
-                                ),
-                                repeated_failure_label=repeated_failure_tracker.label(
-                                    verifier_result.is_correct,
-                                    task.task_name,
-                                    task.sample_id,
-                                    baseline,
-                                    arm,
-                                    model,
-                                ),
-                                recovery_after_filter_label="not_applicable",
-                                memory_write_event=memory_write_event,
-                                memory_after=[entry.model_dump() for entry in memory.entries],
-                                latency_ms=response.latency_ms,
-                                token_usage=response.token_usage,
-                                retry_count=0,
-                                method_calls=recorder.get_records(),
-                            )
-                            f.write(trial.model_dump_json() + "\n")
-                            trial_order += 1
+    if config["run"].get("mode") == "legacy":
+        raise SystemExit("run.mode=legacy is read-only and cannot execute")
+    run_metadata = _run_metadata(config, run_id, run_started_at) if _is_strict_config(config) else None
+    _run_faithful_config(
+        config,
+        run_id,
+        client,
+        replay_responses,
+        responses_by_sample,
+        trials_path,
+        run_started_at,
+        repeated_failure_tracker,
+        run_metadata=run_metadata,
+        run_dir=run_dir if run_metadata is not None else None,
+        audit_dir=audit_dir,
+    )
     print(f"wrote replay trials: {trials_path}")
     return run_dir
 

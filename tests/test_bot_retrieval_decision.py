@@ -246,17 +246,17 @@ def test_miss_logs_similarity_without_retrieved_memory_or_score() -> None:
     assert outcome.retrieved_scores == ()
 
 
-def test_legacy_solve_compatibility_response_selects_a_coarse_structure() -> None:
+def test_v1_fixture_normalization_selects_a_coarse_structure() -> None:
     cli = importlib.import_module("memcontam.cli")
 
     class LegacySolveClient:
         def chat(self, *_args: object, **_kwargs: object) -> LLMResponse:
             return LLMResponse(content="final: 24", raw={}, token_usage={})
 
-    response = cli._ReplayBotSolveCompatibilityClient(LegacySolveClient()).chat(
+    response = cli._V1ReplayFixtureClient(LegacySolveClient()).chat(
         [], "replay", {"method_stage": "bot_instantiate_solve"}
     )
-    matched_response = cli._ReplayBotSolveCompatibilityClient(LegacySolveClient()).chat(
+    matched_response = cli._V1ReplayFixtureClient(LegacySolveClient()).chat(
         [],
         "replay",
         {"method_stage": "bot_instantiate_solve", "_bot_retrieval_decision": "matched"},

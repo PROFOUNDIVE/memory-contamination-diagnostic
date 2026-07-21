@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from memcontam.clients.base import LLMResponse
 
 
@@ -7,7 +9,7 @@ class ReplayClient:
     def __init__(
         self,
         responses: list[str] | None = None,
-        responses_by_sample: dict[str, dict[str, str | list[str]]] | None = None,
+        responses_by_sample: dict[str, Any] | None = None,
     ):
         self.responses = responses or ["{}"]
         self.responses_by_sample = responses_by_sample or {}
@@ -43,7 +45,17 @@ class ReplayClient:
         stage = config.get("method_stage")
         sample_id = config.get("sample_id")
         if stage and sample_id and sample_id in self.responses_by_sample:
-            content = self._next_stage_response(sample_id, stage)
+            sample_response = self.responses_by_sample[sample_id]
+            if isinstance(sample_response, dict):
+                content = self._next_stage_response(sample_id, stage)
+            elif config.get("_require_stage_keyed_replay"):
+                raise ValueError(
+                    f"native replay requires stage-keyed responses for sample {sample_id!r}"
+                )
+            elif isinstance(sample_response, str):
+                content = sample_response
+            else:
+                raise ValueError(f"invalid replay response for sample {sample_id!r}")
         else:
             content = self._next_flat_response()
         token_usage = config.get("token_usage") or {}

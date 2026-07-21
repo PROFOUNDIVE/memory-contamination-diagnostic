@@ -114,6 +114,7 @@ class BotRuntime:
         metadata["solution_trace"] = solve_result.solution_trace
         visible_memory = visible_memory_for_retrieval_decision(retrieval_decision)
         visible_entry_ids = [entry.entry_id for entry in visible_memory]
+        call_config["visible_memory_ids"] = visible_entry_ids
         try:
             payload = distill_thought_template(
                 canonical_task=canonical_task_json(task),

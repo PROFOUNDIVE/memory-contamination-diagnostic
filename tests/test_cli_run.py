@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import copy
 from pathlib import Path
 from typing import Any
 
@@ -2106,6 +2107,31 @@ def test_strict_offline_config_rejects_live_smoke_before_client_creation(tmp_pat
         run_config(config, run_id="strict_live_smoke")
 
     assert not (tmp_path / "runs" / "strict_live_smoke").exists()
+
+
+def test_baseline_fidelity_v2_bot_replay_rejects_plain_problem_distillation(
+    tmp_path, monkeypatch
+) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(repo_root)
+    config = copy.deepcopy(
+        load_config(repo_root / "configs/baseline_fidelity_v2_structural_replay.yaml")
+    )
+    config["logging"]["output_dir"] = str(tmp_path / "runs")
+    config["baselines"] = ["bot_style"]
+    config["replay"] = {
+        "responses_by_sample": {
+            "game24_pilot_001": {"bot_problem_distill": "final: 6 / (1 - (3 / 4))"}
+        }
+    }
+
+    run_dir = run_config(config, run_id="baseline_fidelity_v2_plain_bot_distillation")
+    trial = json.loads((run_dir / "trials.jsonl").read_text(encoding="utf-8"))
+
+    assert trial["status"] == "failed"
+    assert trial["error_type"] == "BaselineOutputError"
+    assert trial["metadata"]["failure_disposition"] == "bot_invalid_problem_distillation"
+    assert [call["stage"] for call in trial["method_calls"]] == ["bot_problem_distill"]
 
 
 @pytest.mark.parametrize(

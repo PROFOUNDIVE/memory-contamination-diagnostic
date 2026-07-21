@@ -89,6 +89,21 @@ def test_replay_client_rejects_missing_required_stage() -> None:
         )
 
 
+def test_native_contract_replay_requires_stage_keyed_responses_for_multicall_baselines() -> None:
+    client = ReplayClient(responses_by_sample={"sample_1": "final: 24"})
+
+    with pytest.raises(ValueError, match="stage-keyed"):
+        client.chat(
+            [{"role": "user", "content": "prompt"}],
+            model="gpt-4o",
+            config={
+                "sample_id": "sample_1",
+                "method_stage": "bot_problem_distill",
+                "_require_stage_keyed_replay": True,
+            },
+        )
+
+
 def test_replay_client_flat_list_fallback_without_stage() -> None:
     client = ReplayClient(responses=["first", "second", "third"])
 
