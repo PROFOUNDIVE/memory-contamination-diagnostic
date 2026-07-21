@@ -97,7 +97,17 @@ class BotRuntime:
                 final_response=raw_solve,
             )
 
-        parsed_answer = parse_final_answer(solve_result.final_answer)
+        try:
+            parsed_answer = parse_final_answer(solve_result.final_answer)
+        except ValueError:
+            return _failure_outcome(
+                recorder,
+                memory_before,
+                metadata,
+                "bot_invalid_solve_result",
+                answer_call_id,
+                final_response=raw_solve,
+            )
         metadata["solution_trace"] = solve_result.solution_trace
         visible_entry_ids = [entry.entry_id for entry in buffer_snapshot]
         try:
@@ -281,9 +291,7 @@ def _failure_outcome(
     memory_write_event: dict[str, Any] | None = None,
     retrieved: dict[str, Any] | None = None,
 ) -> BaselineExecutionOutcome:
-    failure_triples: dict[
-        FailureDisposition, tuple[ErrorType, ScientificIneligibilityReason]
-    ] = {
+    failure_triples: dict[FailureDisposition, tuple[ErrorType, ScientificIneligibilityReason]] = {
         "bot_invalid_problem_distillation": (
             "BaselineOutputError",
             "invalid_problem_distillation",
@@ -334,5 +342,12 @@ def _verify(verifier: Verifier | None, parsed_answer: str) -> bool:
 
 def _trial_id(identity: BotBufferIdentity, task: TaskInstance) -> str:
     return ":".join(
-        [identity.run_id, task.task_name, task.sample_id, identity.baseline, identity.arm, identity.backbone]
+        [
+            identity.run_id,
+            task.task_name,
+            task.sample_id,
+            identity.baseline,
+            identity.arm,
+            identity.backbone,
+        ]
     )

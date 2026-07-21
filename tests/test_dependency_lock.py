@@ -64,6 +64,7 @@ def test_dependency_policy_keeps_bounded_dependencies_and_includes_unsafe_closur
         "pydantic>=2.0,<3",
         "pyyaml>=6.0,<7",
         "sentence-transformers>=3.0,<6",
+        "tiktoken>=0.7,<1",
     ]
     assert project["optional-dependencies"]["dev"] == [
         "pytest>=8.0,<10",
@@ -76,8 +77,18 @@ def test_dependency_policy_keeps_bounded_dependencies_and_includes_unsafe_closur
 
 def test_committed_locks_are_exact_hash_pinned_dependency_closures() -> None:
     entries = {name: _lock_entries(path) for name, path in LOCKS.items()}
-    assert all(lock_entries and all(hashes for hashes in lock_entries.values()) for lock_entries in entries.values())
-    assert {"openai", "pydantic", "pyyaml", "sentence-transformers", "setuptools"} <= entries["runtime"].keys()
+    assert all(
+        lock_entries and all(hashes for hashes in lock_entries.values())
+        for lock_entries in entries.values()
+    )
+    assert {
+        "openai",
+        "pydantic",
+        "pyyaml",
+        "sentence-transformers",
+        "setuptools",
+        "tiktoken",
+    } <= entries["runtime"].keys()
     assert {"pip", "pip-tools", "setuptools"} <= entries["dev"].keys()
     assert "pip-tools==7.6.0" in LOCKS["dev"].read_text(encoding="utf-8")
 
@@ -128,7 +139,17 @@ def test_committed_locks_reproduce_with_mandated_pip_tools_commands() -> None:
 def test_committed_locks_support_hash_checked_dependency_resolution() -> None:
     for lock_path in LOCKS.values():
         _run(
-            ["python", "-m", "pip", "install", "--dry-run", "--ignore-installed", "--require-hashes", "-r", str(lock_path)],
+            [
+                "python",
+                "-m",
+                "pip",
+                "install",
+                "--dry-run",
+                "--ignore-installed",
+                "--require-hashes",
+                "-r",
+                str(lock_path),
+            ],
             _environment(),
         )
 

@@ -79,9 +79,14 @@ class NoMemoryAdapter:
         messages = NoMemoryPolicy().build_prompt(task, memory)
         memory_before = tuple(entry.model_dump() for entry in memory.entries)
         trial_id = ":".join(
-            [str(config.get("run_id", "unknown")), task.task_name, task.sample_id,
-             str(config.get("baseline", "no_memory")), str(config.get("arm", "clean")),
-             str(config.get("model", model))]
+            [
+                str(config.get("run_id", "unknown")),
+                task.task_name,
+                task.sample_id,
+                str(config.get("baseline", "no_memory")),
+                str(config.get("arm", "clean")),
+                str(config.get("model", model)),
+            ]
         )
         recorder = MethodCallRecorder(
             client,
@@ -89,18 +94,65 @@ class NoMemoryAdapter:
             trial_context={**config.get("_logging_trial_context", {}), "trial_id": trial_id},
         )
         try:
-            response = recorder.chat(messages, model=model, config={**config, "sample_id": config.get("sample_id", task.sample_id), "method_stage": "no_memory_generate"})
+            response = recorder.chat(
+                messages,
+                model=model,
+                config={
+                    **config,
+                    "sample_id": config.get("sample_id", task.sample_id),
+                    "method_stage": "no_memory_generate",
+                },
+            )
         except Exception:
-            return _failed(recorder, memory_before, "ProviderCallFailure", "provider_call_failed", "provider_call_failed")
-        parsed_answer = parse_final_answer(response.content)
+            return _failed(
+                recorder,
+                memory_before,
+                "ProviderCallFailure",
+                "provider_call_failed",
+                "provider_call_failed",
+            )
         answer_call_id = recorder.get_records()[0].call_id if recorder.get_records() else None
-        if not parsed_answer:
-            return _failed(recorder, memory_before, "BaselineOutputError", "no_memory_invalid_final_answer", "invalid_final_answer", final_response=response.content, answer_call_id=answer_call_id)
         try:
-            verifier_result = verifier(parsed_answer, task) if verifier else VerifierResult(is_correct=True, parsed_answer=parsed_answer)
+            parsed_answer = parse_final_answer(response.content)
+        except ValueError:
+            parsed_answer = ""
+        if not parsed_answer:
+            return _failed(
+                recorder,
+                memory_before,
+                "BaselineOutputError",
+                "no_memory_invalid_final_answer",
+                "invalid_final_answer",
+                final_response=response.content,
+                answer_call_id=answer_call_id,
+            )
+        try:
+            verifier_result = (
+                verifier(parsed_answer, task)
+                if verifier
+                else VerifierResult(is_correct=True, parsed_answer=parsed_answer)
+            )
         except Exception:
-            return _failed(recorder, memory_before, "VerifierContractError", "verifier_contract_failed", "verifier_contract_failed", final_response=response.content, parsed_answer=parsed_answer, answer_call_id=answer_call_id)
-        return BaselineExecutionOutcome(status="succeeded", final_response=response.content, parsed_answer=parsed_answer, verifier_result=verifier_result, answer_call_id=answer_call_id, method_calls=tuple(recorder.get_records()), memory_before=memory_before, memory_after=memory_before)
+            return _failed(
+                recorder,
+                memory_before,
+                "VerifierContractError",
+                "verifier_contract_failed",
+                "verifier_contract_failed",
+                final_response=response.content,
+                parsed_answer=parsed_answer,
+                answer_call_id=answer_call_id,
+            )
+        return BaselineExecutionOutcome(
+            status="succeeded",
+            final_response=response.content,
+            parsed_answer=parsed_answer,
+            verifier_result=verifier_result,
+            answer_call_id=answer_call_id,
+            method_calls=tuple(recorder.get_records()),
+            memory_before=memory_before,
+            memory_after=memory_before,
+        )
 
 
 def _failed(

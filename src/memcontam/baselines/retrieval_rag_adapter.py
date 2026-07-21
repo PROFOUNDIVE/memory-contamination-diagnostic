@@ -44,7 +44,10 @@ class RetrievalRagAdapter:
         recorder = MethodCallRecorder(
             client,
             event_callback=config.get("_logging_event_callback"),
-            trial_context={**config.get("_logging_trial_context", {}), "trial_id": _trial_id(task, config, model)},
+            trial_context={
+                **config.get("_logging_trial_context", {}),
+                "trial_id": _trial_id(task, config, model),
+            },
         )
         provider_failure = _provider_failure(embedding_provider, corpus_identity, task)
         if provider_failure is not None:
@@ -111,7 +114,10 @@ class RetrievalRagAdapter:
         if method_calls:
             method_calls[-1].retrieved_records = records
         answer_call_id = _answer_call_id(recorder)
-        parsed_answer = parse_final_answer(response.content)
+        try:
+            parsed_answer = parse_final_answer(response.content)
+        except ValueError:
+            parsed_answer = ""
         if not parsed_answer:
             return _failed_outcome(
                 recorder,
@@ -148,7 +154,10 @@ class RetrievalRagAdapter:
             method_calls=tuple(method_calls),
             memory_before=memory_before,
             memory_after=tuple(entry.model_dump() for entry in memory.entries),
-            retrieved_memory=tuple(_entries_by_id(memory.entries)[record.document_id].model_dump() for record in records),
+            retrieved_memory=tuple(
+                _entries_by_id(memory.entries)[record.document_id].model_dump()
+                for record in records
+            ),
             retrieved_scores=tuple(record.score for record in records),
             metadata=_metadata(index, corpus_identity),
         )
@@ -306,7 +315,8 @@ def _failed_outcome(
         memory_before=memory_before,
         memory_after=tuple(entry.model_dump() for entry in memory.entries),
         retrieved_memory=tuple(
-            _entries_by_id(memory.entries)[record.document_id].model_dump() for record in records or []
+            _entries_by_id(memory.entries)[record.document_id].model_dump()
+            for record in records or []
         ),
         retrieved_scores=tuple(record.score for record in records or []),
         error_type=error_type,

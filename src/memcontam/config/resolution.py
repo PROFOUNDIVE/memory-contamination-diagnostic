@@ -8,6 +8,7 @@ from memcontam.baselines.contracts import (
     BASELINE_FIDELITY_V2,
     FAILURE_TAXONOMY_V2,
 )
+from memcontam.baselines.prompt_budget import PromptBudgetSpec, effective_prompt_budget
 from memcontam.clients.provider_profile import ProviderProfile, provider_profile_id
 
 
@@ -34,7 +35,26 @@ def validate_fidelity_contract(config: dict[str, Any]) -> bool:
         raise ValueError(
             "run.fidelity_gate_layer must be structural, source_contract, or real_retriever"
         )
+    _validate_full_history_budget(config)
     return True
+
+
+def _validate_full_history_budget(config: dict[str, Any]) -> None:
+    full_history = config.get("full_history")
+    if full_history is None:
+        return
+    if not isinstance(full_history, dict):
+        raise ValueError("full_history must be a mapping")
+    try:
+        spec = PromptBudgetSpec(
+            context_window_tokens=full_history["context_window_tokens"],
+            max_output_tokens=full_history["max_output_tokens"],
+            fixed_prompt_overhead_tokens=full_history["fixed_prompt_overhead_tokens"],
+            safety_margin_tokens=full_history["safety_margin_tokens"],
+        )
+    except KeyError as exc:
+        raise ValueError(f"full_history missing {exc.args[0]}") from exc
+    effective_prompt_budget(spec, current_task_tokens=0)
 
 
 def _redact(value: Any, key: str = "") -> Any:
