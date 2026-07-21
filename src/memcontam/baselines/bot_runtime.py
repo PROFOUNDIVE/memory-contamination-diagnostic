@@ -10,6 +10,7 @@ from memcontam.baselines.bot_write import (
     BoTTemplatePayload,
     build_template_entry,
     distill_thought_template,
+    visible_memory_for_retrieval_decision,
 )
 from memcontam.baselines.common import parse_final_answer
 from memcontam.baselines.contracts import (
@@ -30,6 +31,7 @@ from memcontam.memory.bot_buffer import (
 from memcontam.memory.embeddings import EmbeddingProvider
 from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
+from memcontam.tasks.dispatch import canonical_task_json
 
 
 Verifier = Callable[[str], VerifierResult | bool]
@@ -110,12 +112,17 @@ class BotRuntime:
                 final_response=raw_solve,
             )
         metadata["solution_trace"] = solve_result.solution_trace
-        visible_entry_ids = [entry.entry_id for entry in buffer_snapshot]
+        visible_memory = visible_memory_for_retrieval_decision(retrieval_decision)
+        visible_entry_ids = [entry.entry_id for entry in visible_memory]
         try:
             payload = distill_thought_template(
+                canonical_task=canonical_task_json(task),
+                distilled_problem=distilled,
+                retrieval_decision=retrieval_decision,
+                selected_structure=solve_result.selected_structure,
                 solution_trace=solve_result.solution_trace,
                 final_answer=solve_result.final_answer,
-                visible_memory_ids=visible_entry_ids,
+                visible_memory=visible_memory,
                 client=recorder,
                 model=model,
                 config=call_config,
@@ -142,6 +149,7 @@ class BotRuntime:
             buffer_snapshot=buffer_snapshot,
             source_trial_id=_trial_id(identity, task),
             embedding_provider=embedding_provider,
+            visible_entry_ids=visible_entry_ids,
             config=call_config,
         )
         try:
@@ -186,9 +194,9 @@ def freeze_native_transition(
     buffer_snapshot: list[MemoryEntry],
     source_trial_id: str,
     embedding_provider: EmbeddingProvider,
+    visible_entry_ids: list[str],
     config: dict[str, Any],
 ) -> FrozenNativeTransition:
-    visible_entry_ids = [entry.entry_id for entry in buffer_snapshot]
     used_entry_ids = set(payload.explicitly_used_memory_ids)
     is_contaminated = any(
         entry.entry_id in used_entry_ids and entry.clean_or_contaminated == "contaminated"

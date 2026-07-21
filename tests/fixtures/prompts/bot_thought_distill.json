@@ -1,1 +1,1 @@
-{"stage":"bot_thought_distill","schema":"TemplateDistillationResult","strict_json":true}
+{"stage":"bot_thought_distill","schema":"TemplateDistillationResult","strict_json":true,"required_inputs":["canonical_task","distilled_problem","retrieval_decision","selected_structure","solution_trace","final_answer","visible_memory"]}
