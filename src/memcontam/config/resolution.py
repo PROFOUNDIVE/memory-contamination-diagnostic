@@ -10,6 +10,7 @@ from memcontam.baselines.contracts import (
 )
 from memcontam.baselines.prompt_budget import PromptBudgetSpec, effective_prompt_budget
 from memcontam.clients.provider_profile import ProviderProfile, provider_profile_id
+from memcontam.memory.embedding_policy import validate_embedding_execution_policy
 
 
 _SECRET_MARKERS = ("api_key", "authorization", "credential", "password", "secret", "token")
@@ -36,6 +37,7 @@ def validate_fidelity_contract(config: dict[str, Any]) -> bool:
             "run.fidelity_gate_layer must be structural, source_contract, or real_retriever"
         )
     _validate_full_history_budget(config)
+    validate_embedding_execution_policy(config, require_mode=True)
     return True
 
 

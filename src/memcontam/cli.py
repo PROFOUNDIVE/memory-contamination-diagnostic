@@ -61,11 +61,29 @@ from memcontam.logging.provenance import (
     normalize_memory_event,
 )
 from memcontam.logging.writer import RunLogWriter
-from memcontam.logging.audit_artifacts import write_provider_profile_atomic, write_resolved_config_atomic
+from memcontam.logging.audit_artifacts import (
+    write_provider_profile_atomic,
+    write_resolved_config_atomic,
+)
 from memcontam.config.resolution import resolve_run_config, validate_fidelity_contract
 from memcontam.memory.bot_buffer import BotBufferIdentity, ThoughtTemplate
-from memcontam.memory.corpus import CorpusRecord, build_arm_corpus, load_corpus
-from memcontam.memory.embeddings import EmbeddingProvider, FakeEmbeddingProvider, SentenceTransformerProvider
+from memcontam.memory.corpus import (
+    CorpusRecord,
+    build_arm_corpus,
+    build_trusted_corpus_identity,
+    load_corpus,
+    load_corpus_manifest,
+)
+from memcontam.memory.embeddings import (
+    EmbeddingProvider,
+    FakeEmbeddingProvider,
+    SentenceTransformerProvider,
+)
+from memcontam.memory.embedding_policy import (
+    build_embedding_provider_for_run,
+    embedding_provider_identity,
+    validate_embedding_execution_policy,
+)
 from memcontam.memory.filters import FilterTelemetry, filter_legacy_replay_entries
 from memcontam.memory.retrieval import retrieve_records
 from memcontam.memory.run_state import RunState
@@ -334,6 +352,7 @@ def _validate_run_config(config: dict[str, Any]) -> None:
     _validate_placeholder_main_config(config)
     try:
         validate_fidelity_contract(config)
+        validate_embedding_execution_policy(config, require_mode=False)
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
     run_config = config.get("run", {})
@@ -452,6 +471,8 @@ def _validate_typed_config_section(section: str, value: Any, model: Any) -> None
 
 def _embedding_provider(config: dict[str, Any]) -> EmbeddingProvider:
     embedding_config = config.get("embedding", {})
+    if "mode" in embedding_config:
+        return build_embedding_provider_for_run(config)
     if embedding_config.get("offline_fallback", False):
         return FakeEmbeddingProvider()
     return SentenceTransformerProvider(
@@ -1402,14 +1423,26 @@ def _run_faithful_config(
         embedding_provider: EmbeddingProvider | None = None
         cache_dir: Path | None = None
         if needs_embedding:
-            embedding_provider = (
-                FakeEmbeddingProvider()
-                if not config.get("embedding") and config.get("arms", []) == ["clean"]
-                else _embedding_provider(config)
+            embedding_provider = _embedding_provider(config)
+            cache_dir = (
+                Path(config.get("embedding", {}).get("cache_path", "data/embedding_cache")) / run_id
             )
-            cache_dir = Path(
-                config.get("embedding", {}).get("cache_path", "data/embedding_cache")
-            ) / run_id
+        corpus_identities = {}
+        if "retrieval_rag" in config["baselines"]:
+            manifest_path = config.get("memory", {}).get("corpus_manifest_path")
+            if manifest_path is not None:
+                assert embedding_provider is not None
+                manifest = load_corpus_manifest(Path(manifest_path))
+                provider_identity = embedding_provider_identity(embedding_provider)
+                corpus_identities = {
+                    task_config["name"]: build_trusted_corpus_identity(
+                        corpus_records,
+                        manifest=manifest,
+                        task_family=task_config["name"],
+                        embedding_provider_identity=provider_identity,
+                    )
+                    for task_config in config["tasks"]
+                }
 
         run_state: RunState | None = None
         bot_runtime: BotRuntime | None = None
@@ -1525,6 +1558,7 @@ def _run_faithful_config(
                                         config=policy_context,
                                         top_k=config.get("embedding", {}).get("top_k"),
                                         embedding_provider=embedding_provider,
+                                        corpus_identity=corpus_identities.get(task_name),
                                         cache_dir=cache_dir / task_name / arm,
                                     )
                                     verifier_result = task_handler["verify"](result["parsed_answer"], task)
@@ -1637,13 +1671,10 @@ def _run_faithful_config(
                                         state = reflection_states
                                         policy = ReflexionStylePolicy()
                                     elif baseline == "dynamic_cheatsheet_rs_optional":
+                                        assert embedding_provider is not None
                                         state = dc_rs_states
                                         policy = DynamicCheatsheetRetrievalSynthesisPolicy(
-                                            embedding_provider=(
-                                                embedding_provider
-                                                if embedding_provider is not None
-                                                else FakeEmbeddingProvider()
-                                            ),
+                                            embedding_provider=embedding_provider,
                                             cache_dir=(
                                                 cache_dir / "dc_rs" / task_name / arm / model
                                                 if cache_dir is not None

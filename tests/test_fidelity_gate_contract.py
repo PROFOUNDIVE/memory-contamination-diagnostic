@@ -69,7 +69,9 @@ def test_fidelity_v2_config_rejects_v1_version_tuple_members(section: str, field
 
 def test_fidelity_v2_validate_config_rejects_v1_prompt_version(tmp_path: Path) -> None:
     config = yaml.safe_load(
-        (ROOT / "configs" / "baseline_fidelity_v2_structural_replay.yaml").read_text(encoding="utf-8")
+        (ROOT / "configs" / "baseline_fidelity_v2_structural_replay.yaml").read_text(
+            encoding="utf-8"
+        )
     )
     config["logging"]["prompt_version"] = "baseline_fidelity_v1"
     config_path = tmp_path / "invalid-v2.yaml"
@@ -77,6 +79,10 @@ def test_fidelity_v2_validate_config_rejects_v1_prompt_version(tmp_path: Path) -
 
     with pytest.raises(SystemExit, match="complete Baseline-Fidelity-V2 version tuple"):
         validate_config(config_path)
+
+
+def test_structural_f1a_config_validates_with_its_explicit_replay_contract() -> None:
+    validate_config(ROOT / "configs" / "baseline_fidelity_v2_structural_replay.yaml")
 
 
 def test_fidelity_v2_config_rejects_unknown_fidelity_gate_layer() -> None:

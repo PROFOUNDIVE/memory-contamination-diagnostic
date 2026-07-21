@@ -57,8 +57,10 @@ target_contamination_set:
 memory:
   corpus_path: data/memory/catalog_v3.jsonl
   corpus_version: memory_catalog_v3
+  corpus_manifest_path: data/memory/catalog_v3.manifest.json
 
 embedding:
+  mode: test_double
   model_id: sentence-transformers/all-MiniLM-L6-v2
   revision: 1110a243fdf4706b3f48f1d95db1a4f5529b4d41
   cache_path: data/embedding_cache

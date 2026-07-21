@@ -56,6 +56,19 @@ class CorpusManifest(BaseModel):
     content_hash: str
 
 
+def load_corpus_manifest(path: Path) -> CorpusManifest:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise CorpusValidationError(f"cannot read corpus manifest: {path}") from exc
+    except json.JSONDecodeError as exc:
+        raise CorpusValidationError(f"malformed corpus manifest: {path}") from exc
+    try:
+        return CorpusManifest.model_validate(payload)
+    except ValueError as exc:
+        raise CorpusValidationError(f"invalid corpus manifest: {path}") from exc
+
+
 def corpus_content_hash(records: list["CorpusRecord"]) -> str:
     payload = json.dumps(
         [record.model_dump(mode="json") for record in records],
@@ -65,7 +78,7 @@ def corpus_content_hash(records: list["CorpusRecord"]) -> str:
     return "sha256:" + hashlib.sha256(payload).hexdigest()
 
 
-def trusted_corpus_card(
+def build_trusted_corpus_identity(
     records: list["CorpusRecord"],
     *,
     manifest: CorpusManifest | None,
@@ -80,6 +93,21 @@ def trusted_corpus_card(
     return CorpusIdentity(
         manifest_id=manifest.manifest_id,
         corpus_version=manifest.corpus_version,
+        task_family=task_family,
+        embedding_provider_identity=embedding_provider_identity,
+    )
+
+
+def trusted_corpus_card(
+    records: list["CorpusRecord"],
+    *,
+    manifest: CorpusManifest | None,
+    task_family: str,
+    embedding_provider_identity: str,
+) -> CorpusIdentity:
+    return build_trusted_corpus_identity(
+        records,
+        manifest=manifest,
         task_family=task_family,
         embedding_provider_identity=embedding_provider_identity,
     )

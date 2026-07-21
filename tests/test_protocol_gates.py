@@ -93,6 +93,21 @@ def test_protocol_validation_accepts_clean_non_scientific_live_run() -> None:
     )
 
 
+def test_protocol_validation_rejects_test_double_embedding_outside_offline_replay() -> None:
+    config = _config(
+        {
+            "stage": "pilot",
+            "execution_class": "live",
+            "provider": "openai_compatible",
+        },
+        ["clean"],
+    )
+    config["embedding"] = {"mode": "test_double"}
+
+    with pytest.raises(SystemExit, match="test_double"):
+        cli._validate_run_config(config)
+
+
 def test_oracle_qa_has_a_dedicated_test_only_namespace() -> None:
     spec = importlib.util.find_spec("memcontam.memory.oracle_qa")
 

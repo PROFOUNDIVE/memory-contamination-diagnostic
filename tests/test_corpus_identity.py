@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, fields
 import importlib
 import importlib.util
+import json
 from typing import cast
 
 from memcontam.memory import corpus, retrieval
@@ -74,3 +75,38 @@ def test_retrieval_rag_rejects_a_lookalike_corpus_identity() -> None:
     assert outcome.error_type == "CorpusContractError"
     assert outcome.failure_disposition == "rag_manifest_invalid"
     assert outcome.scientific_ineligibility_reason == "manifest_invalid"
+
+
+def test_corpus_identity_loads_manifest_and_binds_task_and_provider(tmp_path) -> None:
+    assert hasattr(corpus, "load_corpus_manifest")
+    assert hasattr(corpus, "build_trusted_corpus_identity")
+    record = corpus.CorpusRecord(
+        entry_id="seed-1",
+        task="game24",
+        target_baselines=["retrieval_rag"],
+        memory_type="strategy",
+        content="Use complementary intermediate values.",
+        source="fixture",
+        clean_or_contaminated="clean",
+    )
+    manifest_path = tmp_path / "corpus.manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "manifest_id": "fixture-corpus",
+                "corpus_version": "v1",
+                "content_hash": corpus.corpus_content_hash([record]),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    identity = corpus.build_trusted_corpus_identity(
+        [record],
+        manifest=corpus.load_corpus_manifest(manifest_path),
+        task_family="game24",
+        embedding_provider_identity="fake-deterministic-embedding@local",
+    )
+
+    assert identity.task_family == "game24"
+    assert identity.embedding_provider_identity == "fake-deterministic-embedding@local"
