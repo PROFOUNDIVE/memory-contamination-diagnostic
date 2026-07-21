@@ -7,6 +7,7 @@ import pytest
 
 from memcontam.baselines.contracts import BaselineExecutionOutcome
 from memcontam.logging.schema import VerifierResult
+from memcontam.memory.embeddings import FakeEmbeddingProvider
 
 
 def test_baseline_execution_outcome_retains_failed_evidence_and_valid_incorrect_success() -> None:
@@ -203,6 +204,7 @@ def test_bot_invalid_solve_returns_closed_failure_without_verifier_or_write() ->
         content="Build pairs.",
         memory_type="thought_template",
         clean_or_contaminated="clean",
+        metadata={"description": "Build pairs.", "category": "procedure-based"},
     )
 
     outcome = BotRuntime().run(
@@ -211,7 +213,7 @@ def test_bot_invalid_solve_returns_closed_failure_without_verifier_or_write() ->
         buffer_snapshot=[entry],
         client=client,
         model="replay",
-        config={"sample_id": "sample-1"},
+        config={"sample_id": "sample-1", "embedding_provider": FakeEmbeddingProvider()},
         verifier=verifier_must_not_run,
     )
 
@@ -246,7 +248,8 @@ def test_bot_invalid_thought_distillation_returns_closed_failure_without_verifie
                     '"distilled_task":"Construct 24."}'
                 ),
                 "bot_instantiate_solve": (
-                    '{"solution_trace":"Build pairs.","final_answer":"final: 24"}'
+                    '{"selected_structure":"procedure-based",'
+                    '"solution_trace":"Build pairs.","final_answer":"final: 24"}'
                 ),
                 "bot_thought_distill": '{"description":""}',
             }
@@ -260,7 +263,7 @@ def test_bot_invalid_thought_distillation_returns_closed_failure_without_verifie
         buffer_snapshot=[],
         client=client,
         model="replay",
-        config={"sample_id": "sample-1"},
+        config={"sample_id": "sample-1", "embedding_provider": FakeEmbeddingProvider()},
         verifier=lambda answer: verifier_calls.append(answer) or True,
     )
 

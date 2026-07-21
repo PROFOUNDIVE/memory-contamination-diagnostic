@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -11,10 +12,24 @@ from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
 
 
-FALLBACK_THOUGHT_TEMPLATE = (
-    "Solve the task step by step. Use only justified transformations, obey all stated restrictions, "
-    "and return exactly the required final-answer format."
+CoarseStructure = Literal["prompt-based", "procedure-based", "programming-based"]
+
+COARSE_THOUGHT_STRUCTURES: tuple[tuple[CoarseStructure, str], ...] = (
+    (
+        "prompt-based",
+        "Restate the objective and constraints, then reason through the required answer format.",
+    ),
+    (
+        "procedure-based",
+        "Decompose the task into justified ordered steps and verify each intermediate result.",
+    ),
+    (
+        "programming-based",
+        "Formulate a precise executable-style plan, then evaluate it against the stated constraints.",
+    ),
 )
+
+RETRIEVAL_THRESHOLD = 0.7
 
 _DISTILL_INSTRUCTIONS = """\
 Extract the problem information required to solve the user task. Return only strict unfenced JSON with
@@ -28,6 +43,14 @@ class DistilledProblem(BaseModel):
     key_information: NonEmptyStr
     restrictions: NonEmptyStr
     distilled_task: NonEmptyStr
+
+
+@dataclass(frozen=True)
+class BoTRetrievalDecision:
+    decision: Literal["matched", "miss", "empty_buffer"]
+    matched_entry: MemoryEntry | None
+    top_similarity: float | None
+    threshold: float
 
 
 def distill_problem(
@@ -57,25 +80,30 @@ def build_distilled_query(problem: DistilledProblem) -> str:
 def retrieve_top_template(
     problem: DistilledProblem,
     entries: list[MemoryEntry],
-    provider: EmbeddingProvider,
-) -> dict[str, Any] | None:
+    provider: EmbeddingProvider | None,
+) -> BoTRetrievalDecision:
+    if provider is None:
+        raise ValueError("BoT retrieval requires an explicit embedding_provider")
     if not entries:
-        return None
+        return BoTRetrievalDecision("empty_buffer", None, None, RETRIEVAL_THRESHOLD)
     query_vector = provider.encode_query(build_distilled_query(problem))
-    descriptions = [
-        entry.metadata.get("description", entry.content)
-        if isinstance(entry.metadata.get("description", entry.content), str)
-        else entry.content
-        for entry in entries
-    ]
+    descriptions = [_template_description(entry) for entry in entries]
     document_vectors = [provider.encode_document(description) for description in descriptions]
     top_matches = normalized_dot_top_k(
         query_vector, document_vectors, [entry.entry_id for entry in entries], k=1
     )
     if not top_matches:
-        return None
+        return BoTRetrievalDecision("miss", None, None, RETRIEVAL_THRESHOLD)
     entry_id, score = top_matches[0]
-    if score < 0.7:
-        return None
+    if score < RETRIEVAL_THRESHOLD:
+        return BoTRetrievalDecision("miss", None, score, RETRIEVAL_THRESHOLD)
     entry = next(entry for entry in entries if entry.entry_id == entry_id)
-    return {"entry_id": entry.entry_id, "content": entry.content, "score": score, "memory_entry": entry}
+    return BoTRetrievalDecision("matched", entry, score, RETRIEVAL_THRESHOLD)
+
+
+def _template_description(entry: MemoryEntry) -> str:
+    description = entry.metadata.get("description")
+    category = entry.metadata.get("category")
+    if not isinstance(description, str) or not description.strip() or not isinstance(category, str) or not category.strip():
+        raise ValueError("V2 BoT templates require explicit description and category metadata")
+    return description

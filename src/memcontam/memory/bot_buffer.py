@@ -4,8 +4,9 @@ import copy
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
+from memcontam.baselines.bot_read import _template_description
 from memcontam.baselines.bot_write import BoTTemplatePayload
-from memcontam.memory.embeddings import EmbeddingProvider, FakeEmbeddingProvider, normalized_dot_top_k
+from memcontam.memory.embeddings import EmbeddingProvider, normalized_dot_top_k
 from memcontam.memory.stores import MemoryEntry
 
 
@@ -60,16 +61,12 @@ def evaluate_native_novelty(
 ) -> NativeNoveltyDecision:
     if not existing:
         return NativeNoveltyDecision(True, None, None)
-    embedding_provider = provider or FakeEmbeddingProvider()
-    descriptions = [
-        entry.metadata["description"]
-        if isinstance(entry.metadata.get("description"), str)
-        else entry.content
-        for entry in existing
-    ]
+    if provider is None:
+        raise ValueError("BoT novelty requires an explicit embedding_provider")
+    descriptions = [_template_description(entry) for entry in existing]
     entry_id, score = normalized_dot_top_k(
-        embedding_provider.encode_query(candidate.description),
-        [embedding_provider.encode_document(description) for description in descriptions],
+        provider.encode_query(candidate.description),
+        [provider.encode_document(description) for description in descriptions],
         [entry.entry_id for entry in existing],
         k=1,
     )[0]

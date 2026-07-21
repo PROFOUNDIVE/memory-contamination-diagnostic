@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any, Callable, Literal
 
-from memcontam.baselines.bot_read import retrieve_top_template
+from memcontam.baselines.bot_read import BoTRetrievalDecision, retrieve_top_template
 from memcontam.baselines.bot_solve import parse_bot_solve_result
 from memcontam.baselines.bot_style import BotStylePolicy
 from memcontam.baselines.bot_write import (
@@ -27,7 +27,7 @@ from memcontam.memory.bot_buffer import (
     NativeNoveltyDecision,
     evaluate_native_novelty,
 )
-from memcontam.memory.embeddings import FakeEmbeddingProvider
+from memcontam.memory.embeddings import EmbeddingProvider
 from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
 
@@ -64,6 +64,9 @@ class BotRuntime:
         verifier: Verifier | None = None,
     ) -> BaselineExecutionOutcome:
         call_config = {**config, "sample_id": config.get("sample_id", task.sample_id)}
+        embedding_provider = call_config.get("embedding_provider")
+        if embedding_provider is None:
+            raise ValueError("BoT runtime requires an explicit embedding_provider")
         recorder = MethodCallRecorder(client)
         memory_before = tuple(entry.model_dump() for entry in buffer_snapshot)
         metadata: dict[str, Any] = {"bot_buffer_identity": asdict(identity)}
@@ -76,17 +79,14 @@ class BotRuntime:
             )
 
         metadata["distilled_problem"] = distilled.model_dump()
-        retrieved = retrieve_top_template(
-            distilled,
-            buffer_snapshot,
-            call_config.get("embedding_provider", FakeEmbeddingProvider()),
-        )
+        retrieval_decision = retrieve_top_template(distilled, buffer_snapshot, embedding_provider)
+        metadata["retrieval_decision"] = _retrieval_decision_metadata(retrieval_decision)
         raw_solve = self.policy.template_instantiation_solve(
-            task, distilled, recorder, model, call_config, retrieved=retrieved
+            task, distilled, recorder, model, call_config, retrieval_decision=retrieval_decision
         )
         answer_call_id = recorder.get_records()[-1].call_id
         try:
-            solve_result = parse_bot_solve_result(raw_solve)
+            solve_result = parse_bot_solve_result(raw_solve, retrieval_decision)
         except ValueError:
             return _failure_outcome(
                 recorder,
@@ -97,6 +97,7 @@ class BotRuntime:
                 final_response=raw_solve,
             )
 
+        metadata["selected_structure"] = solve_result.selected_structure
         try:
             parsed_answer = parse_final_answer(solve_result.final_answer)
         except ValueError:
@@ -127,7 +128,7 @@ class BotRuntime:
                 answer_call_id=answer_call_id,
                 final_response=solve_result.final_answer,
                 parsed_answer=parsed_answer,
-                retrieved=retrieved,
+                retrieval_decision=retrieval_decision,
             )
 
         metadata["thought_template"] = {
@@ -140,7 +141,7 @@ class BotRuntime:
             payload=payload,
             buffer_snapshot=buffer_snapshot,
             source_trial_id=_trial_id(identity, task),
-            embedding_provider=call_config.get("embedding_provider", FakeEmbeddingProvider()),
+            embedding_provider=embedding_provider,
             config=call_config,
         )
         try:
@@ -157,7 +158,7 @@ class BotRuntime:
                 parsed_answer=parsed_answer,
                 memory_after=materialized.memory_after,
                 memory_write_event=materialized.memory_write_event,
-                retrieved=retrieved,
+                retrieval_decision=retrieval_decision,
             )
 
         materialized = materialize_frozen_transition(
@@ -172,8 +173,8 @@ class BotRuntime:
             method_calls=tuple(recorder.get_records()),
             memory_before=memory_before,
             memory_after=tuple(entry.model_dump() for entry in materialized.memory_after),
-            retrieved_memory=(retrieved["memory_entry"].model_dump(),) if retrieved else (),
-            retrieved_scores=(retrieved["score"],) if retrieved else (),
+            retrieved_memory=_retrieved_memory(retrieval_decision),
+            retrieved_scores=_retrieved_scores(retrieval_decision),
             memory_write_event=materialized.memory_write_event,
             metadata=metadata,
         )
@@ -184,7 +185,7 @@ def freeze_native_transition(
     payload: BoTTemplatePayload,
     buffer_snapshot: list[MemoryEntry],
     source_trial_id: str,
-    embedding_provider: Any,
+    embedding_provider: EmbeddingProvider,
     config: dict[str, Any],
 ) -> FrozenNativeTransition:
     visible_entry_ids = [entry.entry_id for entry in buffer_snapshot]
@@ -251,7 +252,7 @@ def invalid_distillation_failure_outcome(
     answer_call_id: str | None,
     final_response: str,
     parsed_answer: str,
-    retrieved: dict[str, Any] | None,
+    retrieval_decision: BoTRetrievalDecision,
 ) -> BaselineExecutionOutcome:
     return _failure_outcome(
         recorder,
@@ -269,7 +270,7 @@ def invalid_distillation_failure_outcome(
             "new_entry_id": None,
             "source_outcome": None,
         },
-        retrieved=retrieved,
+        retrieval_decision=retrieval_decision,
     )
 
 
@@ -289,7 +290,7 @@ def _failure_outcome(
     parsed_answer: str | None = None,
     memory_after: tuple[MemoryEntry, ...] | None = None,
     memory_write_event: dict[str, Any] | None = None,
-    retrieved: dict[str, Any] | None = None,
+    retrieval_decision: BoTRetrievalDecision | None = None,
 ) -> BaselineExecutionOutcome:
     failure_triples: dict[FailureDisposition, tuple[ErrorType, ScientificIneligibilityReason]] = {
         "bot_invalid_problem_distillation": (
@@ -319,8 +320,8 @@ def _failure_outcome(
             if memory_after is not None
             else memory_before
         ),
-        retrieved_memory=(retrieved["memory_entry"].model_dump(),) if retrieved else (),
-        retrieved_scores=(retrieved["score"],) if retrieved else (),
+        retrieved_memory=_retrieved_memory(retrieval_decision),
+        retrieved_scores=_retrieved_scores(retrieval_decision),
         memory_write_event=memory_write_event,
         error_type=error_type,
         failure_disposition=failure_disposition,
@@ -351,3 +352,24 @@ def _trial_id(identity: BotBufferIdentity, task: TaskInstance) -> str:
             identity.backbone,
         ]
     )
+
+
+def _retrieval_decision_metadata(decision: BoTRetrievalDecision) -> dict[str, Any]:
+    return {
+        "decision": decision.decision,
+        "matched_entry_id": decision.matched_entry.entry_id if decision.matched_entry else None,
+        "top_similarity": decision.top_similarity,
+        "threshold": decision.threshold,
+    }
+
+
+def _retrieved_memory(decision: BoTRetrievalDecision | None) -> tuple[dict[str, Any], ...]:
+    if decision is None or decision.matched_entry is None:
+        return ()
+    return (decision.matched_entry.model_dump(),)
+
+
+def _retrieved_scores(decision: BoTRetrievalDecision | None) -> tuple[float, ...]:
+    if decision is None or decision.decision != "matched" or decision.top_similarity is None:
+        return ()
+    return (decision.top_similarity,)

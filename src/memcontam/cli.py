@@ -785,7 +785,17 @@ class _ReplayBotSolveCompatibilityClient:
                 }
             )
         elif stage == "bot_instantiate_solve" and response.content.lower().startswith("final:"):
-            content = json.dumps({"solution_trace": "legacy replay", "final_answer": response.content})
+            content = json.dumps(
+                {
+                    "selected_structure": (
+                        "retrieved-template"
+                        if config.get("_bot_retrieval_decision") == "matched"
+                        else "procedure-based"
+                    ),
+                    "solution_trace": "legacy replay",
+                    "final_answer": response.content,
+                }
+            )
         elif stage == "reflexion_reflect" and not response.content.lstrip().startswith("{"):
             content = json.dumps(
                 {

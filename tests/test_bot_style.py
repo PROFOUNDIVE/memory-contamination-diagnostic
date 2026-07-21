@@ -34,6 +34,7 @@ _DISTILLATION_OUTPUT = json.dumps(
 
 _SOLUTION_OUTPUT = json.dumps(
     {
+        "selected_structure": "retrieved-template",
         "solution_trace": "Pair 1 + 3 and 2 + 4, then multiply the pair sums.",
         "final_answer": "final: (1 + 3) * (2 + 4) = 24",
     }
@@ -52,10 +53,13 @@ def _thought_output(*, used_ids: list[str] | None = None) -> str:
 
 
 class _AdmittingEmbeddingProvider:
+    metadata: dict[str, object] = {}
+
     def encode_query(self, text: str) -> list[float]:
         return [1.0, 0.0] if text.startswith("{") else [0.0, 1.0]
 
-    def encode_document(self, _text: str) -> list[float]:
+    def encode_document(self, text: str) -> list[float]:
+        del text
         return [1.0, 0.0]
 
 
@@ -135,6 +139,10 @@ def test_bot_retrieve_uses_distilled_query_and_accepts_threshold_equality() -> N
             content="Build useful pairs before combining them.",
             memory_type="thought_template",
             clean_or_contaminated="clean",
+            metadata={
+                "description": "Build useful pairs before combining them.",
+                "category": "procedure-based",
+            },
         )
     ]
     queries = []
@@ -149,8 +157,10 @@ def test_bot_retrieve_uses_distilled_query_and_accepts_threshold_equality() -> N
 
     retrieved = bot_read.retrieve_top_template(problem, entries, ThresholdProvider())
 
-    assert retrieved["entry_id"] == "tpl_001"
-    assert retrieved["score"] == pytest.approx(0.7)
+    assert retrieved.decision == "matched"
+    assert retrieved.matched_entry is not None
+    assert retrieved.matched_entry.entry_id == "tpl_001"
+    assert retrieved.top_similarity == pytest.approx(0.7)
     assert queries == [bot_read.build_distilled_query(problem)]
 
 
@@ -169,6 +179,7 @@ def test_bot_retrieve_below_threshold_uses_fixed_fallback() -> None:
             content="Ignore this weak match.",
             memory_type="thought_template",
             clean_or_contaminated="clean",
+            metadata={"description": "Ignore this weak match.", "category": "procedure-based"},
         )
     ]
 
@@ -179,15 +190,17 @@ def test_bot_retrieve_below_threshold_uses_fixed_fallback() -> None:
         def encode_document(self, _description):
             return [0.699, (1 - 0.699**2) ** 0.5]
 
-    retrieved = bot_read.retrieve_top_template(problem, entries, BelowThresholdProvider())
+    retrieval_decision = bot_read.retrieve_top_template(problem, entries, BelowThresholdProvider())
     prompt, source_spans = bot_solve.render_bot_solve_prompt(
         TaskInstance(sample_id="sample", task_name="math_equation_balancer", input={"input": "3 + 3"}),
         problem,
-        retrieved,
+        retrieval_decision,
     )
 
-    assert retrieved is None
-    assert bot_read.FALLBACK_THOUGHT_TEMPLATE in prompt
+    assert retrieval_decision.decision == "miss"
+    assert "prompt-based" in prompt
+    assert "procedure-based" in prompt
+    assert "programming-based" in prompt
     assert source_spans == []
 
 
@@ -207,6 +220,7 @@ def test_bot_build_prompt_uses_structured_solve_contract() -> None:
     prompt = BotStylePolicy().build_prompt(
         TaskInstance(sample_id="sample", task_name="math_equation_balancer", input={"input": "3 + 3"}),
         MemoryState(),
+        embedding_provider=_AdmittingEmbeddingProvider(),
     )
 
     assert prompt[0]["role"] == "user"
@@ -229,6 +243,8 @@ def test_bot_runtime_runs_reference_order_and_updates() -> None:
             clean_or_contaminated="contaminated",
             source_trial_id="prev_trial_1",
             metadata={
+                "description": "Build factor-pair subexpressions before combining all numbers.",
+                "category": "procedure-based",
                 "parent_entry_ids": ["template-parent"],
                 "source_entry_ids": ["template-source"],
             },
@@ -306,6 +322,10 @@ def test_bot_runtime_valid_incorrect_answer_keeps_frozen_admission() -> None:
             memory_type="thought_template",
             clean_or_contaminated="clean",
             source_trial_id="prev_trial_1",
+            metadata={
+                "description": "Build factor-pair subexpressions before combining all numbers.",
+                "category": "procedure-based",
+            },
         )
     ]
     client = ReplayClient(
@@ -314,8 +334,8 @@ def test_bot_runtime_valid_incorrect_answer_keeps_frozen_admission() -> None:
                 "bot_problem_distill": _DISTILLATION_OUTPUT,
                 "bot_instantiate_solve": _SOLUTION_OUTPUT,
                 "bot_thought_distill": _thought_output(),
+                }
             }
-        }
     )
 
     result = BotRuntime().run(
@@ -357,6 +377,8 @@ def test_bot_template_answer_and_accepted_write_keep_exact_lineage() -> None:
         memory_type="thought_template",
         clean_or_contaminated="contaminated",
         metadata={
+            "description": "Use the injected template.",
+            "category": "procedure-based",
             "contamination_class": "injected",
             "injected_root_ids": ["injected-template"],
             "lineage_status": "exact",
@@ -368,10 +390,10 @@ def test_bot_template_answer_and_accepted_write_keep_exact_lineage() -> None:
     )
     client = ReplayClient(
         responses_by_sample={
-            "game24_001": {
-                "bot_problem_distill": _DISTILLATION_OUTPUT,
-                "bot_instantiate_solve": _SOLUTION_OUTPUT,
-                "bot_thought_distill": _thought_output(used_ids=["injected-template"]),
+                "game24_001": {
+                    "bot_problem_distill": _DISTILLATION_OUTPUT,
+                    "bot_instantiate_solve": _SOLUTION_OUTPUT,
+                    "bot_thought_distill": _thought_output(used_ids=["injected-template"]),
             }
         }
     )
@@ -417,7 +439,7 @@ def test_bot_novelty_rejects_threshold_equality_without_model_call() -> None:
         content="existing template",
         memory_type="thought_template",
         clean_or_contaminated="clean",
-        metadata={"description": "existing description"},
+        metadata={"description": "existing description", "category": "procedure-based"},
     )
 
     class EqualityProvider:
@@ -448,7 +470,13 @@ def test_bot_verifier_contract_failure_keeps_admitted_transition() -> None:
         responses_by_sample={
             "game24_001": {
                 "bot_problem_distill": _DISTILLATION_OUTPUT,
-                "bot_instantiate_solve": _SOLUTION_OUTPUT,
+                "bot_instantiate_solve": json.dumps(
+                    {
+                        "selected_structure": "procedure-based",
+                        "solution_trace": "Pair 1 + 3 and 2 + 4, then multiply the pair sums.",
+                        "final_answer": "final: (1 + 3) * (2 + 4) = 24",
+                    }
+                ),
                 "bot_thought_distill": _thought_output(),
             }
         }
@@ -463,7 +491,7 @@ def test_bot_verifier_contract_failure_keeps_admitted_transition() -> None:
         buffer_snapshot=[],
         client=client,
         model="gpt-4o",
-        config={"sample_id": "game24_001"},
+        config={"sample_id": "game24_001", "embedding_provider": _AdmittingEmbeddingProvider()},
         verifier=failing_verifier,
     )
 
@@ -491,6 +519,10 @@ def test_bot_runtime_retrieves_after_distillation_and_reuses_template() -> None:
             memory_type="thought_template",
             clean_or_contaminated="clean",
             source_trial_id="prev_trial_1",
+            metadata={
+                "description": "Build factor-pair subexpressions before combining all numbers.",
+                "category": "procedure-based",
+            },
         )
     ]
     client = ReplayClient(
@@ -518,7 +550,7 @@ def test_bot_runtime_retrieves_after_distillation_and_reuses_template() -> None:
             return super().problem_distillation(*args, **kwargs)
 
         def template_instantiation_solve(self, *args, **kwargs):
-            events.append(("solve", kwargs["retrieved"]["entry_id"]))
+            events.append(("solve", kwargs["retrieval_decision"].matched_entry.entry_id))
             return super().template_instantiation_solve(*args, **kwargs)
 
     result = BotRuntime(policy=RecordingPolicy()).run(

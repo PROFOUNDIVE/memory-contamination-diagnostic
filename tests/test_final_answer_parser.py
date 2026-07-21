@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from memcontam.baselines.common import parse_final_answer
+from memcontam.memory.embeddings import FakeEmbeddingProvider
 
 
 def test_parses_one_case_insensitive_final_line_after_reasoning() -> None:
@@ -85,7 +86,10 @@ def test_bot_keeps_invalid_solve_failure_disposition_for_invalid_final_answer() 
                     '"restrictions":"Use each number once.",'
                     '"distilled_task":"Construct 24."}'
                 ),
-                "bot_instantiate_solve": '{"solution_trace":"Build pairs.","final_answer":"24"}',
+                "bot_instantiate_solve": (
+                    '{"selected_structure":"procedure-based",'
+                    '"solution_trace":"Build pairs.","final_answer":"24"}'
+                ),
             }
         }
     )
@@ -96,7 +100,8 @@ def test_bot_keeps_invalid_solve_failure_disposition_for_invalid_final_answer() 
         buffer_snapshot=[],
         client=client,
         model="replay",
-        config={"sample_id": "sample-1"},
+        config={"sample_id": "sample-1", "embedding_provider": FakeEmbeddingProvider()},
     )
 
     assert outcome.failure_disposition == "bot_invalid_solve_result"
+    assert outcome.metadata["selected_structure"] == "procedure-based"

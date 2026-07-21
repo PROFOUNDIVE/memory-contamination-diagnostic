@@ -22,7 +22,7 @@ def _entry(description: str = "Build factor pairs before combining values.") -> 
         content="Do not use this content for novelty.",
         memory_type="thought_template",
         clean_or_contaminated="clean",
-        metadata={"description": description},
+        metadata={"description": description, "category": "procedure-based"},
     )
 
 
@@ -72,3 +72,34 @@ def test_bot_buffer_rejects_description_similarity_at_threshold() -> None:
 
     assert decision.admitted is False
     assert decision.top_similarity == pytest.approx(0.7)
+
+
+@pytest.mark.parametrize("metadata", [{}, {"description": "A description without a category."}])
+def test_bot_buffer_rejects_missing_template_metadata_without_embedding_content(
+    metadata: dict[str, str],
+) -> None:
+    encoded_documents: list[str] = []
+
+    class RecordingProvider:
+        metadata = {}
+
+        def encode_query(self, text: str) -> list[float]:
+            del text
+            return [1.0, 0.0]
+
+        def encode_document(self, text: str) -> list[float]:
+            encoded_documents.append(text)
+            return [1.0, 0.0]
+
+    existing = MemoryEntry(
+        entry_id="legacy-template",
+        content="template body must never substitute for a description",
+        memory_type="thought_template",
+        clean_or_contaminated="clean",
+        metadata=metadata,
+    )
+
+    with pytest.raises(ValueError, match="description and category"):
+        evaluate_native_novelty(_candidate(), [existing], RecordingProvider())
+
+    assert encoded_documents == []
