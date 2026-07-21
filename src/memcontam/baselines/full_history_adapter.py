@@ -11,12 +11,14 @@ from memcontam.baselines.contracts import (
     ScientificIneligibilityReason,
 )
 from memcontam.baselines.full_history import FullHistoryPayload, FullHistoryState, render_full_history
+from memcontam.baselines.full_history_context import render_context_bounded_history
 from memcontam.clients.base import LLMClient
 from memcontam.clients.recording import MethodCallRecorder
 from memcontam.logging.provenance import PromptSourcePart, build_prompt_with_sources, phase11_lineage_metadata
 from memcontam.logging.schema import VerifierResult
 from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
+from memcontam.tasks.dispatch import canonical_task_json
 
 
 class FullHistoryAdapter:
@@ -32,7 +34,7 @@ class FullHistoryAdapter:
     ) -> BaselineExecutionOutcome:
         config = dict(config or {})
         memory_before = tuple(record.model_dump() for record in state.records)
-        messages, source_spans = _messages(task, state)
+        messages, source_spans, selected_records, telemetry = _messages(task, state, config)
         trial_id = _trial_id(task, config, model)
         recorder = MethodCallRecorder(
             client,
@@ -59,6 +61,7 @@ class FullHistoryAdapter:
                 error_type="ProviderCallFailure",
                 failure_disposition="provider_call_failed",
                 scientific_ineligibility_reason="provider_call_failed",
+                metadata={"full_history_context": telemetry},
             )
 
         if response is None:
@@ -70,9 +73,18 @@ class FullHistoryAdapter:
                 error_type="ProviderCallFailure",
                 failure_disposition="provider_call_failed",
                 scientific_ineligibility_reason="provider_call_failed",
+                metadata={"full_history_context": telemetry},
             )
 
-        entry = _append_response(task, state, response.content, config, model, trial_id)
+        entry = _append_response(
+            task,
+            state,
+            response.content,
+            config,
+            model,
+            trial_id,
+            [record.entry_id for record in selected_records],
+        )
         memory_write_event = {
             "type": "full_history_append",
             "status": "accepted",
@@ -96,6 +108,7 @@ class FullHistoryAdapter:
                 error_type="BaselineOutputError",
                 failure_disposition="full_history_invalid_final_answer",
                 scientific_ineligibility_reason="invalid_final_answer",
+                metadata={"full_history_context": telemetry},
             )
 
         try:
@@ -112,6 +125,7 @@ class FullHistoryAdapter:
                 error_type="VerifierContractError",
                 failure_disposition="verifier_contract_failed",
                 scientific_ineligibility_reason="verifier_contract_failed",
+                metadata={"full_history_context": telemetry},
             )
 
         return BaselineExecutionOutcome(
@@ -124,21 +138,24 @@ class FullHistoryAdapter:
             memory_before=memory_before,
             memory_after=tuple(record.model_dump() for record in state.records),
             memory_write_event=memory_write_event,
-            metadata={},
+            metadata={"full_history_context": telemetry},
         )
 
 
-def _messages(task: TaskInstance, state: FullHistoryState) -> tuple[list[dict[str, str]], list[Any]]:
+def _messages(
+    task: TaskInstance, state: FullHistoryState, config: dict[str, Any] | None = None
+) -> tuple[list[dict[str, str]], list[Any], list[MemoryEntry], dict[str, Any]]:
+    decision = render_context_bounded_history(task, state.records, config)
     parts: list[str | PromptSourcePart] = []
-    for index, record in enumerate(state.records):
+    for index, record in enumerate(decision.records):
         if index:
             parts.append("\n\n")
         parts.append(PromptSourcePart(record.content, record))
-    if state.records:
+    if decision.records:
         parts.append("\n\n")
-    parts.append(f"TASK:\n{task.input}")
-    content, spans = build_prompt_with_sources(parts, message_index=0, entries=state.records)
-    return [{"role": "user", "content": content}], spans
+    parts.append(f"TASK:\n{canonical_task_json(task)}")
+    content, spans = build_prompt_with_sources(parts, message_index=0, entries=decision.records)
+    return [{"role": "user", "content": content}], spans, decision.records, decision.telemetry()
 
 
 def _append_response(
@@ -148,20 +165,25 @@ def _append_response(
     config: dict[str, Any],
     model: str,
     trial_id: str,
+    selected_record_ids: list[str],
 ) -> MemoryEntry:
-    source_entry_ids = [record.entry_id for record in state.records]
+    selected_record_id_set = set(selected_record_ids)
     entry_id = f"full_history:{task.task_name}:{task.sample_id}:{uuid4().hex}"
     entry = MemoryEntry(
         entry_id=entry_id,
-        content=render_full_history(entry_id, FullHistoryPayload(str(task.input), raw_response)),
+        content=render_full_history(entry_id, FullHistoryPayload(canonical_task_json(task), raw_response)),
         memory_type="full_history_transcript",
         clean_or_contaminated=(
             "contaminated"
-            if any(record.clean_or_contaminated == "contaminated" for record in state.records)
+            if any(
+                record.clean_or_contaminated == "contaminated"
+                for record in state.records
+                if record.entry_id in selected_record_id_set
+            )
             else "clean"
         ),
         source_trial_id=trial_id,
-        metadata={"source_entry_ids": source_entry_ids},
+        metadata={"source_entry_ids": selected_record_ids},
     )
     if config.get("_logging_target_contamination_set") or config.get("_logging_target_set_id"):
         entry.metadata.update(
@@ -188,6 +210,7 @@ def _failed_outcome(
     parsed_answer: str | None = None,
     answer_call_id: str | None = None,
     memory_write_event: dict[str, Any] | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> BaselineExecutionOutcome:
     return BaselineExecutionOutcome(
         status="failed",
@@ -201,7 +224,7 @@ def _failed_outcome(
         error_type=error_type,
         failure_disposition=failure_disposition,
         scientific_ineligibility_reason=scientific_ineligibility_reason,
-        metadata={},
+        metadata=metadata or {},
     )
 
 

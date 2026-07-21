@@ -70,6 +70,14 @@ embedding:
   corpus_path: data/memory/catalog_v3.jsonl
   corpus_version: memory_catalog_v3
 
+full_history:
+  mode: context_bounded_pair_atomic
+  token_encoding: cl100k_base
+  context_window_tokens: 2048
+  max_output_tokens: 256
+  fixed_prompt_overhead_tokens: 0
+  safety_margin_tokens: 0
+
 replay:
   fixture_version: baseline_fidelity_v2_structural_fixture
   responses_by_sample:

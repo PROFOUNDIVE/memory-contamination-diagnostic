@@ -10,6 +10,7 @@ from memcontam.clients.base import LLMResponse
 from memcontam.logging.schema import VerifierResult
 from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
+from memcontam.tasks.dispatch import canonical_task_json
 
 
 FullHistoryAdapter = import_module("memcontam.baselines.full_history_adapter").FullHistoryAdapter
@@ -24,12 +25,18 @@ def _task() -> TaskInstance:
     )
 
 
-def _config() -> dict[str, str]:
+def _config() -> dict[str, object]:
     return {
         "run_id": "run-1",
         "baseline": "full_history",
         "arm": "clean",
         "model": "replay",
+        "mode": "context_bounded_pair_atomic",
+        "token_encoding": "cl100k_base",
+        "context_window_tokens": 2048,
+        "max_output_tokens": 256,
+        "fixed_prompt_overhead_tokens": 0,
+        "safety_margin_tokens": 0,
     }
 
 
@@ -105,7 +112,7 @@ def test_full_history_renders_raw_records_in_order_and_keeps_valid_incorrect_suc
     assert len(client.calls) == 1
     assert client.calls[0][2]["method_stage"] == "full_history_generate"
     prompt = client.calls[0][0][0]["content"]
-    assert prompt == f"{first.content}\n\n{second.content}\n\nTASK:\n{_task().input}"
+    assert prompt == f"{first.content}\n\n{second.content}\n\nTASK:\n{canonical_task_json(_task())}"
     assert "must not enter history" not in prompt
     assert "parsed_answer" not in prompt
     assert "parent_entry_ids" not in prompt
@@ -116,7 +123,7 @@ def test_full_history_renders_raw_records_in_order_and_keeps_valid_incorrect_suc
     appended = state.records[-1]
     assert appended.content == render_full_history(
         appended.entry_id,
-        FullHistoryPayload(str(_task().input), "final: 24"),
+        FullHistoryPayload(canonical_task_json(_task()), "final: 24"),
     )
     assert "parent_entry_ids" not in appended.metadata
     assert "direct_parent_ids" not in appended.metadata
@@ -128,6 +135,39 @@ def test_full_history_renders_raw_records_in_order_and_keeps_valid_incorrect_suc
         "source_trial_id": "run-1:game24:sample-1:full_history:clean:replay",
         "source_entry_ids": ["history-1", "history-2"],
     }
+    assert outcome.metadata["full_history_context"]["post_record_ids"] == [
+        "history-1",
+        "history-2",
+    ]
+
+
+def test_full_history_uses_canonical_task_json_for_prompt_and_stored_pairs() -> None:
+    canonical_task = TaskInstance(
+        sample_id="sample-1",
+        task_name="game24",
+        input={"z": [2, 1], "a": "value"},
+    )
+    reversed_task = TaskInstance(
+        sample_id="sample-1",
+        task_name="game24",
+        input={"a": "value", "z": [2, 1]},
+    )
+    first_state = FullHistoryState()
+    second_state = FullHistoryState()
+    first_client = _Client("final: answer")
+    second_client = _Client("final: answer")
+
+    FullHistoryAdapter().execute(
+        canonical_task, first_state, client=first_client, model="replay", config=_config()
+    )
+    FullHistoryAdapter().execute(
+        reversed_task, second_state, client=second_client, model="replay", config=_config()
+    )
+
+    expected = canonical_task_json(canonical_task)
+    assert first_client.calls[0][0][0]["content"] == second_client.calls[0][0][0]["content"]
+    assert f"TASK:\n{expected}" in first_state.records[0].content
+    assert f"TASK:\n{expected}" in second_state.records[0].content
 
 
 def test_full_history_empty_response_is_appended_before_the_failed_parse_outcome() -> None:
@@ -148,6 +188,7 @@ def test_full_history_empty_response_is_appended_before_the_failed_parse_outcome
     assert outcome.memory_after[-1]["entry_id"] == state.records[0].entry_id
     assert outcome.memory_write_event is not None
     assert outcome.memory_write_event["status"] == "accepted"
+    assert outcome.metadata["full_history_context"]["post_record_ids"] == []
 
 
 def test_full_history_parse_failure_never_rolls_back_the_completed_response() -> None:
@@ -179,3 +220,4 @@ def test_full_history_appends_before_verifier_contract_failure() -> None:
     assert outcome.status == "failed"
     assert outcome.error_type == "VerifierContractError"
     assert len(state.records) == 1
+    assert outcome.metadata["full_history_context"]["post_record_ids"] == []

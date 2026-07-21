@@ -47,6 +47,10 @@ def _validate_full_history_budget(config: dict[str, Any]) -> None:
         return
     if not isinstance(full_history, dict):
         raise ValueError("full_history must be a mapping")
+    if full_history.get("mode") != "context_bounded_pair_atomic":
+        raise ValueError("full_history mode must be context_bounded_pair_atomic")
+    if not isinstance(full_history.get("token_encoding"), str) or not full_history["token_encoding"]:
+        raise ValueError("full_history token_encoding must be a non-empty string")
     try:
         spec = PromptBudgetSpec(
             context_window_tokens=full_history["context_window_tokens"],
@@ -60,7 +64,14 @@ def _validate_full_history_budget(config: dict[str, Any]) -> None:
 
 
 def _redact(value: Any, key: str = "") -> Any:
-    if any(marker in key.lower() for marker in _SECRET_MARKERS) and key.lower() != "api_key_env":
+    if any(marker in key.lower() for marker in _SECRET_MARKERS) and key.lower() not in {
+        "api_key_env",
+        "token_encoding",
+        "context_window_tokens",
+        "max_output_tokens",
+        "fixed_prompt_overhead_tokens",
+        "safety_margin_tokens",
+    }:
         return "[REDACTED]"
     if isinstance(value, dict):
         return {item_key: _redact(item_value, item_key) for item_key, item_value in value.items()}

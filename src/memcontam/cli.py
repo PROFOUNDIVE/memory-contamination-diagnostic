@@ -1707,7 +1707,11 @@ def _run_faithful_config(
                                         memory,
                                         client=trial_client,
                                         model=model,
-                                        config=policy_context,
+                                        config=(
+                                            {**policy_context, **config.get("full_history", {})}
+                                            if baseline == "full_history"
+                                            else policy_context
+                                        ),
                                         verifier=lambda response, task: task_handler["verify"](
                                             _parse_answer(response), task
                                         ),

@@ -77,6 +77,8 @@ def test_v2_config_rejects_nonpositive_full_history_budget() -> None:
             "prompt_version": "baseline_fidelity_v2",
         },
         "full_history": {
+            "mode": "context_bounded_pair_atomic",
+            "token_encoding": "cl100k_base",
             "context_window_tokens": 100,
             "max_output_tokens": 50,
             "fixed_prompt_overhead_tokens": 25,
