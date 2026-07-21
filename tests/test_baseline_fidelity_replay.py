@@ -13,7 +13,7 @@ from memcontam.logging.schema import RunMetadata, TrialLog
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CONFIG_PATH = ROOT / "configs" / "pilot_multitask_replay.yaml"
+CONFIG_PATH = ROOT / "configs" / "baseline_fidelity_v2_structural_replay.yaml"
 EXPECTED_STAGES = {
     "no_memory": ["no_memory_generate"],
     "full_history": ["full_history_generate"],
@@ -40,14 +40,14 @@ def _deny_network(*_args: object, **_kwargs: object) -> None:
     raise AssertionError("offline replay attempted network access")
 
 
-def test_clean_pilot_replay_is_offline_non_scientific_and_uses_faithful_adapters(
+def test_f1a_structural_replay_is_offline_non_scientific_and_uses_native_adapters(
     tmp_path: Path, monkeypatch
 ) -> None:
     monkeypatch.chdir(ROOT)
     monkeypatch.setattr(socket, "create_connection", _deny_network)
     monkeypatch.setattr(socket.socket, "connect", _deny_network)
 
-    run_dir = cli.run_config(_replay_config(tmp_path), run_id="baseline_fidelity_clean_replay")
+    run_dir = cli.run_config(_replay_config(tmp_path), run_id="bfv2-structural-replay-test")
     trials = _trials(run_dir)
     manifest = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
     resolved = json.loads((run_dir / "resolved_config.json").read_text(encoding="utf-8"))
@@ -56,11 +56,11 @@ def test_clean_pilot_replay_is_offline_non_scientific_and_uses_faithful_adapters
 
     assert manifest["status"] == "completed"
     assert manifest["counts"] == {
-        "trials": 90,
-        "calls": 126,
+        "trials": 5,
+        "calls": 7,
         "failures": 0,
         "filter_events": 0,
-        "memory_events": 36,
+        "memory_events": 2,
     }
     assert metadata.stage == "replay"
     assert (
@@ -75,13 +75,9 @@ def test_clean_pilot_replay_is_offline_non_scientific_and_uses_faithful_adapters
     assert resolved["run"].get("scientific_gate_id") is None
     assert profile == resolved["provider_config"]
 
-    assert len(trials) == 90
-    assert {trial.task_name for trial in trials} == {
-        "game24",
-        "math_equation_balancer",
-        "word_sorting",
-    }
-    assert {trial.backbone for trial in trials} == {"gpt4o", "frontier_reasoning"}
+    assert len(trials) == 5
+    assert {trial.task_name for trial in trials} == {"game24"}
+    assert {trial.backbone for trial in trials} == {"replay_bfv2_structural"}
     assert {trial.baseline for trial in trials} == set(EXPECTED_STAGES)
     assert all(trial.arm == "clean" and trial.status == "succeeded" for trial in trials)
     assert all(trial.verifier_result and trial.verifier_result.is_correct for trial in trials)
@@ -99,7 +95,7 @@ def test_clean_pilot_replay_is_offline_non_scientific_and_uses_faithful_adapters
         trial.memory_write_event and trial.memory_write_event["source_outcome"] is True
         for trial in bot_trials
     )
-    assert aggregate_run(run_dir, stage="replay")["n_trials"] == 90
+    assert aggregate_run(run_dir, stage="replay", contract="phase11")["n_trials"] == 5
 
 
 def test_replay_keeps_valid_incorrect_and_closed_failure_outcomes(
@@ -109,13 +105,13 @@ def test_replay_keeps_valid_incorrect_and_closed_failure_outcomes(
 
     incorrect_config = _replay_config(tmp_path)
     incorrect_config["run"]["mode"] = "faithful"
-    incorrect_config["models"] = ["gpt4o"]
-    incorrect_config["tasks"] = [incorrect_config["tasks"][1]]
     incorrect_config["baselines"] = ["no_memory"]
-    incorrect_config["replay"]["responses_by_sample"]["meb_pilot_003"] = "final: 3 * 6 = 17"
-    incorrect_run = cli.run_config(incorrect_config, run_id="baseline_fidelity_valid_incorrect")
+    incorrect_config["replay"]["responses_by_sample"]["game24_pilot_001"][
+        "no_memory_generate"
+    ] = "final: 1 + 3 + 4 + 6"
+    incorrect_run = cli.run_config(incorrect_config, run_id="bfv2-structural-valid-incorrect")
     incorrect_trial = next(
-        trial for trial in _trials(incorrect_run) if trial.sample_id == "meb_pilot_003"
+        trial for trial in _trials(incorrect_run) if trial.sample_id == "game24_pilot_001"
     )
 
     assert incorrect_trial.status == "succeeded"
@@ -129,13 +125,13 @@ def test_replay_keeps_valid_incorrect_and_closed_failure_outcomes(
 
     failure_config = _replay_config(tmp_path)
     failure_config["run"]["mode"] = "faithful"
-    failure_config["models"] = ["gpt4o"]
-    failure_config["tasks"] = [failure_config["tasks"][1]]
     failure_config["baselines"] = ["no_memory"]
-    failure_config["replay"]["responses_by_sample"]["meb_pilot_003"] = "   "
-    failure_run = cli.run_config(failure_config, run_id="baseline_fidelity_closed_failure")
+    failure_config["replay"]["responses_by_sample"]["game24_pilot_001"][
+        "no_memory_generate"
+    ] = "   "
+    failure_run = cli.run_config(failure_config, run_id="bfv2-structural-closed-failure")
     failure_trial = next(
-        trial for trial in _trials(failure_run) if trial.sample_id == "meb_pilot_003"
+        trial for trial in _trials(failure_run) if trial.sample_id == "game24_pilot_001"
     )
 
     assert failure_trial.status == "failed"

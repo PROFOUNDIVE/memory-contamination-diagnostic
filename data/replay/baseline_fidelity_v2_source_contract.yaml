@@ -1,0 +1,40 @@
+responses_by_sample:
+  game24_pilot_001:
+    no_memory_generate: "final: 6 / (1 - (3 / 4))"
+    full_history_generate: "final: 6 / (1 - (3 / 4))"
+    rag_generate: "final: 6 / (1 - (3 / 4))"
+    bot_problem_distill: '{"key_information":"numbers [1,3,4,6]","restrictions":"Use every number once.","distilled_task":"Construct 24."}'
+    bot_instantiate_solve: '{"selected_structure":"procedure-based","solution_trace":"Build a denominator equal to one quarter.","final_answer":"final: 6 / (1 - (3 / 4))"}'
+    bot_thought_distill: "not-json"
+    reflexion_generate: "final: 6 / (1 - (3 / 4))"
+    reflexion_reflect: '{"mode":"corrective","failure_class":"incorrect_answer","reflection_text":"Check each arithmetic step.","explicitly_used_memory_ids":[]}'
+    dc_rs_synthesize: "<cheatsheet>Use exact fractions and check the target.</cheatsheet>"
+    dc_rs_generate: "Reason through the denominator.\nfinal: 6 / (1 - (3 / 4))"
+  game24_pilot_002:
+    no_memory_generate: "final: 1 + 2 + 3 + 7"
+    full_history_generate: ""
+    rag_generate: "final: 7 + 7 + 3 + 2"
+    bot_problem_distill: '{"key_information":"numbers [2,3,7,7]","restrictions":"Use every number once.","distilled_task":"Construct 24."}'
+    bot_instantiate_solve: '{"selected_structure":"procedure-based","solution_trace":"Add all numbers.","final_answer":"final: 7 + 7 + 3 + 2"}'
+    bot_thought_distill: "not-json"
+    reflexion_generate:
+      - "final: 1 + 2 + 3 + 7"
+      - "final: 7 + 7 + 3 + 2"
+    reflexion_reflect: '{"mode":"corrective","failure_class":"incorrect_answer","reflection_text":"Retry with a target check.","explicitly_used_memory_ids":[]}'
+    dc_rs_synthesize: "missing cheatsheet tags"
+    dc_rs_generate: "final: 7 + 7 + 3 + 2"
+  game24_pilot_003:
+    no_memory_generate: "not a final answer"
+    full_history_generate: "final: (8 / 3) + (8 / 3) + 3"
+    rag_generate: "final: (8 / 3) + (8 / 3) + 3"
+    bot_problem_distill: '{"key_information":"numbers [3,3,8,8]","restrictions":"Use every number once.","distilled_task":"Construct 24."}'
+    bot_instantiate_solve: "not-json"
+    bot_thought_distill: "not-json"
+    reflexion_generate:
+      - "final: 3 + 3 + 8 + 8"
+      - "final: 3 + 3 + 8 + 8"
+    reflexion_reflect:
+      - '{"mode":"corrective","failure_class":"incorrect_answer","reflection_text":"Try fractions.","explicitly_used_memory_ids":[]}'
+      - '{"mode":"corrective","failure_class":"incorrect_answer","reflection_text":"Terminal: re-check constraints.","explicitly_used_memory_ids":[]}'
+    dc_rs_synthesize: "<cheatsheet>Keep exact intermediate values.</cheatsheet>"
+    dc_rs_generate: "final: (8 / 3) + (8 / 3) + 3"

@@ -16,8 +16,7 @@ from memcontam.baselines.contracts import (
 
 def normalize_direct_parent_ids(metadata: Mapping[str, Any]) -> list[str]:
     """Return recorded direct parents without promoting source or context evidence."""
-    direct_parents = _string_list(metadata.get("direct_parent_ids"))
-    return direct_parents or _string_list(metadata.get("parent_entry_ids"))
+    return _string_list(metadata.get("direct_parent_ids"))
 
 
 def validate_memory_item_metadata(metadata: Mapping[str, Any]) -> None:

@@ -1,0 +1,85 @@
+run:
+  name: baseline_fidelity_v2_source_contract_replay
+  description: "F1B source-contract replay for Baseline-Fidelity-V2; offline QA only"
+  mode: faithful
+  stage: replay
+  contract_level: phase11
+  provider: replay
+  model_snapshots:
+    replay_bfv2_source_contract: baseline_fidelity_v2_source_contract_fixture
+  task_order_seed: 1
+  sample_order_seed: 1
+  retry_policy_version: baseline_fidelity_v2
+  baseline_execution_contract_version: baseline_fidelity_v2
+  failure_taxonomy_version: baseline_fidelity_v2
+  fidelity_gate_layer: source_contract
+
+models:
+  - replay_bfv2_source_contract
+
+tasks:
+  - name: game24
+    sample_path: data/tasks/game24_pilot.jsonl
+    limit: 3
+
+baselines:
+  - no_memory
+  - full_history
+  - retrieval_rag
+  - reflexion_style
+  - bot_style
+  - dynamic_cheatsheet_rs_optional
+
+arms:
+  - clean
+
+logging:
+  output_dir: runs
+  schema_version: logging_v2
+  prompt_version: baseline_fidelity_v2
+  memory_policy_version: baseline_fidelity_v2
+  contamination_catalog_version: contamination_v0
+
+evaluation:
+  evaluation_law_id: baseline_fidelity_v2_source_contract_online_replay
+  regime: online
+  task_law_id: locked_game24_limit3_v1
+  inference_law_id: baseline_fidelity_v2_source_contract_fixture
+  checkpoint_policy_id: null
+
+target_contamination_set:
+  target_set_id: controlled_injected_derived_v1
+  definition_version: phase11_v1
+  included_classes:
+    - injected
+    - derived
+  require_exact_lineage: true
+
+memory:
+  corpus_path: data/memory/baseline_fidelity_v2_contract_corpus.jsonl
+  corpus_version: baseline_fidelity_v2_contract_corpus
+  corpus_manifest_path: data/memory/baseline_fidelity_v2_contract_corpus.manifest.json
+
+embedding:
+  mode: test_double
+  cache_path: data/embedding_cache
+  top_k: 3
+  normalize: true
+
+full_history:
+  mode: context_bounded_pair_atomic
+  token_encoding: cl100k_base
+  context_window_tokens: 2048
+  max_output_tokens: 256
+  fixed_prompt_overhead_tokens: 0
+  safety_margin_tokens: 0
+
+reflexion:
+  max_attempts: 2
+
+replay:
+  fixture_version: baseline_fidelity_v2_source_contract_fixture
+  fixture_path: ../data/replay/baseline_fidelity_v2_source_contract.yaml
+
+live_smoke:
+  enabled: false

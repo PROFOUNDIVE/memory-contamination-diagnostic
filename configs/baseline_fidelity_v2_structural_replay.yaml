@@ -86,9 +86,9 @@ replay:
       rag_generate: "final: 6 / (1 - (3 / 4))"
       full_history_generate: "final: 6 / (1 - (3 / 4))"
       reflexion_generate: "final: 6 / (1 - (3 / 4))"
-      bot_problem_distill: "structural replay distillation"
-      bot_instantiate_solve: "final: 6 / (1 - (3 / 4))"
-      bot_thought_distill: "structural replay template"
+      bot_problem_distill: '{"key_information":"numbers [1,3,4,6]","restrictions":"Use every number once.","distilled_task":"Construct 24."}'
+      bot_instantiate_solve: '{"selected_structure":"procedure-based","solution_trace":"Build a denominator equal to one quarter.","final_answer":"final: 6 / (1 - (3 / 4))"}'
+      bot_thought_distill: '{"description":"Build an exact denominator.","template":"Use exact fractions before combining values.","category":"procedure-based","explicitly_used_memory_ids":[]}'
 
 live_smoke:
   enabled: false

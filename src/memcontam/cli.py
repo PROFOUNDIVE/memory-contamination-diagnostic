@@ -169,6 +169,15 @@ def validate_config(path: Path) -> None:
 def load_config(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
+    replay = config.get("replay")
+    if isinstance(replay, dict) and isinstance(replay.get("fixture_path"), str):
+        fixture_path = path.parent / replay["fixture_path"]
+        with fixture_path.open("r", encoding="utf-8") as fixture_file:
+            fixture = yaml.safe_load(fixture_file)
+        responses_by_sample = fixture.get("responses_by_sample") if isinstance(fixture, dict) else None
+        if not isinstance(responses_by_sample, dict):
+            raise SystemExit(f"invalid replay fixture: {fixture_path}")
+        replay["responses_by_sample"] = responses_by_sample
     required = ["run", "models", "tasks", "baselines", "arms"]
     missing = [key for key in required if key not in config]
     if missing:
