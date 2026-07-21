@@ -8,12 +8,14 @@ from typing import cast
 import pytest
 
 from memcontam.baselines.reflexion_adapter import ReflexionAdapter, ReflexionState
+from memcontam.baselines.execution import assert_prompt_bytes
 from memcontam.baselines.reflexion_style import ReflexionStylePolicy
 from memcontam.clients.replay import ReplayClient
 from memcontam.logging.provenance import compute_exposure_from_spans, normalize_memory_event
 from memcontam.logging.schema import MemoryEvent, MemoryItemLog, VerifierResult
 from memcontam.memory.stores import MemoryEntry, MemoryState
 from memcontam.tasks.base import TaskInstance
+from memcontam.tasks.dispatch import canonical_task_json
 
 
 def test_reflexion_contract_requires_structured_generation_and_authenticated_attempts() -> None:
@@ -25,11 +27,11 @@ def test_reflexion_contract_requires_structured_generation_and_authenticated_att
     assert getattr(module, "ReflectionGenerationResult", None) is not None
     assert callable(getattr(module, "apply_keep_last_3", None))
     assert generation_fixture["stage"] == "reflexion_generate"
-    assert reflection_fixture == {
-        "stage": "reflexion_reflect",
-        "schema": "ReflectionGenerationResult",
-        "strict_json": True,
-    }
+    assert generation_fixture["messages"]
+    assert reflection_fixture["stage"] == "reflexion_reflect"
+    assert reflection_fixture["schema"] == "ReflectionGenerationResult"
+    assert reflection_fixture["strict_json"] is True
+    assert reflection_fixture["messages"]
 
 
 def _task() -> TaskInstance:
@@ -253,17 +255,22 @@ def test_adapter_preserves_an_authenticated_reflection_when_retry_generation_is_
     assert [entry.content for entry in state.reflections] == ["Reflection: Retry carefully."]
 
 
-def test_adapter_keeps_only_last_three_reflections_and_uses_explicit_parents() -> None:
+def test_adapter_keeps_reflections_append_only_and_uses_only_visible_explicit_parents() -> None:
     assert getattr(import_module("memcontam.baselines.reflexion_style"), "ReflexionState", None) is ReflexionState
     state = ReflexionState(
         reflections=[
-            MemoryEntry(entry_id="one", content="Reflection: one", memory_type="verbal_reflection"),
+            MemoryEntry(
+                entry_id="one",
+                content="Reflection: one",
+                memory_type="verbal_reflection",
+                clean_or_contaminated="contaminated",
+                metadata={"source_entry_ids": ["hidden-contamination"]},
+            ),
             MemoryEntry(entry_id="two", content="Reflection: two", memory_type="verbal_reflection"),
             MemoryEntry(entry_id="three", content="Reflection: three", memory_type="verbal_reflection"),
             MemoryEntry(entry_id="four", content="Reflection: four", memory_type="verbal_reflection"),
         ]
     )
-    assert [entry.entry_id for entry in state.reflections] == ["two", "three", "four"]
     outcome = _adapter().execute(
         _task(),
         state,
@@ -280,27 +287,95 @@ def test_adapter_keeps_only_last_three_reflections_and_uses_explicit_parents() -
         verifier=lambda answer, _task: answer == "4",
     )
 
-    assert [entry.entry_id for entry in state.reflections] == ["three", "four", state.reflections[-1].entry_id]
+    assert [entry.entry_id for entry in state.reflections[:-1]] == ["one", "two", "three", "four"]
     assert state.reflections[-1].metadata["direct_parent_ids"] == ["two"]
     assert state.reflections[-1].metadata["memory_support_ids"] == ["two"]
     assert state.reflections[-1].metadata["source_entry_ids"] == ["two"]
+    assert state.reflections[-1].metadata["declared_updater_context_ids"] == ["two", "three", "four"]
+    assert state.reflections[-1].clean_or_contaminated == "clean"
     assert outcome.memory_write_event is not None
     assert outcome.memory_write_event["parent_entry_ids"] == ["two"]
 
 
-def test_build_prompt_keeps_legacy_last_three_entries_behavior() -> None:
-    memory = MemoryState(
-        entries=[
-            MemoryEntry(entry_id="one", content="one", memory_type="seed"),
-            MemoryEntry(entry_id="two", content="two", memory_type="seed"),
-            MemoryEntry(entry_id="three", content="three", memory_type="seed"),
-            MemoryEntry(entry_id="four", content="four", memory_type="seed"),
+def test_reflexion_adapter_never_renders_non_reflection_state_entries() -> None:
+    state = ReflexionState(
+        reflections=[
+            MemoryEntry(entry_id="one", content="Reflection: one", memory_type="verbal_reflection"),
+            MemoryEntry(entry_id="two", content="Reflection: two", memory_type="verbal_reflection"),
+            MemoryEntry(
+                entry_id="seed",
+                content="must not be rendered",
+                memory_type="seed",
+            ),
+            MemoryEntry(entry_id="three", content="Reflection: three", memory_type="verbal_reflection"),
         ]
     )
+    outcome = _adapter().execute(
+        _task(),
+        state,
+        client=ReplayClient(responses=["final: 4"]),
+        model="replay",
+        config=_config(max_attempts=1),
+        verifier=lambda answer, _task: answer == "4",
+    )
 
-    assert ReflexionStylePolicy().build_prompt(_task(), memory) == [
-        {"role": "user", "content": "Reflections:\ntwo\nthree\nfour\n\nSolve: {'input': '2 + 2'}"}
+    actor_prompt = outcome.method_calls[0].messages[1]["content"]
+    assert "must not be rendered" not in actor_prompt
+    assert [span.entry_id for span in outcome.method_calls[0].source_spans] == [
+        "one",
+        "two",
+        "three",
     ]
+
+
+def test_reflexion_prompt_renderers_match_committed_fixtures() -> None:
+    memory = MemoryState(
+        entries=[
+            MemoryEntry(entry_id="seed", content="seed corpus instruction", memory_type="seed"),
+            MemoryEntry(
+                entry_id="reflection-1",
+                content="Reflection: verify the operator order.",
+                memory_type="verbal_reflection",
+            ),
+        ]
+    )
+    fixture_dir = Path(__file__).parent / "fixtures/prompts"
+    replacements = {
+        "{{task_family}}": _task().task_name,
+        "{{task_canonical}}": canonical_task_json(_task()),
+        "{{reflection_id}}": "reflection-1",
+        "{{reflection_text}}": "verify the operator order.",
+        "{{failed_response}}": "final: wrong",
+        "{{parsed_answer}}": "wrong",
+    }
+    assert_prompt_bytes(
+        fixture_dir / "reflexion_generate.json",
+        stage="reflexion_generate",
+        messages=ReflexionStylePolicy().build_prompt(_task(), memory),
+        replacements=replacements,
+    )
+
+    outcome = _adapter().execute(
+        _task(),
+        ReflexionState(reflections=[memory.entries[-1]]),
+        client=ReplayClient(
+            responses_by_sample={
+                "sample_001": {
+                    "reflexion_generate": "final: wrong",
+                    "reflexion_reflect": _reflection("verify the operator order.", ("reflection-1",)),
+                }
+            }
+        ),
+        model="replay",
+        config=_config(max_attempts=1),
+        verifier=lambda _answer, _task: False,
+    )
+    assert_prompt_bytes(
+        fixture_dir / "reflexion_reflect.json",
+        stage="reflexion_reflect",
+        messages=outcome.method_calls[1].messages,
+        replacements=replacements,
+    )
 
 
 def test_run_success_generates_once_without_writing_and_uses_last_three_reflections() -> None:
@@ -341,6 +416,7 @@ def test_run_success_generates_once_without_writing_and_uses_last_three_reflecti
     assert [call.stage for call in result["method_calls"]] == ["reflexion_generate"]
     assert [entry["entry_id"] for entry in result["memory_after"]] == [
         "seed",
+        "old",
         "middle",
         "newer",
         "latest",
@@ -354,9 +430,15 @@ def test_run_success_generates_once_without_writing_and_uses_last_three_reflecti
     assert [
         answer_call.messages[1]["content"][span.start : span.end]
         for span in answer_call.source_spans
-    ] == ["Reflection: middle", "Reflection: newer", "Reflection: latest"]
+    ] == [
+        "Reflection ID: middle\nReflection: middle",
+        "Reflection ID: newer\nReflection: newer",
+        "Reflection ID: latest\nReflection: latest",
+    ]
     actor_prompt = result["method_calls"][0].messages[1]["content"]
-    assert "Reflection: middle\nReflection: newer\nReflection: latest" in actor_prompt
+    assert "Reflection ID: middle\nReflection: middle" in actor_prompt
+    assert "Reflection ID: newer\nReflection: newer" in actor_prompt
+    assert "Reflection ID: latest\nReflection: latest" in actor_prompt
     assert "oldest" not in actor_prompt
     assert "seed corpus instruction" not in actor_prompt
 
@@ -428,7 +510,7 @@ def test_run_max_attempts_one_preserves_reflect_then_return_without_retry() -> N
     prompts = "\n".join(
         message["content"] for call in result["method_calls"] for message in call.messages
     )
-    assert "Correct: false" in prompts
+    assert "Failure class:\nincorrect_answer" in prompts
     assert "TOP_SECRET_GOLD" not in prompts
     assert "TOP_SECRET_REASON" not in prompts
 
@@ -493,7 +575,10 @@ def test_run_max_attempts_two_retries_same_sample_with_latest_three_memory_only(
     assert "Failed raw response" not in retry_prompt
     assert "Parsed answer" not in retry_prompt
     assert "Verifier feedback" not in retry_prompt
-    assert "Reflection: one\nReflection: two\nReflection: Check the equation format." in retry_prompt
+    assert "Reflection ID: one\nReflection: one" in retry_prompt
+    assert "Reflection ID: two\nReflection: two" in retry_prompt
+    assert "Reflection ID: old\nReflection: old" not in retry_prompt
+    assert "Reflection ID: reflexion:" in retry_prompt
     assert "Reflection: old" not in retry_prompt
     assert "TOP_SECRET_GOLD" not in retry_prompt
     retry_span = next(

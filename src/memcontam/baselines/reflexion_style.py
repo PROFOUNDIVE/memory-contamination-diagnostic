@@ -9,6 +9,7 @@ from memcontam.baselines.reflexion_adapter import (
     ReflexionState,
     record_attempt_outcome,
     record_reflection_event,
+    visible_reflections,
 )
 from memcontam.clients.base import LLMClient
 from memcontam.logging.schema import VerifierResult
@@ -24,13 +25,16 @@ __all__ = [
     "apply_keep_last_3",
     "record_attempt_outcome",
     "record_reflection_event",
+    "visible_reflections",
 ]
 
 
 class ReflexionStylePolicy:
     def build_prompt(self, task: TaskInstance, memory: MemoryState) -> list[dict[str, str]]:
-        reflections = "\n".join(entry.content for entry in memory.entries[-3:])
-        return [{"role": "user", "content": f"Reflections:\n{reflections}\n\nSolve: {task.input}"}]
+        state = ReflexionState(reflections=_reflection_entries(memory))
+        from memcontam.baselines.reflexion_adapter import _generation_messages
+
+        return _generation_messages(task, visible_reflections(state))[0]
 
     def run(
         self,
@@ -94,5 +98,5 @@ def _reflection_entries(memory: MemoryState) -> list[MemoryEntry]:
     return [
         entry
         for entry in memory.entries
-        if entry.memory_type == "verbal_reflection" or entry.content.startswith("Reflection:")
+        if entry.memory_type == "verbal_reflection"
     ]

@@ -170,6 +170,38 @@ def test_retrieval_rag_valid_incorrect_answer_is_a_success() -> None:
     assert outcome.memory_write_event is None
 
 
+def test_reflexion_terminal_incorrect_answer_remains_a_success_after_reflection() -> None:
+    from memcontam.baselines.reflexion_adapter import ReflexionAdapter, ReflexionState
+    from memcontam.clients.replay import ReplayClient
+    from memcontam.memory.stores import MemoryEntry
+    from memcontam.tasks.base import TaskInstance
+
+    outcome = ReflexionAdapter().execute(
+        TaskInstance(sample_id="sample-1", task_name="game24", input={}),
+        ReflexionState(),
+        client=ReplayClient(
+            responses_by_sample={
+                "sample-1": {
+                    "reflexion_generate": "final: wrong",
+                    "reflexion_reflect": (
+                        '{"mode":"corrective","failure_class":"incorrect_answer",'
+                        '"reflection_text":"retry","explicitly_used_memory_ids":[]}'
+                    ),
+                }
+            }
+        ),
+        model="replay",
+        config={"run_id": "run-1", "max_attempts": 1},
+        verifier=lambda _answer, _task: False,
+    )
+
+    assert outcome.status == "succeeded"
+    assert outcome.verifier_result is False
+    assert outcome.failure_disposition is None
+    assert len(outcome.memory_after) == 1
+    assert MemoryEntry.model_validate(outcome.memory_after[0]).memory_type == "verbal_reflection"
+
+
 def test_bot_invalid_solve_returns_closed_failure_without_verifier_or_write() -> None:
     from memcontam.baselines.bot_runtime import BotRuntime
     from memcontam.clients.replay import ReplayClient

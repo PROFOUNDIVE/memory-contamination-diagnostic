@@ -1,1 +1,1 @@
-{"stage":"reflexion_generate","contract":"Generate a final answer using only the current task and KeepLast_3 reflections."}
+{"stage":"reflexion_generate","messages":[{"role":"system","content":"Solve the {{task_family}} task. Use only the listed reflections when useful. Return exactly one non-empty line: final: <answer>."},{"role":"user","content":"Task: {{task_family}}\n\nReflections:\nReflection ID: {{reflection_id}}\nReflection: {{reflection_text}}\n\nCurrent task:\n{{task_canonical}}"}]}

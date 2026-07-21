@@ -69,6 +69,34 @@ def test_retrieval_rag_adapter_uses_only_the_rag_generate_semantic_stage() -> No
     assert not hasattr(adapter, "build_prompt")
 
 
+def test_reflexion_policy_build_prompt_delegates_to_the_adapter_renderer() -> None:
+    from memcontam.baselines.reflexion_adapter import (
+        ReflexionState,
+        _generation_messages,
+        visible_reflections,
+    )
+    from memcontam.baselines.reflexion_style import ReflexionStylePolicy
+    from memcontam.memory.stores import MemoryEntry, MemoryState
+    from memcontam.tasks.base import TaskInstance
+
+    task = TaskInstance(sample_id="sample-1", task_name="game24", input={})
+    reflection = MemoryEntry(
+        entry_id="reflection-1",
+        content="Reflection: verify arithmetic.",
+        memory_type="verbal_reflection",
+    )
+    memory = MemoryState(
+        entries=[
+            MemoryEntry(entry_id="seed", content="do not render", memory_type="seed"),
+            reflection,
+        ]
+    )
+
+    assert ReflexionStylePolicy().build_prompt(task, memory) == _generation_messages(
+        task, visible_reflections(ReflexionState(reflections=[reflection]))
+    )[0]
+
+
 def test_bot_problem_and_instantiate_stages_have_strict_read_and_solve_contracts() -> None:
     bot_read = importlib.import_module("memcontam.baselines.bot_read")
     bot_solve = importlib.import_module("memcontam.baselines.bot_solve")

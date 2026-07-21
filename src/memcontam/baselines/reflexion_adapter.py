@@ -18,18 +18,27 @@ from memcontam.baselines.contracts import (
 )
 from memcontam.clients.base import LLMClient
 from memcontam.clients.recording import MethodCallRecorder
-from memcontam.logging.provenance import PromptSourcePart, build_prompt_with_sources, phase11_lineage_metadata
+from memcontam.logging.provenance import (
+    PromptSourcePart,
+    build_prompt_with_sources,
+    combine_lineage_status,
+    derived_source_span,
+    phase11_lineage_metadata,
+    source_lineage_from_spans,
+)
 from memcontam.logging.schema import VerifierResult
-from memcontam.memory.stores import MemoryEntry, apply_keep_last_3
+from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
+from memcontam.tasks.dispatch import canonical_task_json
 
 
 @dataclass
 class ReflexionState:
     reflections: list[MemoryEntry] = field(default_factory=list)
 
-    def __post_init__(self) -> None:
-        self.reflections[:] = apply_keep_last_3(self.reflections)
+
+def visible_reflections(state: ReflexionState) -> list[MemoryEntry]:
+    return [entry for entry in state.reflections if entry.memory_type == "verbal_reflection"][-3:]
 
 
 @dataclass(frozen=True)
@@ -101,7 +110,8 @@ class ReflexionAdapter:
         reflection_events: list[ReflexionReflectionEvent] = []
 
         for attempt_index in range(1, max_attempts + 1):
-            messages, source_spans = _generation_messages(task, state.reflections)
+            visible_entries = visible_reflections(state)
+            messages, source_spans = _generation_messages(task, visible_entries)
             try:
                 response = recorder.chat(
                     messages,
@@ -176,13 +186,24 @@ class ReflexionAdapter:
                 )
 
             try:
+                reflection_messages, reflection_spans = _reflection_messages(
+                    task,
+                    visible_entries,
+                    response.content,
+                    parsed_answer,
+                    failed_actor_call_id=answer_call_id,
+                    failed_actor_spans=source_spans,
+                    target_set=config.get("_logging_target_contamination_set")
+                    or config.get("_logging_target_set_id"),
+                )
                 reflection_response = recorder.chat(
-                    _reflection_messages(task, state.reflections, response.content, parsed_answer),
+                    reflection_messages,
                     model=model,
                     config={
                         **config,
                         "sample_id": config.get("sample_id", task.sample_id),
                         "method_stage": "reflexion_reflect",
+                        "source_spans": reflection_spans,
                     },
                 )
             except Exception:
@@ -197,7 +218,7 @@ class ReflexionAdapter:
                     parsed_answer=parsed_answer,
                     answer_call_id=answer_call_id,
                 )
-            payload = _parse_reflection(reflection_response.content, state.reflections)
+            payload = _parse_reflection(reflection_response.content, visible_entries)
             if payload is None:
                 return _failed_outcome(
                     recorder,
@@ -213,7 +234,16 @@ class ReflexionAdapter:
             reflection_call_id = recorder.get_records()[-1].call_id
             if reflection_call_id is None:
                 raise AssertionError("recorded reflection call must have an ID")
-            entry = _append_reflection(task, state, payload, trial_id, reflection_call_id, config)
+            entry = _append_reflection(
+                task,
+                state,
+                payload,
+                trial_id,
+                reflection_call_id,
+                answer_call_id,
+                visible_entries,
+                config,
+            )
             record_reflection_event(
                 reflection_events,
                 attempt_id=attempt_id,
@@ -267,29 +297,69 @@ def _generation_messages(
             parts.append(PromptSourcePart(_render_reflection(entry), entry))
     else:
         parts.append("(none)")
-    parts.append(f"\n\nCurrent task input:\n{task.input}")
+    parts.append(f"\n\nCurrent task:\n{canonical_task_json(task)}")
     content, spans = build_prompt_with_sources(parts, message_index=1)
     return [
-        {"role": "system", "content": f"Solve the {task.task_name} task using reflections when useful."},
+        {
+            "role": "system",
+            "content": (
+                f"Solve the {task.task_name} task. Use only the listed reflections when useful. "
+                "Return exactly one non-empty line: final: <answer>."
+            ),
+        },
         {"role": "user", "content": content},
     ], spans
 
 
 def _reflection_messages(
-    task: TaskInstance, reflections: list[MemoryEntry], response: str, parsed_answer: str
-) -> list[dict[str, str]]:
-    reflection_context = "\n".join(_render_reflection(entry) for entry in reflections) or "(none)"
+    task: TaskInstance,
+    reflections: list[MemoryEntry],
+    response: str,
+    parsed_answer: str,
+    *,
+    failed_actor_call_id: str,
+    failed_actor_spans: list[Any],
+    target_set: Any,
+) -> tuple[list[dict[str, str]], list[Any]]:
+    parts: list[str | PromptSourcePart] = [f"Task: {task.task_name}\n\nVisible reflections:\n"]
+    if reflections:
+        for index, entry in enumerate(reflections):
+            if index:
+                parts.append("\n")
+            parts.append(PromptSourcePart(_render_reflection(entry), entry))
+    else:
+        parts.append("(none)")
+    trajectory_prefix = f"\n\nCurrent task:\n{canonical_task_json(task)}\n\nFailed actor response:\n"
+    suffix = f"\n\nParsed answer:\n{parsed_answer}\n\nFailure class:\nincorrect_answer"
+    parts.append(trajectory_prefix)
+    content, spans = build_prompt_with_sources(parts, message_index=1)
+    trajectory_start = len(content)
+    content += response + suffix
+    spans.append(
+        _failed_actor_trajectory_span(
+            response,
+            message_index=1,
+            start=trajectory_start,
+            end=trajectory_start + len(response),
+            failed_actor_call_id=failed_actor_call_id,
+            failed_actor_spans=failed_actor_spans,
+            target_set=target_set,
+        )
+    )
     return [
-        {"role": "system", "content": "Diagnose the failed attempt and return corrective JSON only."},
         {
-            "role": "user",
+            "role": "system",
             "content": (
-                f"Task: {task.task_name}\n\nReflections:\n{reflection_context}"
-                f"\n\nTask input:\n{task.input}\n\nFailed raw response:\n{response}"
-                f"\n\nParsed answer:\n{parsed_answer}\n\nCorrect: false"
+                "Diagnose the failed actor attempt. Return only JSON matching "
+                "ReflectionGenerationResult. Set failure_class to incorrect_answer and cite only "
+                "reflection IDs shown."
             ),
         },
-    ]
+        {
+            "role": "user",
+            "content": content,
+        },
+    ], spans
 
 
 def _append_reflection(
@@ -298,10 +368,12 @@ def _append_reflection(
     payload: ReflectionPayload,
     trial_id: str,
     reflection_call_id: str,
+    failed_actor_call_id: str,
+    visible_entries: list[MemoryEntry],
     config: dict[str, Any],
 ) -> MemoryEntry:
     used_ids = list(payload.explicitly_used_memory_ids)
-    entries_by_id = {entry.entry_id: entry for entry in state.reflections}
+    entries_by_id = {entry.entry_id: entry for entry in visible_entries}
     used_entries = [entries_by_id[entry_id] for entry_id in used_ids]
     contaminated_source_ids = _contaminated_source_entry_ids(used_entries)
     entry = MemoryEntry(
@@ -316,6 +388,10 @@ def _append_reflection(
             "memory_support_ids": used_ids,
             "source_entry_ids": used_ids,
             "source_contaminated_entry_ids": contaminated_source_ids,
+            "creation_call_id": reflection_call_id,
+            "failed_actor_call_id": failed_actor_call_id,
+            "parent_call_ids": [failed_actor_call_id],
+            "declared_updater_context_ids": [entry.entry_id for entry in visible_entries],
             "parent_call_id": reflection_call_id,
             "reflection_lineage": {"stage": "reflexion_reflect", "source_trial_id": trial_id},
         },
@@ -323,7 +399,7 @@ def _append_reflection(
     target_set = config.get("_logging_target_contamination_set") or config.get("_logging_target_set_id")
     if target_set:
         entry.metadata.update(phase11_lineage_metadata(entry, [*state.reflections, entry], target_set))
-    state.reflections[:] = apply_keep_last_3([*state.reflections, entry])
+    state.reflections.append(entry)
     return entry
 
 
@@ -452,7 +528,82 @@ def _answer_call_id(recorder: MethodCallRecorder) -> str | None:
 
 
 def _render_reflection(entry: MemoryEntry) -> str:
-    return f"Reflection: {entry.content.removeprefix('Reflection:').strip()}"
+    return (
+        f"Reflection ID: {entry.entry_id}\n"
+        f"Reflection: {entry.content.removeprefix('Reflection:').strip()}"
+    )
+
+
+def _failed_actor_trajectory_span(
+    response: str,
+    *,
+    message_index: int,
+    start: int,
+    end: int,
+    failed_actor_call_id: str,
+    failed_actor_spans: list[Any],
+    target_set: Any,
+) -> Any:
+    source_ids, parent_ids, clean_or_contaminated = source_lineage_from_spans(failed_actor_spans)
+    direct_parent_ids = _span_entry_ids(failed_actor_spans)
+    lineage_status = combine_lineage_status(
+        [span.lineage_status or "unavailable" for span in failed_actor_spans]
+    )
+    injected_root_ids: list[str] = []
+    for span in failed_actor_spans:
+        if span.lineage_status == "exact":
+            _extend_unique(injected_root_ids, span.injected_root_ids)
+    target_set_id = _target_set_id(target_set)
+    contamination_class = "derived" if injected_root_ids and lineage_status == "exact" else "clean"
+    return derived_source_span(
+        response,
+        message_index=message_index,
+        start=start,
+        end=end,
+        entry_id=f"reflexion_failed_actor:{failed_actor_call_id}",
+        parent_call_id=failed_actor_call_id,
+        source_ids=source_ids,
+        parent_ids=parent_ids,
+        lineage_id=failed_actor_call_id,
+        version="reflexion_failed_actor_v1",
+        origin="reflexion_generate",
+        clean_or_contaminated=clean_or_contaminated,
+        contamination_class=contamination_class if target_set_id else None,
+        injected_root_ids=injected_root_ids,
+        lineage_status=lineage_status if target_set_id else None,
+        lineage_basis="recorded_parent" if target_set_id else None,
+        direct_parent_ids=direct_parent_ids,
+        target_set_id=target_set_id,
+        is_target_contamination=(
+            contamination_class == "derived" and lineage_status == "exact"
+            if target_set_id
+            else None
+        ),
+    )
+
+
+def _span_entry_ids(spans: list[Any]) -> list[str]:
+    entry_ids: list[str] = []
+    for span in spans:
+        if isinstance(span.entry_id, str) and span.entry_id not in entry_ids:
+            entry_ids.append(span.entry_id)
+    return entry_ids
+
+
+def _extend_unique(target: list[str], values: list[str]) -> None:
+    for value in values:
+        if value not in target:
+            target.append(value)
+
+
+def _target_set_id(target_set: Any) -> str | None:
+    if isinstance(target_set, str) and target_set:
+        return target_set
+    if isinstance(target_set, dict):
+        target_set_id = target_set.get("target_set_id")
+        if isinstance(target_set_id, str) and target_set_id:
+            return target_set_id
+    return None
 
 
 def _contaminated_source_entry_ids(entries: list[MemoryEntry]) -> list[str]:
