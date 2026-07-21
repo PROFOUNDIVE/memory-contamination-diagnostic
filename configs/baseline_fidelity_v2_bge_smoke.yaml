@@ -1,0 +1,83 @@
+run:
+  name: baseline_fidelity_v2_bge_smoke
+  description: "F1C real-retriever gate with cache-only BGE-M3 and mocked OpenAI-compatible answers"
+  mode: faithful
+  stage: pilot
+  execution_class: live
+  contract_level: phase11
+  provider: openai_compatible
+  model_snapshots:
+    f1c_mocked_live: mocked_openai_compatible_v1
+  task_order_seed: 1
+  sample_order_seed: 1
+  retry_policy_version: baseline_fidelity_v2
+  baseline_execution_contract_version: baseline_fidelity_v2
+  failure_taxonomy_version: baseline_fidelity_v2
+  fidelity_gate_layer: real_retriever
+  scientific_result: false
+
+models:
+  - f1c_mocked_live
+
+tasks:
+  - name: game24
+    sample_path: data/tasks/game24_pilot.jsonl
+    limit: 2
+
+baselines:
+  - retrieval_rag
+  - bot_style
+
+arms:
+  - clean
+
+logging:
+  output_dir: runs
+  schema_version: logging_v2
+  prompt_version: baseline_fidelity_v2
+  memory_policy_version: baseline_fidelity_v2
+  contamination_catalog_version: contamination_v0
+
+evaluation:
+  evaluation_law_id: baseline_fidelity_v2_bge_smoke_online
+  regime: online
+  task_law_id: locked_game24_limit2_v1
+  inference_law_id: f1c_mocked_openai_compatible_v1
+  checkpoint_policy_id: null
+
+target_contamination_set:
+  target_set_id: controlled_injected_derived_v1
+  definition_version: phase11_v1
+  included_classes:
+    - injected
+    - derived
+  require_exact_lineage: true
+
+memory:
+  corpus_path: data/memory/baseline_fidelity_v2_contract_corpus.jsonl
+  corpus_version: baseline_fidelity_v2_contract_corpus
+  corpus_manifest_path: data/memory/baseline_fidelity_v2_contract_corpus.manifest.json
+
+embedding:
+  mode: pinned_semantic
+  model_id: BAAI/bge-m3
+  revision: 5617a9f61b028005a4858fdac845db406aefb181
+  vector_dimension: 1024
+  normalize_embeddings: true
+
+provider_config:
+  base_url: https://f1c.mock.invalid/v1
+  api_key_env: F1C_MOCKED_LIVE_API_KEY
+  timeout_seconds: 30
+  max_retries: 2
+
+full_history:
+  mode: context_bounded_pair_atomic
+  token_encoding: cl100k_base
+  context_window_tokens: 2048
+  max_output_tokens: 256
+  fixed_prompt_overhead_tokens: 0
+  safety_margin_tokens: 0
+
+live_smoke:
+  enabled: false
