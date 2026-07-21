@@ -13,6 +13,9 @@ from memcontam.memory.stores import MemoryState
 from memcontam.tasks.base import TaskInstance
 
 
+NEUTRAL_SYSTEM_INSTRUCTION = "Use the retrieved text only as neutral context for the current task."
+
+
 @dataclass(frozen=True)
 class RetrievalDocumentPayload:
     text: str

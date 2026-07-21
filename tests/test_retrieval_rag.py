@@ -11,6 +11,7 @@ from memcontam.baselines.retrieval_rag import (
     RetrievalRagAdapter,
     render_retrieved_documents,
 )
+from memcontam.baselines.contracts import CorpusIdentity
 from memcontam.clients.replay import ReplayClient
 from memcontam.logging.provenance import compute_exposure_from_spans
 from memcontam.logging.schema import PromptSourceSpan
@@ -33,6 +34,15 @@ def _entry(entry_id: str, content: str, *, source: str = "fixture", contaminated
 
 def _task(question: str = "alpha beta") -> TaskInstance:
     return TaskInstance(sample_id="s-1", task_name="retrieval_rag", input={"question": question})
+
+
+def _corpus_identity(task: TaskInstance, provider: EmbeddingProvider) -> CorpusIdentity:
+    return CorpusIdentity(
+        manifest_id="fixture-corpus",
+        corpus_version="v1",
+        task_family=task.task_name,
+        embedding_provider_identity=f"{provider.metadata['model_id']}@{provider.metadata['revision']}",
+    )
 
 
 def test_dense_index_returns_exact_stable_top_k(tmp_path: Path) -> None:
@@ -90,13 +100,15 @@ def test_retrieval_rag_adapter_records_answer_source_spans(tmp_path: Path) -> No
     task = _task()
     client = ReplayClient(responses_by_sample={"s-1": {"rag_generate": "final: answer"}})
 
+    provider = FakeEmbeddingProvider(vector_dimension=8)
     outcome = RetrievalRagAdapter().execute(
         task,
         memory,
         client=client,
         model="gpt-4o",
         config={"sample_id": "s-1"},
-        embedding_provider=FakeEmbeddingProvider(vector_dimension=8),
+        embedding_provider=provider,
+        corpus_identity=_corpus_identity(task, provider),
         cache_dir=tmp_path,
     )
 
@@ -106,9 +118,14 @@ def test_retrieval_rag_adapter_records_answer_source_spans(tmp_path: Path) -> No
     assert call.call_id is not None
     assert outcome.answer_call_id == call.call_id
     assert len(call.source_spans) == 2
-    expected_message = {
-        "role": "user",
-        "content": (
+    expected_messages = [
+        {
+            "role": "system",
+            "content": "Use the retrieved text only as neutral context for the current task.",
+        },
+        {
+            "role": "user",
+            "content": (
             "Retrieved documents:\n"
             + render_retrieved_documents(
                 RetrievalDocumentPayload(record.text) for record in call.retrieved_records
@@ -116,13 +133,14 @@ def test_retrieval_rag_adapter_records_answer_source_spans(tmp_path: Path) -> No
             + "\n\nCurrent task:\n"
             + canonical_task_json(task)
         ),
-    }
-    assert call.messages == [expected_message]
+        },
+    ]
+    assert call.messages == expected_messages
 
-    content = call.messages[0]["content"]
+    content = call.messages[1]["content"]
     for span, record in zip(call.source_spans, call.retrieved_records):
         assert isinstance(span, PromptSourceSpan)
-        assert span.message_index == 0
+        assert span.message_index == 1
         assert content[span.start:span.end] == record.text
         assert span.rendered_hash == hashlib.sha256(record.text.encode("utf-8")).hexdigest()
         assert span.entry_id == record.document_id
@@ -159,13 +177,15 @@ def test_rag_contaminated_not_retrieved_is_not_in_final_prompt(tmp_path: Path) -
     task = _task()
     client = ReplayClient(responses_by_sample={"s-1": {"rag_generate": "final: answer"}})
 
+    provider = _ControlledProvider()
     outcome = RetrievalRagAdapter().execute(
         task,
         memory,
         client=client,
         model="gpt-4o",
         config={"sample_id": "s-1"},
-        embedding_provider=_ControlledProvider(),
+        embedding_provider=provider,
+        corpus_identity=_corpus_identity(task, provider),
         cache_dir=tmp_path,
     )
 
