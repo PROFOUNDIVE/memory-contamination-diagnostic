@@ -8,6 +8,10 @@ from pydantic import StringConstraints
 
 NonEmptyStr = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
+BASELINE_FIDELITY_V2 = "baseline_fidelity_v2"
+BASELINE_EXECUTION_CONTRACT_V2 = BASELINE_FIDELITY_V2
+FAILURE_TAXONOMY_V2 = BASELINE_FIDELITY_V2
+
 SEMANTIC_STAGES = (
     "no_memory_generate",
     "full_history_generate",

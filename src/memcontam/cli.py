@@ -62,7 +62,7 @@ from memcontam.logging.provenance import (
 )
 from memcontam.logging.writer import RunLogWriter
 from memcontam.logging.audit_artifacts import write_provider_profile_atomic, write_resolved_config_atomic
-from memcontam.config.resolution import resolve_run_config
+from memcontam.config.resolution import resolve_run_config, validate_fidelity_contract
 from memcontam.memory.bot_buffer import BotBufferIdentity, ThoughtTemplate
 from memcontam.memory.corpus import CorpusRecord, build_arm_corpus, load_corpus
 from memcontam.memory.embeddings import EmbeddingProvider, FakeEmbeddingProvider, SentenceTransformerProvider
@@ -332,6 +332,10 @@ def _run_metadata(config: dict[str, Any], run_id: str, run_started_at: str) -> R
 
 def _validate_run_config(config: dict[str, Any]) -> None:
     _validate_placeholder_main_config(config)
+    try:
+        validate_fidelity_contract(config)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
     run_config = config.get("run", {})
     stage = run_config.get("stage", "replay")
     if stage not in _STAGES:

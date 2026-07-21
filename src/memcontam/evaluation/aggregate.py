@@ -9,6 +9,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from memcontam.baselines.contracts import BASELINE_FIDELITY_V2
 from memcontam.logging.schema import (
     LOGGING_V2,
     CallEvent,
@@ -23,6 +24,41 @@ from memcontam.logging.schema import (
 
 
 NOT_COMPUTED = "not_computed"
+
+
+def _validate_fidelity_gate_metadata(run_dir: Path, run_metadata: RunMetadata) -> None:
+    metadata_versions = {
+        "memory_policy_version": run_metadata.memory_policy_version,
+        "prompt_version": run_metadata.prompt_version,
+        "retry_policy_version": run_metadata.retry_policy_version,
+    }
+    if not any(value == BASELINE_FIDELITY_V2 for value in metadata_versions.values()):
+        return
+    if any(value != BASELINE_FIDELITY_V2 for value in metadata_versions.values()):
+        raise SystemExit("mixed Baseline-Fidelity versions in run metadata")
+
+    config_path = run_dir / "resolved_config.json"
+    if not config_path.exists():
+        raise SystemExit(
+            "Baseline-Fidelity-V2 run is missing resolved fidelity_gate_layer metadata"
+        )
+    try:
+        resolved = json.loads(config_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"malformed resolved_config.json: {config_path}") from exc
+    logging = resolved.get("logging", {})
+    run = resolved.get("run", {})
+    versions = {
+        "logging.memory_policy_version": logging.get("memory_policy_version"),
+        "logging.prompt_version": logging.get("prompt_version"),
+        "run.retry_policy_version": run.get("retry_policy_version"),
+        "run.baseline_execution_contract_version": run.get("baseline_execution_contract_version"),
+        "run.failure_taxonomy_version": run.get("failure_taxonomy_version"),
+    }
+    if any(value != BASELINE_FIDELITY_V2 for value in versions.values()):
+        raise SystemExit("mixed Baseline-Fidelity versions in resolved config")
+    if run.get("fidelity_gate_layer") not in {"structural", "source_contract", "real_retriever"}:
+        raise SystemExit("invalid or missing fidelity_gate_layer metadata")
 
 
 def _load_trials(trials_path: Path) -> list[TrialLog]:
@@ -807,6 +843,7 @@ def aggregate_run(
         if status not in {"completed", "failed"}:
             raise SystemExit(f"strict run has unexpected status: {status}")
         run_metadata = RunMetadata.model_validate(manifest.get("run_metadata"))
+        _validate_fidelity_gate_metadata(run_dir, run_metadata)
         if contract is not None and contract != run_metadata.contract_level:
             raise SystemExit(
                 f"contract mismatch: requested {contract}, found {run_metadata.contract_level}"

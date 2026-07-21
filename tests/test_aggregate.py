@@ -827,6 +827,67 @@ def _write_jsonl(run_dir: Path, filename: str, rows: list[dict]) -> None:
     )
 
 
+def _v2_resolved_config() -> dict[str, Any]:
+    return {
+        "logging": {
+            "memory_policy_version": "baseline_fidelity_v2",
+            "prompt_version": "baseline_fidelity_v2",
+        },
+        "run": {
+            "retry_policy_version": "baseline_fidelity_v2",
+            "baseline_execution_contract_version": "baseline_fidelity_v2",
+            "failure_taxonomy_version": "baseline_fidelity_v2",
+            "fidelity_gate_layer": "structural",
+        },
+    }
+
+
+def test_aggregate_rejects_mixed_version_fidelity_v1_v2_metadata(tmp_path: Path) -> None:
+    run_dir = tmp_path / "runs" / "mixed_fidelity_versions"
+    run_dir.mkdir(parents=True)
+    _write_phase11_run(run_dir, [_phase11_trial_row(arm="clean", trial_seq=0, event_seq=1)])
+    manifest = _phase11_manifest()
+    manifest["run_metadata"].update(
+        {
+            "memory_policy_version": "baseline_fidelity_v2",
+            "prompt_version": "baseline_fidelity_v2",
+            "retry_policy_version": "baseline_fidelity_v2",
+        }
+    )
+    resolved = _v2_resolved_config()
+    resolved["logging"]["prompt_version"] = "baseline_fidelity_v1"
+    _write_run_json(run_dir, manifest)
+    (run_dir / "resolved_config.json").write_text(json.dumps(resolved), encoding="utf-8")
+
+    from memcontam.evaluation.aggregate import aggregate_run
+
+    with pytest.raises(SystemExit, match="mixed Baseline-Fidelity versions"):
+        aggregate_run(run_dir, stage="replay", contract="phase11")
+
+
+def test_aggregate_rejects_v2_metadata_without_gate_layer(tmp_path: Path) -> None:
+    run_dir = tmp_path / "runs" / "missing_fidelity_gate_layer"
+    run_dir.mkdir(parents=True)
+    _write_phase11_run(run_dir, [_phase11_trial_row(arm="clean", trial_seq=0, event_seq=1)])
+    manifest = _phase11_manifest()
+    manifest["run_metadata"].update(
+        {
+            "memory_policy_version": "baseline_fidelity_v2",
+            "prompt_version": "baseline_fidelity_v2",
+            "retry_policy_version": "baseline_fidelity_v2",
+        }
+    )
+    resolved = _v2_resolved_config()
+    del resolved["run"]["fidelity_gate_layer"]
+    _write_run_json(run_dir, manifest)
+    (run_dir / "resolved_config.json").write_text(json.dumps(resolved), encoding="utf-8")
+
+    from memcontam.evaluation.aggregate import aggregate_run
+
+    with pytest.raises(SystemExit, match="fidelity_gate_layer"):
+        aggregate_run(run_dir, stage="replay", contract="phase11")
+
+
 def _strict_call_event(
     trial_id: str,
     call_id: str,
