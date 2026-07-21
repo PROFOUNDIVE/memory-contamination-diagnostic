@@ -124,9 +124,10 @@ def test_no_memory_adapter_fails_closed_on_empty_output_and_keeps_memory_read_on
 
 def test_retrieval_rag_valid_incorrect_answer_is_a_success() -> None:
     from memcontam.baselines.retrieval_rag import RetrievalRagAdapter
+    from memcontam.baselines.contracts import CorpusIdentity
     from memcontam.clients.base import LLMResponse
     from memcontam.memory.embeddings import FakeEmbeddingProvider
-    from memcontam.memory.stores import MemoryState
+    from memcontam.memory.stores import MemoryEntry, MemoryState
     from memcontam.tasks.base import TaskInstance
 
     class Client:
@@ -134,12 +135,30 @@ def test_retrieval_rag_valid_incorrect_answer_is_a_success() -> None:
             return LLMResponse(content="final: wrong", raw={}, token_usage={}, latency_ms=0)
 
     task = TaskInstance(sample_id="sample-1", task_name="game24", input={"numbers": [1, 3, 4, 6]})
+    provider = FakeEmbeddingProvider()
     outcome = RetrievalRagAdapter().execute(
         task,
-        MemoryState(),
+        MemoryState(
+            entries=[
+                MemoryEntry(
+                    entry_id="rag-strategy",
+                    content="Keep exact intermediate values.",
+                    memory_type="strategy",
+                    clean_or_contaminated="clean",
+                    metadata={"source": "fixture"},
+                )
+            ]
+        ),
         client=Client(),
         model="replay",
-        embedding_provider=FakeEmbeddingProvider(),
+        config={"_require_corpus_identity": True},
+        embedding_provider=provider,
+        corpus_identity=CorpusIdentity(
+            manifest_id="fixture-corpus",
+            corpus_version="v1",
+            task_family="game24",
+            embedding_provider_identity="fake-deterministic-embedding@local",
+        ),
         verifier=lambda answer, seen_task: False,
     )
 

@@ -13,7 +13,7 @@ from memcontam.baselines.contracts import (
     FailureDisposition,
     ScientificIneligibilityReason,
 )
-from memcontam.baselines.retrieval_rag import RetrievalDocumentPayload
+from memcontam.baselines.retrieval_rag import NEUTRAL_SYSTEM_INSTRUCTION, RetrievalDocumentPayload
 from memcontam.clients.base import LLMClient
 from memcontam.clients.recording import MethodCallRecorder
 from memcontam.logging.provenance import PromptSourcePart, build_prompt_with_sources
@@ -49,9 +49,23 @@ class RetrievalRagAdapter:
                 "trial_id": _trial_id(task, config, model),
             },
         )
-        provider_failure = _provider_failure(embedding_provider, corpus_identity, task)
+        provider_failure = _provider_failure(
+            embedding_provider,
+            corpus_identity,
+            task,
+            require_corpus_identity=bool(config.get("_require_corpus_identity", False)),
+        )
         if provider_failure is not None:
             return _failed_outcome(recorder, memory_before, memory, *provider_failure)
+        if not memory.entries and config.get("_require_corpus_identity", False):
+            return _failed_outcome(
+                recorder,
+                memory_before,
+                memory,
+                "CorpusContractError",
+                "rag_manifest_invalid",
+                "manifest_invalid",
+            )
         assert embedding_provider is not None
 
         query = canonical_task_json(task)
@@ -227,9 +241,15 @@ def _build_index(
 
 
 def _provider_failure(
-    provider: EmbeddingProvider | None, corpus_identity: CorpusIdentity | None, task: TaskInstance
+    provider: EmbeddingProvider | None,
+    corpus_identity: CorpusIdentity | None,
+    task: TaskInstance,
+    *,
+    require_corpus_identity: bool,
 ) -> tuple[ErrorType, FailureDisposition, ScientificIneligibilityReason] | None:
     if corpus_identity is not None and type(corpus_identity) is not CorpusIdentity:
+        return "CorpusContractError", "rag_manifest_invalid", "manifest_invalid"
+    if require_corpus_identity and corpus_identity is None:
         return "CorpusContractError", "rag_manifest_invalid", "manifest_invalid"
     if provider is None:
         return (
@@ -253,15 +273,16 @@ def _provider_failure(
         )
     except Exception:
         return "EmbeddingContractError", "rag_embedding_failed", "embedding_failed"
-    if corpus_identity is not None:
-        if corpus_identity.task_family != task.task_name:
-            return "CorpusContractError", "rag_manifest_invalid", "manifest_invalid"
-        if corpus_identity.embedding_provider_identity != f"{model_id}@{revision}":
-            return (
-                "EmbeddingContractError",
-                "rag_embedding_provider_unpinned",
-                "embedding_provider_unpinned",
-            )
+    if corpus_identity is None:
+        return None
+    if corpus_identity.task_family != task.task_name:
+        return "CorpusContractError", "rag_manifest_invalid", "manifest_invalid"
+    if corpus_identity.embedding_provider_identity != f"{model_id}@{revision}":
+        return (
+            "EmbeddingContractError",
+            "rag_embedding_provider_unpinned",
+            "embedding_provider_unpinned",
+        )
     return None
 
 
@@ -276,8 +297,11 @@ def _messages(
             parts.append("\n\n")
         parts.append(PromptSourcePart(document.text, entries_by_id[records[index].document_id]))
     parts.extend(["\n\nCurrent task:\n", canonical_task_json(task)])
-    content, spans = build_prompt_with_sources(parts, message_index=0)
-    return [{"role": "user", "content": content}], spans
+    content, spans = build_prompt_with_sources(parts, message_index=1)
+    return [
+        {"role": "system", "content": NEUTRAL_SYSTEM_INSTRUCTION},
+        {"role": "user", "content": content},
+    ], spans
 
 
 def _metadata(index: DenseIndex, corpus_identity: CorpusIdentity | None) -> dict[str, Any]:
@@ -287,6 +311,11 @@ def _metadata(index: DenseIndex, corpus_identity: CorpusIdentity | None) -> dict
         "embedding_revision": str(index.manifest["embedding_revision"]),
         "embedding_library_version": str(index.manifest["embedding_library_version"]),
         "top_k": 3,
+        "effective_k": len(index.entries) if len(index.entries) < 3 else 3,
+        "similarity": "normalized_dot_product",
+        "normalization": bool(index.manifest["normalize_embeddings"]),
+        "retrieval_unit": "document",
+        "query_serialization_version": "canonical_task_json_v1",
     }
     if corpus_identity is not None:
         metadata["corpus_identity"] = asdict(corpus_identity)
