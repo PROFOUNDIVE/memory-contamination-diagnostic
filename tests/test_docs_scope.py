@@ -145,7 +145,8 @@ def test_readme_points_to_v2_authority_without_claiming_f1c_pass() -> None:
     assert "F1A and F1B pass" in text
     assert "missing_cached_bge_m3" in text
     assert "F1C pass" not in text
-    assert "No V2 release or tag is claimed." in text
+    assert "`v0.8` is a repository research-artifact tag" in text
+    assert "It is not an overall V2 certification because F1C remains blocked." in text
 
 
 def test_g0_doc_states_partial_rag_bot_scope() -> None:
@@ -608,6 +609,13 @@ def test_phase11_config_and_readme_links_are_current() -> None:
     ]:
         assert path in readme
 
+
+def test_readme_merges_phase11_release_and_status_sections() -> None:
+    readme = README.read_text(encoding="utf-8")
+    assert "## v0.7.2 Phase-11 `logging_v2` Contract Release and Status" in readme
+    assert "| `phase11` |" not in readme
+    assert "## Phase-11 `logging_v2` Contract Status" not in readme
+    assert readme.count("configs/logging_contract_phase11_replay.yaml") >= 1
 
 
 def test_v072_release_doc_exists_and_stays_within_scope() -> None:
