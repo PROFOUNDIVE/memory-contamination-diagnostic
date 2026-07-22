@@ -66,5 +66,12 @@ def test_f1c_mocked_live_dispatch_joins_provider_profile_and_resolved_config(mon
     assert response.content == "final: 24"
     assert _Completions.last_kwargs["model"] == config["models"][0]
     assert resolved["run"]["provider_profile_id"] == provider_profile_id(profile)
+    assert resolved["run"]["provider_profile_id"] == provider_profile_id(
+        normalize_provider_profile(
+            ProviderConfig.from_run_config(resolved),
+            served_models=resolved["models"],
+            model_snapshots=resolved["run"]["model_snapshots"],
+        )
+    )
     assert resolved_hash
     assert "mocked-transport-only" not in json.dumps(resolved, sort_keys=True)

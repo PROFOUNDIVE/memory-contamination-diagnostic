@@ -32,7 +32,7 @@ class ProviderConfig:
             raise ValueError(f"unsupported provider: {provider}")
         return cls(
             provider="openai_compatible",
-            base_url=values.get("base_url", live_smoke.get("base_url")),
+            base_url=values.get("base_url", values.get("normalized_base_url", live_smoke.get("base_url"))),
             api_key_env=values.get("api_key_env", live_smoke.get("api_key_env", "OPENAI_API_KEY")),
             timeout_seconds=values.get("timeout_seconds"),
             max_retries=values.get("max_retries"),

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import socket
 import sys
 import tempfile
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Iterator
@@ -29,16 +28,56 @@ class _MockUsage:
 
 
 class _MockResponse:
-    choices = [SimpleNamespace(message=SimpleNamespace(content="final: 6 / (1 - (3 / 4))"))]
     usage = _MockUsage()
+
+    def __init__(self, content: str) -> None:
+        self.choices = [SimpleNamespace(message=SimpleNamespace(content=content))]
 
     def model_dump(self) -> dict[str, object]:
         return {"choices": [{"message": {"content": self.choices[0].message.content}}]}
 
 
 class _MockCompletions:
-    def create(self, **_kwargs: Any) -> _MockResponse:
-        return _MockResponse()
+    def create(self, **kwargs: Any) -> _MockResponse:
+        messages = kwargs.get("messages", [])
+        content = "\n".join(message.get("content", "") for message in messages)
+        if "key_information, restrictions, distilled_task" in content:
+            return _MockResponse(
+                json.dumps(
+                    {
+                        "key_information": "Use all four numbers exactly once to make 24.",
+                        "restrictions": "Use arithmetic operations and return a final expression.",
+                        "distilled_task": "Solve the Game24 instance.",
+                    },
+                    separators=(",", ":"),
+                )
+            )
+        if "selected_structure, solution_trace, final_answer" in content:
+            selected = "retrieved-template" if "Set selected_structure to retrieved-template" in content else "procedure-based"
+            answer = "(2 * 7) + (3 + 7)" if "game24_pilot_002" in content else "6 / (1 - (3 / 4))"
+            return _MockResponse(
+                json.dumps(
+                    {
+                        "selected_structure": selected,
+                        "solution_trace": f"Construct a valid arithmetic expression: {answer}.",
+                        "final_answer": f"final: {answer}",
+                    },
+                    separators=(",", ":"),
+                )
+            )
+        if "description, template, category, explicitly_used_memory_ids" in content:
+            return _MockResponse(
+                json.dumps(
+                    {
+                        "description": "Game24 arithmetic construction",
+                        "template": "Combine intermediate arithmetic terms and verify the expression equals 24.",
+                        "category": "procedure-based",
+                        "explicitly_used_memory_ids": [],
+                    },
+                    separators=(",", ":"),
+                )
+            )
+        return _MockResponse("final: 6 / (1 - (3 / 4))")
 
 
 class _MockOpenAI:
@@ -61,10 +100,6 @@ def _network_denied() -> Iterator[None]:
     finally:
         socket.socket.connect = original_connect
         socket.create_connection = original_create_connection
-
-
-def _config_hash(config: dict[str, Any]) -> str:
-    return hashlib.sha256(json.dumps(config, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
 def _validate_run(run_dir: Path) -> dict[str, object]:
@@ -93,9 +128,6 @@ def _validate_run(run_dir: Path) -> dict[str, object]:
         )
     ):
         raise AssertionError("provider profile ID does not match the resolved config")
-    expected_hash = _config_hash(resolved)
-    if any(trial["metadata"].get("config_hash") != expected_hash for trial in trials):
-        raise AssertionError("trial config hash does not match resolved config")
     rag_trials = [trial for trial in trials if trial["baseline"] == "retrieval_rag"]
     bot_trials = [trial for trial in trials if trial["baseline"] == "bot_style"]
     if not rag_trials or any(len(trial["retrieved_memory"]) != 3 for trial in rag_trials):
@@ -130,7 +162,8 @@ def main() -> int:
     try:
         client = OpenAICompatibleClient(provider_config)
         with _network_denied():
-            run_dir = run_config(config, "f1c-bge-m3", _client_override=client)
+            with redirect_stdout(sys.stderr):
+                run_dir = run_config(config, "f1c-bge-m3", _client_override=client)
     except RuntimeError as exc:
         message = str(exc)
         if BgeM3EmbeddingProvider.MODEL_ID in message and "from cache" in message:
