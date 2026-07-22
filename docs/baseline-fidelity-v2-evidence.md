@@ -9,6 +9,8 @@ authority.
 | Field | Recorded value |
 |---|---|
 | Repository commit before Task 13 documentation | `09c6160452f95302dc5574d1edb1ebeaa620cd61` |
+| Repository commit before v0.8 release documentation | `67a199c0` |
+| Intended repository research-artifact tag | `v0.8` |
 | Plan | `.sisyphus/plans/BASELINE-FIDELITY-V2_source-contract_remediation.md` |
 | Plan SHA-256 | `5a5afe7f0d5fa171ff9d0b279fdd5875ee6885e718043cdfff3e59c449428e0f` |
 | Evidence namespace | `.sisyphus/evidence/baseline-fidelity-v2/` |
@@ -78,3 +80,6 @@ The evidence package isn't a complete V2 certification seal while F1C is blocked
 only accepted next step is to provision the exact pinned BGE-M3 revision in the local
 cache and rerun the existing verifier. Changing the model, revision, provider mode, or
 network policy would create different evidence, not complete this gate.
+
+The `v0.8` tag records the completed source-contract remediation state. It does not
+convert the blocked F1C layer into a pass.

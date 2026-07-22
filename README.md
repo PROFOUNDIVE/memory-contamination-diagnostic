@@ -18,14 +18,15 @@ pinned BGE-M3 cache-only semantics and mocked OpenAI-compatible answer dispatch.
 checkout lacks the required BGE-M3 revision, so the verifier reports
 `missing_cached_bge_m3` and overall V2 certification remains blocked. Replay evidence
 isn't benchmark, manuscript-quality, causal, or production contamination evidence.
-No V2 release or tag is claimed.
+`v0.8` is a repository research-artifact tag for the completed V2 source-contract
+remediation. It is not an overall V2 certification because F1C remains blocked.
 
 ## Historical Release Roadmap
 
 | Tag | Scope | Baselines | Key features |
 |---|---|---|---|
+| `v0.8` | Baseline-Fidelity-V2 source-contract remediation tag | `no_memory`, `full_history`, `retrieval_rag`, `bot_style`, `reflexion_style`, `dynamic_cheatsheet_rs_optional` | F1A/F1B offline QA pass, V2 source-contract artifacts, strict source visibility, blocked F1C cache gate preserved |
 | `v0.7.2` | Phase-11 `logging_v2` release tag for offline contract QA | Existing strict logging baselines | Typed evaluation law, fixed target set, exact direct-edge lineage, answer-call exposure, pair/checkpoint joins |
-| `phase11` | Phase-11 `logging_v2` operator contract and offline replay QA workflow | Existing strict logging baselines | Fixed evaluation law, fixed target set, exact direct-edge lineage, answer-call exposure, pair/checkpoint joins |
 | `v0.7` | Strict logging audit remediation over the locked offline 39-row gate | `no_memory`, `full_history`, `retrieval_rag`, `reflexion_style`, `bot_style` | `run.json` plus typed split streams, answer-call source-span exposure, durable failures, stage-gated aggregation |
 | `v0.6` | Stricter Reflexion retry fidelity over the locked 3-task pilot set | `dynamic_cheatsheet_rs_optional`, `reflexion_style` | Retry actor sees only latest-three reflections + current input; failed trajectory stays inside `reflexion_reflect` |
 | `v0.5` | Full G0 native-memory pass over the locked 3-task pilot set | `full_history`, `reflexion_style`, `dynamic_cheatsheet_optional` | Append-only full history, failure-gated reflection, latest-three reflection window, generate/curate DC-Cu loop |
@@ -58,9 +59,26 @@ python -m memcontam.cli aggregate "runs/$RUN_ID" --stage replay
 
 This offline gate is not an API-connected pilot, main run, or benchmark result. No API-connected pilot was run; main readiness requires later evidence and an explicit decision. See [`docs/logging-audit-remediation-v0.7.md`](docs/logging-audit-remediation-v0.7.md) for the release report and [`docs/logging-contract-v1.md`](docs/logging-contract-v1.md) for operator rules.
 
-## v0.7.2 Phase-11 `logging_v2` Contract Release
+## v0.8 Baseline-Fidelity-V2 Source-Contract Remediation
+
+`v0.8` records the completed Baseline-Fidelity-V2 source-contract remediation. F1A structural integration replay and F1B source-contract replay pass as offline QA gates; F1C remains blocked until the exact pinned BGE-M3 cache is available locally and `scripts/verify_bge_m3_fidelity.py` passes.
+
+Verification commands:
+
+```bash
+python -m memcontam.cli validate-config configs/baseline_fidelity_v2_structural_replay.yaml
+python -m memcontam.cli validate-config configs/baseline_fidelity_v2_source_contract_replay.yaml
+python -m pytest -q tests/test_baseline_fidelity_replay.py tests/test_baseline_source_contract_replay.py tests/test_docs_scope.py tests/test_baseline_policy_compatibility.py
+python -m ruff check src tests scripts
+```
+
+This is a repository research-artifact tag, not a package release, benchmark result, manuscript result, live scientific admission, production contamination claim, or complete upstream-method reproduction. See [`docs/baseline-fidelity-v2.md`](docs/baseline-fidelity-v2.md) for the authority and [`docs/baseline-fidelity-v2-evidence.md`](docs/baseline-fidelity-v2-evidence.md) for provenance.
+
+## v0.7.2 Phase-11 `logging_v2` Contract Release and Status
 
 `v0.7.2` is the release tag for the Phase-11 `logging_v2` contract implementation and its offline replay QA workflow. It adds typed evaluation-law metadata, fixed target-set joins, exact direct-edge lineage rules, answer-call-only exposure accounting, and deterministic pair/checkpoint aggregation semantics on top of the strict logging surface.
+
+The contract is documented in [`docs/logging-contract-v2-phase11.md`](docs/logging-contract-v2-phase11.md). The accompanying [`docs/logging-audit-remediation-phase11.md`](docs/logging-audit-remediation-phase11.md) remains the unfilled operator review template; [`docs/logging-audit-remediation-v0.7.2.md`](docs/logging-audit-remediation-v0.7.2.md) is the release report. The historical [`docs/logging-contract-v1.md`](docs/logging-contract-v1.md) remains the v1 operator contract and is not Phase-11 evidence.
 
 Verification commands:
 
@@ -75,37 +93,7 @@ python -m memcontam.cli run configs/logging_contract_phase11_replay.yaml --run-i
 python -m memcontam.cli aggregate "runs/$RUN_ID" --stage replay --contract phase11
 ```
 
-This is offline contract QA, not a pilot, main run, benchmark, manuscript result, or empirical result. No API-connected pilot was run. See [`docs/logging-audit-remediation-v0.7.2.md`](docs/logging-audit-remediation-v0.7.2.md) for the release report, [`docs/logging-contract-v2-phase11.md`](docs/logging-contract-v2-phase11.md) for the operator contract, and [`docs/logging-audit-remediation-phase11.md`](docs/logging-audit-remediation-phase11.md) for the unfilled operator review template.
-
-## Phase-11 `logging_v2` Contract Status
-
-The repository contains the Phase-11 contract implementation and an offline
-replay QA workflow. The contract is documented in
-[`docs/logging-contract-v2-phase11.md`](docs/logging-contract-v2-phase11.md).
-The accompanying report at
-[`docs/logging-audit-remediation-phase11.md`](docs/logging-audit-remediation-phase11.md)
-is a template, not a claim that a release review has passed. The historical
-[`docs/logging-contract-v1.md`](docs/logging-contract-v1.md) remains the v1
-operator contract and is not Phase-11 evidence.
-
-Phase-11 verification uses the versioned replay config and explicit contract
-flag:
-
-```bash
-python -m memcontam.cli validate-config configs/logging_contract_phase11_replay.yaml
-python -m pytest tests/test_phase11_logging_contract_gate.py -q
-python -m pytest tests/test_docs_scope.py -q
-python -m ruff check src tests scripts
-
-RUN_ID="phase11-logging-contract-replay-$(date -u +%Y%m%dT%H%M%SZ)"
-python -m memcontam.cli run configs/logging_contract_phase11_replay.yaml --run-id "$RUN_ID"
-python -m memcontam.cli aggregate "runs/$RUN_ID" --stage replay --contract phase11
-```
-
-This is offline contract QA, not a pilot, main run, benchmark, manuscript
-result, or empirical result. No API-connected pilot was run. The workflow
-does not claim causal use, complete PROV-DM, or automatic migration of legacy
-or `logging_v1` artifacts.
+This is offline contract QA, not a pilot, main run, benchmark, manuscript result, or empirical result. No API-connected pilot was run. The workflow does not claim causal use, complete PROV-DM, or automatic migration of legacy or `logging_v1` artifacts.
 
 ---
 

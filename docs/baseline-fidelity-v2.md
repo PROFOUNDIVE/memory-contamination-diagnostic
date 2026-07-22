@@ -12,7 +12,8 @@ artifacts are QA and fidelity evidence, not benchmark or manuscript-quality evid
 They don't establish scientific results, causal effects, production readiness, or a
 complete reproduction of any upstream method.
 
-No package version changes, release, or tag are part of this authority. `pyproject.toml`
+`v0.8` is a repository research-artifact tag for the completed V2 source-contract
+remediation. It is not a package release or overall V2 certification. `pyproject.toml`
 remains at `0.1.0`.
 
 ## Exact Method Claims
@@ -142,7 +143,7 @@ git diff --check
 V2 does not claim benchmark or manuscript evidence, empirical score validity, causal
 attribution, scientific live admission, production contamination, production filtering,
 filtered aggregation, automatic V1 migration, local vLLM provisioning, cross-platform
-dependency reproducibility, a compute-matched main baseline, or release readiness.
+dependency reproducibility, a compute-matched main baseline, or certification readiness.
 
 The clean V2 source-fidelity work does not activate historical `contaminated` or
 `contaminated_filter` arms. Valid incorrect trials remain in the experimental outcome
