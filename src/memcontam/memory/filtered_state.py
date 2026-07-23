@@ -5,15 +5,25 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass, replace
 from typing import Literal, Sequence
 
-from memcontam.memory.admission import AdmissionDecision
+from memcontam.memory.admission import AdmissionContext, AdmissionDecision, AdmissionError, evaluate_admission
 from memcontam.memory.checkpoints import NativeCheckpoint
+from memcontam.memory.cards_v3 import MemoryCardEnvelopeV3
+from memcontam.memory.checkpoint_v3 import (
+    CheckpointError,
+    NativeEntry,
+    NativeState,
+    Phase12Checkpoint,
+    append_native_entry,
+    deserialize_checkpoint,
+    serialize_checkpoint,
+)
 
 
 @dataclass(frozen=True)
 class PartitionDecision:
     entry_id: str
     state: Literal["active", "quarantine"]
-    reason: str
+    reason: str | None
 
 
 @dataclass(frozen=True)
@@ -21,6 +31,143 @@ class FilteredNativeState:
     active: NativeCheckpoint
     quarantine: NativeCheckpoint
     decisions: tuple[PartitionDecision, ...]
+
+
+@dataclass(frozen=True)
+class CandidateWrite:
+    entry: NativeEntry
+    envelope: MemoryCardEnvelopeV3
+
+
+@dataclass(frozen=True)
+class FilteredCheckpoint:
+    source_checkpoint: Phase12Checkpoint
+    active: Phase12Checkpoint
+    quarantine: Phase12Checkpoint
+    active_envelopes: tuple[MemoryCardEnvelopeV3, ...]
+    quarantined_envelopes: tuple[MemoryCardEnvelopeV3, ...]
+    decisions: tuple[PartitionDecision, ...]
+
+    @property
+    def reader_entries(self) -> tuple[str | NativeEntry, ...]:
+        return self.active.state.entries
+
+    @property
+    def updater_entries(self) -> tuple[str | NativeEntry, ...]:
+        return self.active.state.entries
+
+
+@dataclass(frozen=True)
+class FilterTransition:
+    state: FilteredCheckpoint
+    decision: AdmissionDecision
+
+    @property
+    def reader_entries(self) -> tuple[str | NativeEntry, ...]:
+        return self.state.reader_entries
+
+    @property
+    def updater_entries(self) -> tuple[str | NativeEntry, ...]:
+        return self.state.updater_entries
+
+
+def partition_native_checkpoint(
+    checkpoint: Phase12Checkpoint, context: AdmissionContext
+) -> FilteredCheckpoint:
+    try:
+        state = deserialize_checkpoint(checkpoint)
+    except CheckpointError as error:
+        raise AdmissionError(error.code) from error
+
+    envelopes_by_id = _envelopes_by_id(context.evidence_envelopes)
+    active_entries: list[str | NativeEntry] = []
+    quarantine_entries: list[str | NativeEntry] = []
+    active_envelopes: list[MemoryCardEnvelopeV3] = list(context.active_envelopes)
+    quarantined_envelopes: list[MemoryCardEnvelopeV3] = list(context.quarantined_envelopes)
+    decisions: list[PartitionDecision] = []
+
+    for entry in state.entries:
+        entry_id = _entry_id(entry)
+        envelope = envelopes_by_id.get(entry_id)
+        if envelope is None:
+            decision = AdmissionDecision(entry_id, False, "MISSING_SUPPORT_EVIDENCE")
+        else:
+            decision = evaluate_admission(
+                envelope,
+                replace(
+                    context,
+                    active_envelopes=tuple(active_envelopes),
+                    quarantined_envelopes=tuple(quarantined_envelopes),
+                ),
+            )
+        if decision.admitted:
+            if envelope is None:
+                raise AdmissionError("MISSING_SUPPORT_EVIDENCE")
+            active_entries.append(entry)
+            active_envelopes.append(envelope)
+            decisions.append(PartitionDecision(entry_id, "active", None))
+        else:
+            quarantine_entries.append(entry)
+            if envelope is not None:
+                quarantined_envelopes.append(envelope)
+            decisions.append(PartitionDecision(entry_id, "quarantine", decision.reason))
+
+    return FilteredCheckpoint(
+        source_checkpoint=checkpoint,
+        active=_checkpoint_with_entries(state, active_entries),
+        quarantine=_checkpoint_with_entries(state, quarantine_entries),
+        active_envelopes=tuple(active_envelopes),
+        quarantined_envelopes=tuple(quarantined_envelopes),
+        decisions=tuple(decisions),
+    )
+
+
+def route_candidate_write(
+    state: FilteredCheckpoint, candidate: CandidateWrite, context: AdmissionContext
+) -> FilterTransition:
+    _validate_candidate(candidate, state)
+    evidence = _merge_envelopes(
+        context.evidence_envelopes,
+        state.active_envelopes,
+        state.quarantined_envelopes,
+        (candidate.envelope,),
+    )
+    decision = evaluate_admission(
+        candidate.envelope,
+        replace(
+            context,
+            evidence_envelopes=evidence,
+            active_envelopes=state.active_envelopes,
+            quarantined_envelopes=state.quarantined_envelopes,
+        ),
+    )
+    try:
+        active = state.active
+        quarantine = state.quarantine
+        active_envelopes = state.active_envelopes
+        quarantined_envelopes = state.quarantined_envelopes
+        if decision.admitted:
+            active = append_native_entry(active, candidate.entry)
+            active_envelopes = (*active_envelopes, candidate.envelope)
+            partition = PartitionDecision(candidate.envelope.entry_id, "active", None)
+        else:
+            quarantine = append_native_entry(quarantine, candidate.entry)
+            quarantined_envelopes = (*quarantined_envelopes, candidate.envelope)
+            partition = PartitionDecision(candidate.envelope.entry_id, "quarantine", decision.reason)
+    except CheckpointError as error:
+        raise AdmissionError(error.code) from error
+
+    return FilterTransition(
+        state=FilteredCheckpoint(
+            source_checkpoint=state.source_checkpoint,
+            active=active,
+            quarantine=quarantine,
+            active_envelopes=active_envelopes,
+            quarantined_envelopes=quarantined_envelopes,
+            decisions=(*state.decisions, partition),
+        ),
+        decision=decision,
+    )
 
 
 def partition_native_state_for_fixture(
@@ -142,3 +289,75 @@ def _serialize_checkpoint(checkpoint: NativeCheckpoint) -> dict[str, object]:
         "identity": asdict(checkpoint.identity),
         "parameters": checkpoint.parameters,
     }
+
+
+def _envelopes_by_id(
+    envelopes: Sequence[MemoryCardEnvelopeV3],
+) -> dict[str, MemoryCardEnvelopeV3]:
+    by_id: dict[str, MemoryCardEnvelopeV3] = {}
+    for envelope in envelopes:
+        if not isinstance(envelope, MemoryCardEnvelopeV3) or envelope.entry_id in by_id:
+            raise AdmissionError("INVALID_ENVELOPE_EVIDENCE")
+        by_id[envelope.entry_id] = envelope
+    return by_id
+
+
+def _entry_id(entry: str | NativeEntry) -> str:
+    if isinstance(entry, NativeEntry):
+        return entry.entry_id
+    if isinstance(entry, str) and entry:
+        return entry
+    raise AdmissionError("INVALID_NATIVE_ENTRY")
+
+
+def _checkpoint_with_entries(
+    source: NativeState, entries: Sequence[str | NativeEntry]
+) -> Phase12Checkpoint:
+    try:
+        return serialize_checkpoint(
+            NativeState(
+                baseline=source.baseline,
+                entries=tuple(entries),
+                native_state=source.native_state,
+                schema_version=source.schema_version,
+            )
+        )
+    except CheckpointError as error:
+        raise AdmissionError(error.code) from error
+
+
+def _validate_candidate(candidate: CandidateWrite, state: FilteredCheckpoint) -> None:
+    if not isinstance(candidate, CandidateWrite) or not isinstance(candidate.entry, NativeEntry):
+        raise AdmissionError("INVALID_NATIVE_ENTRY")
+    envelope = candidate.envelope
+    if not isinstance(envelope, MemoryCardEnvelopeV3) or (
+        candidate.entry.entry_id,
+        candidate.entry.semantic_kind,
+        candidate.entry.native_component,
+        candidate.entry.content,
+        candidate.entry.content_hash,
+    ) != (
+        envelope.entry_id,
+        envelope.semantic_kind,
+        envelope.native_component,
+        envelope.content,
+        envelope.content_hash,
+    ):
+        raise AdmissionError("ENTRY_ENVELOPE_MISMATCH")
+    existing_ids = {
+        _entry_id(entry)
+        for entry in (*state.active.state.entries, *state.quarantine.state.entries)
+    }
+    if candidate.entry.entry_id in existing_ids:
+        raise AdmissionError("DUPLICATE_ENTRY")
+
+
+def _merge_envelopes(
+    *groups: Sequence[MemoryCardEnvelopeV3],
+) -> tuple[MemoryCardEnvelopeV3, ...]:
+    merged: dict[str, MemoryCardEnvelopeV3] = {}
+    for group in groups:
+        for envelope in group:
+            if isinstance(envelope, MemoryCardEnvelopeV3):
+                merged.setdefault(envelope.entry_id, envelope)
+    return tuple(merged.values())

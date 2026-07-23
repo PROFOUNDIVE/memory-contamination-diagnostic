@@ -17,6 +17,14 @@ class WriterPermission:
 
 NATIVE_WRITER_PERMISSIONS = (
     WriterPermission(
+        "fh_bounded",
+        "full_history_transcript",
+        "fh_appender",
+        "full_history_generate",
+        "history",
+        True,
+    ),
+    WriterPermission(
         "full_history",
         "full_history_transcript",
         "fh_appender",
@@ -39,6 +47,14 @@ NATIVE_WRITER_PERMISSIONS = (
         "reflexion_reflect",
         "reflections",
         True,
+    ),
+    WriterPermission(
+        "rag_frozen",
+        "rag_document",
+        "rag_corpus_loader",
+        "rag_corpus_load",
+        "corpus",
+        False,
     ),
     WriterPermission(
         "retrieval_rag",

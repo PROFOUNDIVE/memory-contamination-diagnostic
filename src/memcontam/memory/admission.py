@@ -1,15 +1,23 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Sequence
+from dataclasses import dataclass, field
+from typing import Mapping, Sequence
 
 from memcontam.memory.cards import MemoryCard, MemoryCardEnvelope
+from memcontam.memory.cards_v3 import MemoryCardEnvelopeV3, MemoryEnvelopeError, validate_memory_envelope
+from memcontam.memory.writer_registry import WriterRegistry
 
 
 class AdmissionGraphError(ValueError):
     def __init__(self, reason: str):
         super().__init__(reason)
         self.reason = reason
+
+
+class AdmissionError(ValueError):
+    def __init__(self, code: str):
+        super().__init__(code)
+        self.code = code
 
 
 @dataclass(frozen=True)
@@ -25,13 +33,30 @@ class AuthorizedWriterRegistry:
 
 @dataclass(frozen=True)
 class AdmissionContext:
-    authorized_writers: AuthorizedWriterRegistry
+    authorized_writers: AuthorizedWriterRegistry | None = None
     trial_log_support_ids: frozenset[str] = frozenset()
     admitted_envelopes: tuple[MemoryCardEnvelope, ...] = ()
+    writer_registry: WriterRegistry = field(default_factory=WriterRegistry.native)
+    writer_event_ids: frozenset[str] = frozenset()
+    trial_record_ids: frozenset[str] = frozenset()
+    evidence_envelopes: tuple[MemoryCardEnvelopeV3, ...] = ()
+    active_envelopes: tuple[MemoryCardEnvelopeV3, ...] = ()
+    quarantined_envelopes: tuple[MemoryCardEnvelopeV3, ...] = ()
+    semantic_kind_support: Mapping[str, frozenset[str]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "trial_log_support_ids", frozenset(self.trial_log_support_ids))
         object.__setattr__(self, "admitted_envelopes", tuple(self.admitted_envelopes))
+        object.__setattr__(self, "writer_event_ids", frozenset(self.writer_event_ids))
+        object.__setattr__(self, "trial_record_ids", frozenset(self.trial_record_ids))
+        object.__setattr__(self, "evidence_envelopes", tuple(self.evidence_envelopes))
+        object.__setattr__(self, "active_envelopes", tuple(self.active_envelopes))
+        object.__setattr__(self, "quarantined_envelopes", tuple(self.quarantined_envelopes))
+        object.__setattr__(
+            self,
+            "semantic_kind_support",
+            {kind: frozenset(supported) for kind, supported in self.semantic_kind_support.items()},
+        )
 
 
 @dataclass(frozen=True)
@@ -81,6 +106,66 @@ def evaluate_entry_admission(
     card: MemoryCard, envelope: MemoryCardEnvelope, context: AdmissionContext
 ) -> AdmissionDecision:
     return evaluate_admission_graph(((card, envelope),), context)[0]
+
+
+def evaluate_admission(
+    envelope: MemoryCardEnvelopeV3, context: AdmissionContext
+) -> AdmissionDecision:
+    """Evaluate a Phase-12 write from operational evidence only."""
+    if not isinstance(envelope, MemoryCardEnvelopeV3):
+        return AdmissionDecision("", False, "INVALID_ENVELOPE")
+
+    prior_entries = _unique_v3_envelopes(
+        (
+            *context.evidence_envelopes,
+            *context.active_envelopes,
+            *context.quarantined_envelopes,
+        ),
+        excluding=envelope.entry_id,
+    )
+    try:
+        validate_memory_envelope(envelope, context.writer_registry, prior_entries)
+    except MemoryEnvelopeError as error:
+        return AdmissionDecision(envelope.entry_id, False, _quarantine_reason(error.code))
+
+    if envelope.writer_event_id not in context.writer_event_ids:
+        return AdmissionDecision(envelope.entry_id, False, "UNREGISTERED_WRITER_EVENT")
+    if not set(envelope.trial_support_ids).issubset(context.trial_record_ids):
+        return AdmissionDecision(envelope.entry_id, False, "MISSING_SUPPORT_EVIDENCE")
+
+    active = _v3_envelopes_by_id(context.active_envelopes)
+    quarantined = _v3_envelopes_by_id(context.quarantined_envelopes)
+    for parent_id in envelope.direct_parent_ids:
+        if parent_id in quarantined:
+            return AdmissionDecision(envelope.entry_id, False, "PARENT_QUARANTINED")
+        if parent_id not in active:
+            return AdmissionDecision(envelope.entry_id, False, "MISSING_PARENT_EVIDENCE")
+
+    allowed_support_kinds = context.semantic_kind_support.get(envelope.semantic_kind)
+    if allowed_support_kinds is not None:
+        if any(
+            active[parent_id].semantic_kind not in allowed_support_kinds
+            for parent_id in envelope.memory_support_ids
+        ):
+            return AdmissionDecision(envelope.entry_id, False, "INVALID_SUPPORT_EVIDENCE")
+
+    predecessor_id = envelope.version_predecessor_id
+    if predecessor_id is not None:
+        predecessor = active.get(predecessor_id)
+        if predecessor is None or predecessor_id in quarantined:
+            return AdmissionDecision(envelope.entry_id, False, "INVALID_VERSION_EVIDENCE")
+        if (
+            predecessor.baseline,
+            predecessor.semantic_kind,
+            predecessor.native_component,
+        ) != (
+            envelope.baseline,
+            envelope.semantic_kind,
+            envelope.native_component,
+        ):
+            return AdmissionDecision(envelope.entry_id, False, "INVALID_VERSION_EVIDENCE")
+
+    return AdmissionDecision(envelope.entry_id, True, "ADMITTED")
 
 
 def evaluate_admission_graph(
@@ -145,7 +230,7 @@ def evaluate_admission_graph(
         envelope = by_id[entry_id]
         if entry_id in issues:
             decision = AdmissionDecision(entry_id, False, issues[entry_id])
-        elif not context.authorized_writers.permits(envelope.writer_id):
+        elif context.authorized_writers is None or not context.authorized_writers.permits(envelope.writer_id):
             decision = AdmissionDecision(entry_id, False, "unauthorized_writer")
         elif any(
             not evaluate(parent_id).admitted
@@ -297,3 +382,37 @@ def _precedes(parent_order: int | str, child_order: int | str) -> bool:
     if isinstance(parent_order, str) and isinstance(child_order, str):
         return parent_order < child_order
     return False
+
+
+def _quarantine_reason(code: str) -> str:
+    if code == "UNREGISTERED_WRITER_EVENT":
+        return code
+    if code in {"MISSING_SOURCE_TRIAL", "MISSING_TRIAL_SUPPORT", "SUPPORT_OUTSIDE_PARENTS"}:
+        return "MISSING_SUPPORT_EVIDENCE"
+    if code == "MISSING_REFERENCE":
+        return "MISSING_PARENT_EVIDENCE"
+    if code in {"VERSION_PREDECESSOR_CONFLATED", "VERSION_PREDECESSOR_MISMATCH"}:
+        return "INVALID_VERSION_EVIDENCE"
+    if code == "FUTURE_REFERENCE":
+        return "INVALID_PARENT_EVIDENCE"
+    return "INVALID_ENVELOPE"
+
+
+def _v3_envelopes_by_id(
+    envelopes: Sequence[MemoryCardEnvelopeV3],
+) -> dict[str, MemoryCardEnvelopeV3]:
+    return {
+        envelope.entry_id: envelope
+        for envelope in envelopes
+        if isinstance(envelope, MemoryCardEnvelopeV3)
+    }
+
+
+def _unique_v3_envelopes(
+    envelopes: Sequence[MemoryCardEnvelopeV3], *, excluding: str
+) -> tuple[MemoryCardEnvelopeV3, ...]:
+    by_id: dict[str, MemoryCardEnvelopeV3] = {}
+    for known in envelopes:
+        if isinstance(known, MemoryCardEnvelopeV3) and known.entry_id != excluding:
+            by_id.setdefault(known.entry_id, known)
+    return tuple(by_id.values())
