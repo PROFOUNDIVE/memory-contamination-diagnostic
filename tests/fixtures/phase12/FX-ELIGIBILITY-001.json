@@ -1,0 +1,1 @@
+{"baseline_eligible":{"bot":[3,5],"fh":[3,4,5],"rag_frozen":[2,3,4,5],"reflexion":[3,4,5]},"fixture_id":"FX-ELIGIBILITY-001","horizon":3,"joint":[3,5],"not_estimable":false,"quantiles":{"0.25":3,"0.5":3,"0.75":5}}

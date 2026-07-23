@@ -1,0 +1,1 @@
+{"expected":{"clean_minus_contam":0.5,"clean_minus_filter":0.25,"correct_minus_contam":0.375,"filter_minus_contam":0.25,"irrelevant_minus_contam":0.25},"fixture_id":"FX-AGG-001","horizon":4,"seed_accuracy":{"s1":{"clean":1.0,"contam":0.5,"correct":0.75,"filter":0.75,"irrelevant":0.75},"s2":{"clean":0.75,"contam":0.25,"correct":0.75,"filter":0.5,"irrelevant":0.5}}}

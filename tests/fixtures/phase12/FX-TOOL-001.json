@@ -1,0 +1,1 @@
+{"code":"print((6 * 7) + 1)\n","expected":{"execution_count":1,"exit_code":0,"stderr":"","stdout":"43\n","timed_out":false},"fixture_id":"FX-TOOL-001"}
