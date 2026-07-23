@@ -21,7 +21,11 @@ class VectorEmbedder:
 def test_calibrates_disjoint_outcome_free_affinity_bands_and_recall() -> None:
     result = calibrate_affinity(
         [{"id": "query", "text": "query"}],
-        [{"id": "low", "text": "low"}, {"id": "mid", "text": "mid"}, {"id": "high", "text": "high"}],
+        [
+            {"id": "low", "text": "low"},
+            {"id": "mid", "text": "mid"},
+            {"id": "high", "text": "high"},
+        ],
         VectorEmbedder(),
         {"low": (0.0, 0.4), "mid": (0.4, 0.8), "high": (0.8, 1.0)},
     )

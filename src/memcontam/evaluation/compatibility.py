@@ -82,7 +82,9 @@ def _require_evidence(value: Any) -> str:
     return _canonical(value)
 
 
-def _validate_applicability(run: RunMetadataV3) -> tuple[str | None, str | None, str | None, str | None]:
+def _validate_applicability(
+    run: RunMetadataV3,
+) -> tuple[str | None, str | None, str | None, str | None]:
     if isinstance(run, PreRouteRunMetadata):
         if run.route_selection_manifest_id is not None:
             raise CompatibilityError("GOVERNANCE_FORBIDDEN", "route_selection_manifest_id")
@@ -143,7 +145,9 @@ def build_compatibility_key(run: RunMetadataV3) -> CompatibilityKey:
     if run.contract_level != "phase12":
         raise CompatibilityError("SCHEMA_CONTRACT_MISMATCH", "contract_level")
 
-    scientific_admission, route_selection, seed_allocation, activation = _validate_applicability(run)
+    scientific_admission, route_selection, seed_allocation, activation = _validate_applicability(
+        run
+    )
     return CompatibilityKey(
         schema_version=run.schema_version,
         contract_level=run.contract_level,

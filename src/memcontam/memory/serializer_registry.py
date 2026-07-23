@@ -3,7 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Mapping
 
-from memcontam.memory.checkpoint_v3 import CHECKPOINT_V3, NATIVE_ENTRY_V1, CheckpointError, NativeEntry, NativeState
+from memcontam.memory.checkpoint_v3 import (
+    CHECKPOINT_V3,
+    NATIVE_ENTRY_V1,
+    CheckpointError,
+    NativeEntry,
+    NativeState,
+)
 
 
 @dataclass(frozen=True)
@@ -60,5 +66,8 @@ class SerializerRegistry:
                 if not entry.direct_parent_ids:
                     raise CheckpointError("DIRECT_DC_STRATEGY_ROOT")
                 return
-        if (entry.semantic_kind, entry.native_component) != (schema.semantic_kind, schema.native_component):
+        if (entry.semantic_kind, entry.native_component) != (
+            schema.semantic_kind,
+            schema.native_component,
+        ):
             raise CheckpointError("WRONG_NATIVE_COMPONENT")

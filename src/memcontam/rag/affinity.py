@@ -76,4 +76,6 @@ def _identity_and_text(value: Mapping[str, Any]) -> tuple[str, str]:
 
 
 def _has_main_outcome(value: Mapping[str, Any]) -> bool:
-    return any(key in value for key in ("main_outcome", "outcome", "verified_success", "final_inclusion"))
+    return any(
+        key in value for key in ("main_outcome", "outcome", "verified_success", "final_inclusion")
+    )

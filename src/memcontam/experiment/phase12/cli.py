@@ -20,6 +20,7 @@ from memcontam.experiment.phase12.contracts import (
     MemoryArmExecutionKey,
     PrefixExecutionKey,
     PrefixTemplateSpec,
+    RouteCandidateId,
     RunTemplateSpec,
 )
 from memcontam.experiment.phase12.planner import (
@@ -93,7 +94,12 @@ _WRITERS = {
     "fh_bounded": ("full_history_transcript", "fh_appender", "full_history_generate", "history"),
     "rag_frozen": ("rag_document", "rag_corpus_loader", "rag_corpus_load", "corpus"),
     "bot_style": ("thought_template", "bot_buffer_manager", "bot_thought_distill", "buffer"),
-    "reflexion_style": ("verbal_reflection", "reflexion_reflector", "reflexion_reflect", "reflections"),
+    "reflexion_style": (
+        "verbal_reflection",
+        "reflexion_reflector",
+        "reflexion_reflect",
+        "reflections",
+    ),
 }
 
 
@@ -170,7 +176,10 @@ def _validate_config(path: Path) -> Any:
 
 def _plan(path: Path) -> dict[str, Any]:
     config = _validate_config(path)
-    template_sets = tuple(build_candidate_template_set(config, candidate) for candidate in ("3w", "5w"))
+    candidates: tuple[RouteCandidateId, ...] = ("3w", "5w")
+    template_sets = tuple(
+        build_candidate_template_set(config, candidate) for candidate in candidates
+    )
     scopes = build_conditional_call_scope_registry(template_sets, frozen_at="non-scientific-replay")
     registries = generate_candidate_route_registries(template_sets, scopes)
     return {
@@ -268,7 +277,10 @@ def _validated_route(payload: dict[str, Any]):
         return None
     try:
         return validate_route_selection(
-            tuple(RouteFeasibilityReport.model_validate(item) for item in payload["feasibility_reports"]),
+            tuple(
+                RouteFeasibilityReport.model_validate(item)
+                for item in payload["feasibility_reports"]
+            ),
             PilotBManifest.model_validate(payload["pilot_b_manifest"]),
             MftManifest.model_validate(payload["mft_manifest"]),
             RouteSelectionManifest.model_validate(selection_payload),
@@ -298,7 +310,10 @@ def _validated_activation(payload: dict[str, Any], route: Any):
             raise AdmissionDenied("EXPLORATORY_RESOURCE_RESERVATION_NOT_PASS")
         if plan.estimated_exploratory_calls > resource.exploratory_call_budget:
             raise AdmissionDenied("EXPLORATORY_BUDGET_INSUFFICIENT")
-        if resource.exploratory_call_budget + resource.reproducibility_reserve > resource.remaining_call_capacity:
+        if (
+            resource.exploratory_call_budget + resource.reproducibility_reserve
+            > resource.remaining_call_capacity
+        ):
             raise AdmissionDenied("REPRODUCIBILITY_RESERVE_INSUFFICIENT")
         return validate_exploratory_activation(plan, resource, activation, route)
     except PlanningError as error:
@@ -319,7 +334,13 @@ def _run_branch(args: argparse.Namespace) -> dict[str, Any]:
     fixture = _load_replay_fixture(args.fixture_root, args.replay)
     prefix = _build_prefix(fixture)
     baseline = prefix.checkpoint.state.baseline
-    registry_path = Path(__file__).resolve().parents[4] / "data" / "phase12" / "registries" / "candidate_registry_v1.json"
+    registry_path = (
+        Path(__file__).resolve().parents[4]
+        / "data"
+        / "phase12"
+        / "registries"
+        / "candidate_registry_v1.json"
+    )
     branches = build_matched_branches(
         prefix.checkpoint,
         load_candidate_registry(registry_path).triplets[0],
@@ -329,7 +350,10 @@ def _run_branch(args: argparse.Namespace) -> dict[str, Any]:
     suffix = _suffix_tasks(fixture)
     spec = _suffix_spec(baseline)
     factory = SuffixWriterFactory(
-        {arm: _ReplaySuffixPolicy() for arm in ("clean", "correct", "irrelevant", "contam", "filter")}
+        {
+            arm: _ReplaySuffixPolicy()
+            for arm in ("clean", "correct", "irrelevant", "contam", "filter")
+        }
     )
     suffix_result = run_matched_suffix(branches, suffix, spec, factory, seed=fixture["seed"])
     writer = _open_writer(args.run_root / args.run_id, fixture, prefix=False)
@@ -395,7 +419,9 @@ class _ReplayPrefixPolicy:
 
 
 class _ReplaySuffixPolicy:
-    def execute(self, task: TaskInstance, state: NativeState, seed: int, trial_id: str) -> SuffixStep:
+    def execute(
+        self, task: TaskInstance, state: NativeState, seed: int, trial_id: str
+    ) -> SuffixStep:
         del task, seed, trial_id
         return SuffixStep(state)
 
@@ -475,7 +501,11 @@ def _suffix_spec(baseline: str) -> RunTemplateSpec:
 
 
 def _open_writer(run_dir: Path, fixture: dict[str, Any], *, prefix: bool) -> Phase12RunWriter:
-    execution_key = LogPrefixExecutionKey(kind="branch_free_prefix") if prefix else LogMemoryArmExecutionKey(kind="memory_arm", arm="clean")
+    execution_key = (
+        LogPrefixExecutionKey(kind="branch_free_prefix")
+        if prefix
+        else LogMemoryArmExecutionKey(kind="memory_arm", arm="clean")
+    )
     metadata = PreRouteRunMetadata(
         protocol_version="phase12_primary_v1",
         evidence_layer="build",
@@ -514,7 +544,9 @@ def _write_prefix_result(writer: Phase12RunWriter, result: Any) -> None:
         writer.append_event(event.model_copy(update={"run_id": writer.run_dir.name}))
 
 
-def _write_suffix_result(writer: Phase12RunWriter, result: Any, factory: SuffixWriterFactory) -> None:
+def _write_suffix_result(
+    writer: Phase12RunWriter, result: Any, factory: SuffixWriterFactory
+) -> None:
     for run in result.runs:
         ledger = factory._writers[run.arm]
         assert isinstance(ledger, SuffixEventLedger)
@@ -530,13 +562,16 @@ def _write_suffix_result(writer: Phase12RunWriter, result: Any, factory: SuffixW
     for arm in ("clean", "correct", "irrelevant", "contam", "filter"):
         ledger = factory._writers[arm]
         assert isinstance(ledger, SuffixEventLedger)
-        for event in ledger.events:
-            writer.append_event(event.model_copy(update={"run_id": writer.run_dir.name}))
+        for ledger_event in ledger.events:
+            writer.append_event(ledger_event.model_copy(update={"run_id": writer.run_dir.name}))
 
 
 def _write_sidecars(run_dir: Path, fixture: dict[str, Any], command: str) -> None:
     (run_dir / "resolved_config.json").write_text(
-        json.dumps({"command": command, "fixture_id": fixture["fixture_id"], "scientific_result": False}, sort_keys=True),
+        json.dumps(
+            {"command": command, "fixture_id": fixture["fixture_id"], "scientific_result": False},
+            sort_keys=True,
+        ),
         encoding="utf-8",
     )
     (run_dir / "provider_profile.json").write_text(
@@ -549,7 +584,10 @@ def _aggregate(args: argparse.Namespace) -> dict[str, Any]:
     if args.replay:
         fixture = _load_replay_fixture(args.fixture_root, args.replay)
         accuracy = fixture["seed_accuracy"]
-        averages = {arm: sum(seed[arm] for seed in accuracy.values()) / len(accuracy) for arm in accuracy["s1"]}
+        averages = {
+            arm: sum(seed[arm] for seed in accuracy.values()) / len(accuracy)
+            for arm in accuracy["s1"]
+        }
         return {
             "clean_minus_contam": averages["clean"] - averages["contam"],
             "clean_minus_filter": averages["clean"] - averages["filter"],
@@ -566,7 +604,10 @@ def _validate_archive(args: argparse.Namespace) -> dict[str, Any]:
     if args.replay:
         fixture = _load_replay_fixture(args.fixture_root, args.replay)
         expected = fixture.get("expected", {})
-        return {"archive_valid": expected.get("archive_valid") is True, "resolved_edges": expected.get("resolved_edges", 0)}
+        return {
+            "archive_valid": expected.get("archive_valid") is True,
+            "resolved_edges": expected.get("resolved_edges", 0),
+        }
     assert args.run_dir is not None
     manifest_path = args.run_dir / "public_artifact_manifest.json"
     if not manifest_path.exists():
@@ -580,7 +621,9 @@ def _validate_archive(args: argparse.Namespace) -> dict[str, Any]:
             raise SystemExit(f"phase12 archive hash mismatch: {filename}")
         if filename.endswith(".jsonl") and len(_jsonl(path)) != artifact["count"]:
             raise SystemExit(f"phase12 archive count mismatch: {filename}")
-    parse_log_record_v3(json.loads((args.run_dir / "run.json").read_text(encoding="utf-8"))["run_metadata"])
+    parse_log_record_v3(
+        json.loads((args.run_dir / "run.json").read_text(encoding="utf-8"))["run_metadata"]
+    )
     for filename in _PUBLIC_STREAMS:
         for row in _jsonl(args.run_dir / filename):
             if filename != "calls.jsonl" and filename != "memory_events.jsonl":

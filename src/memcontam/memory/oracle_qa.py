@@ -9,4 +9,5 @@ def drop_known_contaminated(
 ) -> tuple[list[MemoryEntry], FilterTelemetry]:
     return filter_legacy_replay_entries(entries)
 
+
 __all__ = ["drop_known_contaminated"]

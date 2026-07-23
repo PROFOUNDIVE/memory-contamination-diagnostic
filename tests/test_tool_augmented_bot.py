@@ -164,8 +164,9 @@ def test_rejects_unexecuted_validation_and_hidden_verifier_evidence() -> None:
         ),
         model="replay",
         config=_tool_config(SubprocessTestDouble()),
-        verifier=lambda answer: verifier_calls.append(answer)
-        or verify_expression(answer, [1, 3, 4, 6]),
+        verifier=lambda answer: (
+            verifier_calls.append(answer) or verify_expression(answer, [1, 3, 4, 6])
+        ),
     )
 
     assert outcome.failure_disposition == "bot_invalid_thought_distillation"
@@ -184,7 +185,10 @@ def test_code_distillation_uses_only_the_retrieved_memory_id() -> None:
         entry_id="retrieved-template",
         content="Validate the expression before responding.",
         memory_type="thought_template",
-        metadata={"description": "Validate an arithmetic expression.", "category": "programming-based"},
+        metadata={
+            "description": "Validate an arithmetic expression.",
+            "category": "programming-based",
+        },
     )
     hidden = MemoryEntry(
         entry_id="hidden-template",
@@ -237,5 +241,7 @@ def test_code_distillation_uses_only_the_retrieved_memory_id() -> None:
     )
 
     assert outcome.status == "succeeded"
-    thought_config = next(config for config in client.configs if config["method_stage"] == "bot_thought_distill")
+    thought_config = next(
+        config for config in client.configs if config["method_stage"] == "bot_thought_distill"
+    )
     assert thought_config["visible_memory_ids"] == [retrieved.entry_id]

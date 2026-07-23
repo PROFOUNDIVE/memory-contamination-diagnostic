@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_FIXTURE_ROOT = ROOT / "tests" / "fixtures" / "phase12"
 REPOSITORY_COMMIT = "830b89c8c169ffa9cdea472887fdae134dbae7cf"
 EXPERIMENT_DESIGN_SHA256 = "984fe2881690d93a8ccced87abf03de4bf0012158462cf07ed23505414073eb0"
-MANIFEST_SHA256 = "dde9b189475f773368b5f6d61ca10357d64f2e7b68a205dc436f51a796313308"
+MANIFEST_SHA256 = "b129d5a66166b0ec5fc8bb4b32c2ab2a76e09238d074b91687322a97828adda8"
 MANIFEST_VERSION = "phase12-fixtures-v13"
 FIXTURE_SEED = 12026
 FIXTURE_FILENAMES = (
@@ -102,7 +102,9 @@ def _check(fixture_root: Path) -> tuple[dict[str, bytes], list[str]]:
         except json.JSONDecodeError:
             errors.append(f"FIXTURE_JSON_INVALID:{filename}")
             continue
-        if not isinstance(payload, dict) or payload.get("fixture_id") != filename.removesuffix(".json"):
+        if not isinstance(payload, dict) or payload.get("fixture_id") != filename.removesuffix(
+            ".json"
+        ):
             errors.append(f"FIXTURE_ID_MISMATCH:{filename}")
             continue
         payloads[filename] = payload

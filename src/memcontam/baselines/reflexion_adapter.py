@@ -27,7 +27,7 @@ from memcontam.logging.provenance import (
     phase11_lineage_metadata,
     source_lineage_from_spans,
 )
-from memcontam.logging.schema import VerifierResult
+from memcontam.logging.schema import ContaminationClass, VerifierResult
 from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
 from memcontam.tasks.dispatch import canonical_task_json
@@ -277,7 +277,9 @@ def _parse_generation(response: str) -> str | None:
         return None
 
 
-def _parse_reflection(response: str, visible_entries: list[MemoryEntry]) -> ReflectionPayload | None:
+def _parse_reflection(
+    response: str, visible_entries: list[MemoryEntry]
+) -> ReflectionPayload | None:
     try:
         result = ReflectionGenerationResult.model_validate_json(response)
     except (ValidationError, ValueError, json.JSONDecodeError):
@@ -332,7 +334,9 @@ def _reflection_messages(
             parts.append(PromptSourcePart(_render_reflection(entry), entry))
     else:
         parts.append("(none)")
-    trajectory_prefix = f"\n\nCurrent task:\n{canonical_task_json(task)}\n\nFailed actor response:\n"
+    trajectory_prefix = (
+        f"\n\nCurrent task:\n{canonical_task_json(task)}\n\nFailed actor response:\n"
+    )
     suffix = f"\n\nParsed answer:\n{parsed_answer}\n\nFailure class:\nincorrect_answer"
     parts.append(trajectory_prefix)
     content, spans = build_prompt_with_sources(parts, message_index=1)
@@ -399,9 +403,13 @@ def _append_reflection(
             "reflection_lineage": {"stage": "reflexion_reflect", "source_trial_id": trial_id},
         },
     )
-    target_set = config.get("_logging_target_contamination_set") or config.get("_logging_target_set_id")
+    target_set = config.get("_logging_target_contamination_set") or config.get(
+        "_logging_target_set_id"
+    )
     if target_set:
-        entry.metadata.update(phase11_lineage_metadata(entry, [*state.reflections, entry], target_set))
+        entry.metadata.update(
+            phase11_lineage_metadata(entry, [*state.reflections, entry], target_set)
+        )
     state.reflections.append(entry)
     return entry
 
@@ -466,7 +474,9 @@ def _memory_write_event(
 ) -> dict[str, Any] | None:
     if not events:
         return None
-    entry = next(entry for entry in state.reflections if entry.entry_id == events[-1].reflection_entry_id)
+    entry = next(
+        entry for entry in state.reflections if entry.entry_id == events[-1].reflection_entry_id
+    )
     return {
         "type": "reflexion_append",
         "status": "accepted",
@@ -557,7 +567,9 @@ def _failed_actor_trajectory_span(
         if span.lineage_status == "exact":
             _extend_unique(injected_root_ids, span.injected_root_ids)
     target_set_id = _target_set_id(target_set)
-    contamination_class = "derived" if injected_root_ids and lineage_status == "exact" else "clean"
+    contamination_class: ContaminationClass = (
+        "derived" if injected_root_ids and lineage_status == "exact" else "clean"
+    )
     return derived_source_span(
         response,
         message_index=message_index,

@@ -31,7 +31,7 @@ def test_round_trips_every_primary_baseline_checkpoint() -> None:
 
     states = [
         (
-        checkpoint_module.NativeState.from_mapping(prefix["checkpoint"]),
+            checkpoint_module.NativeState.from_mapping(prefix["checkpoint"]),
             checkpoint_module.Phase12CheckpointIdentity(
                 checkpoint_id=prefix["expected_checkpoint_id"],
                 baseline=prefix["checkpoint"]["baseline"],
@@ -43,28 +43,28 @@ def test_round_trips_every_primary_baseline_checkpoint() -> None:
     states.append(
         (
             checkpoint_module.NativeState(
-            baseline="dynamic_cheatsheet_rs_optional",
-            entries=(
-                checkpoint_module.NativeEntry(
-                    entry_id="dc-archive-1",
-                    semantic_kind="dc_rs_io_pair",
-                    schema_version="phase12_native_entry_v1",
-                    native_component="archive",
-                    content="input/output archive pair",
-                    content_hash="archive-content-hash",
-                    direct_parent_ids=(),
+                baseline="dynamic_cheatsheet_rs_optional",
+                entries=(
+                    checkpoint_module.NativeEntry(
+                        entry_id="dc-archive-1",
+                        semantic_kind="dc_rs_io_pair",
+                        schema_version="phase12_native_entry_v1",
+                        native_component="archive",
+                        content="input/output archive pair",
+                        content_hash="archive-content-hash",
+                        direct_parent_ids=(),
+                    ),
+                    checkpoint_module.NativeEntry(
+                        entry_id="dc-strategy-1",
+                        semantic_kind="dynamic_cheatsheet",
+                        schema_version="phase12_native_entry_v1",
+                        native_component="strategy",
+                        content="derived strategy",
+                        content_hash="strategy-content-hash",
+                        direct_parent_ids=("dc-archive-1",),
+                    ),
                 ),
-                checkpoint_module.NativeEntry(
-                    entry_id="dc-strategy-1",
-                    semantic_kind="dynamic_cheatsheet",
-                    schema_version="phase12_native_entry_v1",
-                    native_component="strategy",
-                    content="derived strategy",
-                    content_hash="strategy-content-hash",
-                    direct_parent_ids=("dc-archive-1",),
-                ),
-            ),
-            native_state={"archive": ["dc-archive-1"], "strategy": "derived strategy"},
+                native_state={"archive": ["dc-archive-1"], "strategy": "derived strategy"},
             ),
             None,
         )

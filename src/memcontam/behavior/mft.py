@@ -120,7 +120,10 @@ class MftSuiteResult:
     def mft04_status(self) -> Literal["pass", "fail"]:
         return (
             "fail"
-            if any(case.test_id == "MFT-04" and case.status == "contract_failure" for case in self.cases)
+            if any(
+                case.test_id == "MFT-04" and case.status == "contract_failure"
+                for case in self.cases
+            )
             else "pass"
         )
 
@@ -207,7 +210,9 @@ def _generate_cases(
         task_families = (
             execution_context.task_families
             if row.task_families == ("all",)
-            else tuple(task for task in execution_context.task_families if task in row.task_families)
+            else tuple(
+                task for task in execution_context.task_families if task in row.task_families
+            )
         )
         conditions = tuple(
             condition

@@ -67,9 +67,15 @@ class ReflexionStylePolicy:
             verifier=capture_verifier,
         )
         if state.reflections != original_reflections:
-            memory.entries = [entry for entry in memory.entries if entry not in original_reflections]
+            memory.entries = [
+                entry for entry in memory.entries if entry not in original_reflections
+            ]
             memory.entries.extend(state.reflections)
-        verifier_result = captured_verifier_result if captured_verifier_result is not None else outcome.verifier_result
+        verifier_result = (
+            captured_verifier_result
+            if captured_verifier_result is not None
+            else outcome.verifier_result
+        )
         if isinstance(verifier_result, bool):
             verifier_result = VerifierResult(
                 is_correct=verifier_result, parsed_answer=outcome.parsed_answer
@@ -95,8 +101,4 @@ class ReflexionStylePolicy:
 
 
 def _reflection_entries(memory: MemoryState) -> list[MemoryEntry]:
-    return [
-        entry
-        for entry in memory.entries
-        if entry.memory_type == "verbal_reflection"
-    ]
+    return [entry for entry in memory.entries if entry.memory_type == "verbal_reflection"]

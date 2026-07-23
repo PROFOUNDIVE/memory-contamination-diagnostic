@@ -61,10 +61,12 @@ def test_fails_closed_for_registered_sandbox_errors() -> None:
         )
 
     scientific_executor = tools.SubprocessTestDouble()
-    with pytest.raises(tools.ToolInfrastructureError, match="SCIENTIFIC_SUBPROCESS_FALLBACK_FORBIDDEN"):
-        tools.PythonSandbox(_contract(tools, scientific=True), executor=scientific_executor).execute(
-            tools.ToolRequest("print(43)\n")
-        )
+    with pytest.raises(
+        tools.ToolInfrastructureError, match="SCIENTIFIC_SUBPROCESS_FALLBACK_FORBIDDEN"
+    ):
+        tools.PythonSandbox(
+            _contract(tools, scientific=True), executor=scientific_executor
+        ).execute(tools.ToolRequest("print(43)\n"))
     assert scientific_executor.execution_count == 0
 
     with pytest.raises(tools.ToolPolicyError, match="RUNTIME_IDENTITY_MISMATCH"):

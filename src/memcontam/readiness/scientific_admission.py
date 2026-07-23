@@ -52,8 +52,10 @@ class CertificateBundle:
 
     @property
     def has_evidence(self) -> bool:
-        return self.bfv2_certificate is not None or self.p12i_certificate is not None or bool(
-            self.p12i_artifacts
+        return (
+            self.bfv2_certificate is not None
+            or self.p12i_certificate is not None
+            or bool(self.p12i_artifacts)
         )
 
 
@@ -119,10 +121,14 @@ def _evaluate_exploratory(
         raise AdmissionDenied("EXPLORATORY_ACTIVATION_REQUIRED")
     if exploratory_activation is None:
         raise AdmissionDenied("EXPLORATORY_ACTIVATION_REQUIRED")
-    if exploratory_activation.estimated_exploratory_calls > exploratory_activation.exploratory_call_budget:
+    if (
+        exploratory_activation.estimated_exploratory_calls
+        > exploratory_activation.exploratory_call_budget
+    ):
         raise AdmissionDenied("EXPLORATORY_BUDGET_INSUFFICIENT")
     if (
-        exploratory_activation.exploratory_call_budget + exploratory_activation.reproducibility_reserve
+        exploratory_activation.exploratory_call_budget
+        + exploratory_activation.reproducibility_reserve
         > exploratory_activation.remaining_call_capacity
     ):
         raise AdmissionDenied("REPRODUCIBILITY_RESERVE_INSUFFICIENT")
@@ -193,7 +199,9 @@ def _validate_route(
     ):
         raise AdmissionDenied("ROUTE_SELECTION_MISMATCH")
     if validate_slot:
-        _validate_slot(request.abstract_seed_slot, request.trajectory_seed, route_selection.slot_to_seed)
+        _validate_slot(
+            request.abstract_seed_slot, request.trajectory_seed, route_selection.slot_to_seed
+        )
     return route_selection
 
 

@@ -131,7 +131,8 @@ def _complete_archive(root: Path) -> tuple[Path, PreRouteRunManifestRow]:
         root / "claim_scope_table.md",
     )
     (root / "bfv2_certificate.json").write_text(
-        json.dumps({"overall_status": "blocked", "reason": "missing_cached_bge_m3"}), encoding="utf-8"
+        json.dumps({"overall_status": "blocked", "reason": "missing_cached_bge_m3"}),
+        encoding="utf-8",
     )
     return root, row
 

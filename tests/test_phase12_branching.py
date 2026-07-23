@@ -21,7 +21,12 @@ WRITERS = {
     "fh_bounded": ("full_history_transcript", "fh_appender", "full_history_generate", "history"),
     "rag_frozen": ("rag_document", "rag_corpus_loader", "rag_corpus_load", "corpus"),
     "bot_style": ("thought_template", "bot_buffer_manager", "bot_thought_distill", "buffer"),
-    "reflexion_style": ("verbal_reflection", "reflexion_reflector", "reflexion_reflect", "reflections"),
+    "reflexion_style": (
+        "verbal_reflection",
+        "reflexion_reflector",
+        "reflexion_reflect",
+        "reflections",
+    ),
 }
 
 
@@ -100,7 +105,9 @@ def test_builds_five_matched_branches_for_each_memory_baseline() -> None:
         )
         assert branches.filter.source_checkpoint == branches.contam.checkpoint
         assert _entry_ids(branches.filter.active.state.entries) == clean_entries
-        assert _entry_ids(branches.filter.quarantine.state.entries) == (triplet.false_candidate.candidate_id,)
+        assert _entry_ids(branches.filter.quarantine.state.entries) == (
+            triplet.false_candidate.candidate_id,
+        )
         assert {branch.source_checkpoint_id for branch in branches.materialized} == {
             prefix_checkpoint.identity.checkpoint_id
         }
@@ -143,7 +150,9 @@ def test_rejects_unmatched_or_illegal_branch_construction() -> None:
     with pytest.raises(BranchConstructionError, match="PREFIX_IDENTITY_DRIFT"):
         replace(branches, correct=replace(branches.correct, source_checkpoint_id="other-prefix"))
     with pytest.raises(BranchConstructionError, match="FILTER_SOURCE_MISMATCH"):
-        replace(branches, filter=replace(branches.filter, source_checkpoint=branches.clean.checkpoint))
+        replace(
+            branches, filter=replace(branches.filter, source_checkpoint=branches.clean.checkpoint)
+        )
 
 
 def test_nomem_produces_one_alias_record_without_materialized_branches() -> None:

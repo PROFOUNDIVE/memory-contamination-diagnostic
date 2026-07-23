@@ -12,7 +12,9 @@ def test_certifies_first_difference_counterexample() -> None:
     from memcontam.contamination.phase12.registry import load_candidate_registry
 
     triplet = next(
-        item for item in load_candidate_registry(REGISTRY_PATH).triplets if item.task == "word_sorting"
+        item
+        for item in load_candidate_registry(REGISTRY_PATH).triplets
+        if item.task == "word_sorting"
     )
     result = certify_triplet(triplet, CertificationSuite.primary())
 

@@ -5,7 +5,12 @@ from typing import Any, Mapping, Protocol
 
 from memcontam.contamination.phase12.models import canonical_json_hash
 from memcontam.memory.embeddings import normalized_dot_top_k
-from memcontam.rag.phase12_corpus import BranchCorpus, BranchCorpusSet, Document, MetadataVariantCorpus
+from memcontam.rag.phase12_corpus import (
+    BranchCorpus,
+    BranchCorpusSet,
+    Document,
+    MetadataVariantCorpus,
+)
 
 
 BRANCH_INDEX_VERSION = "index-v3"
@@ -41,7 +46,9 @@ class BranchIndex:
             {
                 "documents": [document.payload() for document in self.documents],
                 "embedding_contract": dict(self.embedding_contract),
-                "vectors": {document_id: list(vector) for document_id, vector in self.vectors.items()},
+                "vectors": {
+                    document_id: list(vector) for document_id, vector in self.vectors.items()
+                },
             }
         )
 
@@ -93,11 +100,15 @@ def _build_index(
 ) -> BranchIndex:
     documents = corpus.active_documents
     vectors = {
-        document.document_id: tuple(float(value) for value in embedder.encode_document(document.text))
+        document.document_id: tuple(
+            float(value) for value in embedder.encode_document(document.text)
+        )
         for document in documents
     }
     dimension = contract.get("dimension")
-    if not isinstance(dimension, int) or any(len(vector) != dimension for vector in vectors.values()):
+    if not isinstance(dimension, int) or any(
+        len(vector) != dimension for vector in vectors.values()
+    ):
         raise ValueError("EMBEDDING_DIMENSION_MISMATCH")
     if contract.get("normalized") is not True:
         raise ValueError("EMBEDDING_NORMALIZATION_REQUIRED")
@@ -122,14 +133,16 @@ def _embedding_contract(embedder: EmbeddingProvider) -> Mapping[str, Any]:
     revision = metadata.get("revision")
     dimension = metadata.get("vector_dimension")
     normalized = metadata.get("normalize_embeddings")
-    if not all(isinstance(value, str) for value in (model_id, revision)) or not isinstance(dimension, int):
+    if not all(isinstance(value, str) for value in (model_id, revision)) or not isinstance(
+        dimension, int
+    ):
         raise ValueError("EMBEDDING_CONTRACT_REQUIRED")
     return _validate_embedding_contract(
         {
-        "dimension": dimension,
-        "normalized": normalized is True,
-        "production_identity": f"{model_id}@{revision}",
-        "provider": model_id,
+            "dimension": dimension,
+            "normalized": normalized is True,
+            "production_identity": f"{model_id}@{revision}",
+            "provider": model_id,
         }
     )
 

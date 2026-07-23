@@ -67,7 +67,11 @@ class ToolRuntimeContract:
 
     def __post_init__(self) -> None:
         if "@sha256:" not in self.oci_image:
-            code = "OCI_IMAGE_TAG_ONLY" if ":" in self.oci_image.rsplit("/", 1)[-1] else "OCI_DIGEST_REQUIRED"
+            code = (
+                "OCI_IMAGE_TAG_ONLY"
+                if ":" in self.oci_image.rsplit("/", 1)[-1]
+                else "OCI_DIGEST_REQUIRED"
+            )
             raise ToolPolicyError(code)
         if not _OCI_DIGEST.fullmatch(self.oci_image):
             raise ToolPolicyError("OCI_DIGEST_INVALID")

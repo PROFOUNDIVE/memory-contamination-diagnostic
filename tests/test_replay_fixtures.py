@@ -80,7 +80,9 @@ def test_replay_configs_are_explicitly_versioned(config_path: Path, fixture_vers
 
     assert config["run"]["stage"] == "replay"
     assert config["run"]["provider"] == "replay"
-    assert config["run"]["model_snapshots"] == {model: fixture_version for model in config["models"]}
+    assert config["run"]["model_snapshots"] == {
+        model: fixture_version for model in config["models"]
+    }
     assert config["logging"]["schema_version"] == "logging_v1"
     assert config["replay"]["fixture_version"] == fixture_version
 
@@ -114,7 +116,9 @@ def test_logging_contract_replay_fixture_is_offline_and_expands_to_39_combinatio
     assert config["run"]["mode"] == "faithful"
     assert config["run"]["stage"] == "replay"
     assert config["run"]["provider"] == "replay"
-    assert config["run"]["model_snapshots"] == {"replay_logging_contract": "logging_contract_fixture_v1"}
+    assert config["run"]["model_snapshots"] == {
+        "replay_logging_contract": "logging_contract_fixture_v1"
+    }
     assert config["models"] == ["replay_logging_contract"]
     assert config["logging"]["schema_version"] == "logging_v1"
     assert config["replay"]["fixture_version"] == "logging_contract_fixture_v1"
@@ -135,7 +139,9 @@ def test_logging_contract_replay_fixture_is_offline_and_expands_to_39_combinatio
     assert "6 / (1 - (3 / 4))" in retry[1]
 
 
-def test_phase11_logging_contract_replay_fixture_is_offline_and_expands_to_39_combinations() -> None:
+def test_phase11_logging_contract_replay_fixture_is_offline_and_expands_to_39_combinations() -> (
+    None
+):
     config = _load_yaml(PHASE11_CONTRACT_CONFIG_PATH)
     fixture = config["replay"]["responses_by_sample"]
 
@@ -218,7 +224,9 @@ def test_phase11_config_validation_fails_closed_for_unknown_typed_values(
         cli.validate_config(path)
 
 
-@pytest.mark.parametrize("stage", ["bot_problem_distill", "bot_thought_distill", "bot_novelty_decide"])
+@pytest.mark.parametrize(
+    "stage", ["bot_problem_distill", "bot_thought_distill", "bot_novelty_decide"]
+)
 def test_faithful_replay_rejects_internal_answer_leakage(stage: str) -> None:
     fixture = _load_yaml(FIXTURE_PATH)
     leaked = [

@@ -994,7 +994,11 @@ def test_signature_basis_cannot_claim_exact_lineage() -> None:
         )
     with pytest.raises(ValidationError, match="signature"):
         MemoryItemLog.model_validate(
-            {**_logging_v2_memory_item_payload(), "lineage_status": "exact", "lineage_basis": "signature"}
+            {
+                **_logging_v2_memory_item_payload(),
+                "lineage_status": "exact",
+                "lineage_basis": "signature",
+            }
         )
 
 
@@ -1138,7 +1142,9 @@ def test_logging_v2_frozen_and_online_checkpoint_rules() -> None:
         TrialLog.model_validate(writing_baseline)
 
     online_with_checkpoint = _logging_v2_trial_payload(
-        checkpoint_ref=_checkpoint_ref_payload(checkpoint_id="checkpoint-1", checkpoint_trial_index=1)
+        checkpoint_ref=_checkpoint_ref_payload(
+            checkpoint_id="checkpoint-1", checkpoint_trial_index=1
+        )
     )
     with pytest.raises(ValidationError, match="online"):
         TrialLog.model_validate(online_with_checkpoint)
@@ -1150,7 +1156,9 @@ def test_logging_v1_remains_phase10_and_does_not_accept_phase11_contract_level()
     assert TrialLog.model_validate(v1_payload).schema_version == LOGGING_V1
     assert TrialLog.model_validate(v1_payload).evaluation_law_id is None
     with pytest.raises(ValidationError, match="contract_level"):
-        RunMetadata.model_validate({**_logging_v2_run_metadata().model_dump(), "schema_version": LOGGING_V1})
+        RunMetadata.model_validate(
+            {**_logging_v2_run_metadata().model_dump(), "schema_version": LOGGING_V1}
+        )
 
 
 def test_memory_item_log_normalizes_lineage_without_mutating_entry_id() -> None:

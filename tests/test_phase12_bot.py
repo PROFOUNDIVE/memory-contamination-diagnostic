@@ -14,7 +14,12 @@ from memcontam.baselines.bot_phase12 import (
 from memcontam.clients.replay import ReplayClient
 from memcontam.memory.admission import AdmissionContext
 from memcontam.memory.cards_v3 import MEMORY_CARD_V3, MemoryCardEnvelopeV3, canonical_content_hash
-from memcontam.memory.checkpoint_v3 import NATIVE_ENTRY_V1, NativeEntry, NativeState, serialize_checkpoint
+from memcontam.memory.checkpoint_v3 import (
+    NATIVE_ENTRY_V1,
+    NativeEntry,
+    NativeState,
+    serialize_checkpoint,
+)
 from memcontam.memory.filtered_state import partition_native_checkpoint
 from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
@@ -54,7 +59,10 @@ def _task() -> TaskInstance:
 
 
 def _trial(
-    *, branch: Literal["clean", "correct", "irrelevant", "contam", "filter"], used_ids: list[str], verifier
+    *,
+    branch: Literal["clean", "correct", "irrelevant", "contam", "filter"],
+    used_ids: list[str],
+    verifier,
 ) -> BoTTrialContextV3:
     return BoTTrialContextV3(
         task=_task(),
@@ -101,11 +109,16 @@ def _memory_template(entry_id: str) -> MemoryEntry:
         entry_id=entry_id,
         content="Use rational intermediate values.",
         memory_type="thought_template",
-        metadata={"description": "Use rational intermediate values.", "category": "procedure-based"},
+        metadata={
+            "description": "Use rational intermediate values.",
+            "category": "procedure-based",
+        },
     )
 
 
-def _envelope(entry: NativeEntry, *, trial_id: str | None, writer_id: str, stage: str) -> MemoryCardEnvelopeV3:
+def _envelope(
+    entry: NativeEntry, *, trial_id: str | None, writer_id: str, stage: str
+) -> MemoryCardEnvelopeV3:
     return MemoryCardEnvelopeV3(
         entry_id=entry.entry_id,
         baseline="bot_style",
@@ -133,7 +146,9 @@ def test_rejects_bot_branch_without_two_active_clean_competitors() -> None:
 
     with pytest.raises(BoTContractError, match="BOT_COMPETITORS_UNAVAILABLE"):
         BoTPhase12Adapter().execute(
-            _trial(branch="contam", used_ids=[false_template.entry_id], verifier=lambda _answer: True),
+            _trial(
+                branch="contam", used_ids=[false_template.entry_id], verifier=lambda _answer: True
+            ),
             BoTStateV3(entries=[false_template], active_capacity=2),
         )
 
@@ -151,7 +166,8 @@ def test_exposed_false_template_can_create_explicitly_parented_descendant() -> N
     )
 
     result = BoTPhase12Adapter().execute(
-        _trial(branch="contam", used_ids=[false_template.entry_id], verifier=lambda _answer: True), state
+        _trial(branch="contam", used_ids=[false_template.entry_id], verifier=lambda _answer: True),
+        state,
     )
 
     assert [call.stage for call in result.outcome.method_calls] == [
@@ -172,12 +188,18 @@ def test_exposed_false_template_can_create_explicitly_parented_descendant() -> N
 
 def test_rejects_visibility_only_parent_and_verifier_dependent_novelty() -> None:
     visible = _memory_template("visible-template")
-    clean_competitors = [_memory_template("z-clean-template-a"), _memory_template("z-clean-template-b")]
+    clean_competitors = [
+        _memory_template("z-clean-template-a"),
+        _memory_template("z-clean-template-b"),
+    ]
     without_explicit_parent = BoTPhase12Adapter().execute(
         _trial(branch="contam", used_ids=[], verifier=lambda _answer: True),
         BoTStateV3(
             entries=[visible, *clean_competitors],
-            clean_competitor_ids=(visible.entry_id, *(entry.entry_id for entry in clean_competitors)),
+            clean_competitor_ids=(
+                visible.entry_id,
+                *(entry.entry_id for entry in clean_competitors),
+            ),
             active_capacity=4,
         ),
     )
@@ -185,7 +207,10 @@ def test_rejects_visibility_only_parent_and_verifier_dependent_novelty() -> None
         _trial(branch="contam", used_ids=[], verifier=lambda _answer: False),
         BoTStateV3(
             entries=[visible, *clean_competitors],
-            clean_competitor_ids=(visible.entry_id, *(entry.entry_id for entry in clean_competitors)),
+            clean_competitor_ids=(
+                visible.entry_id,
+                *(entry.entry_id for entry in clean_competitors),
+            ),
             active_capacity=4,
         ),
     )

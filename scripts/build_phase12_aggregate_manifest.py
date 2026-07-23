@@ -46,7 +46,9 @@ def main() -> int:
         if args.output is None:
             parser.error("--output is required with --input")
         aggregate_manifest = build_aggregate_manifest(_records(args.input), run_manifest)
-        result: dict[str, Any] = {"aggregate_manifest_hash": write_aggregate_manifest(aggregate_manifest, args.output)}
+        result: dict[str, Any] = {
+            "aggregate_manifest_hash": write_aggregate_manifest(aggregate_manifest, args.output)
+        }
         if args.claims is not None:
             if args.claim_output is None:
                 parser.error("--claim-output is required with --claims")

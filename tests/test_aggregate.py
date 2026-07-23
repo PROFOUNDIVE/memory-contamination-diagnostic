@@ -511,7 +511,9 @@ def test_aggregate_run_ignores_incomplete_bot_write_lineage(
         ("invalid", True),
     ],
 )
-def test_aggregate_run_rejects_bad_trials_jsonl(tmp_path, fixture_name: str, write_fixture: bool) -> None:
+def test_aggregate_run_rejects_bad_trials_jsonl(
+    tmp_path, fixture_name: str, write_fixture: bool
+) -> None:
     run_dir = tmp_path / "runs" / fixture_name
     run_dir.mkdir(parents=True)
     trials_path = run_dir / "trials.jsonl"
@@ -561,7 +563,10 @@ def test_aggregate_reports_method_call_overhead(tmp_path) -> None:
             _method_call("bot_problem_distill"),
             _method_call("bot_instantiate_solve"),
             _method_call("bot_thought_distill"),
-            _method_call("bot_novelty_decide", token_usage={"prompt_tokens": 8, "completion_tokens": 2, "total_tokens": 10}),
+            _method_call(
+                "bot_novelty_decide",
+                token_usage={"prompt_tokens": 8, "completion_tokens": 2, "total_tokens": 10},
+            ),
         ],
         memory_write_event=_bot_write_event(status="accepted"),
     )
@@ -678,7 +683,6 @@ def test_aggregate_counts_bot_lineage_status_variants(tmp_path) -> None:
     assert group["bot_update_incomplete_count"] == 1
 
 
-
 def _strict_run_metadata(run_id: str = "run1", stage: str = "replay") -> dict[str, Any]:
     return {
         "run_metadata_id": f"{run_id}:metadata",
@@ -703,7 +707,9 @@ def _strict_run_metadata(run_id: str = "run1", stage: str = "replay") -> dict[st
     }
 
 
-def _strict_manifest(run_id: str = "run1", stage: str = "replay", status: str = "completed") -> dict[str, Any]:
+def _strict_manifest(
+    run_id: str = "run1", stage: str = "replay", status: str = "completed"
+) -> dict[str, Any]:
     return {
         "run_metadata": _strict_run_metadata(run_id, stage),
         "status": status,
@@ -807,7 +813,10 @@ def _write_phase11_run(
         "calls.jsonl",
         [
             _strict_call_event(
-                row["trial_id"], row["answer_call_id"], row["trial_seq"], row["event_seq"] + len(rows)
+                row["trial_id"],
+                row["answer_call_id"],
+                row["trial_seq"],
+                row["event_seq"] + len(rows),
             )
             for row in rows
         ],
@@ -914,7 +923,8 @@ def _strict_call_event(
         "model": "replay",
         "decoding_params": {"temperature": 0.0, "top_p": 1.0, "max_tokens": 100},
         "response_text": f"{method_stage} response",
-        "token_usage": token_usage or {"prompt_tokens": 5, "completion_tokens": 5, "total_tokens": 10},
+        "token_usage": token_usage
+        or {"prompt_tokens": 5, "completion_tokens": 5, "total_tokens": 10},
         "latency_ms": latency_ms,
         "retry_count": 0,
         "source_spans": source_spans or [],
@@ -1128,15 +1138,23 @@ def _strict_trial_row(
     return TrialLog(**base).model_dump(mode="json")
 
 
-
 def test_strict_aggregate_default_requires_stage_and_rejects_legacy(tmp_path: Path) -> None:
     run_dir = tmp_path / "runs" / "strict_no_stage"
     run_dir.mkdir(parents=True)
     _write_run_json(run_dir, _strict_manifest())
     _write_jsonl(run_dir, "trials.jsonl", [_strict_trial_row(trial_seq=0, event_seq=1)])
-    _write_jsonl(run_dir, "calls.jsonl", [_strict_call_event(
-        "run1:game24:s1:no_memory:clean:replay", "run1:game24:s1:no_memory:clean:replay:call:1", 0, 2
-    )])
+    _write_jsonl(
+        run_dir,
+        "calls.jsonl",
+        [
+            _strict_call_event(
+                "run1:game24:s1:no_memory:clean:replay",
+                "run1:game24:s1:no_memory:clean:replay:call:1",
+                0,
+                2,
+            )
+        ],
+    )
     _write_jsonl(run_dir, "failures.jsonl", [])
     _write_jsonl(run_dir, "filter_events.jsonl", [])
     _write_jsonl(run_dir, "memory_events.jsonl", [])
@@ -1159,10 +1177,22 @@ def test_strict_aggregate_stage_mismatch_fails(stage: str, tmp_path: Path) -> No
     run_dir = tmp_path / "runs" / f"stage_mismatch_{stage}"
     run_dir.mkdir(parents=True)
     _write_run_json(run_dir, _strict_manifest(stage=stage))
-    _write_jsonl(run_dir, "trials.jsonl", [_strict_trial_row(trial_seq=0, event_seq=1, stage=stage)])
-    _write_jsonl(run_dir, "calls.jsonl", [_strict_call_event(
-        "run1:game24:s1:no_memory:clean:replay", "run1:game24:s1:no_memory:clean:replay:call:1", 0, 2, stage=stage
-    )])
+    _write_jsonl(
+        run_dir, "trials.jsonl", [_strict_trial_row(trial_seq=0, event_seq=1, stage=stage)]
+    )
+    _write_jsonl(
+        run_dir,
+        "calls.jsonl",
+        [
+            _strict_call_event(
+                "run1:game24:s1:no_memory:clean:replay",
+                "run1:game24:s1:no_memory:clean:replay:call:1",
+                0,
+                2,
+                stage=stage,
+            )
+        ],
+    )
     _write_jsonl(run_dir, "failures.jsonl", [])
     _write_jsonl(run_dir, "filter_events.jsonl", [])
     _write_jsonl(run_dir, "memory_events.jsonl", [])
@@ -1182,28 +1212,50 @@ def test_strict_aggregate_uses_calls_jsonl_for_telemetry(tmp_path: Path) -> None
     _write_run_json(run_dir, _strict_manifest())
     trial_id = "run1:game24:s1:no_memory:clean:replay"
     call_id = f"{trial_id}:call:1"
-    _write_jsonl(run_dir, "trials.jsonl", [
-        _strict_trial_row(trial_seq=0, event_seq=1, method_calls=[
-            {
-                "call_id": call_id,
-                "stage": "no_memory_generate",
-                "messages": [{"role": "user", "content": "solve"}],
-                "raw_response": "final: 24",
-                "model": "replay",
-                "temperature": 0.0,
-                "top_p": 1.0,
-                "max_tokens": 100,
-                "latency_ms": 10,
-                "token_usage": {"prompt_tokens": 5, "completion_tokens": 5, "total_tokens": 10},
-                "retry_count": 0,
-                "error_type": None,
-                "source_spans": [],
-            }
-        ])
-    ])
-    _write_jsonl(run_dir, "calls.jsonl", [
-        _strict_call_event(trial_id, call_id, 0, 2, token_usage={"prompt_tokens": 7, "completion_tokens": 3, "total_tokens": 10})
-    ])
+    _write_jsonl(
+        run_dir,
+        "trials.jsonl",
+        [
+            _strict_trial_row(
+                trial_seq=0,
+                event_seq=1,
+                method_calls=[
+                    {
+                        "call_id": call_id,
+                        "stage": "no_memory_generate",
+                        "messages": [{"role": "user", "content": "solve"}],
+                        "raw_response": "final: 24",
+                        "model": "replay",
+                        "temperature": 0.0,
+                        "top_p": 1.0,
+                        "max_tokens": 100,
+                        "latency_ms": 10,
+                        "token_usage": {
+                            "prompt_tokens": 5,
+                            "completion_tokens": 5,
+                            "total_tokens": 10,
+                        },
+                        "retry_count": 0,
+                        "error_type": None,
+                        "source_spans": [],
+                    }
+                ],
+            )
+        ],
+    )
+    _write_jsonl(
+        run_dir,
+        "calls.jsonl",
+        [
+            _strict_call_event(
+                trial_id,
+                call_id,
+                0,
+                2,
+                token_usage={"prompt_tokens": 7, "completion_tokens": 3, "total_tokens": 10},
+            )
+        ],
+    )
     _write_jsonl(run_dir, "failures.jsonl", [])
     _write_jsonl(run_dir, "filter_events.jsonl", [])
     _write_jsonl(run_dir, "memory_events.jsonl", [])
@@ -1223,43 +1275,57 @@ def test_strict_aggregate_fails_when_nested_calls_disagree_with_calls_jsonl(tmp_
     _write_run_json(run_dir, _strict_manifest())
     trial_id = "run1:game24:s1:no_memory:clean:replay"
     call_id = f"{trial_id}:call:1"
-    _write_jsonl(run_dir, "trials.jsonl", [
-        _strict_trial_row(trial_seq=0, event_seq=1, method_calls=[
-            {
-                "call_id": call_id,
-                "stage": "no_memory_generate",
-                "messages": [{"role": "user", "content": "solve"}],
-                "raw_response": "final: 24",
-                "model": "replay",
-                "temperature": 0.0,
-                "top_p": 1.0,
-                "max_tokens": 100,
-                "latency_ms": 10,
-                "token_usage": {"prompt_tokens": 5, "completion_tokens": 5, "total_tokens": 10},
-                "retry_count": 0,
-                "error_type": None,
-                "source_spans": [],
-            },
-            {
-                "call_id": f"{trial_id}:call:2",
-                "stage": "no_memory_generate",
-                "messages": [{"role": "user", "content": "solve again"}],
-                "raw_response": "final: 24",
-                "model": "replay",
-                "temperature": 0.0,
-                "top_p": 1.0,
-                "max_tokens": 100,
-                "latency_ms": 10,
-                "token_usage": {"prompt_tokens": 5, "completion_tokens": 5, "total_tokens": 10},
-                "retry_count": 0,
-                "error_type": None,
-                "source_spans": [],
-            }
-        ])
-    ])
-    _write_jsonl(run_dir, "calls.jsonl", [
-        _strict_call_event(trial_id, call_id, 0, 2)
-    ])
+    _write_jsonl(
+        run_dir,
+        "trials.jsonl",
+        [
+            _strict_trial_row(
+                trial_seq=0,
+                event_seq=1,
+                method_calls=[
+                    {
+                        "call_id": call_id,
+                        "stage": "no_memory_generate",
+                        "messages": [{"role": "user", "content": "solve"}],
+                        "raw_response": "final: 24",
+                        "model": "replay",
+                        "temperature": 0.0,
+                        "top_p": 1.0,
+                        "max_tokens": 100,
+                        "latency_ms": 10,
+                        "token_usage": {
+                            "prompt_tokens": 5,
+                            "completion_tokens": 5,
+                            "total_tokens": 10,
+                        },
+                        "retry_count": 0,
+                        "error_type": None,
+                        "source_spans": [],
+                    },
+                    {
+                        "call_id": f"{trial_id}:call:2",
+                        "stage": "no_memory_generate",
+                        "messages": [{"role": "user", "content": "solve again"}],
+                        "raw_response": "final: 24",
+                        "model": "replay",
+                        "temperature": 0.0,
+                        "top_p": 1.0,
+                        "max_tokens": 100,
+                        "latency_ms": 10,
+                        "token_usage": {
+                            "prompt_tokens": 5,
+                            "completion_tokens": 5,
+                            "total_tokens": 10,
+                        },
+                        "retry_count": 0,
+                        "error_type": None,
+                        "source_spans": [],
+                    },
+                ],
+            )
+        ],
+    )
+    _write_jsonl(run_dir, "calls.jsonl", [_strict_call_event(trial_id, call_id, 0, 2)])
     _write_jsonl(run_dir, "failures.jsonl", [])
     _write_jsonl(run_dir, "filter_events.jsonl", [])
     _write_jsonl(run_dir, "memory_events.jsonl", [])
@@ -1275,12 +1341,12 @@ def test_strict_aggregate_rejects_missing_answer_call(tmp_path: Path) -> None:
     run_dir.mkdir(parents=True)
     _write_run_json(run_dir, _strict_manifest())
     trial_id = "run1:game24:s1:no_memory:clean:replay"
-    _write_jsonl(run_dir, "trials.jsonl", [
-        _strict_trial_row(trial_seq=0, event_seq=1, answer_call_id=f"{trial_id}:call:missing")
-    ])
-    _write_jsonl(run_dir, "calls.jsonl", [
-        _strict_call_event(trial_id, f"{trial_id}:call:1", 0, 2)
-    ])
+    _write_jsonl(
+        run_dir,
+        "trials.jsonl",
+        [_strict_trial_row(trial_seq=0, event_seq=1, answer_call_id=f"{trial_id}:call:missing")],
+    )
+    _write_jsonl(run_dir, "calls.jsonl", [_strict_call_event(trial_id, f"{trial_id}:call:1", 0, 2)])
     _write_jsonl(run_dir, "failures.jsonl", [])
     _write_jsonl(run_dir, "filter_events.jsonl", [])
     _write_jsonl(run_dir, "memory_events.jsonl", [])
@@ -1296,12 +1362,8 @@ def test_strict_aggregate_rejects_duplicate_event_seq(tmp_path: Path) -> None:
     run_dir.mkdir(parents=True)
     _write_run_json(run_dir, _strict_manifest())
     trial_id = "run1:game24:s1:no_memory:clean:replay"
-    _write_jsonl(run_dir, "trials.jsonl", [
-        _strict_trial_row(trial_seq=0, event_seq=1)
-    ])
-    _write_jsonl(run_dir, "calls.jsonl", [
-        _strict_call_event(trial_id, f"{trial_id}:call:1", 0, 1)
-    ])
+    _write_jsonl(run_dir, "trials.jsonl", [_strict_trial_row(trial_seq=0, event_seq=1)])
+    _write_jsonl(run_dir, "calls.jsonl", [_strict_call_event(trial_id, f"{trial_id}:call:1", 0, 1)])
     _write_jsonl(run_dir, "failures.jsonl", [])
     _write_jsonl(run_dir, "filter_events.jsonl", [])
     _write_jsonl(run_dir, "memory_events.jsonl", [])
@@ -1317,12 +1379,14 @@ def test_strict_aggregate_rejects_mixed_stage(tmp_path: Path) -> None:
     run_dir.mkdir(parents=True)
     _write_run_json(run_dir, _strict_manifest(stage="replay"))
     trial_id = "run1:game24:s1:no_memory:clean:replay"
-    _write_jsonl(run_dir, "trials.jsonl", [
-        _strict_trial_row(trial_seq=0, event_seq=1, stage="pilot")
-    ])
-    _write_jsonl(run_dir, "calls.jsonl", [
-        _strict_call_event(trial_id, f"{trial_id}:call:1", 0, 2, stage="pilot")
-    ])
+    _write_jsonl(
+        run_dir, "trials.jsonl", [_strict_trial_row(trial_seq=0, event_seq=1, stage="pilot")]
+    )
+    _write_jsonl(
+        run_dir,
+        "calls.jsonl",
+        [_strict_call_event(trial_id, f"{trial_id}:call:1", 0, 2, stage="pilot")],
+    )
     _write_jsonl(run_dir, "failures.jsonl", [])
     _write_jsonl(run_dir, "filter_events.jsonl", [])
     _write_jsonl(run_dir, "memory_events.jsonl", [])
@@ -1339,30 +1403,34 @@ def test_strict_aggregate_rejects_unsupported_exposure_on_main(tmp_path: Path) -
     _write_run_json(run_dir, _strict_manifest(stage="main"))
     trial_id = "run1:game24:s1:no_memory:contaminated:replay"
     call_id = f"{trial_id}:call:1"
-    _write_jsonl(run_dir, "trials.jsonl", [
-        _strict_trial_row(
-            trial_seq=0,
-            event_seq=1,
-            stage="main",
-            arm="contaminated",
-            trial_id=trial_id,
-            answer_call_id=call_id,
-            contamination_exposure={
-                "condition": "contaminated",
-                "status": "not_evaluable",
-                "is_exposed": None,
-                "answer_call_id": None,
-                "target_entry_ids": [],
-                "source_entry_ids": ["m1"],
-                "exposed_source_ids": [],
-                "exposure_mode": "not_evaluable",
-                "reason": "legacy proxy",
-            },
-        )
-    ])
-    _write_jsonl(run_dir, "calls.jsonl", [
-        _strict_call_event(trial_id, call_id, 0, 2, stage="main")
-    ])
+    _write_jsonl(
+        run_dir,
+        "trials.jsonl",
+        [
+            _strict_trial_row(
+                trial_seq=0,
+                event_seq=1,
+                stage="main",
+                arm="contaminated",
+                trial_id=trial_id,
+                answer_call_id=call_id,
+                contamination_exposure={
+                    "condition": "contaminated",
+                    "status": "not_evaluable",
+                    "is_exposed": None,
+                    "answer_call_id": None,
+                    "target_entry_ids": [],
+                    "source_entry_ids": ["m1"],
+                    "exposed_source_ids": [],
+                    "exposure_mode": "not_evaluable",
+                    "reason": "legacy proxy",
+                },
+            )
+        ],
+    )
+    _write_jsonl(
+        run_dir, "calls.jsonl", [_strict_call_event(trial_id, call_id, 0, 2, stage="main")]
+    )
     _write_jsonl(run_dir, "failures.jsonl", [])
     _write_jsonl(run_dir, "filter_events.jsonl", [])
     _write_jsonl(run_dir, "memory_events.jsonl", [])
@@ -1379,26 +1447,40 @@ def test_strict_aggregate_excludes_failed_trials_from_accuracy(tmp_path: Path) -
     _write_run_json(run_dir, _strict_manifest())
     success_trial_id = "run1:game24:s1:no_memory:clean:replay"
     failed_trial_id = "run1:game24:s2:no_memory:clean:replay"
-    _write_jsonl(run_dir, "trials.jsonl", [
-        _strict_trial_row(trial_seq=0, event_seq=1, trial_id=success_trial_id, sample_id="s1"),
-        _strict_trial_row(
-            trial_seq=1,
-            event_seq=2,
-            trial_id=failed_trial_id,
-            sample_id="s2",
-            status="failed",
-            verifier_result=None,
-            raw_response=None,
-            parsed_answer=None,
-        ),
-    ])
-    _write_jsonl(run_dir, "calls.jsonl", [
-        _strict_call_event(success_trial_id, f"{success_trial_id}:call:1", 0, 3),
-        _strict_call_event(failed_trial_id, f"{failed_trial_id}:call:1", 1, 4),
-    ])
-    _write_jsonl(run_dir, "failures.jsonl", [
-        _strict_failure_event(failed_trial_id, f"{failed_trial_id}:failure:1", 1, 5, origin="verifier")
-    ])
+    _write_jsonl(
+        run_dir,
+        "trials.jsonl",
+        [
+            _strict_trial_row(trial_seq=0, event_seq=1, trial_id=success_trial_id, sample_id="s1"),
+            _strict_trial_row(
+                trial_seq=1,
+                event_seq=2,
+                trial_id=failed_trial_id,
+                sample_id="s2",
+                status="failed",
+                verifier_result=None,
+                raw_response=None,
+                parsed_answer=None,
+            ),
+        ],
+    )
+    _write_jsonl(
+        run_dir,
+        "calls.jsonl",
+        [
+            _strict_call_event(success_trial_id, f"{success_trial_id}:call:1", 0, 3),
+            _strict_call_event(failed_trial_id, f"{failed_trial_id}:call:1", 1, 4),
+        ],
+    )
+    _write_jsonl(
+        run_dir,
+        "failures.jsonl",
+        [
+            _strict_failure_event(
+                failed_trial_id, f"{failed_trial_id}:failure:1", 1, 5, origin="verifier"
+            )
+        ],
+    )
     _write_jsonl(run_dir, "filter_events.jsonl", [])
     _write_jsonl(run_dir, "memory_events.jsonl", [])
 
@@ -1435,40 +1517,52 @@ def test_strict_aggregate_rejects_missing_filter_outcome(tmp_path: Path) -> None
             "clean_or_contaminated": "contaminated",
         }
     ]
-    _write_jsonl(run_dir, "trials.jsonl", [
-        _strict_trial_row(
-            trial_seq=0,
-            event_seq=3,
-            trial_id=trial_id,
-            arm="contaminated_filter",
-            answer_call_id=call_id,
-            filter_decision={"removed_count": 1, "dropped": 1},
-            method_calls=[
-                {
-                    "call_id": call_id,
-                    "stage": "no_memory_generate",
-                    "messages": [{"role": "user", "content": "solve"}],
-                    "raw_response": "final: 24",
-                    "model": "replay",
-                    "temperature": 0.0,
-                    "top_p": 1.0,
-                    "max_tokens": 100,
-                    "latency_ms": 10,
-                    "token_usage": {"prompt_tokens": 5, "completion_tokens": 5, "total_tokens": 10},
-                    "retry_count": 0,
-                    "error_type": None,
-                    "source_spans": source_spans,
-                }
-            ],
-        )
-    ])
-    _write_jsonl(run_dir, "calls.jsonl", [
-        _strict_call_event(trial_id, call_id, 0, 2, source_spans=source_spans)
-    ])
+    _write_jsonl(
+        run_dir,
+        "trials.jsonl",
+        [
+            _strict_trial_row(
+                trial_seq=0,
+                event_seq=3,
+                trial_id=trial_id,
+                arm="contaminated_filter",
+                answer_call_id=call_id,
+                filter_decision={"removed_count": 1, "dropped": 1},
+                method_calls=[
+                    {
+                        "call_id": call_id,
+                        "stage": "no_memory_generate",
+                        "messages": [{"role": "user", "content": "solve"}],
+                        "raw_response": "final: 24",
+                        "model": "replay",
+                        "temperature": 0.0,
+                        "top_p": 1.0,
+                        "max_tokens": 100,
+                        "latency_ms": 10,
+                        "token_usage": {
+                            "prompt_tokens": 5,
+                            "completion_tokens": 5,
+                            "total_tokens": 10,
+                        },
+                        "retry_count": 0,
+                        "error_type": None,
+                        "source_spans": source_spans,
+                    }
+                ],
+            )
+        ],
+    )
+    _write_jsonl(
+        run_dir,
+        "calls.jsonl",
+        [_strict_call_event(trial_id, call_id, 0, 2, source_spans=source_spans)],
+    )
     _write_jsonl(run_dir, "failures.jsonl", [])
-    _write_jsonl(run_dir, "filter_events.jsonl", [
-        _strict_filter_event(trial_id, f"{trial_id}:filter:1", 0, 1, arm="contaminated_filter")
-    ])
+    _write_jsonl(
+        run_dir,
+        "filter_events.jsonl",
+        [_strict_filter_event(trial_id, f"{trial_id}:filter:1", 0, 1, arm="contaminated_filter")],
+    )
     _write_jsonl(run_dir, "memory_events.jsonl", [])
 
     from memcontam.evaluation.aggregate import aggregate_run
@@ -1483,19 +1577,25 @@ def test_strict_aggregate_rejects_missing_memory_event(tmp_path: Path) -> None:
     _write_run_json(run_dir, _strict_manifest())
     trial_id = "run1:game24:s1:bot_style:clean:replay"
     call_id = f"{trial_id}:call:1"
-    _write_jsonl(run_dir, "trials.jsonl", [
-        _strict_trial_row(
-            trial_seq=0,
-            event_seq=2,
-            trial_id=trial_id,
-            baseline="bot_style",
-            answer_call_id=call_id,
-            memory_write_event=_bot_write_event(status="accepted", event_type="bot_write"),
-        )
-    ])
-    _write_jsonl(run_dir, "calls.jsonl", [
-        _strict_call_event(trial_id, call_id, 0, 1, method_stage="bot_instantiate_solve")
-    ])
+    _write_jsonl(
+        run_dir,
+        "trials.jsonl",
+        [
+            _strict_trial_row(
+                trial_seq=0,
+                event_seq=2,
+                trial_id=trial_id,
+                baseline="bot_style",
+                answer_call_id=call_id,
+                memory_write_event=_bot_write_event(status="accepted", event_type="bot_write"),
+            )
+        ],
+    )
+    _write_jsonl(
+        run_dir,
+        "calls.jsonl",
+        [_strict_call_event(trial_id, call_id, 0, 1, method_stage="bot_instantiate_solve")],
+    )
     _write_jsonl(run_dir, "failures.jsonl", [])
     _write_jsonl(run_dir, "filter_events.jsonl", [])
     _write_jsonl(run_dir, "memory_events.jsonl", [])
@@ -1512,26 +1612,34 @@ def test_strict_aggregate_scopes_calls_jsonl_metrics_to_group(tmp_path: Path) ->
     _write_run_json(run_dir, _strict_manifest())
     first_trial_id = "run1:game24:s1:no_memory:clean:replay"
     second_trial_id = "run1:game24:s1:full_history:clean:replay"
-    _write_jsonl(run_dir, "trials.jsonl", [
-        _strict_trial_row(trial_seq=0, event_seq=1, trial_id=first_trial_id),
-        _strict_trial_row(
-            trial_seq=1,
-            event_seq=2,
-            trial_id=second_trial_id,
-            baseline="full_history",
-            answer_call_id=f"{second_trial_id}:call:1",
-        ),
-    ])
-    _write_jsonl(run_dir, "calls.jsonl", [
-        _strict_call_event(first_trial_id, f"{first_trial_id}:call:1", 0, 3),
-        _strict_call_event(
-            second_trial_id,
-            f"{second_trial_id}:call:1",
-            1,
-            4,
-            method_stage="full_history_generate",
-        ),
-    ])
+    _write_jsonl(
+        run_dir,
+        "trials.jsonl",
+        [
+            _strict_trial_row(trial_seq=0, event_seq=1, trial_id=first_trial_id),
+            _strict_trial_row(
+                trial_seq=1,
+                event_seq=2,
+                trial_id=second_trial_id,
+                baseline="full_history",
+                answer_call_id=f"{second_trial_id}:call:1",
+            ),
+        ],
+    )
+    _write_jsonl(
+        run_dir,
+        "calls.jsonl",
+        [
+            _strict_call_event(first_trial_id, f"{first_trial_id}:call:1", 0, 3),
+            _strict_call_event(
+                second_trial_id,
+                f"{second_trial_id}:call:1",
+                1,
+                4,
+                method_stage="full_history_generate",
+            ),
+        ],
+    )
     _write_jsonl(run_dir, "failures.jsonl", [])
     _write_jsonl(run_dir, "filter_events.jsonl", [])
     _write_jsonl(run_dir, "memory_events.jsonl", [])
@@ -1597,7 +1705,9 @@ def test_phase11_aggregate_uses_exact_pair_id_and_reports_context(tmp_path: Path
 
     result = aggregate_run(run_dir, stage="replay", contract="phase11")
 
-    assert {group["vanilla_to_contamination_degradation_rate"] for group in result["groups"]} == {1.0}
+    assert {group["vanilla_to_contamination_degradation_rate"] for group in result["groups"]} == {
+        1.0
+    }
     assert {
         (group["evaluation_law_id"], group["target_set_id"], group["contract_level"])
         for group in result["groups"]
@@ -1688,7 +1798,9 @@ def test_phase11_aggregate_traverses_direct_edge_parent_without_mutating_graph(
     assert aggregate_run(run_dir, stage="replay", contract="phase11")["status"] == "completed"
 
 
-def test_phase11_aggregate_does_not_fall_back_to_sample_id_for_incomplete_pairs(tmp_path: Path) -> None:
+def test_phase11_aggregate_does_not_fall_back_to_sample_id_for_incomplete_pairs(
+    tmp_path: Path,
+) -> None:
     run_dir = tmp_path / "runs" / "phase11_incomplete_pairs"
     run_dir.mkdir(parents=True)
     rows = [

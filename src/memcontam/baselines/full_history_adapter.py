@@ -10,11 +10,19 @@ from memcontam.baselines.contracts import (
     FailureDisposition,
     ScientificIneligibilityReason,
 )
-from memcontam.baselines.full_history import FullHistoryPayload, FullHistoryState, render_full_history
+from memcontam.baselines.full_history import (
+    FullHistoryPayload,
+    FullHistoryState,
+    render_full_history,
+)
 from memcontam.baselines.full_history_context import render_context_bounded_history
 from memcontam.clients.base import LLMClient
 from memcontam.clients.recording import MethodCallRecorder
-from memcontam.logging.provenance import PromptSourcePart, build_prompt_with_sources, phase11_lineage_metadata
+from memcontam.logging.provenance import (
+    PromptSourcePart,
+    build_prompt_with_sources,
+    phase11_lineage_metadata,
+)
 from memcontam.logging.schema import VerifierResult
 from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
@@ -171,7 +179,9 @@ def _append_response(
     entry_id = f"full_history:{task.task_name}:{task.sample_id}:{uuid4().hex}"
     entry = MemoryEntry(
         entry_id=entry_id,
-        content=render_full_history(entry_id, FullHistoryPayload(canonical_task_json(task), raw_response)),
+        content=render_full_history(
+            entry_id, FullHistoryPayload(canonical_task_json(task), raw_response)
+        ),
         memory_type="full_history_transcript",
         clean_or_contaminated=(
             "contaminated"

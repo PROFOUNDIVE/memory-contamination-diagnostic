@@ -24,9 +24,7 @@ class ReplayClient:
     def _next_stage_response(self, sample_id: str, stage: str) -> str:
         sample_stages = self.responses_by_sample[sample_id]
         if stage not in sample_stages:
-            raise ValueError(
-                f"missing replay response for sample {sample_id!r} stage {stage!r}"
-            )
+            raise ValueError(f"missing replay response for sample {sample_id!r} stage {stage!r}")
         stage_response = sample_stages[stage]
         if isinstance(stage_response, list):
             key = (sample_id, stage)

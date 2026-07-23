@@ -130,9 +130,9 @@ def test_retrieves_executed_routine_and_synthesizes_general_strategy(tmp_path) -
     )
     executor = SubprocessTestDouble()
 
-    result = DcRsPhase12Adapter(embedding_provider=_EmbeddingProvider(), cache_dir=tmp_path).execute(
-        _trial(client, executor), DcRsStateV3(archive=[_executed_archive()])
-    )
+    result = DcRsPhase12Adapter(
+        embedding_provider=_EmbeddingProvider(), cache_dir=tmp_path
+    ).execute(_trial(client, executor), DcRsStateV3(archive=[_executed_archive()]))
 
     assert [call.stage for call in result.outcome.method_calls] == [
         "dc_rs_synthesize",
@@ -175,7 +175,9 @@ def test_retrieves_executed_routine_and_synthesizes_general_strategy(tmp_path) -
         }
     )
     followup_trial = _trial(followup_client, executor)
-    followup = DcRsPhase12Adapter(embedding_provider=_EmbeddingProvider(), cache_dir=tmp_path).execute(
+    followup = DcRsPhase12Adapter(
+        embedding_provider=_EmbeddingProvider(), cache_dir=tmp_path
+    ).execute(
         replace(
             followup_trial,
             trial_id="dc-rs-tool-run:followup",

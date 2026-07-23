@@ -104,7 +104,12 @@ class BotRuntime:
         metadata["retrieval_decision"] = _retrieval_decision_metadata(retrieval_decision)
         if tool_mode == "text_only":
             raw_solve = self.policy.template_instantiation_solve(
-                task, distilled, recorder, model, text_call_config, retrieval_decision=retrieval_decision
+                task,
+                distilled,
+                recorder,
+                model,
+                text_call_config,
+                retrieval_decision=retrieval_decision,
             )
             answer_call_id = recorder.get_records()[-1].call_id
         else:
@@ -118,7 +123,12 @@ class BotRuntime:
                     model=model,
                     config=call_config,
                 )
-            except (ToolExecutionError, ToolInfrastructureError, ToolPolicyError, ToolProtocolError) as error:
+            except (
+                ToolExecutionError,
+                ToolInfrastructureError,
+                ToolPolicyError,
+                ToolProtocolError,
+            ) as error:
                 metadata["tool_error_code"] = error.code
                 return _failure_outcome(
                     recorder,

@@ -24,11 +24,15 @@ def _models(paths: list[Path], model: Any) -> dict[str, Any]:
     for path in paths:
         payload = json.loads(path.read_text(encoding="utf-8"))
         records.extend(payload if isinstance(payload, list) else [payload])
-    return {record.manifest_id: record for record in (model.model_validate(item) for item in records)}
+    return {
+        record.manifest_id: record for record in (model.model_validate(item) for item in records)
+    }
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Build or validate a canonical Phase 12 run manifest.")
+    parser = argparse.ArgumentParser(
+        description="Build or validate a canonical Phase 12 run manifest."
+    )
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--input", type=Path)
     source.add_argument("--manifest", type=Path)
@@ -41,7 +45,9 @@ def main() -> int:
     if args.input is not None:
         if args.output is None:
             parser.error("--output is required with --input")
-        manifest_hash = write_run_manifest(build_run_manifest(load_run_artifact_refs(args.input)), args.output)
+        manifest_hash = write_run_manifest(
+            build_run_manifest(load_run_artifact_refs(args.input)), args.output
+        )
         print(manifest_hash)
         return 0
 

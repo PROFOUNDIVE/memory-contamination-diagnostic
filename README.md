@@ -21,6 +21,26 @@ isn't benchmark, manuscript-quality, causal, or production contamination evidenc
 `v0.8` is a repository research-artifact tag for the completed V2 source-contract
 remediation. It is not an overall V2 certification because F1C remains blocked.
 
+## Phase-12 Repository Contract Status
+
+Phase-12 support is implemented as a repository contract, not as a scientific result.
+The contract adds `logging_v3`, five Methods-facing arms (`Clean`, `Correct`,
+`Irrelevant`, `Contam`, `Filter`), branch-free clean prefixes, matched suffixes,
+P12I build-layer replay checks, canonical configs, manifests, archive validation, and
+separate exploratory Python-sandbox governance.
+
+The committed Phase-12 workflow remains offline and non-scientific until the exact F1C
+gate is satisfied with the pinned BGE-M3 cache and the required external governance
+artifacts are provided. P12I may pass as build-layer readiness while scientific
+admission remains false. Text-only evidence and exploratory code evidence are not
+pooled.
+
+Operator-facing references:
+
+- [`docs/phase12-implementation-contract.md`](docs/phase12-implementation-contract.md)
+- [`docs/logging-v3-phase12.md`](docs/logging-v3-phase12.md)
+- [`docs/phase12-operator-runbook.md`](docs/phase12-operator-runbook.md)
+
 ## Historical Release Roadmap
 
 | Tag | Scope | Baselines | Key features |
@@ -290,6 +310,9 @@ The bundled config emits 90 replay trial rows:
 
 ## Documentation
 
+- Phase-12 implementation contract: [`docs/phase12-implementation-contract.md`](docs/phase12-implementation-contract.md)
+- Phase-12 logging v3 contract: [`docs/logging-v3-phase12.md`](docs/logging-v3-phase12.md)
+- Phase-12 operator runbook: [`docs/phase12-operator-runbook.md`](docs/phase12-operator-runbook.md)
 - Baseline-Fidelity-V2 authority: [`docs/baseline-fidelity-v2.md`](docs/baseline-fidelity-v2.md)
 - Baseline-Fidelity-V2 evidence provenance: [`docs/baseline-fidelity-v2-evidence.md`](docs/baseline-fidelity-v2-evidence.md)
 - Historical Baseline-Fidelity-V1 authority: [`docs/baseline-fidelity-v1.md`](docs/baseline-fidelity-v1.md)

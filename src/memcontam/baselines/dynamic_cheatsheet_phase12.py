@@ -183,7 +183,9 @@ class DcRsPhase12Adapter:
             cache_dir=self.cache_dir,
         )
         canonical_task = canonical_task_json(trial.task)
-        retrieved_records = retriever._retrieve_pairs(canonical_task, active_archive, trial.trial_id)
+        retrieved_records = retriever._retrieve_pairs(
+            canonical_task, active_archive, trial.trial_id
+        )
         archive_by_id = {entry.entry_id: entry for entry in active_archive}
         retrieved_archive = [archive_by_id[record.document_id] for record in retrieved_records]
         recorder = MethodCallRecorder(trial.client)
@@ -222,8 +224,8 @@ class DcRsPhase12Adapter:
             {entry.entry_id for entry in active_archive}
         ):
             candidate = replace(candidate, lineage_status="approximate")
-        strategy_entry, strategy_envelope, strategy_admission, strategy_transition = _admit_strategy(
-            candidate, state, trial, prior_strategy
+        strategy_entry, strategy_envelope, strategy_admission, strategy_transition = (
+            _admit_strategy(candidate, state, trial, prior_strategy)
         )
 
         admitted_strategies = _active_strategies(state)
@@ -258,10 +260,14 @@ class DcRsPhase12Adapter:
             tool_trace = _canonical_tool_trace(recorder, tool_events, generated_output)
         else:
             generated_output = generated.content
-        archive_entry = _archive_write(generated_output, canonical_task, trial, tool_trace=tool_trace)
+        archive_entry = _archive_write(
+            generated_output, canonical_task, trial, tool_trace=tool_trace
+        )
         state.archive.append(archive_entry)
         archive_envelope = _archive_envelope(archive_entry, trial)
-        archive_transition = _route_write(state, _archive_native(archive_entry), archive_envelope, trial)
+        archive_transition = _route_write(
+            state, _archive_native(archive_entry), archive_envelope, trial
+        )
 
         try:
             parsed_answer = parse_final_answer(generated_output)
@@ -284,7 +290,9 @@ class DcRsPhase12Adapter:
         else:
             archive_entry.metadata["parsed_answer"] = parsed_answer
             try:
-                verifier_result = trial.verifier(parsed_answer, trial.task) if trial.verifier else None
+                verifier_result = (
+                    trial.verifier(parsed_answer, trial.task) if trial.verifier else None
+                )
             except Exception:
                 outcome = _outcome(
                     "failed",
@@ -342,7 +350,10 @@ def _validate_trial_and_state(trial: DcRsTrialContextV3, state: DcRsStateV3) -> 
         )
     ):
         raise DcRsContractError("CURRENT_OUTCOME_LEAKAGE")
-    if any(key in trial.config for key in ("inferred_parent_ids", "direct_parent_ids", "parent_entry_ids")):
+    if any(
+        key in trial.config
+        for key in ("inferred_parent_ids", "direct_parent_ids", "parent_entry_ids")
+    ):
         raise DcRsContractError("IMPLICIT_PARENT_UNION")
     if any(
         key in trial.config
@@ -445,7 +456,12 @@ def _run_generation_tool_loop(
             policy,
             writer=trial.config.get("_tool_event_writer"),
         )
-    except (ToolExecutionError, ToolInfrastructureError, ToolPolicyError, ToolProtocolError) as error:
+    except (
+        ToolExecutionError,
+        ToolInfrastructureError,
+        ToolPolicyError,
+        ToolProtocolError,
+    ) as error:
         raise DcRsToolContractError(error.code) from error
 
 
@@ -485,7 +501,9 @@ def _canonical_tool_trace(
                 "stdout": event.output,
             }
         )
-    return json.dumps({"executions": executions, "final": final_answer}, sort_keys=True, separators=(",", ":"))
+    return json.dumps(
+        {"executions": executions, "final": final_answer}, sort_keys=True, separators=(",", ":")
+    )
 
 
 def _active_archive(state: DcRsStateV3) -> list[MemoryEntry]:
@@ -506,7 +524,8 @@ def _active_components(
     if state.filter_state is None:
         return list(components)
     active_ids = {
-        entry.entry_id if isinstance(entry, NativeEntry) else entry for entry in state.filter_state.reader_entries
+        entry.entry_id if isinstance(entry, NativeEntry) else entry
+        for entry in state.filter_state.reader_entries
     }
     known = {entry.entry_id: entry for entry in components}
     required = active_ids & set(known)
@@ -593,7 +612,9 @@ def _route_write(
         evidence_envelopes=(*state.admission_context.evidence_envelopes, envelope),
     )
     try:
-        transition = route_candidate_write(state.filter_state, CandidateWrite(entry, envelope), context)
+        transition = route_candidate_write(
+            state.filter_state, CandidateWrite(entry, envelope), context
+        )
     except AdmissionError as error:
         raise DcRsContractError(error.code) from error
     state.filter_state = transition.state
@@ -701,7 +722,9 @@ def _outcome(
     )
 
 
-def _memory_snapshots(strategies: Sequence[NativeEntry], archive: Sequence[MemoryEntry]) -> list[dict[str, Any]]:
+def _memory_snapshots(
+    strategies: Sequence[NativeEntry], archive: Sequence[MemoryEntry]
+) -> list[dict[str, Any]]:
     return [
         *(_strategy_memory(entry).model_dump() for entry in strategies),
         *(entry.model_dump() for entry in archive),
@@ -712,7 +735,9 @@ def _archive_entry(entry: MemoryEntry | NativeEntry) -> MemoryEntry:
     if isinstance(entry, MemoryEntry):
         if entry.memory_type == "dynamic_cheatsheet":
             raise DcRsContractError("DIRECT_STRATEGY_INJECTION")
-        if entry.memory_type != "dc_rs_io_pair" or not isinstance(entry.metadata.get("generated_output"), str):
+        if entry.memory_type != "dc_rs_io_pair" or not isinstance(
+            entry.metadata.get("generated_output"), str
+        ):
             raise DcRsContractError("INVALID_ARCHIVE_COMPONENT")
         return entry
     if not isinstance(entry, NativeEntry):
@@ -784,7 +809,9 @@ def _native_archive_values(content: str) -> tuple[str, str, str | None]:
         value = json.loads(content)
     except json.JSONDecodeError:
         return content, content, None
-    if not isinstance(value, dict) or not all(isinstance(value.get(key), str) for key in ("input", "raw_output")):
+    if not isinstance(value, dict) or not all(
+        isinstance(value.get(key), str) for key in ("input", "raw_output")
+    ):
         raise DcRsContractError("INVALID_ARCHIVE_COMPONENT")
     tool_trace = value.get("tool_trace")
     if tool_trace is not None and not isinstance(tool_trace, str):
@@ -815,7 +842,9 @@ def _explicit_source_ids(output: str) -> tuple[str, ...]:
         parsed = json.loads(value)
     except json.JSONDecodeError:
         parsed = [item.strip() for item in value.split(",")]
-    if not isinstance(parsed, list) or any(not isinstance(item, str) or not item.strip() for item in parsed):
+    if not isinstance(parsed, list) or any(
+        not isinstance(item, str) or not item.strip() for item in parsed
+    ):
         raise DcRsContractError("INVALID_EXPLICIT_SOURCE_IDS")
     return tuple(item.strip() for item in parsed)
 

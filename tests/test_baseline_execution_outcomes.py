@@ -262,7 +262,9 @@ def test_bot_invalid_solve_returns_closed_failure_without_verifier_or_write() ->
     assert outcome.memory_write_event is None
 
 
-def test_bot_invalid_thought_distillation_returns_closed_failure_without_verifier_or_write() -> None:
+def test_bot_invalid_thought_distillation_returns_closed_failure_without_verifier_or_write() -> (
+    None
+):
     from memcontam.baselines.bot_runtime import BotRuntime
     from memcontam.clients.replay import ReplayClient
     from memcontam.memory.bot_buffer import BotBufferIdentity

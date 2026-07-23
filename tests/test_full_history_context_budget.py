@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from memcontam.baselines.full_history import FullHistoryPayload, FullHistoryState, render_full_history
+from memcontam.baselines.full_history import (
+    FullHistoryPayload,
+    FullHistoryState,
+    render_full_history,
+)
 from memcontam.baselines.full_history_adapter import FullHistoryAdapter
 from memcontam.baselines.full_history_context import render_context_bounded_history
 from memcontam.baselines.prompt_budget import count_prompt_tokens
@@ -79,7 +83,9 @@ def test_adapter_retains_all_pairs_but_records_only_visible_sources_on_verifier_
     newest = _record("history-2", "newest-visible-pair")
 
     class Client:
-        def chat(self, messages: list[dict[str, str]], model: str, config: dict[str, object]) -> LLMResponse:
+        def chat(
+            self, messages: list[dict[str, str]], model: str, config: dict[str, object]
+        ) -> LLMResponse:
             del messages, model, config
             return LLMResponse(content="final: 24", raw={}, token_usage={}, latency_ms=0)
 

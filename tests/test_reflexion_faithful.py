@@ -21,8 +21,12 @@ from memcontam.tasks.dispatch import canonical_task_json
 def test_reflexion_contract_requires_structured_generation_and_authenticated_attempts() -> None:
     module = __import__("memcontam.baselines.reflexion_style", fromlist=["*"])
     fixture_dir = Path(__file__).parent / "fixtures/prompts"
-    generation_fixture = json.loads((fixture_dir / "reflexion_generate.json").read_text(encoding="utf-8"))
-    reflection_fixture = json.loads((fixture_dir / "reflexion_reflect.json").read_text(encoding="utf-8"))
+    generation_fixture = json.loads(
+        (fixture_dir / "reflexion_generate.json").read_text(encoding="utf-8")
+    )
+    reflection_fixture = json.loads(
+        (fixture_dir / "reflexion_reflect.json").read_text(encoding="utf-8")
+    )
 
     assert getattr(module, "ReflectionGenerationResult", None) is not None
     assert callable(getattr(module, "apply_keep_last_3", None))
@@ -67,7 +71,9 @@ def _reflection(text: str, used_ids: tuple[str, ...] = ()) -> str:
 
 
 def _adapter() -> ReflexionAdapter:
-    adapter = getattr(import_module("memcontam.baselines.reflexion_style"), "ReflexionAdapter", None)
+    adapter = getattr(
+        import_module("memcontam.baselines.reflexion_style"), "ReflexionAdapter", None
+    )
     assert adapter is not None
     return adapter()
 
@@ -108,11 +114,15 @@ def test_adapter_stores_terminal_reflection_after_two_authenticated_incorrect_at
         "reflexion_reflect",
     ]
     assert [call.retry_count for call in outcome.method_calls] == [0, 0, 0, 0]
-    assert [attempt["attempt_index"] for attempt in outcome.metadata["reflexion_attempt_outcomes"]] == [
+    assert [
+        attempt["attempt_index"] for attempt in outcome.metadata["reflexion_attempt_outcomes"]
+    ] == [
         1,
         2,
     ]
-    assert [attempt["failure_class"] for attempt in outcome.metadata["reflexion_attempt_outcomes"]] == [
+    assert [
+        attempt["failure_class"] for attempt in outcome.metadata["reflexion_attempt_outcomes"]
+    ] == [
         "incorrect_answer",
         "incorrect_answer",
     ]
@@ -147,7 +157,9 @@ def test_adapter_keeps_transport_retries_out_of_semantic_attempt_metadata() -> N
     )
 
     assert [call.retry_count for call in outcome.method_calls] == [3, 3, 3]
-    assert [attempt["attempt_index"] for attempt in outcome.metadata["reflexion_attempt_outcomes"]] == [
+    assert [
+        attempt["attempt_index"] for attempt in outcome.metadata["reflexion_attempt_outcomes"]
+    ] == [
         1,
         2,
     ]
@@ -164,7 +176,9 @@ def test_adapter_stops_before_authentication_on_malformed_generation() -> None:
     outcome = _adapter().execute(
         _task(),
         state,
-        client=ReplayClient(responses_by_sample={"sample_001": {fixture["stage"]: fixture["response"]}}),
+        client=ReplayClient(
+            responses_by_sample={"sample_001": {fixture["stage"]: fixture["response"]}}
+        ),
         model="replay",
         config=_config(max_attempts=2),
         verifier=lambda answer, _task: False,
@@ -256,7 +270,10 @@ def test_adapter_preserves_an_authenticated_reflection_when_retry_generation_is_
 
 
 def test_adapter_keeps_reflections_append_only_and_uses_only_visible_explicit_parents() -> None:
-    assert getattr(import_module("memcontam.baselines.reflexion_style"), "ReflexionState", None) is ReflexionState
+    assert (
+        getattr(import_module("memcontam.baselines.reflexion_style"), "ReflexionState", None)
+        is ReflexionState
+    )
     state = ReflexionState(
         reflections=[
             MemoryEntry(
@@ -267,8 +284,12 @@ def test_adapter_keeps_reflections_append_only_and_uses_only_visible_explicit_pa
                 metadata={"source_entry_ids": ["hidden-contamination"]},
             ),
             MemoryEntry(entry_id="two", content="Reflection: two", memory_type="verbal_reflection"),
-            MemoryEntry(entry_id="three", content="Reflection: three", memory_type="verbal_reflection"),
-            MemoryEntry(entry_id="four", content="Reflection: four", memory_type="verbal_reflection"),
+            MemoryEntry(
+                entry_id="three", content="Reflection: three", memory_type="verbal_reflection"
+            ),
+            MemoryEntry(
+                entry_id="four", content="Reflection: four", memory_type="verbal_reflection"
+            ),
         ]
     )
     outcome = _adapter().execute(
@@ -291,7 +312,11 @@ def test_adapter_keeps_reflections_append_only_and_uses_only_visible_explicit_pa
     assert state.reflections[-1].metadata["direct_parent_ids"] == ["two"]
     assert state.reflections[-1].metadata["memory_support_ids"] == ["two"]
     assert state.reflections[-1].metadata["source_entry_ids"] == ["two"]
-    assert state.reflections[-1].metadata["declared_updater_context_ids"] == ["two", "three", "four"]
+    assert state.reflections[-1].metadata["declared_updater_context_ids"] == [
+        "two",
+        "three",
+        "four",
+    ]
     assert state.reflections[-1].clean_or_contaminated == "clean"
     assert outcome.memory_write_event is not None
     assert outcome.memory_write_event["parent_entry_ids"] == ["two"]
@@ -307,7 +332,9 @@ def test_reflexion_adapter_never_renders_non_reflection_state_entries() -> None:
                 content="must not be rendered",
                 memory_type="seed",
             ),
-            MemoryEntry(entry_id="three", content="Reflection: three", memory_type="verbal_reflection"),
+            MemoryEntry(
+                entry_id="three", content="Reflection: three", memory_type="verbal_reflection"
+            ),
         ]
     )
     outcome = _adapter().execute(
@@ -362,7 +389,9 @@ def test_reflexion_prompt_renderers_match_committed_fixtures() -> None:
             responses_by_sample={
                 "sample_001": {
                     "reflexion_generate": "final: wrong",
-                    "reflexion_reflect": _reflection("verify the operator order.", ("reflection-1",)),
+                    "reflexion_reflect": _reflection(
+                        "verify the operator order.", ("reflection-1",)
+                    ),
                 }
             }
         ),
@@ -393,9 +422,7 @@ def test_run_success_generates_once_without_writing_and_uses_last_three_reflecti
             MemoryEntry(entry_id="latest", content="latest", memory_type="verbal_reflection"),
         ]
     )
-    client = ReplayClient(
-        responses_by_sample={"sample_001": {"reflexion_generate": "FINAL: 4"}}
-    )
+    client = ReplayClient(responses_by_sample={"sample_001": {"reflexion_generate": "FINAL: 4"}})
 
     def verify(*args: object) -> VerifierResult:
         assert args == ("4", task)
@@ -462,9 +489,9 @@ def test_run_max_attempts_one_preserves_reflect_then_return_without_retry() -> N
         responses_by_sample={
             "sample_001": {
                 "reflexion_generate": ["final: incorrect"],
-                    "reflexion_reflect": _reflection(
-                        "Re-check operator precedence.", ("one", "two", "three")
-                    ),
+                "reflexion_reflect": _reflection(
+                    "Re-check operator precedence.", ("one", "two", "three")
+                ),
             }
         }
     )
@@ -499,7 +526,10 @@ def test_run_max_attempts_one_preserves_reflect_then_return_without_retry() -> N
     assert appended.content == "Reflection: Re-check operator precedence."
     assert appended.memory_type == "verbal_reflection"
     assert appended.clean_or_contaminated == "contaminated"
-    assert appended.source_trial_id == "run_001:math_equation_balancer:sample_001:reflexion_style:clean:replay"
+    assert (
+        appended.source_trial_id
+        == "run_001:math_equation_balancer:sample_001:reflexion_style:clean:replay"
+    )
     assert appended.metadata["parent_entry_ids"] == ["one", "two", "three"]
     assert appended.metadata["source_entry_ids"] == ["one", "two", "three"]
     assert appended.metadata["reflection_lineage"]["stage"] == "reflexion_reflect"
@@ -534,7 +564,9 @@ def test_run_max_attempts_two_retries_same_sample_with_latest_three_memory_only(
         responses_by_sample={
             "sample_001": {
                 "reflexion_generate": ["final: incorrect", "final: 4"],
-                    "reflexion_reflect": _reflection("Check the equation format.", ("old", "one", "two")),
+                "reflexion_reflect": _reflection(
+                    "Check the equation format.", ("old", "one", "two")
+                ),
             }
         }
     )
@@ -582,7 +614,9 @@ def test_run_max_attempts_two_retries_same_sample_with_latest_three_memory_only(
     assert "Reflection: old" not in retry_prompt
     assert "TOP_SECRET_GOLD" not in retry_prompt
     retry_span = next(
-        span for span in result["method_calls"][-1].source_spans if span.entry_id == memory.entries[-1].entry_id
+        span
+        for span in result["method_calls"][-1].source_spans
+        if span.entry_id == memory.entries[-1].entry_id
     )
     assert retry_span.source_ids == ["old", "one", "two"]
     assert retry_span.parent_ids == ["old", "one", "two"]
@@ -609,7 +643,7 @@ def test_retry_answer_span_reuses_exact_reflection_lineage() -> None:
         responses_by_sample={
             "sample_001": {
                 "reflexion_generate": ["final: incorrect", "final: 4"],
-                    "reflexion_reflect": _reflection("Use the mitigation.", ("injected-reflection",)),
+                "reflexion_reflect": _reflection("Use the mitigation.", ("injected-reflection",)),
             }
         }
     )
@@ -724,7 +758,7 @@ def test_run_rejects_empty_failure_reflection_without_mutating_memory() -> None:
         responses_by_sample={
             "sample_001": {
                 "reflexion_generate": "final: incorrect",
-                    "reflexion_reflect": "not-json",
+                "reflexion_reflect": "not-json",
             }
         }
     )
@@ -798,7 +832,7 @@ def test_accepted_reflection_memory_event_normalizes_append() -> None:
         responses_by_sample={
             "sample_001": {
                 "reflexion_generate": "final: incorrect",
-                    "reflexion_reflect": _reflection("Check units.", ("one",)),
+                "reflexion_reflect": _reflection("Check units.", ("one",)),
             }
         }
     )
@@ -842,7 +876,7 @@ def test_rejected_empty_reflection_memory_event_preserves_snapshot() -> None:
         responses_by_sample={
             "sample_001": {
                 "reflexion_generate": "final: incorrect",
-                    "reflexion_reflect": "not-json",
+                "reflexion_reflect": "not-json",
             }
         }
     )

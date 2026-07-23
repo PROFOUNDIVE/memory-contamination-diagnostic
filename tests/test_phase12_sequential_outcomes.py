@@ -133,8 +133,14 @@ def test_classifies_only_registered_task_specific_failures() -> None:
         classify=lambda _query, output, _verifier: output == "fraction-pruned",
     )
 
-    assert classify_failure({"task_name": "game24"}, "fraction-pruned", None, {"game24": [classifier]}) == "fraction_pruned"
-    assert classify_failure({"task_name": "game24"}, "generic error", None, {"game24": [classifier]}) is None
+    assert (
+        classify_failure({"task_name": "game24"}, "fraction-pruned", None, {"game24": [classifier]})
+        == "fraction_pruned"
+    )
+    assert (
+        classify_failure({"task_name": "game24"}, "generic error", None, {"game24": [classifier]})
+        is None
+    )
 
 
 @pytest.mark.parametrize(

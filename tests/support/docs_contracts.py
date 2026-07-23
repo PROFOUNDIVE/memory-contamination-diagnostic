@@ -17,7 +17,9 @@ _PROHIBITED_CLAIMS = tuple(
         r"\b(?:benchmark|manuscript)(?:-quality)?\s+(?:result|results|evidence|claim|claims)\b",
     )
 )
-_NEGATION = re.compile(r"\b(?:not|no|never|isn't|aren't|cannot|can't|doesn't|don't)\b", re.IGNORECASE)
+_NEGATION = re.compile(
+    r"\b(?:not|no|never|isn't|aren't|cannot|can't|doesn't|don't)\b", re.IGNORECASE
+)
 
 
 @dataclass(frozen=True)

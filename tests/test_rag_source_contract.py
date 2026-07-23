@@ -87,7 +87,9 @@ def test_rag_source_contract_rejects_an_empty_identified_corpus(tmp_path: Path) 
     assert outcome.method_calls == ()
 
 
-def test_rag_source_contract_uses_three_text_only_documents_and_no_memory_write(tmp_path: Path) -> None:
+def test_rag_source_contract_uses_three_text_only_documents_and_no_memory_write(
+    tmp_path: Path,
+) -> None:
     task = _task()
     provider = FakeEmbeddingProvider(vector_dimension=8)
     entries, _ = build_arm_corpus(load_corpus(CORPUS_PATH), task.task_name, "clean")

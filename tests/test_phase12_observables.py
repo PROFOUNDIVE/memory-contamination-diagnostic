@@ -8,7 +8,12 @@ from typing import Literal
 import pytest
 
 from memcontam.logging.schema import PromptSourceSpan
-from memcontam.logging.schema_v3 import ContextEvent, MemoryArmExecutionKey, MemoryBranchTrialLog, RetrievalEvent
+from memcontam.logging.schema_v3 import (
+    ContextEvent,
+    MemoryArmExecutionKey,
+    MemoryBranchTrialLog,
+    RetrievalEvent,
+)
 
 
 RAG_FIXTURE = Path(__file__).parent / "fixtures" / "phase12" / "FX-RAG-001.json"
@@ -100,7 +105,11 @@ def _span(entry_id: str) -> PromptSourceSpan:
 
 def test_distinguishes_retrieval_final_context_exposure_and_use() -> None:
     rag = json.loads(RAG_FIXTURE.read_text(encoding="utf-8"))
-    false_id = next(document["id"] for document in rag["branch_documents"]["contam"] if "false" in document["id"])
+    false_id = next(
+        document["id"]
+        for document in rag["branch_documents"]["contam"]
+        if "false" in document["id"]
+    )
     clean_id = rag["branch_documents"]["clean"][0]["id"]
     target_set = observables.TargetSetEvidence(
         target_set_id="targets-v1",
@@ -122,7 +131,9 @@ def test_distinguishes_retrieval_final_context_exposure_and_use() -> None:
     assert truncated.use.is_used is False
 
     correct_id = next(
-        document["id"] for document in rag["branch_documents"]["correct"] if "correct" in document["id"]
+        document["id"]
+        for document in rag["branch_documents"]["correct"]
+        if "correct" in document["id"]
     )
     auxiliary = observables.compute_observables(
         _trial("correct"),

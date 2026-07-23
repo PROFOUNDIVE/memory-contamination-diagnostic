@@ -20,6 +20,7 @@ from memcontam.logging.schema_v3 import (
     RunMetadataV3,
     ScientificExploratoryCodeRunMetadata,
     SelectedRouteRunMetadata,
+    ScientificAdmissionReference,
     parse_log_record_v3,
 )
 
@@ -51,6 +52,9 @@ class RunArtifactRef:
     output_hash: str
     public_artifact_manifest_path: Path
     public_artifact_manifest_hash: str
+    route_selection_manifest_hash: str | None = None
+    seed_allocation_manifest_hash: str | None = None
+    exploratory_activation_manifest_hash: str | None = None
     rerun_parent_id: str | None = None
 
 
@@ -130,7 +134,9 @@ def write_run_manifest(manifest: RunManifest, path: Path | str) -> str:
 def read_run_manifest(path: Path | str) -> RunManifest:
     try:
         lines = Path(path).read_text(encoding="utf-8").splitlines()
-        manifest = RunManifest(tuple(_row_from_dict(json.loads(line)) for line in lines if line.strip()))
+        manifest = RunManifest(
+            tuple(_row_from_dict(json.loads(line)) for line in lines if line.strip())
+        )
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
         if isinstance(error, ManifestError):
             raise
@@ -167,9 +173,11 @@ def load_run_artifact_refs(path: Path | str) -> tuple[RunArtifactRef, ...]:
 def _build_row(ref: RunArtifactRef) -> RunManifestRow:
     _validate_artifact_ref(ref)
     metadata = ref.metadata
-    admission = getattr(metadata, "scientific_admission_ref", None)
-    if admission is None:
-        admission = getattr(metadata, "scientific_admission_ref_or_none", None)
+    admission: ScientificAdmissionReference | None
+    if isinstance(metadata, (PreRouteRunMetadata, NonScientificExploratoryCodeRunMetadata)):
+        admission = metadata.scientific_admission_ref_or_none
+    else:
+        admission = metadata.scientific_admission_ref
     common: dict[str, Any] = dict(
         run_id=ref.run_id,
         git_commit=ref.git_commit,
@@ -189,7 +197,9 @@ def _build_row(ref: RunArtifactRef) -> RunManifestRow:
         public_artifact_manifest_path=str(ref.public_artifact_manifest_path.resolve()),
         public_artifact_manifest_hash=ref.public_artifact_manifest_hash,
         scientific_result=metadata.scientific_result,
-        scientific_admission_hash_or_none=None if admission is None else canonical_json_hash(admission),
+        scientific_admission_hash_or_none=(
+            None if admission is None else canonical_json_hash(admission.model_dump(mode="json"))
+        ),
         rerun_parent_id=ref.rerun_parent_id,
     )
     if isinstance(metadata, PreRouteRunMetadata):
@@ -207,9 +217,13 @@ def _build_row(ref: RunArtifactRef) -> RunManifestRow:
         return SelectedRouteRunManifestRow(
             metadata_kind="selected_route",
             route_selection_manifest_id=metadata.route_selection_manifest_id,
-            route_selection_manifest_hash=None,
+            route_selection_manifest_hash=_required_governance_hash(
+                ref.route_selection_manifest_hash, "ROUTE_SELECTION_MISMATCH"
+            ),
             seed_allocation_manifest_id=metadata.seed_allocation_manifest_id,
-            seed_allocation_manifest_hash=None,
+            seed_allocation_manifest_hash=_required_governance_hash(
+                ref.seed_allocation_manifest_hash, "SEED_ALLOCATION_MISMATCH"
+            ),
             exploratory_activation_manifest_id=None,
             exploratory_activation_manifest_hash=None,
             **common,
@@ -229,11 +243,17 @@ def _build_row(ref: RunArtifactRef) -> RunManifestRow:
         return ExploratoryRunManifestRow(
             metadata_kind="exploratory_code_scientific",
             route_selection_manifest_id=metadata.source_route_selection_manifest_id,
-            route_selection_manifest_hash=None,
+            route_selection_manifest_hash=_required_governance_hash(
+                ref.route_selection_manifest_hash, "ROUTE_SELECTION_MISMATCH"
+            ),
             seed_allocation_manifest_id=metadata.source_seed_allocation_manifest_id,
-            seed_allocation_manifest_hash=None,
+            seed_allocation_manifest_hash=_required_governance_hash(
+                ref.seed_allocation_manifest_hash, "SEED_ALLOCATION_MISMATCH"
+            ),
             exploratory_activation_manifest_id=metadata.exploratory_activation_manifest_id,
-            exploratory_activation_manifest_hash=None,
+            exploratory_activation_manifest_hash=_required_governance_hash(
+                ref.exploratory_activation_manifest_hash, "ACTIVATION_MISMATCH"
+            ),
             **common,
         )
     raise ManifestError("UNKNOWN_METADATA_KIND")
@@ -260,6 +280,12 @@ def _validate_artifact_ref(ref: RunArtifactRef) -> None:
     )
 
 
+def _required_governance_hash(value: str | None, code: str) -> str:
+    if not value:
+        raise ManifestError(code)
+    return value
+
+
 def _validate_template(metadata: RunMetadataV3, template: TemplateSpec) -> None:
     if (
         metadata.run_template_id != _template_id(template)
@@ -268,14 +294,20 @@ def _validate_template(metadata: RunMetadataV3, template: TemplateSpec) -> None:
         or metadata.baseline_condition_id != template.baseline_condition_id
         or canonical_json_hash(metadata.execution_key.model_dump(mode="json"))
         != canonical_json_hash(template.execution_key.model_dump(mode="json"))
-        or canonical_json_hash(_sensitivity_payload(metadata.sensitivity_cell_ref.model_dump(mode="json")))
+        or canonical_json_hash(
+            _sensitivity_payload(metadata.sensitivity_cell_ref.model_dump(mode="json"))
+        )
         != canonical_json_hash(template.sensitivity_cell_ref)
     ):
         raise ManifestError("RUN_TEMPLATE_MISMATCH")
 
 
 def _template_id(template: TemplateSpec) -> str:
-    return template.prefix_template_key if isinstance(template, PrefixTemplateSpec) else template.run_template_id
+    return (
+        template.prefix_template_key
+        if isinstance(template, PrefixTemplateSpec)
+        else template.run_template_id
+    )
 
 
 def _sensitivity_payload(value: Mapping[str, Any]) -> dict[str, Any]:
@@ -349,7 +381,9 @@ def _validate_artifact_paths(
     ):
         raise ManifestError("MISSING_RAW_RANGE")
     try:
-        record_count = sum(1 for line in raw_log_path.read_text(encoding="utf-8").splitlines() if line.strip())
+        record_count = sum(
+            1 for line in raw_log_path.read_text(encoding="utf-8").splitlines() if line.strip()
+        )
     except OSError as error:
         raise ManifestError("RAW_LOG_HASH_MISMATCH") from error
     if raw_record_range[1] >= record_count:
@@ -373,7 +407,10 @@ def _validate_pre_route(row: PreRouteRunManifestRow) -> None:
         raise ManifestError("ROUTE_SELECTION_FORBIDDEN_PRE_ROUTE")
     if row.seed_allocation_manifest_id is not None or row.seed_allocation_manifest_hash is not None:
         raise ManifestError("SEED_ALLOCATION_FORBIDDEN_PRE_ROUTE")
-    if row.exploratory_activation_manifest_id is not None or row.exploratory_activation_manifest_hash is not None:
+    if (
+        row.exploratory_activation_manifest_id is not None
+        or row.exploratory_activation_manifest_hash is not None
+    ):
         raise ManifestError("EXPLORATORY_ACTIVATION_FORBIDDEN")
 
 
@@ -419,9 +456,10 @@ def _validate_exploratory(
     if not activation_id:
         raise ManifestError("EXPLORATORY_ACTIVATION_REQUIRED")
     activation = activations.get(activation_id)
-    if activation is None or (
-        row.exploratory_activation_manifest_hash is not None
-        and row.exploratory_activation_manifest_hash != activation.artifact_hash
+    if (
+        activation is None
+        or not row.exploratory_activation_manifest_hash
+        or row.exploratory_activation_manifest_hash != activation.artifact_hash
     ):
         raise ManifestError("ACTIVATION_MISMATCH")
     if (
@@ -440,11 +478,10 @@ def _route_selection(
     selection_id = row.route_selection_manifest_id
     if not selection_id:
         raise ManifestError("ROUTE_SELECTION_REQUIRED")
+    if not row.route_selection_manifest_hash:
+        raise ManifestError("ROUTE_SELECTION_MISMATCH")
     selection = route_manifests.get(selection_id)
-    if selection is None or (
-        row.route_selection_manifest_hash is not None
-        and row.route_selection_manifest_hash != selection.artifact_hash
-    ):
+    if selection is None or row.route_selection_manifest_hash != selection.artifact_hash:
         raise ManifestError("ROUTE_SELECTION_MISMATCH")
     return selection
 
@@ -455,11 +492,10 @@ def _seed_allocation(
     allocation_id = row.seed_allocation_manifest_id
     if not allocation_id:
         raise ManifestError("SEED_ALLOCATION_REQUIRED")
+    if not row.seed_allocation_manifest_hash:
+        raise ManifestError("SEED_ALLOCATION_MISMATCH")
     allocation = seed_allocations.get(allocation_id)
-    if allocation is None or (
-        row.seed_allocation_manifest_hash is not None
-        and row.seed_allocation_manifest_hash != allocation.artifact_hash
-    ):
+    if allocation is None or row.seed_allocation_manifest_hash != allocation.artifact_hash:
         raise ManifestError("SEED_ALLOCATION_MISMATCH")
     return allocation
 
@@ -520,6 +556,9 @@ def _artifact_ref_from_dict(value: Mapping[str, Any]) -> RunArtifactRef:
         output_hash=value["output_hash"],
         public_artifact_manifest_path=Path(value["public_artifact_manifest_path"]),
         public_artifact_manifest_hash=value["public_artifact_manifest_hash"],
+        route_selection_manifest_hash=value.get("route_selection_manifest_hash"),
+        seed_allocation_manifest_hash=value.get("seed_allocation_manifest_hash"),
+        exploratory_activation_manifest_hash=value.get("exploratory_activation_manifest_hash"),
         rerun_parent_id=value.get("rerun_parent_id"),
     )
 

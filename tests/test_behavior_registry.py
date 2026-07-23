@@ -48,7 +48,9 @@ def _write_rows(root: Path, rows: list[dict[str, object]]) -> None:
 
 
 def _refresh_row_hash(row: dict[str, object]) -> None:
-    row["row_hash"] = canonical_json_hash({key: value for key, value in row.items() if key != "row_hash"})
+    row["row_hash"] = canonical_json_hash(
+        {key: value for key, value in row.items() if key != "row_hash"}
+    )
 
 
 def test_loads_complete_frozen_registry_bundle() -> None:

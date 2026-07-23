@@ -116,7 +116,9 @@ def _parse_action(content: str) -> dict[str, Any]:
         return action
     if action["action"] != "execute_python":
         raise ToolProtocolError("UNKNOWN_ACTION")
-    if set(action) - {"action", "code", "timeout_seconds"} or not isinstance(action.get("code"), str):
+    if set(action) - {"action", "code", "timeout_seconds"} or not isinstance(
+        action.get("code"), str
+    ):
         raise ToolProtocolError("MALFORMED_ACTION")
     timeout = action.get("timeout_seconds")
     if timeout is not None and (isinstance(timeout, bool) or not isinstance(timeout, (int, float))):

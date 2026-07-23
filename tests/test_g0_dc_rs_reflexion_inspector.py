@@ -30,7 +30,9 @@ def _env() -> dict[str, str]:
     return env
 
 
-def _call(stage: str, model: str, content: str, *, records: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+def _call(
+    stage: str, model: str, content: str, *, records: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
     return {
         "stage": stage,
         "messages": [{"role": "user", "content": content}],
@@ -45,7 +47,9 @@ def _call(stage: str, model: str, content: str, *, records: list[dict[str, Any]]
 
 
 def _exposure(arm: str, memory: list[dict[str, Any]]) -> dict[str, Any]:
-    contaminated = [entry["entry_id"] for entry in memory if entry["clean_or_contaminated"] == "contaminated"]
+    contaminated = [
+        entry["entry_id"] for entry in memory if entry["clean_or_contaminated"] == "contaminated"
+    ]
     return {
         "condition": arm,
         "is_exposed": bool(contaminated),
@@ -101,7 +105,12 @@ def _dc_rs_trial(
         "metadata": {"output_text": "answer"},
     }
     calls = [
-        _call("dc_rs_synthesize", model, "<cheatsheet>synthetic strategy</cheatsheet>", records=records),
+        _call(
+            "dc_rs_synthesize",
+            model,
+            "<cheatsheet>synthetic strategy</cheatsheet>",
+            records=records,
+        ),
         _call("dc_rs_generate", model, "final: answer"),
     ]
     return TrialLog(
@@ -256,7 +265,12 @@ def test_inspector_accepts_exact_synthetic_followup_gate(tmp_path: Path) -> None
     assert result.returncode == 0, result.stderr + result.stdout
     report = json.loads(result.stdout)
     assert report["overall"] == "pass"
-    assert report["summary"] == {"trials": 108, "method_calls": 174, "dc_rs_calls": 108, "reflexion_calls": 66}
+    assert report["summary"] == {
+        "trials": 108,
+        "method_calls": 174,
+        "dc_rs_calls": 108,
+        "reflexion_calls": 66,
+    }
 
 
 def test_inspector_rejects_swapped_dc_rs_stages(tmp_path: Path) -> None:

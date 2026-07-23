@@ -68,16 +68,19 @@ def test_renders_triplet_variants_into_each_matching_native_domain() -> None:
             triplet.correct_twin.candidate_id,
             triplet.irrelevant_control.candidate_id,
         ]
-        assert {entry.semantic_kind for entry in (false_entry, correct_entry, irrelevant_entry)} == {
-            semantic_kind
-        }
-        assert {entry.native_component for entry in (false_entry, correct_entry, irrelevant_entry)} == {
-            native_component
-        }
-        assert {entry.schema_version for entry in (false_entry, correct_entry, irrelevant_entry)} == {
-            "phase12_native_entry_v1"
-        }
-        assert all(entry.direct_parent_ids == () for entry in (false_entry, correct_entry, irrelevant_entry))
+        assert {
+            entry.semantic_kind for entry in (false_entry, correct_entry, irrelevant_entry)
+        } == {semantic_kind}
+        assert {
+            entry.native_component for entry in (false_entry, correct_entry, irrelevant_entry)
+        } == {native_component}
+        assert {
+            entry.schema_version for entry in (false_entry, correct_entry, irrelevant_entry)
+        } == {"phase12_native_entry_v1"}
+        assert all(
+            entry.direct_parent_ids == ()
+            for entry in (false_entry, correct_entry, irrelevant_entry)
+        )
 
     dc_checkpoint = _checkpoint_module().serialize_checkpoint(
         _checkpoint_module().NativeState(
@@ -106,7 +109,9 @@ def test_rejects_forbidden_or_nonmatched_interventions() -> None:
 
     changed_clean_entry = replace(
         checkpoint,
-        state=replace(checkpoint.state, entries=("changed-clean-entry", *checkpoint.state.entries[1:])),
+        state=replace(
+            checkpoint.state, entries=("changed-clean-entry", *checkpoint.state.entries[1:])
+        ),
     )
     with pytest.raises(renderers.RendererError, match="CHECKPOINT_HASH_MISMATCH"):
         renderers.render_false("fh_bounded", triplet, changed_clean_entry)

@@ -50,9 +50,9 @@ def test_clean_and_contaminated_arms_share_identical_clean_records() -> None:
         contaminated_entries, _ = build_arm_corpus(records, task, "contaminated")
         filtered_entries, _ = build_arm_corpus(records, task, "contaminated_filter")
 
-        assert all(
-            entry.clean_or_contaminated == "clean" for entry in clean_entries
-        ), f"clean arm for {task} contains non-clean records"
+        assert all(entry.clean_or_contaminated == "clean" for entry in clean_entries), (
+            f"clean arm for {task} contains non-clean records"
+        )
 
         clean_ids = {entry.entry_id for entry in clean_entries}
         contaminated_ids = {entry.entry_id for entry in contaminated_entries}
@@ -81,9 +81,9 @@ def test_clean_and_contaminated_arms_share_identical_clean_records() -> None:
         assert len(filtered_entries) <= len(contaminated_entries), (
             f"filter arm for {task} grew the corpus"
         )
-        assert all(
-            entry.clean_or_contaminated != "contaminated" for entry in filtered_entries
-        ), f"filter arm for {task} still contains contaminated records"
+        assert all(entry.clean_or_contaminated != "contaminated" for entry in filtered_entries), (
+            f"filter arm for {task} still contains contaminated records"
+        )
 
         assert _content_hash(clean_entries) == _content_hash(clean_entries), (
             f"clean arm hash for {task} is not stable"
@@ -343,7 +343,10 @@ def test_dc_rs_v2_pair_preserves_raw_generated_output_and_separate_parsed_answer
         record = load_corpus(path)[0]
         entries, _ = build_arm_corpus([record], "game24", "clean")
 
-    assert record.generated_output == "Strategy: preserve intermediate values. Code: enumerate candidates."
+    assert (
+        record.generated_output
+        == "Strategy: preserve intermediate values. Code: enumerate candidates."
+    )
     assert record.parsed_answer == "candidate expression"
     assert record.output_text is None
     assert entries[0].metadata["generated_output"] == record.generated_output
@@ -464,7 +467,9 @@ def test_phase11_seed_provenance_rejects_invalid_seed_classes(
     )
 
     with tempfile.TemporaryDirectory() as tmp:
-        path = _write_fixture(Path(tmp), [_with_seed_provenance(_valid_clean_record("clean_game24_seed_003")), row])
+        path = _write_fixture(
+            Path(tmp), [_with_seed_provenance(_valid_clean_record("clean_game24_seed_003")), row]
+        )
         with pytest.raises(CorpusValidationError) as exc:
             load_corpus(path)
         assert f"bad_{contamination_class}_seed_001" in str(exc.value)
@@ -533,7 +538,9 @@ def test_dc_rs_arm_construction_keeps_clean_pair_and_filters_corruption(
         filtered_entries, filtered_meta = build_arm_corpus(records, task, "contaminated_filter")
 
         assert [entry.entry_id for entry in clean_entries] == [clean_id]
-        assert [entry.entry_id for entry in contaminated_entries] == sorted([clean_id, corrupted_id])
+        assert [entry.entry_id for entry in contaminated_entries] == sorted(
+            [clean_id, corrupted_id]
+        )
         assert [entry.entry_id for entry in filtered_entries] == [clean_id]
         assert filtered_meta is not None
         assert filtered_meta["filter_name"] == "drop_known_contaminated"
@@ -546,7 +553,8 @@ def test_dc_rs_arm_construction_keeps_clean_pair_and_filters_corruption(
         assert filtered_meta["kept_source_ids"] == [clean_id]
         assert filtered_meta["removed_source_ids"] == [corrupted_id]
         removed_decision = next(
-            decision for decision in filtered_meta["decisions"]
+            decision
+            for decision in filtered_meta["decisions"]
             if decision["entry_id"] == corrupted_id
         )
         assert removed_decision["ground_truth"] == "contaminated"
@@ -595,18 +603,20 @@ def test_drop_known_contaminated_records_item_level_decisions_and_counts() -> No
     assert len(decisions) == 2
 
     clean_decision = next(d for d in decisions if d["entry_id"] == "clean_game24_001")
-    assert clean_decision["content_hash"] == sha256(
-        "Break the problem into smaller sub-expressions.".encode("utf-8")
-    ).hexdigest()
+    assert (
+        clean_decision["content_hash"]
+        == sha256("Break the problem into smaller sub-expressions.".encode("utf-8")).hexdigest()
+    )
     assert clean_decision["ground_truth"] == "clean"
     assert clean_decision["action"] == "kept"
     assert clean_decision["reason"] == "clean"
     assert clean_decision["score"] is None
 
     corrupted_decision = next(d for d in decisions if d["entry_id"] == "corrupted_game24_001")
-    assert corrupted_decision["content_hash"] == sha256(
-        "A misleading rule that does not help.".encode("utf-8")
-    ).hexdigest()
+    assert (
+        corrupted_decision["content_hash"]
+        == sha256("A misleading rule that does not help.".encode("utf-8")).hexdigest()
+    )
     assert corrupted_decision["ground_truth"] == "contaminated"
     assert corrupted_decision["action"] == "removed"
     assert corrupted_decision["reason"] == "known_contaminated"

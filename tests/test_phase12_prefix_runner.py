@@ -237,7 +237,9 @@ def test_accepts_a_v3_style_writer_without_runner_specific_state() -> None:
         writer=writer,
     )
 
-    assert [trial_id for trial_id, _ in writer.trials] == [trial.trial_id for trial in writer.events]
+    assert [trial_id for trial_id, _ in writer.trials] == [
+        trial.trial_id for trial in writer.events
+    ]
     assert result.checkpoint_events == tuple(
         event for event in writer.events if event.record_type == "checkpoint_event"
     )

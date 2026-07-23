@@ -83,7 +83,11 @@ def _answer_call(calls_by_id: dict[str, CallEvent], trial: TrialLog) -> CallEven
 
 
 def _source_ids_from_spans(call: CallEvent) -> list[str]:
-    return [source_id for span in call.source_spans for source_id in (span.source_ids or [span.entry_id])]
+    return [
+        source_id
+        for span in call.source_spans
+        for source_id in (span.source_ids or [span.entry_id])
+    ]
 
 
 def _memory_snapshot(entries: list[dict[str, Any]]) -> str:
@@ -160,7 +164,9 @@ def test_logging_contract_replay_emits_exact_strict_39_row_artifacts(tmp_path, m
     assert not failures
     assert {call.trial_id for call in calls} == {trial.trial_id for trial in trials}
     assert {event.trial_id for event in filters}.issubset({trial.trial_id for trial in trials})
-    assert {event.trial_id for event in memory_events}.issubset({trial.trial_id for trial in trials})
+    assert {event.trial_id for event in memory_events}.issubset(
+        {trial.trial_id for trial in trials}
+    )
 
     all_event_sequences = [
         *(call.event_seq for call in calls),
@@ -181,7 +187,9 @@ def test_logging_contract_replay_emits_exact_strict_39_row_artifacts(tmp_path, m
         assert trial.stage == metadata.stage
         answer_call = _answer_call(calls_by_id, trial)
         trial_calls = calls_by_trial[trial.trial_id]
-        assert [call.call_id for call in trial_calls] == [call.call_id for call in trial.method_calls]
+        assert [call.call_id for call in trial_calls] == [
+            call.call_id for call in trial.method_calls
+        ]
         assert trial.prompt_messages == answer_call.messages
         assert trial.raw_response == answer_call.response_text
         assert trial.parsed_answer == trial.verifier_result.parsed_answer
@@ -204,7 +212,11 @@ def test_logging_contract_replay_emits_exact_strict_39_row_artifacts(tmp_path, m
             if exposure.is_exposed:
                 assert answer_call.source_spans
                 assert set(exposure.exposed_source_ids).issubset(
-                    {source_id for span in answer_call.source_spans for source_id in [span.entry_id, *span.source_ids]}
+                    {
+                        source_id
+                        for span in answer_call.source_spans
+                        for source_id in [span.entry_id, *span.source_ids]
+                    }
                 )
                 assert exposure.exposure_mode == "final_prompt"
             else:
@@ -258,7 +270,9 @@ def test_logging_contract_failure_continues_to_later_strict_trial(tmp_path, monk
     sample_path = tmp_path / "game24_two.jsonl"
     sample_path.write_text(
         "\n".join(
-            json.dumps({"sample_id": f"contract_failure_{index}", "numbers": [1, 3, 4, 6], "target": 24})
+            json.dumps(
+                {"sample_id": f"contract_failure_{index}", "numbers": [1, 3, 4, 6], "target": 24}
+            )
             for index in (1, 2)
         )
         + "\n",

@@ -12,7 +12,9 @@ from memcontam.logging.schema import CallEvent, FailureEvent, FilterEvent, Memor
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SEMANTIC_CALL_FIXTURES = ROOT / "tests" / "fixtures" / "baseline_fidelity_v2_semantic_call_hashes.json"
+SEMANTIC_CALL_FIXTURES = (
+    ROOT / "tests" / "fixtures" / "baseline_fidelity_v2_semantic_call_hashes.json"
+)
 
 
 def _json(path: Path) -> dict[str, Any]:
@@ -79,10 +81,14 @@ def inspect_run(run_dir: Path) -> dict[str, Any]:
     events_by_trial = {event.trial_id: event for event in memory_events}
     filters_by_trial = {event.trial_id: event for event in filters}
     expected_prompt_hashes = _json(SEMANTIC_CALL_FIXTURES)
-    trial_call_ids = [call.call_id for trial in trials for call in trial.method_calls if call.call_id]
+    trial_call_ids = [
+        call.call_id for trial in trials for call in trial.method_calls if call.call_id
+    ]
     if len(trial_call_ids) != len(set(trial_call_ids)) or set(trial_call_ids) != set(calls_by_id):
         reasons.append("calls.jsonl does not exactly join trial method calls")
-    failed_ids = {trial.failure_id for trial in trials if trial.status == "failed" and trial.failure_id}
+    failed_ids = {
+        trial.failure_id for trial in trials if trial.status == "failed" and trial.failure_id
+    }
     if failed_ids != set(failures_by_id):
         reasons.append("failures.jsonl does not exactly join failed trials")
     for trial in trials:
@@ -106,16 +112,25 @@ def inspect_run(run_dir: Path) -> dict[str, Any]:
             _check_spans(trial, call, reasons)
         if trial.status == "failed":
             failure = failures_by_id.get(trial.failure_id or "")
-            triple = (trial.error_type, trial.metadata.get("failure_disposition"), trial.metadata.get("scientific_ineligibility_reason"))
+            triple = (
+                trial.error_type,
+                trial.metadata.get("failure_disposition"),
+                trial.metadata.get("scientific_ineligibility_reason"),
+            )
             if failure is None or not all(isinstance(value, str) and value for value in triple):
                 reasons.append(f"{trial.trial_id}: missing closed failure triple")
             elif failure.error_type != trial.error_type or failure.disposition != triple[1]:
                 reasons.append(f"{trial.trial_id}: failure event does not match trial triple")
         event = events_by_trial.get(trial.trial_id)
-        changed = [entry.get("entry_id") for entry in trial.memory_before] != [entry.get("entry_id") for entry in trial.memory_after]
+        changed = [entry.get("entry_id") for entry in trial.memory_before] != [
+            entry.get("entry_id") for entry in trial.memory_after
+        ]
         if changed and event is None:
             reasons.append(f"{trial.trial_id}: state changed without memory event")
-        if event is not None and (event.before_entry_ids != [entry.get("entry_id") for entry in trial.memory_before] or event.after_entry_ids != [entry.get("entry_id") for entry in trial.memory_after]):
+        if event is not None and (
+            event.before_entry_ids != [entry.get("entry_id") for entry in trial.memory_before]
+            or event.after_entry_ids != [entry.get("entry_id") for entry in trial.memory_after]
+        ):
             reasons.append(f"{trial.trial_id}: memory event state delta mismatch")
         if trial.baseline == "retrieval_rag":
             if len(trial.method_calls) and len(trial.method_calls[0].retrieved_records) != 3:
@@ -124,7 +139,9 @@ def inspect_run(run_dir: Path) -> dict[str, Any]:
                 reasons.append(f"{trial.trial_id}: RAG is not read-only")
         if trial.filter_decision is None and trial.trial_id in filters_by_trial:
             reasons.append(f"{trial.trial_id}: unexpected filter event")
-    changed_trial_ids = {trial.trial_id for trial in trials if trial.memory_before != trial.memory_after}
+    changed_trial_ids = {
+        trial.trial_id for trial in trials if trial.memory_before != trial.memory_after
+    }
     if not changed_trial_ids.issubset(events_by_trial) or not set(events_by_trial).issubset(
         {trial.trial_id for trial in trials}
     ):
@@ -174,11 +191,15 @@ def _check_spans(trial: TrialLog, call: Any, reasons: list[str]) -> None:
             reasons.append(f"{trial.trial_id}: source span hash mismatch")
         derived = span.entry_id.startswith(("dc_rs_synthesized:", "reflexion_failed_actor:"))
         if span.entry_id not in entry_ids and not derived:
-            reasons.append(f"{trial.trial_id}: source span references unknown entry {span.entry_id}")
+            reasons.append(
+                f"{trial.trial_id}: source span references unknown entry {span.entry_id}"
+            )
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Inspect Baseline-Fidelity-V2 F1B replay artifacts.")
+    parser = argparse.ArgumentParser(
+        description="Inspect Baseline-Fidelity-V2 F1B replay artifacts."
+    )
     parser.add_argument("run_dir", type=Path)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args(argv)

@@ -73,7 +73,9 @@ class BaselineStepResultV3:
 
 
 class RagFrozenPhase12Adapter:
-    def execute(self, trial: RagFrozenTrialContextV3, state: RagFrozenStateV3) -> BaselineStepResultV3:
+    def execute(
+        self, trial: RagFrozenTrialContextV3, state: RagFrozenStateV3
+    ) -> BaselineStepResultV3:
         _validate_trial_and_state(trial, state)
         assert state.corpus is not None and state.index is not None
 
@@ -81,7 +83,9 @@ class RagFrozenPhase12Adapter:
         candidates = state.index.retrieve(query, 3)
         candidate_ids = tuple(candidate.document_id for candidate in candidates)
         included_ids = _included_ids(trial, candidate_ids)
-        removed_ids = tuple(candidate_id for candidate_id in candidate_ids if candidate_id not in included_ids)
+        removed_ids = tuple(
+            candidate_id for candidate_id in candidate_ids if candidate_id not in included_ids
+        )
         theory_exposure, auxiliary_inclusion = _exposure_fields(trial, included_ids)
 
         documents = {document.document_id: document for document in state.index.documents}
@@ -149,9 +153,13 @@ def _validate_trial_and_state(trial: RagFrozenTrialContextV3, state: RagFrozenSt
         raise RagExecutionError("FILTER_QUARANTINE_EXPOSURE")
 
 
-def _included_ids(trial: RagFrozenTrialContextV3, candidate_ids: tuple[str, ...]) -> tuple[str, ...]:
+def _included_ids(
+    trial: RagFrozenTrialContextV3, candidate_ids: tuple[str, ...]
+) -> tuple[str, ...]:
     included = candidate_ids if trial.included_document_ids is None else trial.included_document_ids
-    if len(set(included)) != len(included) or any(document_id not in candidate_ids for document_id in included):
+    if len(set(included)) != len(included) or any(
+        document_id not in candidate_ids for document_id in included
+    ):
         raise RagExecutionError("INVALID_FINAL_CONTEXT")
     return tuple(document_id for document_id in candidate_ids if document_id in included)
 

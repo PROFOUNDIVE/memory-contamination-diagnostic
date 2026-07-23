@@ -37,39 +37,57 @@ def test_replay_client_consumes_named_stages_in_order() -> None:
         latency_ms=0,
     )
 
-    assert client.chat(
-        [{"role": "user", "content": "prompt"}],
-        model="gpt-4o",
-        config={"sample_id": "sample_1", "method_stage": "bot_problem_distill"},
-    ).content == "distill response"
+    assert (
+        client.chat(
+            [{"role": "user", "content": "prompt"}],
+            model="gpt-4o",
+            config={"sample_id": "sample_1", "method_stage": "bot_problem_distill"},
+        ).content
+        == "distill response"
+    )
 
-    assert client.chat(
-        [{"role": "user", "content": "prompt"}],
-        model="gpt-4o",
-        config={"sample_id": "sample_1", "method_stage": "bot_instantiate_solve"},
-    ).content == "solve response"
+    assert (
+        client.chat(
+            [{"role": "user", "content": "prompt"}],
+            model="gpt-4o",
+            config={"sample_id": "sample_1", "method_stage": "bot_instantiate_solve"},
+        ).content
+        == "solve response"
+    )
 
-    assert client.chat(
-        [{"role": "user", "content": "prompt"}],
-        model="gpt-4o",
-        config={"sample_id": "sample_1", "method_stage": "bot_thought_distill"},
-    ).content == "thought response"
+    assert (
+        client.chat(
+            [{"role": "user", "content": "prompt"}],
+            model="gpt-4o",
+            config={"sample_id": "sample_1", "method_stage": "bot_thought_distill"},
+        ).content
+        == "thought response"
+    )
 
-    assert client.chat(
-        [{"role": "user", "content": "prompt"}],
-        model="gpt-4o",
-        config={"sample_id": "sample_1", "method_stage": "bot_novelty_decide"},
-    ).content == "yes"
-    assert client.chat(
-        [{"role": "user", "content": "prompt"}],
-        model="gpt-4o",
-        config={"sample_id": "sample_1", "method_stage": "bot_novelty_decide"},
-    ).content == "no"
-    assert client.chat(
-        [{"role": "user", "content": "prompt"}],
-        model="gpt-4o",
-        config={"sample_id": "sample_1", "method_stage": "bot_novelty_decide"},
-    ).content == "yes"
+    assert (
+        client.chat(
+            [{"role": "user", "content": "prompt"}],
+            model="gpt-4o",
+            config={"sample_id": "sample_1", "method_stage": "bot_novelty_decide"},
+        ).content
+        == "yes"
+    )
+    assert (
+        client.chat(
+            [{"role": "user", "content": "prompt"}],
+            model="gpt-4o",
+            config={"sample_id": "sample_1", "method_stage": "bot_novelty_decide"},
+        ).content
+        == "no"
+    )
+    assert (
+        client.chat(
+            [{"role": "user", "content": "prompt"}],
+            model="gpt-4o",
+            config={"sample_id": "sample_1", "method_stage": "bot_novelty_decide"},
+        ).content
+        == "yes"
+    )
 
 
 def test_replay_client_rejects_missing_required_stage() -> None:
@@ -107,21 +125,30 @@ def test_native_contract_replay_requires_stage_keyed_responses_for_multicall_bas
 def test_replay_client_flat_list_fallback_without_stage() -> None:
     client = ReplayClient(responses=["first", "second", "third"])
 
-    assert client.chat(
-        [{"role": "user", "content": "prompt"}],
-        model="gpt-4o",
-        config={},
-    ).content == "first"
-    assert client.chat(
-        [{"role": "user", "content": "prompt"}],
-        model="gpt-4o",
-        config={},
-    ).content == "second"
-    assert client.chat(
-        [{"role": "user", "content": "prompt"}],
-        model="gpt-4o",
-        config={},
-    ).content == "third"
+    assert (
+        client.chat(
+            [{"role": "user", "content": "prompt"}],
+            model="gpt-4o",
+            config={},
+        ).content
+        == "first"
+    )
+    assert (
+        client.chat(
+            [{"role": "user", "content": "prompt"}],
+            model="gpt-4o",
+            config={},
+        ).content
+        == "second"
+    )
+    assert (
+        client.chat(
+            [{"role": "user", "content": "prompt"}],
+            model="gpt-4o",
+            config={},
+        ).content
+        == "third"
+    )
 
 
 def test_replay_client_uses_v0_5_fixture_stage_responses() -> None:
@@ -130,31 +157,46 @@ def test_replay_client_uses_v0_5_fixture_stage_responses() -> None:
     sample_id = "game24_pilot_001"
     stages = fixture["responses_by_sample"][sample_id]
 
-    assert client.chat(
-        [{"role": "user", "content": "prompt"}],
-        model="replay",
-        config={"sample_id": sample_id, "method_stage": "full_history_generate"},
-    ).content == stages["full_history_generate"]
-    assert client.chat(
-        [{"role": "user", "content": "prompt"}],
-        model="replay",
-        config={"sample_id": sample_id, "method_stage": "reflexion_generate"},
-    ).content == stages["reflexion_generate"]
-    assert client.chat(
-        [{"role": "user", "content": "prompt"}],
-        model="replay",
-        config={"sample_id": sample_id, "method_stage": "reflexion_reflect"},
-    ).content == stages["reflexion_reflect"]
-    assert client.chat(
-        [{"role": "user", "content": "prompt"}],
-        model="replay",
-        config={"sample_id": sample_id, "method_stage": "dynamic_cheatsheet_generate"},
-    ).content == stages["dynamic_cheatsheet_generate"]
-    assert client.chat(
-        [{"role": "user", "content": "prompt"}],
-        model="replay",
-        config={"sample_id": sample_id, "method_stage": "dynamic_cheatsheet_curate"},
-    ).content == stages["dynamic_cheatsheet_curate"]
+    assert (
+        client.chat(
+            [{"role": "user", "content": "prompt"}],
+            model="replay",
+            config={"sample_id": sample_id, "method_stage": "full_history_generate"},
+        ).content
+        == stages["full_history_generate"]
+    )
+    assert (
+        client.chat(
+            [{"role": "user", "content": "prompt"}],
+            model="replay",
+            config={"sample_id": sample_id, "method_stage": "reflexion_generate"},
+        ).content
+        == stages["reflexion_generate"]
+    )
+    assert (
+        client.chat(
+            [{"role": "user", "content": "prompt"}],
+            model="replay",
+            config={"sample_id": sample_id, "method_stage": "reflexion_reflect"},
+        ).content
+        == stages["reflexion_reflect"]
+    )
+    assert (
+        client.chat(
+            [{"role": "user", "content": "prompt"}],
+            model="replay",
+            config={"sample_id": sample_id, "method_stage": "dynamic_cheatsheet_generate"},
+        ).content
+        == stages["dynamic_cheatsheet_generate"]
+    )
+    assert (
+        client.chat(
+            [{"role": "user", "content": "prompt"}],
+            model="replay",
+            config={"sample_id": sample_id, "method_stage": "dynamic_cheatsheet_curate"},
+        ).content
+        == stages["dynamic_cheatsheet_curate"]
+    )
 
 
 def test_replay_client_respects_reflexion_and_dc_stage_order() -> None:
@@ -197,31 +239,46 @@ def test_replay_client_uses_followup_fixture_stage_responses() -> None:
     sample_id = "game24_pilot_001"
     stages = fixture["responses_by_sample"][sample_id]
 
-    assert client.chat(
-        [{"role": "user", "content": "prompt"}],
-        model="replay",
-        config={"sample_id": sample_id, "method_stage": "dc_rs_synthesize"},
-    ).content == stages["dc_rs_synthesize"]
-    assert client.chat(
-        [{"role": "user", "content": "prompt"}],
-        model="replay",
-        config={"sample_id": sample_id, "method_stage": "dc_rs_generate"},
-    ).content == stages["dc_rs_generate"]
-    assert client.chat(
-        [{"role": "user", "content": "prompt"}],
-        model="replay",
-        config={"sample_id": sample_id, "method_stage": "reflexion_generate"},
-    ).content == stages["reflexion_generate"][0]
-    assert client.chat(
-        [{"role": "user", "content": "prompt"}],
-        model="replay",
-        config={"sample_id": sample_id, "method_stage": "reflexion_reflect"},
-    ).content == stages["reflexion_reflect"]
-    assert client.chat(
-        [{"role": "user", "content": "prompt"}],
-        model="replay",
-        config={"sample_id": sample_id, "method_stage": "reflexion_generate"},
-    ).content == stages["reflexion_generate"][1]
+    assert (
+        client.chat(
+            [{"role": "user", "content": "prompt"}],
+            model="replay",
+            config={"sample_id": sample_id, "method_stage": "dc_rs_synthesize"},
+        ).content
+        == stages["dc_rs_synthesize"]
+    )
+    assert (
+        client.chat(
+            [{"role": "user", "content": "prompt"}],
+            model="replay",
+            config={"sample_id": sample_id, "method_stage": "dc_rs_generate"},
+        ).content
+        == stages["dc_rs_generate"]
+    )
+    assert (
+        client.chat(
+            [{"role": "user", "content": "prompt"}],
+            model="replay",
+            config={"sample_id": sample_id, "method_stage": "reflexion_generate"},
+        ).content
+        == stages["reflexion_generate"][0]
+    )
+    assert (
+        client.chat(
+            [{"role": "user", "content": "prompt"}],
+            model="replay",
+            config={"sample_id": sample_id, "method_stage": "reflexion_reflect"},
+        ).content
+        == stages["reflexion_reflect"]
+    )
+    assert (
+        client.chat(
+            [{"role": "user", "content": "prompt"}],
+            model="replay",
+            config={"sample_id": sample_id, "method_stage": "reflexion_generate"},
+        ).content
+        == stages["reflexion_generate"][1]
+    )
 
 
 def test_replay_client_followup_non_retry_samples_have_single_reflexion_generate() -> None:
@@ -232,11 +289,14 @@ def test_replay_client_followup_non_retry_samples_have_single_reflexion_generate
         if sample_id == "game24_pilot_001":
             continue
         assert isinstance(stages["reflexion_generate"], str), sample_id
-        assert client.chat(
-            [{"role": "user", "content": "prompt"}],
-            model="replay",
-            config={"sample_id": sample_id, "method_stage": "reflexion_generate"},
-        ).content == stages["reflexion_generate"]
+        assert (
+            client.chat(
+                [{"role": "user", "content": "prompt"}],
+                model="replay",
+                config={"sample_id": sample_id, "method_stage": "reflexion_generate"},
+            ).content
+            == stages["reflexion_generate"]
+        )
 
 
 def test_replay_client_followup_dc_rs_stages_are_ordered_before_reflexion() -> None:
@@ -245,18 +305,27 @@ def test_replay_client_followup_dc_rs_stages_are_ordered_before_reflexion() -> N
     sample_id = "meb_pilot_001"
     stages = fixture["responses_by_sample"][sample_id]
 
-    assert client.chat(
-        [{"role": "user", "content": "prompt"}],
-        model="replay",
-        config={"sample_id": sample_id, "method_stage": "dc_rs_synthesize"},
-    ).content == stages["dc_rs_synthesize"]
-    assert client.chat(
-        [{"role": "user", "content": "prompt"}],
-        model="replay",
-        config={"sample_id": sample_id, "method_stage": "dc_rs_generate"},
-    ).content == stages["dc_rs_generate"]
-    assert client.chat(
-        [{"role": "user", "content": "prompt"}],
-        model="replay",
-        config={"sample_id": sample_id, "method_stage": "reflexion_generate"},
-    ).content == stages["reflexion_generate"]
+    assert (
+        client.chat(
+            [{"role": "user", "content": "prompt"}],
+            model="replay",
+            config={"sample_id": sample_id, "method_stage": "dc_rs_synthesize"},
+        ).content
+        == stages["dc_rs_synthesize"]
+    )
+    assert (
+        client.chat(
+            [{"role": "user", "content": "prompt"}],
+            model="replay",
+            config={"sample_id": sample_id, "method_stage": "dc_rs_generate"},
+        ).content
+        == stages["dc_rs_generate"]
+    )
+    assert (
+        client.chat(
+            [{"role": "user", "content": "prompt"}],
+            model="replay",
+            config={"sample_id": sample_id, "method_stage": "reflexion_generate"},
+        ).content
+        == stages["reflexion_generate"]
+    )

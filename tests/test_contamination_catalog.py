@@ -113,9 +113,7 @@ def test_v2_corpus_contaminated_pairs_match_clean_record(v2_corpus) -> None:
 
 def test_v2_corpus_clean_payload_matches_task_strategy(v2_corpus) -> None:
     v1 = load_corpus(Path(__file__).resolve().parents[1] / "data/memory/catalog_v1.jsonl")
-    v1_clean_by_task = {
-        r.task: r.content for r in v1 if r.clean_or_contaminated == "clean"
-    }
+    v1_clean_by_task = {r.task: r.content for r in v1 if r.clean_or_contaminated == "clean"}
     dc_rs_clean_by_task = {
         "game24": '{"numbers":[1,2,3,3],"target":9}',
         "math_equation_balancer": '{"input":"7 + 8 = ?"}',

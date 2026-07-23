@@ -27,7 +27,7 @@ registry_hashes:
   behavior: 52627253c96cd0f1592e74a32e26f81bd68749f7b1c76c15396abaf0ae02cd36
   inv03_equivalence: ffdb247dc187d462208dbe9f7a4ead8bfa27def24a3052baedca77c50aa2e620
 exploratory_run_template_registry_id: exploratory-registry-v1
-exploratory_run_template_registry_hash: exploratory-registry-hash
+exploratory_run_template_registry_hash: abfab50e644ed7bd48d3710922a0313ec8307d409c1b0040232e4a3fb8d484d2
 abstract_slots: [game24|exploratory|slot-001]
 estimated_exploratory_calls: 12
 oci_contract_path: containers/python-sandbox/image.lock.json

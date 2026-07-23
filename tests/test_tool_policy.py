@@ -69,4 +69,6 @@ def test_primary_text_only_modules_do_not_import_tools() -> None:
             for node in ast.walk(tree)
             if isinstance(node, ast.ImportFrom) and node.module is not None
         }
-        assert not any(name == "memcontam.tools" or name.startswith("memcontam.tools.") for name in imports)
+        assert not any(
+            name == "memcontam.tools" or name.startswith("memcontam.tools.") for name in imports
+        )

@@ -97,9 +97,7 @@ def _check_rag(trials: list[TrialLog]) -> dict[str, Any]:
         else:
             read_only_trials += 1
 
-        call_records = [
-            record for call in generate_calls for record in call.retrieved_records
-        ]
+        call_records = [record for call in generate_calls for record in call.retrieved_records]
         trial_corpus_hashes = {record.corpus_hash for record in call_records}
         metadata_corpus_hash = trial.metadata.get("corpus_hash")
         if len(trial_corpus_hashes) != 1:
@@ -132,9 +130,7 @@ def _check_rag(trials: list[TrialLog]) -> dict[str, Any]:
             if record.document_id not in prompt_text or record.text not in prompt_text
         ]
         if missing:
-            reasons.append(
-                f"{trial.trial_id}: prompt missing retrieved record IDs/text: {missing}"
-            )
+            reasons.append(f"{trial.trial_id}: prompt missing retrieved record IDs/text: {missing}")
             continue
         aligned_trials += 1
 
@@ -343,7 +339,9 @@ def _check_logging(trials: list[TrialLog]) -> dict[str, Any]:
         for call in trial.method_calls:
             if call.error_type is not None:
                 error_calls += 1
-                reasons.append(f"{trial.trial_id}: {call.stage} call recorded error {call.error_type!r}")
+                reasons.append(
+                    f"{trial.trial_id}: {call.stage} call recorded error {call.error_type!r}"
+                )
 
     missing_calls = len(target_trials) - trials_with_calls
     if missing_calls:
@@ -376,8 +374,12 @@ def inspect_run(run_dir: Path) -> dict[str, Any]:
         "logging": logging_result["pass"],
         "rag_counts": {k: v for k, v in rag_result.items() if k not in {"pass", "reasons"}},
         "bot_counts": {k: v for k, v in bot_result.items() if k not in {"pass", "reasons"}},
-        "persistence_counts": {k: v for k, v in persistence_result.items() if k not in {"pass", "reasons"}},
-        "isolation_counts": {k: v for k, v in isolation_result.items() if k not in {"pass", "reasons"}},
+        "persistence_counts": {
+            k: v for k, v in persistence_result.items() if k not in {"pass", "reasons"}
+        },
+        "isolation_counts": {
+            k: v for k, v in isolation_result.items() if k not in {"pass", "reasons"}
+        },
         "logging_counts": {k: v for k, v in logging_result.items() if k not in {"pass", "reasons"}},
         "reasons": (
             rag_result.get("reasons", [])
@@ -392,13 +394,21 @@ def inspect_run(run_dir: Path) -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Validate a G0 RAG/BoT replay run for fidelity.")
-    parser.add_argument("run_dir", type=Path, help="path to the run directory containing trials.jsonl")
+    parser.add_argument(
+        "run_dir", type=Path, help="path to the run directory containing trials.jsonl"
+    )
     args = parser.parse_args(argv)
 
     report = inspect_run(args.run_dir)
     print(json.dumps(report, indent=2))
 
-    checks = [report["rag"], report["bot"], report["persistence"], report["isolation"], report["logging"]]
+    checks = [
+        report["rag"],
+        report["bot"],
+        report["persistence"],
+        report["isolation"],
+        report["logging"],
+    ]
     return 0 if all(check == "pass" for check in checks) else 1
 
 

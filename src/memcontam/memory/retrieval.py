@@ -61,7 +61,10 @@ class DenseIndex:
         query_vector = self.provider.encode_query(query)
         document_ids = [entry.entry_id for entry in self.entries]
         scores = normalized_dot_top_k(query_vector, self.document_vectors, document_ids, k)
-        return [self._retrieval_record(document_id, score, rank) for rank, (document_id, score) in enumerate(scores, 1)]
+        return [
+            self._retrieval_record(document_id, score, rank)
+            for rank, (document_id, score) in enumerate(scores, 1)
+        ]
 
     def _retrieval_record(self, document_id: str, score: float, rank: int) -> RetrievalRecord:
         entry = self._entries_by_id[document_id]
@@ -98,7 +101,9 @@ class DenseIndex:
         vectors = [self.provider.encode_document(entry.content) for entry in self.entries]
         _validate_vectors(vectors, [entry.entry_id for entry in self.entries])
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.manifest_path.write_text(json.dumps(self.manifest, sort_keys=True, indent=2), encoding="utf-8")
+        self.manifest_path.write_text(
+            json.dumps(self.manifest, sort_keys=True, indent=2), encoding="utf-8"
+        )
         self.vectors_path.write_text(json.dumps(vectors), encoding="utf-8")
         return vectors
 
@@ -122,13 +127,22 @@ def retrieve_records(query: str, entries: list[MemoryEntry], k: int = 3) -> list
     if k <= 0 or not entries:
         return []
     with tempfile.TemporaryDirectory() as cache_dir:
-        records = DenseIndex(entries, provider=FakeEmbeddingProvider(), cache_dir=cache_dir).retrieve(query, k)
-    return [_legacy_record(record, _entries_by_id(entries)[record.document_id]) for record in records]
+        records = DenseIndex(
+            entries, provider=FakeEmbeddingProvider(), cache_dir=cache_dir
+        ).retrieve(query, k)
+    return [
+        _legacy_record(record, _entries_by_id(entries)[record.document_id]) for record in records
+    ]
 
 
-def lexical_retrieve(query: str, entries: list[MemoryEntry], k: int = 3) -> list[tuple[MemoryEntry, float]]:
+def lexical_retrieve(
+    query: str, entries: list[MemoryEntry], k: int = 3
+) -> list[tuple[MemoryEntry, float]]:
     # ponytail: compatibility wrapper for older tuple callers; new code should use retrieve_records().
-    return [(record["memory_entry"], record["score"]) for record in retrieve_records(query, entries, k=k)]
+    return [
+        (record["memory_entry"], record["score"])
+        for record in retrieve_records(query, entries, k=k)
+    ]
 
 
 def _legacy_record(record: RetrievalRecord, entry: MemoryEntry) -> RetrievedRecord:

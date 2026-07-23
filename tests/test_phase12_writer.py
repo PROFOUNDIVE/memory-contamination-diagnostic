@@ -158,14 +158,20 @@ def test_writes_and_reopens_complete_v3_run(tmp_path: Path) -> None:
     for filename, artifact in manifest.artifacts.items():
         payload = (run_dir / filename).read_bytes()
         assert artifact["sha256"] == hashlib.sha256(payload).hexdigest()
-        assert artifact["count"] == (1 if filename == "run.json" else len(_jsonl(run_dir / filename)))
+        assert artifact["count"] == (
+            1 if filename == "run.json" else len(_jsonl(run_dir / filename))
+        )
         if filename.endswith(".jsonl"):
             assert all(
-                line == json.dumps(json.loads(line), ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+                line
+                == json.dumps(
+                    json.loads(line), ensure_ascii=False, separators=(",", ":"), sort_keys=True
+                )
                 for line in (run_dir / filename).read_text(encoding="utf-8").splitlines()
             )
     public_payload = "".join(
-        (run_dir / filename).read_text(encoding="utf-8") for filename in (*PUBLIC_STREAMS, "run.json")
+        (run_dir / filename).read_text(encoding="utf-8")
+        for filename in (*PUBLIC_STREAMS, "run.json")
     )
     assert "audit_label" not in public_payload
     assert "private" not in public_payload
@@ -181,7 +187,9 @@ def test_rejects_invalid_ids_audit_leakage_and_nonatomic_finalize(
     with pytest.raises(Phase12WriteError, match="DUPLICATE_EVENT_ID"):
         writer.append_event(tool_event)
     with pytest.raises(Phase12WriteError, match="UNKNOWN_TRIAL_ID"):
-        writer.append_event(_events("invalid", "missing")[0].model_copy(update={"event_id": "tool-2"}))
+        writer.append_event(
+            _events("invalid", "missing")[0].model_copy(update={"event_id": "tool-2"})
+        )
     leaked_admission = _events("invalid", "trial-1")[3].model_copy(
         update={"audit_label": "private"}
     )

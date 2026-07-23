@@ -12,7 +12,9 @@ def test_certifies_registered_precedence_counterexample() -> None:
     from memcontam.contamination.phase12.registry import load_candidate_registry
 
     triplet = next(
-        item for item in load_candidate_registry(REGISTRY_PATH).triplets if item.task == "math_equation_balancer"
+        item
+        for item in load_candidate_registry(REGISTRY_PATH).triplets
+        if item.task == "math_equation_balancer"
     )
     result = certify_triplet(triplet, CertificationSuite.primary())
 

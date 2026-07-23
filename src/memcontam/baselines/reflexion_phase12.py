@@ -8,7 +8,12 @@ from memcontam.baselines.reflexion_adapter import ReflexionAdapter, ReflexionSta
 from memcontam.clients.base import LLMClient
 from memcontam.memory.admission import AdmissionContext, AdmissionError
 from memcontam.memory.cards_v3 import MEMORY_CARD_V3, MemoryCardEnvelopeV3, canonical_content_hash
-from memcontam.memory.checkpoint_v3 import NATIVE_ENTRY_V1, NativeEntry, NativeState, serialize_checkpoint
+from memcontam.memory.checkpoint_v3 import (
+    NATIVE_ENTRY_V1,
+    NativeEntry,
+    NativeState,
+    serialize_checkpoint,
+)
 from memcontam.memory.filtered_state import (
     CandidateWrite,
     FilterTransition,
@@ -58,7 +63,10 @@ class ReflexionTrialContextV3:
             raise ReflexionContractError("INVALID_TRIAL_CONTEXT")
         if not isinstance(self.order_key, (int, str)) or isinstance(self.order_key, bool):
             raise ReflexionContractError("INVALID_TRIAL_CONTEXT")
-        if self.tool_mode != "text_only" or self.config.get("tool_mode", "text_only") != "text_only":
+        if (
+            self.tool_mode != "text_only"
+            or self.config.get("tool_mode", "text_only") != "text_only"
+        ):
             raise ReflexionContractError("PRIMARY_TOOL_FORBIDDEN")
         if self.config.get("tools"):
             raise ReflexionContractError("PRIMARY_TOOL_FORBIDDEN")
@@ -86,7 +94,10 @@ class ReflexionStateV3:
             reflection_ids = _entry_ids(self.reflections)
             if not reflection_ids or reflection_ids[-1] != self.injected_root_id:
                 raise ReflexionContractError("INJECTED_REFLECTION_NOT_NEWEST")
-        if self.active_capacity is not None and len(_active_reflections(self)) > self.active_capacity:
+        if (
+            self.active_capacity is not None
+            and len(_active_reflections(self)) > self.active_capacity
+        ):
             raise ReflexionContractError("ACTIVE_CAPACITY_MISCOUNT")
 
 
@@ -116,7 +127,9 @@ class BaselineStepResultV3:
 
 
 class ReflexionPhase12Adapter:
-    def execute(self, trial: ReflexionTrialContextV3, state: ReflexionStateV3) -> BaselineStepResultV3:
+    def execute(
+        self, trial: ReflexionTrialContextV3, state: ReflexionStateV3
+    ) -> BaselineStepResultV3:
         _validate_branch_state(trial, state)
         active = _active_reflections(state)
         native_reflections: list[NativeEntry] = []
@@ -230,7 +243,11 @@ def _native_reflection(
     lineage_parents = _direct_parent_ids(entry)
     supports = _identifier_metadata(entry, "memory_support_ids")
     sources = _identifier_metadata(entry, "source_entry_ids")
-    visible_ids = {reflection.entry_id for reflection in visible_reflections if reflection.entry_id != entry.entry_id}
+    visible_ids = {
+        reflection.entry_id
+        for reflection in visible_reflections
+        if reflection.entry_id != entry.entry_id
+    }
     if supports != sources or (lineage_parents and lineage_parents != supports):
         raise ReflexionContractError("IMPLICIT_PARENT_UNION")
     parents = supports
@@ -274,11 +291,15 @@ def _native_reflection(
         content=native.content,
         content_hash=native.content_hash,
     )
-    return native, envelope, ReflectionCallLineageEvent(
-        actor_call_id=failed_actor_call_id,
-        reflection_call_id=reflection_call_id,
-        failed_actor_call_id=failed_actor_call_id,
-        reflection_entry_id=native.entry_id,
+    return (
+        native,
+        envelope,
+        ReflectionCallLineageEvent(
+            actor_call_id=failed_actor_call_id,
+            reflection_call_id=reflection_call_id,
+            failed_actor_call_id=failed_actor_call_id,
+            reflection_entry_id=native.entry_id,
+        ),
     )
 
 
@@ -315,7 +336,9 @@ def _route_filter_write(
         evidence_envelopes=(*state.admission_context.evidence_envelopes, envelope),
     )
     try:
-        transition = route_candidate_write(state.filter_state, CandidateWrite(native, envelope), context)
+        transition = route_candidate_write(
+            state.filter_state, CandidateWrite(native, envelope), context
+        )
     except AdmissionError as error:
         raise ReflexionContractError(error.code) from error
     state.filter_state = transition.state
@@ -336,14 +359,23 @@ def _enforce_active_capacity(
         _remove_reflection(state, legacy_state, evicted.entry_id)
         _remove_from_filter_active_state(state, evicted.entry_id)
         state.evicted_reflections.append(evicted)
-        if state.injected_root_id == evicted.entry_id and state.first_injected_eviction_trial_id is None:
+        if (
+            state.injected_root_id == evicted.entry_id
+            and state.first_injected_eviction_trial_id is None
+        ):
             state.first_injected_eviction_trial_id = trial.trial_id
-        evictions.append(ReflectionEvictionEvent(evicted.entry_id, trial.trial_id, state.active_capacity))
+        evictions.append(
+            ReflectionEvictionEvent(evicted.entry_id, trial.trial_id, state.active_capacity)
+        )
 
 
-def _remove_reflection(state: ReflexionStateV3, legacy_state: ReflexionState, entry_id: str) -> None:
+def _remove_reflection(
+    state: ReflexionStateV3, legacy_state: ReflexionState, entry_id: str
+) -> None:
     state.reflections[:] = [entry for entry in state.reflections if _entry_id(entry) != entry_id]
-    legacy_state.reflections[:] = [entry for entry in legacy_state.reflections if entry.entry_id != entry_id]
+    legacy_state.reflections[:] = [
+        entry for entry in legacy_state.reflections if entry.entry_id != entry_id
+    ]
 
 
 def _remove_from_filter_active_state(state: ReflexionStateV3, entry_id: str) -> None:
@@ -354,7 +386,9 @@ def _remove_from_filter_active_state(state: ReflexionStateV3, entry_id: str) -> 
     if len(retained_entries) == len(active.entries):
         return
     retained_envelopes = tuple(
-        envelope for envelope in state.filter_state.active_envelopes if envelope.entry_id != entry_id
+        envelope
+        for envelope in state.filter_state.active_envelopes
+        if envelope.entry_id != entry_id
     )
     state.filter_state = replace(
         state.filter_state,

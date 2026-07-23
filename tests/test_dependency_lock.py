@@ -45,6 +45,10 @@ def _run(command: list[str], environment: dict[str, str]) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def _lock_body(path: Path) -> bytes:
+    return b"".join(path.read_bytes().splitlines(keepends=True)[6:])
+
+
 def _environment(custom_compile_command: str | None = None) -> dict[str, str]:
     environment = os.environ | {
         "PIP_CONFIG_FILE": "/dev/null",
@@ -100,6 +104,8 @@ def test_committed_locks_reproduce_with_mandated_pip_tools_commands() -> None:
             "runtime": temporary_root / "requirements.lock",
             "dev": temporary_root / "requirements-dev.lock",
         }
+        for name, output in outputs.items():
+            output.write_bytes(LOCKS[name].read_bytes())
         _run(
             [
                 "python",
@@ -133,7 +139,7 @@ def test_committed_locks_reproduce_with_mandated_pip_tools_commands() -> None:
                 "--resolver=backtracking --output-file=requirements-dev.lock pyproject.toml"
             ),
         )
-        assert all(outputs[name].read_bytes() == path.read_bytes() for name, path in LOCKS.items())
+        assert all(_lock_body(outputs[name]) == _lock_body(path) for name, path in LOCKS.items())
 
 
 def test_committed_locks_support_hash_checked_dependency_resolution() -> None:

@@ -19,8 +19,8 @@ EXPECTED_REPOSITORY_COMMIT = "830b89c8c169ffa9cdea472887fdae134dbae7cf"
 EXPECTED_F1C_CONTRACT_REFS = {
     "cache_setup_doc_blob_sha": "d2d1e7b2d2405e77c1708ae2a6af808a0316d825",
     "live_embedding_test_blob_sha": "366601812c64046a34531c0966dcc9467041e3d5",
-    "provider_config_blob_sha": "96657263c4dd0ce72f6aeff13fffa139a058a53f",
-    "verifier_blob_sha": "1f590bc5eb934fad62b9cdc3f06fd355e86127de",
+    "provider_config_blob_sha": "966a00c797cdfaf22ec4695e3d68090e3c47fce4",
+    "verifier_blob_sha": "6c651b5924e68daffe6d72145ef8d8765b761483",
 }
 _F1C_SOURCE_PATHS = {
     "cache_setup_doc_blob_sha": "docs/bge-m3-cache-setup.md",
@@ -88,9 +88,7 @@ def issue_p12i(
     return certificate
 
 
-def artifacts_for(
-    result: P12IReplayResult, bfv2: FidelityCertificate
-) -> dict[str, Any]:
+def artifacts_for(result: P12IReplayResult, bfv2: FidelityCertificate) -> dict[str, Any]:
     run_dir = result.archive_run_dir
     resolved_config = _read_json(run_dir / "resolved_config.json", "P12I_CONFIG_MISSING")
     public_manifest = _read_json(
@@ -138,7 +136,11 @@ def validate_p12i(
     certificate: Phase12IntegrationCertificate | Mapping[str, Any],
     artifacts: Mapping[str, Any],
 ) -> CertificateValidationReport:
-    cert = load_p12i(certificate) if not isinstance(certificate, Phase12IntegrationCertificate) else certificate
+    cert = (
+        load_p12i(certificate)
+        if not isinstance(certificate, Phase12IntegrationCertificate)
+        else certificate
+    )
     if cert.protocol_version != "phase12_integration_v1":
         raise CertificateError("P12I_PROTOCOL_VERSION_MISMATCH")
     if cert.overall_status != "pass":
@@ -147,7 +149,9 @@ def validate_p12i(
         raise CertificateError("P12I_REPOSITORY_COMMIT_MISMATCH")
     if artifacts.get("repository_commit", EXPECTED_REPOSITORY_COMMIT) != cert.git_commit:
         raise CertificateError("P12I_REPOSITORY_COMMIT_MISMATCH")
-    _validate_artifact_hash(artifacts, "resolved_config", "resolved_config_hash", cert.resolved_config_hash)
+    _validate_artifact_hash(
+        artifacts, "resolved_config", "resolved_config_hash", cert.resolved_config_hash
+    )
     _validate_artifact_hash(
         artifacts,
         "public_artifact_manifest",
@@ -165,7 +169,10 @@ def validate_p12i(
     _validate_f1c_contract_refs(artifacts)
     _validate_subgates(artifacts.get("subgates"), cert)
     scientific_admission = bfv2.overall_status == "pass"
-    if "scientific_admission" in artifacts and artifacts["scientific_admission"] is not scientific_admission:
+    if (
+        "scientific_admission" in artifacts
+        and artifacts["scientific_admission"] is not scientific_admission
+    ):
         raise CertificateError("P12I_SCIENTIFIC_ADMISSION_MISMATCH")
     return CertificateValidationReport(
         valid=True,
@@ -188,7 +195,11 @@ def _bfv2_from_artifacts(artifacts: Mapping[str, Any]) -> FidelityCertificate:
     if value is None:
         raise CertificateError("P12I_BFV2_CERTIFICATE_MISSING")
     try:
-        return value if isinstance(value, FidelityCertificate) else FidelityCertificate.model_validate(value)
+        return (
+            value
+            if isinstance(value, FidelityCertificate)
+            else FidelityCertificate.model_validate(value)
+        )
     except (TypeError, ValueError) as error:
         raise CertificateError("P12I_BFV2_CERTIFICATE_INVALID") from error
 
@@ -289,7 +300,9 @@ def _read_json(path: Path, code: str) -> Any:
         raise CertificateError(code) from error
 
 
-def _validated_subgates(subgates: tuple[P12ISubgateEvidence, ...]) -> tuple[P12ISubgateEvidence, ...]:
+def _validated_subgates(
+    subgates: tuple[P12ISubgateEvidence, ...],
+) -> tuple[P12ISubgateEvidence, ...]:
     dummy = Phase12IntegrationCertificate(
         certificate_id="pending",
         protocol_version="phase12_integration_v1",

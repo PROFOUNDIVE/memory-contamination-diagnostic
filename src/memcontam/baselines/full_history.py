@@ -56,13 +56,17 @@ class FullHistoryPolicy:
             captured_verifier_result = verifier(answer, seen_task)
             return captured_verifier_result
 
-        outcome = import_module("memcontam.baselines.full_history_adapter").FullHistoryAdapter().execute(
-            task,
-            state,
-            client=client,
-            model=model,
-            config=config,
-            verifier=capture_verifier,
+        outcome = (
+            import_module("memcontam.baselines.full_history_adapter")
+            .FullHistoryAdapter()
+            .execute(
+                task,
+                state,
+                client=client,
+                model=model,
+                config=config,
+                verifier=capture_verifier,
+            )
         )
         memory.entries = state.records
         verifier_result = captured_verifier_result or outcome.verifier_result

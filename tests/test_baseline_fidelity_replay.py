@@ -106,9 +106,9 @@ def test_replay_keeps_valid_incorrect_and_closed_failure_outcomes(
     incorrect_config = _replay_config(tmp_path)
     incorrect_config["run"]["mode"] = "faithful"
     incorrect_config["baselines"] = ["no_memory"]
-    incorrect_config["replay"]["responses_by_sample"]["game24_pilot_001"][
-        "no_memory_generate"
-    ] = "final: 1 + 3 + 4 + 6"
+    incorrect_config["replay"]["responses_by_sample"]["game24_pilot_001"]["no_memory_generate"] = (
+        "final: 1 + 3 + 4 + 6"
+    )
     incorrect_run = cli.run_config(incorrect_config, run_id="bfv2-structural-valid-incorrect")
     incorrect_trial = next(
         trial for trial in _trials(incorrect_run) if trial.sample_id == "game24_pilot_001"
@@ -126,9 +126,9 @@ def test_replay_keeps_valid_incorrect_and_closed_failure_outcomes(
     failure_config = _replay_config(tmp_path)
     failure_config["run"]["mode"] = "faithful"
     failure_config["baselines"] = ["no_memory"]
-    failure_config["replay"]["responses_by_sample"]["game24_pilot_001"][
-        "no_memory_generate"
-    ] = "   "
+    failure_config["replay"]["responses_by_sample"]["game24_pilot_001"]["no_memory_generate"] = (
+        "   "
+    )
     failure_run = cli.run_config(failure_config, run_id="bfv2-structural-closed-failure")
     failure_trial = next(
         trial for trial in _trials(failure_run) if trial.sample_id == "game24_pilot_001"

@@ -204,14 +204,11 @@ def _validate_strict_consistency(
     )
     _require_homogeneous(
         "schema_version",
-        {run_metadata.schema_version}
-        | {trial.schema_version for trial in trials},
+        {run_metadata.schema_version} | {trial.schema_version for trial in trials},
     )
 
     if expected_stage is not None and run_metadata.stage != expected_stage:
-        raise SystemExit(
-            f"stage mismatch: expected {expected_stage}, found {run_metadata.stage}"
-        )
+        raise SystemExit(f"stage mismatch: expected {expected_stage}, found {run_metadata.stage}")
 
     seen_event_seq: set[int] = set()
     for stream_name, events in (
@@ -273,7 +270,7 @@ def _validate_strict_consistency(
             raise SystemExit(f"filter event without trial filter_decision: {trial.trial_id}")
         if trial.filter_decision is not None:
             actions = [event.action for event in trial_filters]
-            for action in {"apply", "outcome"}:
+            for action in ("apply", "outcome"):
                 count = actions.count(action)
                 if count > 1:
                     raise SystemExit(f"duplicate filter {action} for trial: {trial.trial_id}")
@@ -285,13 +282,17 @@ def _validate_strict_consistency(
                 if event.action == "outcome" and trial.verifier_result is not None:
                     expected_verdict = str(trial.verifier_result.is_correct).lower()
                     if event.verdict != expected_verdict:
-                        raise SystemExit(f"filter outcome verdict mismatch for trial: {trial.trial_id}")
+                        raise SystemExit(
+                            f"filter outcome verdict mismatch for trial: {trial.trial_id}"
+                        )
 
         trial_memory_events = memory_events_by_trial.get(trial.trial_id, [])
         needs_memory_event = (
             trial.memory_write_event is not None
             and trial.baseline not in {"no_memory", "retrieval_rag"}
-            and bool(trial.memory_write_event.get("type") or trial.memory_write_event.get("event_type"))
+            and bool(
+                trial.memory_write_event.get("type") or trial.memory_write_event.get("event_type")
+            )
         )
         if needs_memory_event and not trial_memory_events:
             raise SystemExit(f"missing memory event for trial: {trial.trial_id}")
@@ -301,7 +302,9 @@ def _validate_strict_consistency(
             if event.baseline != trial.baseline:
                 raise SystemExit(f"memory event baseline mismatch for trial: {trial.trial_id}")
             if event.source_trial_id is not None and event.source_trial_id != trial.trial_id:
-                raise SystemExit(f"memory event source_trial_id mismatch for trial: {trial.trial_id}")
+                raise SystemExit(
+                    f"memory event source_trial_id mismatch for trial: {trial.trial_id}"
+                )
 
     for failure in failures:
         if failure.trial_id in failed_trial_ids:
@@ -351,11 +354,7 @@ def _validate_phase11_consistency(
 ) -> None:
     evaluation_law = run_metadata.evaluation_law
     target_set = run_metadata.target_contamination_set
-    if (
-        run_metadata.contract_level != "phase11"
-        or evaluation_law is None
-        or target_set is None
-    ):
+    if run_metadata.contract_level != "phase11" or evaluation_law is None or target_set is None:
         raise SystemExit("logging_v2 requires phase11 run metadata contract")
 
     def require_single(field: str, values: set[str]) -> None:
@@ -364,7 +363,8 @@ def _validate_phase11_consistency(
 
     require_single(
         "evaluation_law_id",
-        {evaluation_law.evaluation_law_id} | {trial.evaluation_law_id or "<missing>" for trial in trials},
+        {evaluation_law.evaluation_law_id}
+        | {trial.evaluation_law_id or "<missing>" for trial in trials},
     )
     require_single(
         "target_set_id",
@@ -477,7 +477,10 @@ def _validate_phase11_consistency(
                     if root_id not in exposed_root_ids:
                         exposed_root_ids.append(root_id)
         exposure = trial.contamination_exposure
-        if exposure.source_entry_ids != source_entry_ids or exposure.target_entry_ids != target_entry_ids:
+        if (
+            exposure.source_entry_ids != source_entry_ids
+            or exposure.target_entry_ids != target_entry_ids
+        ):
             raise SystemExit(f"answer exposure membership mismatch for {trial.trial_id}")
         if exposure.status == "supported" and exposure.is_exposed:
             if (
@@ -489,7 +492,10 @@ def _validate_phase11_consistency(
 
     if evaluation_law.regime == "online":
         for trial in trials:
-            if trial.memory_update_mode not in {"enabled", "not_applicable"} or trial.checkpoint_ref:
+            if (
+                trial.memory_update_mode not in {"enabled", "not_applicable"}
+                or trial.checkpoint_ref
+            ):
                 raise SystemExit(f"online checkpoint/update mismatch: {trial.trial_id}")
         return
     if memory_events:
@@ -608,7 +614,11 @@ def _bot_lineage_metrics(trials: list[TrialLog]) -> dict[str, int | str]:
                 incomplete += 1
             continue
 
-        flags = {key: event.get(key) for key in ("accepted", "rejected", "reused", "incomplete") if key in event}
+        flags = {
+            key: event.get(key)
+            for key in ("accepted", "rejected", "reused", "incomplete")
+            if key in event
+        }
         if flags and sum(bool(value) for value in flags.values()) == 1:
             if flags.get("accepted"):
                 accepted += 1
@@ -673,16 +683,20 @@ def _metric_group(
     n_evaluable = len(succeeded_trials)
 
     verified_success_count = sum(
-        1 for trial in succeeded_trials if trial.verifier_result and trial.verifier_result.is_correct
+        1
+        for trial in succeeded_trials
+        if trial.verifier_result and trial.verifier_result.is_correct
     )
     contaminated_condition_count = sum(1 for trial in trials if trial.arm != "clean")
     controlled_exposure_count = sum(
         1
         for trial in trials
-        if trial.contamination_exposure.status == "supported" and trial.contamination_exposure.is_exposed
+        if trial.contamination_exposure.status == "supported"
+        and trial.contamination_exposure.is_exposed
     )
     filter_drop_count = sum(
-        int(trial.filter_decision.get("dropped", 0)) if trial.filter_decision else 0 for trial in trials
+        int(trial.filter_decision.get("dropped", 0)) if trial.filter_decision else 0
+        for trial in trials
     )
     token_usage_total = sum(int(trial.token_usage.get("total_tokens", 0)) for trial in trials)
 
@@ -698,7 +712,9 @@ def _metric_group(
         trial for trial in trials if _is_evaluable_uptake_label(trial.bad_memory_uptake_label)
     ]
     repeated_failure_evaluable = [
-        trial for trial in trials if _is_evaluable_repeated_failure_label(trial.repeated_failure_label)
+        trial
+        for trial in trials
+        if _is_evaluable_repeated_failure_label(trial.repeated_failure_label)
     ]
     descendant_evaluable = [trial for trial in trials if _descendant_link_present(trial)]
 
@@ -708,7 +724,11 @@ def _metric_group(
         else NOT_COMPUTED
     )
     repeated_failure_count: int | str = (
-        sum(1 for trial in repeated_failure_evaluable if trial.repeated_failure_label == "repeated_failure")
+        sum(
+            1
+            for trial in repeated_failure_evaluable
+            if trial.repeated_failure_label == "repeated_failure"
+        )
         if repeated_failure_evaluable
         else NOT_COMPUTED
     )
@@ -724,7 +744,11 @@ def _metric_group(
         len(uptake_evaluable),
     )
     repeated_failure_rate = _rate(
-        sum(1 for trial in repeated_failure_evaluable if trial.repeated_failure_label == "repeated_failure"),
+        sum(
+            1
+            for trial in repeated_failure_evaluable
+            if trial.repeated_failure_label == "repeated_failure"
+        ),
         len(repeated_failure_evaluable),
     )
     descendant_rate = _rate(len(descendant_evaluable), len(descendant_evaluable))
@@ -796,7 +820,11 @@ def _paired_degradation(
             degradation_by_combo[combo] = NOT_COMPUTED
             continue
 
-        paired_clean = [rows[0] for rows in clean_by_pair.values() if rows[0].status != "failed" and rows[0].verifier_result]
+        paired_clean = [
+            rows[0]
+            for rows in clean_by_pair.values()
+            if rows[0].status != "failed" and rows[0].verifier_result
+        ]
         paired_contaminated = [
             rows[0]
             for rows in contaminated_by_pair.values()
@@ -811,14 +839,11 @@ def _paired_degradation(
             for trial in paired_clean
             if trial.verifier_result is not None and trial.verifier_result.is_correct
         ) / len(paired_clean)
-        contaminated_rate = (
-            sum(
-                1
-                for trial in paired_contaminated
-                if trial.verifier_result is not None and trial.verifier_result.is_correct
-            )
-            / len(paired_contaminated)
-        )
+        contaminated_rate = sum(
+            1
+            for trial in paired_contaminated
+            if trial.verifier_result is not None and trial.verifier_result.is_correct
+        ) / len(paired_contaminated)
         degradation_by_combo[combo] = clean_rate - contaminated_rate
     return degradation_by_combo
 
@@ -879,11 +904,18 @@ def aggregate_run(
         contract_level = None
 
     grouped: dict[tuple[str, str, str, str], list[TrialLog]] = defaultdict(list)
-    combos: dict[tuple[str, str, str], dict[str, list[TrialLog]]] = defaultdict(lambda: defaultdict(list))
+    combos: dict[tuple[str, str, str], dict[str, list[TrialLog]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
     for trial in trials:
         if trial.metadata.get("exclude_from_aggregate") or trial.metadata.get("phase") == "warmup":
             continue
-        key = (trial.task_name, trial.baseline, trial.arm, trial.backbone)
+        key: tuple[str, str, str, str] = (
+            trial.task_name,
+            trial.baseline,
+            trial.arm,
+            trial.backbone,
+        )
         grouped[key].append(trial)
         combos[(trial.task_name, trial.baseline, trial.backbone)][trial.arm].append(trial)
 
@@ -924,7 +956,9 @@ def aggregate_run(
                 failures=failures_for_metrics,
             )
         )
-        group["vanilla_to_contamination_degradation_rate"] = degradation_by_combo.get(combo, NOT_COMPUTED)
+        group["vanilla_to_contamination_degradation_rate"] = degradation_by_combo.get(
+            combo, NOT_COMPUTED
+        )
         groups.append(group)
 
     return {

@@ -104,15 +104,22 @@ def test_rejects_each_registered_incompatible_mixture(
 
 def test_enforces_governance_and_seed_applicability() -> None:
     pre_route = _metadata("pre_route")
-    with pytest.raises(CompatibilityError, match="GOVERNANCE_FORBIDDEN.*route_selection_manifest_id"):
+    with pytest.raises(
+        CompatibilityError, match="GOVERNANCE_FORBIDDEN.*route_selection_manifest_id"
+    ):
         build_compatibility_key(
             _changed(pre_route, route_selection_manifest_id="route-selection-forbidden")
         )
 
     selected_route = _metadata("selected_route")
-    with pytest.raises(CompatibilityError, match="SEED_ASSIGNMENT_MISMATCH.*abstract_seed_slot_or_none"):
+    with pytest.raises(
+        CompatibilityError, match="SEED_ASSIGNMENT_MISMATCH.*abstract_seed_slot_or_none"
+    ):
         validate_compatible_runs(
-            [selected_route, _changed(selected_route, trajectory_seed=selected_route.trajectory_seed + 1)]
+            [
+                selected_route,
+                _changed(selected_route, trajectory_seed=selected_route.trajectory_seed + 1),
+            ]
         )
 
     non_scientific = _metadata("non_scientific_exploratory")

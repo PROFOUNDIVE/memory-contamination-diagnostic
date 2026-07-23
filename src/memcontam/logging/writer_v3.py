@@ -7,7 +7,7 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal, TextIO
+from typing import Any, Literal, TextIO, TypedDict
 
 from pydantic import BaseModel
 
@@ -29,10 +29,15 @@ class Phase12WriteError(ValueError):
     pass
 
 
+class _ArtifactRecord(TypedDict):
+    count: int
+    sha256: str
+
+
 @dataclass(frozen=True)
 class PublicArtifactManifest:
     status: Literal["completed", "failed"]
-    artifacts: dict[str, dict[str, str | int]]
+    artifacts: dict[str, _ArtifactRecord]
 
     def to_dict(self) -> dict[str, Any]:
         return {"status": self.status, "artifacts": self.artifacts}
@@ -63,7 +68,9 @@ class Phase12RunWriter:
         FailureEventV3: "failures.jsonl",
     }
 
-    def __init__(self, run_root: Path, metadata: RunMetadataV3, tmp_dir: Path | None = None) -> None:
+    def __init__(
+        self, run_root: Path, metadata: RunMetadataV3, tmp_dir: Path | None = None
+    ) -> None:
         self.run_dir = run_root
         if os.path.lexists(self.run_dir):
             raise FileExistsError(f"final run path already exists: {self.run_dir}")
@@ -161,7 +168,9 @@ class Phase12RunWriter:
             self._mark_failed()
             raise
 
-    def finalize(self, status: Literal["completed", "failed"] = "completed") -> PublicArtifactManifest:
+    def finalize(
+        self, status: Literal["completed", "failed"] = "completed"
+    ) -> PublicArtifactManifest:
         if status not in {"completed", "failed"}:
             raise ValueError("final status must be completed or failed")
         if status == "failed":
@@ -250,7 +259,7 @@ class Phase12RunWriter:
     def _write_public_artifact_manifest(
         self, status: Literal["completed", "failed"]
     ) -> PublicArtifactManifest:
-        artifacts = {
+        artifacts: dict[str, _ArtifactRecord] = {
             filename: {"sha256": _sha256(self.temp_dir / filename), "count": count}
             for filename, count in (("run.json", 1), *self._stream_counts())
         }
@@ -265,7 +274,9 @@ class Phase12RunWriter:
         return manifest
 
     def _stream_counts(self) -> list[tuple[str, int]]:
-        return [(filename, self._counts[count_name]) for filename, count_name in self._STREAMS.items()]
+        return [
+            (filename, self._counts[count_name]) for filename, count_name in self._STREAMS.items()
+        ]
 
     def _flush_streams(self) -> None:
         for stream in self._streams.values():
@@ -315,7 +326,10 @@ def _canonical_json(value: Any) -> str:
 
 def _contains_audit_field(value: Any) -> bool:
     if isinstance(value, dict):
-        return any("audit" in str(key).lower() or _contains_audit_field(item) for key, item in value.items())
+        return any(
+            "audit" in str(key).lower() or _contains_audit_field(item)
+            for key, item in value.items()
+        )
     if isinstance(value, list):
         return any(_contains_audit_field(item) for item in value)
     return False

@@ -70,7 +70,9 @@ def test_nomem_executes_once_and_materializes_only_display_aliases() -> None:
     )
     aliases = build_matched_branches(
         checkpoint,
-        load_candidate_registry(Path("data/phase12/registries/candidate_registry_v1.json")).triplets[0],
+        load_candidate_registry(
+            Path("data/phase12/registries/candidate_registry_v1.json")
+        ).triplets[0],
         RendererRegistry.native(),
         AdmissionContext(),
     )

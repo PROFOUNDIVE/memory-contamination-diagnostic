@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Literal
 
 from memcontam.experiment.phase12.contracts import BehaviorTestRow
 
@@ -32,6 +32,7 @@ def evaluate_direction(
         return _result(test_id, "inconclusive", rule, "INTERVAL_NOT_ESTIMABLE", evidence=interval)
     estimate, lower, upper = values
     direction, threshold = _THRESHOLDS[canonical_id]
+    classification: Literal["supported", "violated", "inconclusive", "not_applicable"]
     if direction == "lower":
         if lower >= threshold:
             classification = "supported"

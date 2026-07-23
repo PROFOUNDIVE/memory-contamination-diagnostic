@@ -11,7 +11,13 @@ FILTER_FIXTURE = ROOT / "tests" / "fixtures" / "phase12" / "FX-FILTER-001.json"
 BRANCH_FIXTURE = ROOT / "tests" / "fixtures" / "phase12" / "FX-BRANCH-001.json"
 
 WRITERS = {
-    "fh_bounded": ("full_history_transcript", "fh_appender", "full_history_generate", "history", True),
+    "fh_bounded": (
+        "full_history_transcript",
+        "fh_appender",
+        "full_history_generate",
+        "history",
+        True,
+    ),
     "rag_frozen": ("rag_document", "rag_corpus_loader", "rag_corpus_load", "corpus", False),
     "bot_style": ("thought_template", "bot_buffer_manager", "bot_thought_distill", "buffer", True),
     "reflexion_style": (
@@ -93,8 +99,15 @@ def test_fixture_routes_by_provenance_and_parent_state() -> None:
     admission, cards, _, _ = _modules()
     fixture = _fixture(FILTER_FIXTURE)
 
-    ordinary = _envelope(cards, "ordinary-ok", "fh_bounded", 1, created_trial_id="trial-1",
-                        source_trial_ids=("trial-1",), trial_support_ids=("trial-1",))
+    ordinary = _envelope(
+        cards,
+        "ordinary-ok",
+        "fh_bounded",
+        1,
+        created_trial_id="trial-1",
+        source_trial_ids=("trial-1",),
+        trial_support_ids=("trial-1",),
+    )
     external = _envelope(
         cards,
         "external-root",
@@ -129,7 +142,11 @@ def test_fixture_routes_by_provenance_and_parent_state() -> None:
     )
 
     observed = [
-        (decision.entry_id, "active" if decision.admitted else "quarantine", None if decision.admitted else decision.reason)
+        (
+            decision.entry_id,
+            "active" if decision.admitted else "quarantine",
+            None if decision.admitted else decision.reason,
+        )
         for decision in decisions
     ]
     assert observed == [(entry["id"], *entry["expected"]) for entry in fixture["entries"]]
@@ -140,7 +157,9 @@ def test_filter_starts_from_contam_checkpoint_and_routes_later_writes() -> None:
     fixture = _fixture(BRANCH_FIXTURE)
 
     for baseline, prefix in fixture["baseline_prefixes"].items():
-        source = checkpoints.serialize_checkpoint(checkpoints.NativeState.from_mapping(prefix["checkpoint"]))
+        source = checkpoints.serialize_checkpoint(
+            checkpoints.NativeState.from_mapping(prefix["checkpoint"])
+        )
         source_envelopes = tuple(
             _envelope(cards, entry_id, baseline, order_key)
             for order_key, entry_id in enumerate(prefix["checkpoint"]["entries"], start=1)
@@ -161,9 +180,7 @@ def test_filter_starts_from_contam_checkpoint_and_routes_later_writes() -> None:
             admission,
             (*source_envelopes, root_envelope),
             trial_ids=tuple(
-                trial_id
-                for envelope in source_envelopes
-                for trial_id in envelope.trial_support_ids
+                trial_id for envelope in source_envelopes for trial_id in envelope.trial_support_ids
             ),
         )
 
@@ -202,7 +219,9 @@ def test_rejected_replacement_keeps_the_prior_active_version() -> None:
     admission, cards, checkpoints, filtered_state = _modules()
     original = _envelope(cards, "original", "fh_bounded", 1)
     source = checkpoints.serialize_checkpoint(
-        checkpoints.NativeState("fh_bounded", (_entry(checkpoints, cards, original),), {"records": []})
+        checkpoints.NativeState(
+            "fh_bounded", (_entry(checkpoints, cards, original),), {"records": []}
+        )
     )
     context = _context(admission, (original,), trial_ids=original.trial_support_ids)
     partition = filtered_state.partition_native_checkpoint(source, context)
@@ -226,7 +245,9 @@ def test_rejected_replacement_keeps_the_prior_active_version() -> None:
 
     assert transition.decision.reason == "UNREGISTERED_WRITER_EVENT"
     assert list(_entry_ids(transition.state.reader_entries)) == ["original"]
-    assert [entry.entry_id for entry in transition.state.quarantine.state.entries] == ["replacement"]
+    assert [entry.entry_id for entry in transition.state.quarantine.state.entries] == [
+        "replacement"
+    ]
 
 
 def test_admission_reports_support_parent_and_version_evidence_failures() -> None:
@@ -258,10 +279,19 @@ def test_admission_reports_support_parent_and_version_evidence_failures() -> Non
         version_predecessor_id="parent",
     )
 
-    assert admission.evaluate_admission(missing_parent, active_context).reason == "MISSING_PARENT_EVIDENCE"
-    assert admission.evaluate_admission(missing_support, active_context).reason == "MISSING_SUPPORT_EVIDENCE"
+    assert (
+        admission.evaluate_admission(missing_parent, active_context).reason
+        == "MISSING_PARENT_EVIDENCE"
+    )
+    assert (
+        admission.evaluate_admission(missing_support, active_context).reason
+        == "MISSING_SUPPORT_EVIDENCE"
+    )
     version_context = replace(
         active_context,
         trial_record_ids=active_context.trial_record_ids | set(invalid_version.trial_support_ids),
     )
-    assert admission.evaluate_admission(invalid_version, version_context).reason == "INVALID_VERSION_EVIDENCE"
+    assert (
+        admission.evaluate_admission(invalid_version, version_context).reason
+        == "INVALID_VERSION_EVIDENCE"
+    )

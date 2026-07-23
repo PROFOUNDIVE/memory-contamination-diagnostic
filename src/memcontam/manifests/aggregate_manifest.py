@@ -72,7 +72,9 @@ def write_aggregate_manifest(manifest: AggregateManifest, path: Path | str) -> s
     _validate_manifest_rows(manifest.rows)
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text("".join(_canonical_json(row.to_dict()) for row in manifest.rows), encoding="utf-8")
+    destination.write_text(
+        "".join(_canonical_json(row.to_dict()) for row in manifest.rows), encoding="utf-8"
+    )
     return canonical_json_hash([row.to_dict() for row in manifest.rows])
 
 
@@ -92,7 +94,9 @@ def read_aggregate_manifest(path: Path | str) -> AggregateManifest:
     return manifest
 
 
-def _build_row(value: AggregateManifestRow | Mapping[str, Any], run_manifest: RunManifest) -> AggregateManifestRow:
+def _build_row(
+    value: AggregateManifestRow | Mapping[str, Any], run_manifest: RunManifest
+) -> AggregateManifestRow:
     source = value.to_dict() if isinstance(value, AggregateManifestRow) else dict(value)
     run_rows = _run_rows(run_manifest)
     run_ids = _strings(source.get("run_ids", ()), "AGGREGATE_MANIFEST_SCHEMA_INVALID")
@@ -187,14 +191,21 @@ def _required_string(value: Any) -> str:
 
 
 def _strings(value: Any, code: str) -> tuple[str, ...]:
-    if not isinstance(value, (list, tuple)) or any(not isinstance(item, str) or not item for item in value):
+    if not isinstance(value, (list, tuple)) or any(
+        not isinstance(item, str) or not item for item in value
+    ):
         raise AggregateManifestError(code)
     return tuple(value)
 
 
 def _population(value: Any) -> Mapping[str, str | None]:
-    if not isinstance(value, Mapping) or not value or any(
-        not isinstance(key, str) or not isinstance(item, str | type(None)) for key, item in value.items()
+    if (
+        not isinstance(value, Mapping)
+        or not value
+        or any(
+            not isinstance(key, str) or not isinstance(item, str | type(None))
+            for key, item in value.items()
+        )
     ):
         raise AggregateManifestError("AGGREGATE_MANIFEST_SCHEMA_INVALID")
     return dict(value)

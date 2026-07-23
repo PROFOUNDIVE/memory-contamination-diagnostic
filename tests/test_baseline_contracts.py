@@ -35,6 +35,4 @@ def test_shared_non_empty_str_and_exact_semantic_stages_are_public_contracts() -
 def test_canonical_task_json_is_compact_and_key_sorted() -> None:
     dispatch = importlib.import_module("memcontam.tasks.dispatch")
 
-    assert dispatch.canonical_task_json({"z": [2, 1], "a": "value"}) == (
-        '{"a":"value","z":[2,1]}'
-    )
+    assert dispatch.canonical_task_json({"z": [2, 1], "a": "value"}) == ('{"a":"value","z":[2,1]}')

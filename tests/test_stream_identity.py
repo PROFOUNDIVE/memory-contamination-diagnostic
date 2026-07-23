@@ -33,6 +33,8 @@ def test_stream_identity_isolated_by_arm_but_cross_arm_pairs_share_pair_key() ->
     clean = identity("run", "game24", "full_history", "clean", "replay")
     contaminated = identity("run", "game24", "full_history", "contaminated", "replay")
     assert clean != contaminated
-    assert to_pair_key(clean) == to_pair_key(contaminated) == pair_key(
-        "run", "game24", "full_history", "replay"
+    assert (
+        to_pair_key(clean)
+        == to_pair_key(contaminated)
+        == pair_key("run", "game24", "full_history", "replay")
     )

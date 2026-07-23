@@ -248,13 +248,24 @@ def test_writer_finalizes_complete_ordered_run(tmp_path: Path) -> None:
 
     assert not writer.temp_dir.exists()
     assert run_dir.exists()
-    assert [filter_event.filter_id, call.call_id, failure_event.failure_id, memory_event.memory_id] == [
+    assert [
+        filter_event.filter_id,
+        call.call_id,
+        failure_event.failure_id,
+        memory_event.memory_id,
+    ] == [
         "trial-1:filter:1",
         "trial-1:call:1",
         "trial-1:failure:1",
         "trial-1:memory:1",
     ]
-    assert [filter_event.event_seq, call.event_seq, failure_event.event_seq, memory_event.event_seq, trial.event_seq] == [
+    assert [
+        filter_event.event_seq,
+        call.event_seq,
+        failure_event.event_seq,
+        memory_event.event_seq,
+        trial.event_seq,
+    ] == [
         1,
         2,
         3,
@@ -432,26 +443,28 @@ def test_phase11_clean_natural_target_survives_writer_and_aggregate(tmp_path: Pa
         "require_exact_lineage": True,
     }
     metadata = RunMetadata.model_validate(metadata_payload)
-    span = PromptSourceSpan.model_validate({
-        "message_index": 0,
-        "start": 0,
-        "end": 7,
-        "rendered_hash": "sha256:natural",
-        "entry_id": "natural-1",
-        "source_ids": ["natural-1"],
-        "parent_ids": ["clean-seed"],
-        "lineage_id": "natural-1",
-        "version": "v1",
-        "origin": "full_history_append",
-        "clean_or_contaminated": "contaminated",
-        "contamination_class": "natural",
-        "injected_root_ids": [],
-        "lineage_status": "exact",
-        "lineage_basis": "recorded_parent",
-        "direct_parent_ids": ["clean-seed"],
-        "target_set_id": "natural-target-v1",
-        "is_target_contamination": True,
-    })
+    span = PromptSourceSpan.model_validate(
+        {
+            "message_index": 0,
+            "start": 0,
+            "end": 7,
+            "rendered_hash": "sha256:natural",
+            "entry_id": "natural-1",
+            "source_ids": ["natural-1"],
+            "parent_ids": ["clean-seed"],
+            "lineage_id": "natural-1",
+            "version": "v1",
+            "origin": "full_history_append",
+            "clean_or_contaminated": "contaminated",
+            "contamination_class": "natural",
+            "injected_root_ids": [],
+            "lineage_status": "exact",
+            "lineage_basis": "recorded_parent",
+            "direct_parent_ids": ["clean-seed"],
+            "target_set_id": "natural-target-v1",
+            "is_target_contamination": True,
+        }
+    )
     writer = RunLogWriter(tmp_path / "run-v2", metadata)
     call = writer.write_call(_call().model_copy(update={"source_spans": [span]}))
     payload = _phase11_trial(call.call_id).model_dump(mode="json")

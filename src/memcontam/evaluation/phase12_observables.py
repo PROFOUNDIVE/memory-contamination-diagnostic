@@ -5,7 +5,12 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from memcontam.logging.schema import PromptSourceSpan, TargetContaminationSetSpec
-from memcontam.logging.schema_v3 import ContextEvent, MemoryBranchTrialLog, RetrievalEvent, TrialLogV3
+from memcontam.logging.schema_v3 import (
+    ContextEvent,
+    MemoryBranchTrialLog,
+    RetrievalEvent,
+    TrialLogV3,
+)
 
 
 class ObservableError(ValueError):
@@ -36,7 +41,7 @@ class TargetSetEvidence:
 class AttributionRule:
     rule_id: str
     version: str
-    evaluate: Callable[[Mapping[str, Any]], bool]
+    evaluate: Callable[[Mapping[str, object]], bool]
 
     def __post_init__(self) -> None:
         if not self.rule_id or not self.version:
@@ -160,8 +165,10 @@ def _target_set_evidence(
     )
     entry_ids = target_set.get("target_entry_ids", target_set.get("target_ids", ()))
     spans = target_set.get("answer_call_spans", target_set.get("source_spans", ()))
-    if not isinstance(target_set_id, str) or not isinstance(entry_ids, Sequence) or isinstance(
-        entry_ids, str
+    if (
+        not isinstance(target_set_id, str)
+        or not isinstance(entry_ids, Sequence)
+        or isinstance(entry_ids, str)
     ):
         raise ObservableError("INVALID_TARGET_SET_EVIDENCE")
     if not isinstance(spans, Sequence) or isinstance(spans, str):
@@ -204,7 +211,13 @@ def _retrieval_record(
     retrievals: Sequence[RetrievalEvent] | RetrievalEvent | None,
     target_ids: tuple[str, ...],
 ) -> RetrievalRecord:
-    events = () if retrievals is None else (retrievals,) if isinstance(retrievals, RetrievalEvent) else retrievals
+    events = (
+        ()
+        if retrievals is None
+        else (retrievals,)
+        if isinstance(retrievals, RetrievalEvent)
+        else retrievals
+    )
     by_id = {event.event_id: event for event in events}
     expected_ids = tuple(trial.retrieval_event_ids)
     if set(by_id) - set(expected_ids):
@@ -214,8 +227,12 @@ def _retrieval_record(
     retrieved_entry_ids = _unique(
         entry_id for event_id in expected_ids for entry_id in by_id[event_id].retrieved_entry_ids
     )
-    retrieved_targets = tuple(entry_id for entry_id in retrieved_entry_ids if entry_id in target_ids)
-    return RetrievalRecord(expected_ids, retrieved_entry_ids, retrieved_targets, bool(retrieved_targets))
+    retrieved_targets = tuple(
+        entry_id for entry_id in retrieved_entry_ids if entry_id in target_ids
+    )
+    return RetrievalRecord(
+        expected_ids, retrieved_entry_ids, retrieved_targets, bool(retrieved_targets)
+    )
 
 
 def _final_context_record(
@@ -235,9 +252,7 @@ def _final_context_record(
             return FinalContextInclusionRecord("unavailable", None, (), (), None)
         final_ids = _unique(span.entry_id for span in evidence.answer_call_spans)
         targets = tuple(entry_id for entry_id in final_ids if entry_id in target_ids)
-        return FinalContextInclusionRecord(
-            "supported", None, final_ids, targets, bool(targets)
-        )
+        return FinalContextInclusionRecord("supported", None, final_ids, targets, bool(targets))
 
     final_ids = tuple(context.final_entry_ids)
     span_ids = _unique(span.entry_id for span in evidence.answer_call_spans)
@@ -286,7 +301,8 @@ def _theory_exposure(
     exposed_ids = tuple(
         span.entry_id
         for span in evidence.answer_call_spans
-        if span.entry_id in final_context.included_target_entry_ids and _is_target_span(span, evidence)
+        if span.entry_id in final_context.included_target_entry_ids
+        and _is_target_span(span, evidence)
     )
     if not exposed_ids:
         raise ObservableError("FINAL_CONTEXT_SPAN_MISMATCH")
@@ -321,7 +337,9 @@ def _operational_use(
         raise ObservableError("INVALID_ATTRIBUTION_RESULT")
     if used and exposure.is_exposed is not True:
         raise ObservableError("U_GT_Z")
-    return OperationalUseRecord("supported", attribution_rule.rule_id, attribution_rule.version, used)
+    return OperationalUseRecord(
+        "supported", attribution_rule.rule_id, attribution_rule.version, used
+    )
 
 
 def _unique(entry_ids: Any) -> tuple[str, ...]:

@@ -37,7 +37,9 @@ def _load_trials(run_dir: Path) -> list[TrialLog]:
         raise SystemExit(f"trials.jsonl not found: {trials_path}")
 
     trials: list[TrialLog] = []
-    for line_number, line in enumerate(trials_path.read_text(encoding="utf-8").splitlines(), start=1):
+    for line_number, line in enumerate(
+        trials_path.read_text(encoding="utf-8").splitlines(), start=1
+    ):
         if not line.strip():
             continue
         try:
@@ -61,7 +63,10 @@ def _entry_ids(entries: list[dict[str, Any]]) -> set[str]:
 
 def _is_catalog_seed_entry(entry: dict[str, Any]) -> bool:
     memory_type = entry.get("memory_type")
-    return memory_type in {"full_history_transcript", "verbal_reflection", "cheatsheet_item"} and entry.get("source_trial_id") is None
+    return (
+        memory_type in {"full_history_transcript", "verbal_reflection", "cheatsheet_item"}
+        and entry.get("source_trial_id") is None
+    )
 
 
 def _all_entry_ids(trials: list[TrialLog]) -> set[str]:
@@ -103,7 +108,9 @@ def _check_shape(trials: list[TrialLog]) -> dict[str, Any]:
         seen_trial_ids.add(trial.trial_id)
 
         baseline_counts[trial.baseline] = baseline_counts.get(trial.baseline, 0) + 1
-        baseline_arm_counts[(trial.baseline, trial.arm)] = baseline_arm_counts.get((trial.baseline, trial.arm), 0) + 1
+        baseline_arm_counts[(trial.baseline, trial.arm)] = (
+            baseline_arm_counts.get((trial.baseline, trial.arm), 0) + 1
+        )
 
     if baselines != EXPECTED_BASELINES:
         reasons.append(f"unexpected baselines: {baselines ^ EXPECTED_BASELINES}")
@@ -149,7 +156,11 @@ def _check_stages(trials: list[TrialLog]) -> dict[str, Any]:
         if trial.baseline == "full_history":
             expected = ["full_history_generate"]
         elif trial.baseline == "reflexion_style":
-            expected = ["reflexion_generate"] if stages == ["reflexion_generate"] else ["reflexion_generate", "reflexion_reflect"]
+            expected = (
+                ["reflexion_generate"]
+                if stages == ["reflexion_generate"]
+                else ["reflexion_generate", "reflexion_reflect"]
+            )
         else:
             expected = ["dynamic_cheatsheet_generate", "dynamic_cheatsheet_curate"]
 
@@ -192,10 +203,14 @@ def _check_full_history(trials: list[TrialLog]) -> dict[str, Any]:
             reasons.append(f"{trial.trial_id}: missing memory_write_event")
             continue
         if event.get("status") != "accepted":
-            reasons.append(f"{trial.trial_id}: full_history write status {event.get('status')!r} != accepted")
+            reasons.append(
+                f"{trial.trial_id}: full_history write status {event.get('status')!r} != accepted"
+            )
             continue
         if event.get("type") != "full_history_append":
-            reasons.append(f"{trial.trial_id}: full_history write type {event.get('type')!r} != full_history_append")
+            reasons.append(
+                f"{trial.trial_id}: full_history write type {event.get('type')!r} != full_history_append"
+            )
             continue
 
         new_entry_id = event.get("new_entry_id")
@@ -212,22 +227,30 @@ def _check_full_history(trials: list[TrialLog]) -> dict[str, Any]:
             continue
         added = memory_after_ids - memory_before_ids
         if added != {new_entry_id}:
-            reasons.append(f"{trial.trial_id}: added entry {added} does not match write event {new_entry_id}")
+            reasons.append(
+                f"{trial.trial_id}: added entry {added} does not match write event {new_entry_id}"
+            )
             continue
 
         new_entry = next((e for e in trial.memory_after if e.get("entry_id") == new_entry_id), None)
         if new_entry is None:
-            reasons.append(f"{trial.trial_id}: new_entry_id {new_entry_id} not found in memory_after")
+            reasons.append(
+                f"{trial.trial_id}: new_entry_id {new_entry_id} not found in memory_after"
+            )
             continue
         if new_entry.get("memory_type") != "full_history_transcript":
-            reasons.append(f"{trial.trial_id}: new entry memory_type {new_entry.get('memory_type')!r}")
+            reasons.append(
+                f"{trial.trial_id}: new entry memory_type {new_entry.get('memory_type')!r}"
+            )
             continue
 
         prompt_text = "\n".join(str(m.get("content", "")) for m in trial.prompt_messages)
         for entry in trial.memory_before:
             content = entry.get("content", "")
             if isinstance(content, str) and content not in prompt_text:
-                reasons.append(f"{trial.trial_id}: prompt missing memory_before entry {entry.get('entry_id')}")
+                reasons.append(
+                    f"{trial.trial_id}: prompt missing memory_before entry {entry.get('entry_id')}"
+                )
                 break
         accepted += 1
 
@@ -269,11 +292,21 @@ def _check_reflexion(trials: list[TrialLog]) -> dict[str, Any]:
             reflected_trials += 1
 
         reflection_entries = [
-            e for e in trial.memory_before
-            if e.get("memory_type") == "verbal_reflection" or str(e.get("content", "")).startswith("Reflection:")
+            e
+            for e in trial.memory_before
+            if e.get("memory_type") == "verbal_reflection"
+            or str(e.get("content", "")).startswith("Reflection:")
         ]
         prompt_text = "\n".join(str(m.get("content", "")) for m in trial.prompt_messages)
-        rendered = len([e for e in reflection_entries if e.get("content", "") in prompt_text or f"Reflection: {str(e.get('content', '')).removeprefix('Reflection:').strip()}" in prompt_text])
+        rendered = len(
+            [
+                e
+                for e in reflection_entries
+                if e.get("content", "") in prompt_text
+                or f"Reflection: {str(e.get('content', '')).removeprefix('Reflection:').strip()}"
+                in prompt_text
+            ]
+        )
         if len(reflection_entries) > 3 and rendered > 3:
             reasons.append(f"{trial.trial_id}: prompt exposes more than 3 reflections")
             continue
@@ -310,10 +343,14 @@ def _check_dynamic_cheatsheet(trials: list[TrialLog]) -> dict[str, Any]:
 
         if trial.sample_id == "game24_pilot_001":
             if status != "preserved_missing_tag":
-                reasons.append(f"{trial.trial_id}: game24_pilot_001 DC status {status!r} != preserved_missing_tag")
+                reasons.append(
+                    f"{trial.trial_id}: game24_pilot_001 DC status {status!r} != preserved_missing_tag"
+                )
                 continue
             if trial.memory_after != trial.memory_before:
-                reasons.append(f"{trial.trial_id}: game24_pilot_001 DC memory_after changed despite preservation")
+                reasons.append(
+                    f"{trial.trial_id}: game24_pilot_001 DC memory_after changed despite preservation"
+                )
                 continue
             preserved += 1
         else:
@@ -363,15 +400,25 @@ def _check_arms(trials: list[TrialLog]) -> dict[str, Any]:
         elif trial.arm == "contaminated":
             if not is_exposed:
                 reasons.append(f"{trial.trial_id}: contaminated arm has no exposure")
-            seed_ids = {e["entry_id"] for e in trial.memory_before if e.get("clean_or_contaminated") == "contaminated"}
+            seed_ids = {
+                e["entry_id"]
+                for e in trial.memory_before
+                if e.get("clean_or_contaminated") == "contaminated"
+            }
             if not seed_ids and trial.sample_id.endswith("_001"):
-                reasons.append(f"{trial.trial_id}: contaminated arm missing paired seed in memory_before")
+                reasons.append(
+                    f"{trial.trial_id}: contaminated arm missing paired seed in memory_before"
+                )
         elif trial.arm == "contaminated_filter":
             if trial.filter_decision is None or trial.filter_decision.get("dropped", 0) == 0:
                 reasons.append(f"{trial.trial_id}: contaminated_filter missing non-zero drop")
-            remaining = [e for e in trial.memory_before if e.get("clean_or_contaminated") == "contaminated"]
+            remaining = [
+                e for e in trial.memory_before if e.get("clean_or_contaminated") == "contaminated"
+            ]
             if remaining:
-                reasons.append(f"{trial.trial_id}: contaminated_filter still has contaminated memory_before entries")
+                reasons.append(
+                    f"{trial.trial_id}: contaminated_filter still has contaminated memory_before entries"
+                )
             if is_exposed:
                 reasons.append(f"{trial.trial_id}: contaminated_filter arm is exposed")
 
@@ -398,7 +445,9 @@ def _check_isolation(trials: list[TrialLog]) -> dict[str, Any]:
         visible_ids = _entry_ids(trial.memory_before + trial.memory_after)
         for entry_id, source_identity in accepted_by_id.items():
             if entry_id in visible_ids and identity != source_identity:
-                reasons.append(f"{entry_id} from {source_identity} leaked into {identity} ({trial.trial_id})")
+                reasons.append(
+                    f"{entry_id} from {source_identity} leaked into {identity} ({trial.trial_id})"
+                )
 
     passed = not reasons
     return {
@@ -419,7 +468,9 @@ def _check_no_bot_warmup(trials: list[TrialLog]) -> dict[str, Any]:
         metadata = trial.metadata or {}
         for key in metadata:
             if any(bot_key in key.lower() for bot_key in bot_keys):
-                reasons.append(f"{trial.trial_id}: native baseline metadata contains bot/retrieval key {key!r}")
+                reasons.append(
+                    f"{trial.trial_id}: native baseline metadata contains bot/retrieval key {key!r}"
+                )
         if trial.retrieved_memory:
             reasons.append(f"{trial.trial_id}: native baseline has retrieved_memory entries")
         if trial.retrieved_scores:
@@ -441,28 +492,38 @@ def _check_leakage(trials: list[TrialLog]) -> dict[str, Any]:
                 content = str(message.get("content", ""))
                 for sub in SOURCE_LABELS:
                     if sub.lower() in content.lower():
-                        reasons.append(f"{trial.trial_id}: method_call message contains source label {sub!r}")
+                        reasons.append(
+                            f"{trial.trial_id}: method_call message contains source label {sub!r}"
+                        )
 
         for message in trial.prompt_messages:
             content = str(message.get("content", ""))
             for sub in SOURCE_LABELS:
                 if sub.lower() in content.lower():
-                    reasons.append(f"{trial.trial_id}: prompt_message contains source label {sub!r}")
+                    reasons.append(
+                        f"{trial.trial_id}: prompt_message contains source label {sub!r}"
+                    )
 
         for entry in trial.memory_before + trial.memory_after:
             content = str(entry.get("content", ""))
             for sub in SOURCE_LABELS:
                 if sub.lower() in content.lower():
-                    reasons.append(f"{trial.trial_id}: memory entry {entry.get('entry_id')} contains source label {sub!r}")
+                    reasons.append(
+                        f"{trial.trial_id}: memory entry {entry.get('entry_id')} contains source label {sub!r}"
+                    )
 
             if _is_catalog_seed_entry(entry):
                 for sub in _FORBIDDEN_ANSWER_SUBSTRINGS:
                     if sub.lower() in content.lower():
-                        reasons.append(f"{trial.trial_id}: seed memory entry {entry.get('entry_id')} contains {sub!r}")
+                        reasons.append(
+                            f"{trial.trial_id}: seed memory entry {entry.get('entry_id')} contains {sub!r}"
+                        )
 
         for entry in trial.memory_before + trial.memory_after:
             if "clean_or_contaminated" not in entry:
-                reasons.append(f"{trial.trial_id}: memory entry {entry.get('entry_id')} missing clean_or_contaminated")
+                reasons.append(
+                    f"{trial.trial_id}: memory entry {entry.get('entry_id')} missing clean_or_contaminated"
+                )
 
     passed = not reasons
     return {
@@ -536,7 +597,9 @@ def inspect_run(run_dir: Path) -> dict[str, Any]:
         "fh_counts": {k: v for k, v in fh_result.items() if k not in {"pass", "reasons"}},
         "refl_counts": {k: v for k, v in refl_result.items() if k not in {"pass", "reasons"}},
         "dc_counts": {k: v for k, v in dc_result.items() if k not in {"pass", "reasons"}},
-        "isolation_counts": {k: v for k, v in isolation_result.items() if k not in {"pass", "reasons"}},
+        "isolation_counts": {
+            k: v for k, v in isolation_result.items() if k not in {"pass", "reasons"}
+        },
         "logging_counts": {k: v for k, v in logging_result.items() if k not in {"pass", "reasons"}},
         "reasons": (
             shape_result.get("reasons", [])
@@ -556,8 +619,12 @@ def inspect_run(run_dir: Path) -> dict[str, Any]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Validate a G0 full-history/Reflexion/DC replay run for fidelity.")
-    parser.add_argument("run_dir", type=Path, help="path to the run directory containing trials.jsonl")
+    parser = argparse.ArgumentParser(
+        description="Validate a G0 full-history/Reflexion/DC replay run for fidelity."
+    )
+    parser.add_argument(
+        "run_dir", type=Path, help="path to the run directory containing trials.jsonl"
+    )
     args = parser.parse_args(argv)
 
     report = inspect_run(args.run_dir)

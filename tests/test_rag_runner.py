@@ -72,9 +72,7 @@ def _corpus_identity(task: TaskInstance) -> CorpusIdentity:
 
 
 def _fixture(name: str) -> dict:
-    return json.loads(
-        (Path(__file__).parent / "fixtures" / name).read_text(encoding="utf-8")
-    )
+    return json.loads((Path(__file__).parent / "fixtures" / name).read_text(encoding="utf-8"))
 
 
 def test_retrieval_rag_uses_canonical_top_three_text_only_prompt(tmp_path: Path) -> None:
@@ -86,9 +84,9 @@ def test_retrieval_rag_uses_canonical_top_three_text_only_prompt(tmp_path: Path)
         _entry("doc-d", "Keep intermediate values exact."),
     ]
     memory = MemoryState(entries=entries)
-    expected_records = DenseIndex(entries, provider=provider, cache_dir=tmp_path / "expected").retrieve(
-        canonical_task_json(_task()), 3
-    )
+    expected_records = DenseIndex(
+        entries, provider=provider, cache_dir=tmp_path / "expected"
+    ).retrieve(canonical_task_json(_task()), 3)
     prompt_fixture = _fixture("prompts/rag_generate.json")
     replay_fixture = _fixture("replay/baseline_fidelity_v1/retrieval_rag.json")
     client = _FakeClient(replay_fixture["response"])
@@ -188,9 +186,10 @@ def test_retrieval_rag_retrieval_failure_uses_the_closed_taxonomy(
     assert result["status"] == "failed"
     assert result["error_type"] == failure_fixture["error_type"]
     assert result["failure_disposition"] == failure_fixture["failure_disposition"]
-    assert result["scientific_ineligibility_reason"] == failure_fixture[
-        "scientific_ineligibility_reason"
-    ]
+    assert (
+        result["scientific_ineligibility_reason"]
+        == failure_fixture["scientific_ineligibility_reason"]
+    )
     assert client.calls == []
 
 

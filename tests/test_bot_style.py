@@ -192,7 +192,9 @@ def test_bot_retrieve_below_threshold_uses_fixed_fallback() -> None:
 
     retrieval_decision = bot_read.retrieve_top_template(problem, entries, BelowThresholdProvider())
     prompt, source_spans = bot_solve.render_bot_solve_prompt(
-        TaskInstance(sample_id="sample", task_name="math_equation_balancer", input={"input": "3 + 3"}),
+        TaskInstance(
+            sample_id="sample", task_name="math_equation_balancer", input={"input": "3 + 3"}
+        ),
         problem,
         retrieval_decision,
     )
@@ -218,7 +220,9 @@ def test_bot_solve_requires_trace_and_final_answer_without_verifier() -> None:
 
 def test_bot_build_prompt_uses_structured_solve_contract() -> None:
     prompt = BotStylePolicy().build_prompt(
-        TaskInstance(sample_id="sample", task_name="math_equation_balancer", input={"input": "3 + 3"}),
+        TaskInstance(
+            sample_id="sample", task_name="math_equation_balancer", input={"input": "3 + 3"}
+        ),
         MemoryState(),
         embedding_provider=_AdmittingEmbeddingProvider(),
     )
@@ -295,7 +299,10 @@ def test_bot_runtime_runs_reference_order_and_updates() -> None:
     answer_call = result.method_calls[1]
     assert result.answer_call_id == answer_call.call_id
     assert answer_call.stage == "bot_instantiate_solve"
-    assert [call.source_spans for call in result.method_calls if call is not answer_call] == [[], []]
+    assert [call.source_spans for call in result.method_calls if call is not answer_call] == [
+        [],
+        [],
+    ]
     assert len(answer_call.source_spans) == 1
     span = answer_call.source_spans[0]
     assert answer_call.messages[1]["content"][span.start : span.end] == (
@@ -334,8 +341,8 @@ def test_bot_runtime_valid_incorrect_answer_keeps_frozen_admission() -> None:
                 "bot_problem_distill": _DISTILLATION_OUTPUT,
                 "bot_instantiate_solve": _SOLUTION_OUTPUT,
                 "bot_thought_distill": _thought_output(),
-                }
             }
+        }
     )
 
     result = BotRuntime().run(
@@ -390,10 +397,10 @@ def test_bot_template_answer_and_accepted_write_keep_exact_lineage() -> None:
     )
     client = ReplayClient(
         responses_by_sample={
-                "game24_001": {
-                    "bot_problem_distill": _DISTILLATION_OUTPUT,
-                    "bot_instantiate_solve": _SOLUTION_OUTPUT,
-                    "bot_thought_distill": _thought_output(used_ids=["injected-template"]),
+            "game24_001": {
+                "bot_problem_distill": _DISTILLATION_OUTPUT,
+                "bot_instantiate_solve": _SOLUTION_OUTPUT,
+                "bot_thought_distill": _thought_output(used_ids=["injected-template"]),
             }
         }
     )

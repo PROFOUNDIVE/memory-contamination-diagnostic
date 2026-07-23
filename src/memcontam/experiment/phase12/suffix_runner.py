@@ -18,7 +18,12 @@ from memcontam.logging.schema_v3 import (
     NoMemExecutionKey as LogNoMemExecutionKey,
     NoMemTrialLog,
 )
-from memcontam.memory.checkpoint_v3 import NativeEntry, NativeState, Phase12Checkpoint, serialize_checkpoint
+from memcontam.memory.checkpoint_v3 import (
+    NativeEntry,
+    NativeState,
+    Phase12Checkpoint,
+    serialize_checkpoint,
+)
 from memcontam.tasks.base import TaskInstance
 
 
@@ -38,8 +43,8 @@ __all__ = [
 ]
 
 
-_ARMS = ("clean", "correct", "irrelevant", "contam", "filter")
 Arm = Literal["clean", "correct", "irrelevant", "contam", "filter"]
+_ARMS: tuple[Arm, ...] = ("clean", "correct", "irrelevant", "contam", "filter")
 
 
 class SuffixExecutionError(ValueError):
@@ -54,7 +59,9 @@ class SuffixStep:
 
 
 class SuffixPolicy(Protocol):
-    def execute(self, task: TaskInstance, state: NativeState, seed: int, trial_id: str) -> SuffixStep: ...
+    def execute(
+        self, task: TaskInstance, state: NativeState, seed: int, trial_id: str
+    ) -> SuffixStep: ...
 
 
 class WriterFactory(Protocol):
@@ -143,7 +150,9 @@ def run_matched_suffix(
     tasks = _matched_tasks(suffix)
     if isinstance(branches, NoMemAliasRecord):
         return _run_nomem_suffix(branches, tasks, spec, writer_factory, seed)
-    if not isinstance(branches, BranchSet) or not isinstance(spec.execution_key, MemoryArmExecutionKey):
+    if not isinstance(branches, BranchSet) or not isinstance(
+        spec.execution_key, MemoryArmExecutionKey
+    ):
         raise SuffixExecutionError("MEMORY_ARM_EXECUTION_KEY_REQUIRED")
     if spec.prefix_template_key_or_none is None:
         raise SuffixExecutionError("PREFIX_CHECKPOINT_REQUIRED")
@@ -172,7 +181,7 @@ def run_matched_suffix(
             prefix_run_id,
             checkpoint_index,
             branches.source_checkpoint.identity.checkpoint_id,
-            interventions.get(arm),
+            None if arm == "clean" else interventions.get(arm),
         )
         for arm in _ARMS
     )
@@ -298,7 +307,10 @@ def _run_nomem_suffix(
     writer_factory: WriterFactory,
     seed: int,
 ) -> SuffixRunSet:
-    if not isinstance(spec.execution_key, NoMemExecutionKey) or spec.prefix_template_key_or_none is not None:
+    if (
+        not isinstance(spec.execution_key, NoMemExecutionKey)
+        or spec.prefix_template_key_or_none is not None
+    ):
         raise SuffixExecutionError("NOMEM_ARM_FORBIDDEN")
     if aliases.underlying_execution_count != 1 or aliases.display_alias_count != 5:
         raise SuffixExecutionError("INVALID_NOMEM_ALIAS_RESULT")

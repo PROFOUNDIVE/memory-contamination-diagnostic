@@ -169,7 +169,9 @@ class BoTPhase12Adapter:
 
 
 def resolve_explicit_parents(ids: Sequence[str], state: BoTStateV3) -> tuple[str, ...]:
-    if len(ids) != len(set(ids)) or any(not isinstance(entry_id, str) or not entry_id for entry_id in ids):
+    if len(ids) != len(set(ids)) or any(
+        not isinstance(entry_id, str) or not entry_id for entry_id in ids
+    ):
         raise BoTContractError("INVALID_EXPLICIT_PARENT_IDS")
     known_ids = {entry.entry_id for entry in state.entries}
     return tuple(entry_id for entry_id in ids if entry_id in known_ids)
@@ -188,7 +190,11 @@ def _active_entries(state: BoTStateV3) -> list[MemoryEntry]:
             for entry in state.filter_state.reader_entries
         }
     entries = [_as_memory_entry(entry) for entry in state.entries]
-    active = entries if allowed_ids is None else [entry for entry in entries if entry.entry_id in allowed_ids]
+    active = (
+        entries
+        if allowed_ids is None
+        else [entry for entry in entries if entry.entry_id in allowed_ids]
+    )
     if allowed_ids is not None and {entry.entry_id for entry in active} != allowed_ids:
         raise BoTContractError("FILTER_ACTIVE_TEMPLATE_MISSING")
     return active
@@ -254,7 +260,11 @@ def _prompt_events(
         context_id=f"{trial.trial_id}:context",
         final_entry_ids=prompt_entry_ids,
     )
-    return BoTPromptDecision("matched" if matched else "fallback", matched_entry_id), retrieval, context
+    return (
+        BoTPromptDecision("matched" if matched else "fallback", matched_entry_id),
+        retrieval,
+        context,
+    )
 
 
 def _final_prompt_entry_ids(outcome: BaselineExecutionOutcome) -> list[str]:
@@ -367,13 +377,17 @@ def _route_filter_write(
         trial_record_ids=state.admission_context.trial_record_ids | {trial.trial_id},
         evidence_envelopes=(*state.admission_context.evidence_envelopes, envelope),
     )
-    transition = route_candidate_write(state.filter_state, CandidateWrite(native_entry, envelope), context)
+    transition = route_candidate_write(
+        state.filter_state, CandidateWrite(native_entry, envelope), context
+    )
     state.filter_state = transition.state
     state.admission_context = context
     return transition
 
 
-def _replace_candidate(outcome: BaselineExecutionOutcome, candidate: MemoryEntry) -> BaselineExecutionOutcome:
+def _replace_candidate(
+    outcome: BaselineExecutionOutcome, candidate: MemoryEntry
+) -> BaselineExecutionOutcome:
     return replace(
         outcome,
         memory_after=(*outcome.memory_after[:-1], candidate.model_dump()),

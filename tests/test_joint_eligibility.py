@@ -59,9 +59,10 @@ def test_selects_registered_common_checkpoint_from_eligible_panel() -> None:
     assert result.joint_eligible_indices == tuple(fixture["joint"])
     assert result.not_estimable is fixture["not_estimable"]
     assert result.estimability_counts == {"eligible_checkpoints": 2, "primary_baselines": 4}
-    assert eligibility.select_lower_quantile_checkpoint(
-        result.joint_eligible_indices, Decimal("0.5")
-    ) == 3
+    assert (
+        eligibility.select_lower_quantile_checkpoint(result.joint_eligible_indices, Decimal("0.5"))
+        == 3
+    )
 
 
 def test_rejects_noncommon_relaxed_or_short_horizon_selection() -> None:
@@ -77,7 +78,10 @@ def test_rejects_noncommon_relaxed_or_short_horizon_selection() -> None:
 
     assert result.not_estimable is True
     assert result.joint_eligible_indices == ()
-    assert eligibility.select_lower_quantile_checkpoint(result.joint_eligible_indices, Decimal("0.5")) is None
+    assert (
+        eligibility.select_lower_quantile_checkpoint(result.joint_eligible_indices, Decimal("0.5"))
+        is None
+    )
     with pytest.raises(eligibility.EligibilityError, match="RELAXED_MATURITY_THRESHOLD"):
         eligibility.compute_joint_eligibility((*decisions, *_decisions("fh", [5], horizon=2)), 3)
     with pytest.raises(eligibility.EligibilityError, match="INVALID_HORIZON"):

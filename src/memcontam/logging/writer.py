@@ -159,7 +159,9 @@ class RunLogWriter:
             raise
         return enriched
 
-    def _write_line(self, filename: str, model: CallEvent | FailureEvent | FilterEvent | MemoryEvent | TrialLog) -> None:
+    def _write_line(
+        self, filename: str, model: CallEvent | FailureEvent | FilterEvent | MemoryEvent | TrialLog
+    ) -> None:
         payload = json.dumps(
             model.model_dump(mode="json"),
             ensure_ascii=False,
@@ -171,7 +173,9 @@ class RunLogWriter:
     def _write_manifest(self) -> None:
         manifest_tmp = self.temp_dir / "run.json.tmp"
         with manifest_tmp.open("w", encoding="utf-8") as handle:
-            json.dump(self._manifest, handle, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+            json.dump(
+                self._manifest, handle, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+            )
             handle.write("\n")
             handle.flush()
             os.fsync(handle.fileno())
@@ -211,7 +215,10 @@ class RunLogWriter:
             raise RuntimeError(f"writer is {self._state}")
 
     def _validate_event_context(self, event: EventT) -> None:
-        if event.run_metadata_id != self.run_metadata.run_metadata_id or event.run_id != self.run_metadata.run_id:
+        if (
+            event.run_metadata_id != self.run_metadata.run_metadata_id
+            or event.run_id != self.run_metadata.run_id
+        ):
             raise ValueError("event run context does not match writer metadata")
         if event.stage != self.run_metadata.stage:
             raise ValueError("event stage does not match writer metadata")
@@ -221,7 +228,10 @@ class RunLogWriter:
                 raise ValueError("frozen phase11 runs must not write memory events")
 
     def _validate_trial_context(self, trial: TrialLog) -> None:
-        if trial.run_metadata_id != self.run_metadata.run_metadata_id or trial.run_id != self.run_metadata.run_id:
+        if (
+            trial.run_metadata_id != self.run_metadata.run_metadata_id
+            or trial.run_id != self.run_metadata.run_id
+        ):
             raise ValueError("trial run context does not match writer metadata")
         if trial.stage != self.run_metadata.stage:
             raise ValueError("trial stage does not match writer metadata")
@@ -271,9 +281,14 @@ class RunLogWriter:
             [trial.trajectory_pair_id or "", str(trial.checkpoint_index), trial.sample_id]
         )
         if trial.pair_id != expected_pair_id:
-            raise ValueError(f"trial pair_id does not match trajectory/checkpoint/sample: {trial.pair_id}")
+            raise ValueError(
+                f"trial pair_id does not match trajectory/checkpoint/sample: {trial.pair_id}"
+            )
         if evaluation_law.regime == "online":
-            if trial.memory_update_mode not in {"enabled", "not_applicable"} or trial.checkpoint_ref:
+            if (
+                trial.memory_update_mode not in {"enabled", "not_applicable"}
+                or trial.checkpoint_ref
+            ):
                 raise ValueError("online phase11 trial has frozen checkpoint/update context")
             return
         if trial.memory_update_mode not in {"disabled", "not_applicable"}:

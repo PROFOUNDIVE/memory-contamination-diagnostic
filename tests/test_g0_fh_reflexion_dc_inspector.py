@@ -238,7 +238,11 @@ def _seed_entries(task: str, baseline: str, arm: str) -> list[dict[str, Any]]:
 
 
 def _memory_entry(spec: dict[str, Any], task: str, baseline: str) -> dict[str, Any]:
-    metadata: dict[str, Any] = {"task": task, "source": "pilot_warmup_strategy", "target_baselines": [baseline]}
+    metadata: dict[str, Any] = {
+        "task": task,
+        "source": "pilot_warmup_strategy",
+        "target_baselines": [baseline],
+    }
     if spec["clean_or_contaminated"] == "contaminated":
         metadata["source"] = "injected_corruption"
         metadata["paired_clean_entry_id"] = spec["entry_id"].replace("corrupted", "clean")
@@ -258,7 +262,9 @@ def _filter_decision(arm: str) -> dict[str, Any] | None:
     return None
 
 
-def _contamination_exposure(arm: str, memory_before: list[dict], retrieved_memory: list[dict]) -> dict[str, Any]:
+def _contamination_exposure(
+    arm: str, memory_before: list[dict], retrieved_memory: list[dict]
+) -> dict[str, Any]:
     source_entries = [e for e in memory_before if e.get("clean_or_contaminated") == "contaminated"]
     source_ids = [e["entry_id"] for e in source_entries]
     if arm == "clean":
@@ -268,7 +274,9 @@ def _contamination_exposure(arm: str, memory_before: list[dict], retrieved_memor
             "source_entry_ids": [],
             "contamination_types": [],
             "memory_before_entry_ids": [e["entry_id"] for e in memory_before],
-            "retrieved_entry_ids": [e.get("entry_id") for e in retrieved_memory if e.get("entry_id")],
+            "retrieved_entry_ids": [
+                e.get("entry_id") for e in retrieved_memory if e.get("entry_id")
+            ],
             "exposure_mode": "none",
             "reason": "clean arm has no contaminated memory sources",
         }
@@ -280,11 +288,15 @@ def _contamination_exposure(arm: str, memory_before: list[dict], retrieved_memor
         "memory_before_entry_ids": [e["entry_id"] for e in memory_before],
         "retrieved_entry_ids": [e.get("entry_id") for e in retrieved_memory if e.get("entry_id")],
         "exposure_mode": "memory_before" if source_ids else "none",
-        "reason": "contaminated memory sources were available before prompting" if source_ids else "no contaminated memory sources remained after filtering",
+        "reason": "contaminated memory sources were available before prompting"
+        if source_ids
+        else "no contaminated memory sources remained after filtering",
     }
 
 
-def _method_call(stage: str, messages: list[dict[str, str]], raw_response: str, model: str) -> dict[str, Any]:
+def _method_call(
+    stage: str, messages: list[dict[str, str]], raw_response: str, model: str
+) -> dict[str, Any]:
     return {
         "stage": stage,
         "messages": messages,
@@ -307,10 +319,29 @@ def _trial_id(task: str, sample: str, baseline: str, arm: str, model: str) -> st
 
 def _task_input(task: str, sample: str) -> dict[str, Any]:
     if task == "game24":
-        return {"numbers": [1, 3, 4, 6] if "001" in sample else [2, 3, 7, 7] if "002" in sample else [3, 3, 8, 8], "target": 24}
+        return {
+            "numbers": [1, 3, 4, 6]
+            if "001" in sample
+            else [2, 3, 7, 7]
+            if "002" in sample
+            else [3, 3, 8, 8],
+            "target": 24,
+        }
     if task == "math_equation_balancer":
-        return {"input": "2 + 5 = ?" if "001" in sample else "9 - 4 = ?" if "002" in sample else "3 * 6 = ?"}
-    return {"words": ["pear", "apple", "banana"] if "001" in sample else ["delta", "charlie", "bravo", "alpha"] if "002" in sample else ["zebra", "yak", "ant"]}
+        return {
+            "input": "2 + 5 = ?"
+            if "001" in sample
+            else "9 - 4 = ?"
+            if "002" in sample
+            else "3 * 6 = ?"
+        }
+    return {
+        "words": ["pear", "apple", "banana"]
+        if "001" in sample
+        else ["delta", "charlie", "bravo", "alpha"]
+        if "002" in sample
+        else ["zebra", "yak", "ant"]
+    }
 
 
 def _gold_or_verifier_spec(task: str) -> dict[str, Any]:
@@ -341,7 +372,9 @@ def _build_full_history_trial(
     correct = VERIFIER_RESULTS[task][sample]["is_correct"]
 
     parent_ids = [e["entry_id"] for e in memory_before]
-    source_ids = [e["entry_id"] for e in memory_before if e.get("clean_or_contaminated") == "contaminated"]
+    source_ids = [
+        e["entry_id"] for e in memory_before if e.get("clean_or_contaminated") == "contaminated"
+    ]
     new_entry_id = f"full_history:{task}:{sample}:{arm}:{model}"
     transcript = (
         f"Previous input: {_task_input(task, sample)}\n"
@@ -370,11 +403,14 @@ def _build_full_history_trial(
 
     history = "\n\n".join(
         f"Previous input: <task prompt>\nPrevious response: {e['content']}"
-        if e["entry_id"].startswith("memory_clean_") or e["entry_id"].startswith("memory_corrupted_")
+        if e["entry_id"].startswith("memory_clean_")
+        or e["entry_id"].startswith("memory_corrupted_")
         else f"Previous input: {e['metadata'].get('task_input', '<task prompt>')}\nPrevious response: {e['content']}"
         for e in memory_before
     )
-    prompt_messages = [{"role": "user", "content": f"History:\n{history}\n\nSolve: {_task_input(task, sample)}"}]
+    prompt_messages = [
+        {"role": "user", "content": f"History:\n{history}\n\nSolve: {_task_input(task, sample)}"}
+    ]
 
     return {
         "trial_id": _trial_id(task, sample, baseline, arm, model),
@@ -393,7 +429,11 @@ def _build_full_history_trial(
         "filter_decision": _filter_decision(arm),
         "raw_response": raw_response,
         "parsed_answer": parsed_answer,
-        "verifier_result": VerifierResult(is_correct=correct, parsed_answer=parsed_answer, reason=VERIFIER_RESULTS[task][sample]["reason"]),
+        "verifier_result": VerifierResult(
+            is_correct=correct,
+            parsed_answer=parsed_answer,
+            reason=VERIFIER_RESULTS[task][sample]["reason"],
+        ),
         "metadata": {
             "parent_entry_ids": parent_ids,
             "source_entry_ids": source_ids,
@@ -408,7 +448,9 @@ def _build_full_history_trial(
             "source_entry_ids": source_ids,
         },
         "memory_after": memory_after,
-        "method_calls": [_method_call("full_history_generate", prompt_messages, raw_response, model)],
+        "method_calls": [
+            _method_call("full_history_generate", prompt_messages, raw_response, model)
+        ],
         "contamination_exposure": _contamination_exposure(arm, memory_before, []),
         "bad_memory_uptake_label": "not_applicable",
         "repeated_failure_label": "not_applicable" if correct else "first_failure",
@@ -440,11 +482,25 @@ def _build_reflexion_trial(
     parsed_answer = raw_response.split(":", 1)[1].strip()
     correct = VERIFIER_RESULTS[task][sample]["is_correct"]
 
-    reflection_entries = [e for e in memory_before if e.get("memory_type") == "verbal_reflection" or str(e.get("content", "")).startswith("Reflection:")]
-    reflection_context = "\n".join(f"Reflection: {e['content'].removeprefix('Reflection:').strip()}" for e in reflection_entries[-3:]) or "(none)"
+    reflection_entries = [
+        e
+        for e in memory_before
+        if e.get("memory_type") == "verbal_reflection"
+        or str(e.get("content", "")).startswith("Reflection:")
+    ]
+    reflection_context = (
+        "\n".join(
+            f"Reflection: {e['content'].removeprefix('Reflection:').strip()}"
+            for e in reflection_entries[-3:]
+        )
+        or "(none)"
+    )
     generate_messages = [
         {"role": "system", "content": f"Solve the {task} task using reflections when useful."},
-        {"role": "user", "content": f"Task: {task}\n\nReflections:\n{reflection_context}\n\nCurrent task input:\n{_task_input(task, sample)}"},
+        {
+            "role": "user",
+            "content": f"Task: {task}\n\nReflections:\n{reflection_context}\n\nCurrent task input:\n{_task_input(task, sample)}",
+        },
     ]
     method_calls = [_method_call("reflexion_generate", generate_messages, raw_response, model)]
 
@@ -452,15 +508,23 @@ def _build_reflexion_trial(
     if not correct:
         reflect_raw = fixture["responses_by_sample"][sample]["reflexion_reflect"]
         reflect_messages = [
-            {"role": "system", "content": "Diagnose the failed attempt and write a concise mitigation plan."},
-            {"role": "user", "content": (
-                f"Task: {task}\n\nReflections:\n{reflection_context}\n\nTask input:\n{_task_input(task, sample)}\n\n"
-                f"Failed raw response:\n{raw_response}\n\nParsed answer:\n{parsed_answer}\n\nCorrect: false"
-            )},
+            {
+                "role": "system",
+                "content": "Diagnose the failed attempt and write a concise mitigation plan.",
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Task: {task}\n\nReflections:\n{reflection_context}\n\nTask input:\n{_task_input(task, sample)}\n\n"
+                    f"Failed raw response:\n{raw_response}\n\nParsed answer:\n{parsed_answer}\n\nCorrect: false"
+                ),
+            },
         ]
         method_calls.append(_method_call("reflexion_reflect", reflect_messages, reflect_raw, model))
         reflection_entry_id = f"reflexion:{task}:{sample}:{arm}:{model}"
-        contaminated_sources = [e["entry_id"] for e in memory_before if e.get("clean_or_contaminated") == "contaminated"]
+        contaminated_sources = [
+            e["entry_id"] for e in memory_before if e.get("clean_or_contaminated") == "contaminated"
+        ]
         reflection_entry = {
             "entry_id": reflection_entry_id,
             "content": f"Reflection: {reflect_raw}",
@@ -507,13 +571,20 @@ def _build_reflexion_trial(
         "filter_decision": _filter_decision(arm),
         "raw_response": raw_response,
         "parsed_answer": parsed_answer,
-        "verifier_result": VerifierResult(is_correct=correct, parsed_answer=parsed_answer, reason=VERIFIER_RESULTS[task][sample]["reason"]),
+        "verifier_result": VerifierResult(
+            is_correct=correct,
+            parsed_answer=parsed_answer,
+            reason=VERIFIER_RESULTS[task][sample]["reason"],
+        ),
         "metadata": {},
         "memory_write_event": memory_write_event,
         "memory_after": memory_after,
         "method_calls": method_calls,
         "contamination_exposure": _contamination_exposure(arm, memory_before, []),
-        "bad_memory_uptake_label": "not_applicable" if arm == "clean" or not any(e.get("clean_or_contaminated") == "contaminated" for e in memory_before) else "not_evaluable",
+        "bad_memory_uptake_label": "not_applicable"
+        if arm == "clean"
+        or not any(e.get("clean_or_contaminated") == "contaminated" for e in memory_before)
+        else "not_evaluable",
         "repeated_failure_label": "not_applicable" if correct else "first_failure",
         "recovery_after_filter_label": "not_applicable",
         "latency_ms": None,
@@ -544,17 +615,27 @@ def _build_dynamic_cheatsheet_trial(
     is_correct = DC_ANSWER_CORRECT[sample]
 
     cheatsheet = "\n".join(f"- {e['content']}" for e in memory_before)
-    generate_messages = [{"role": "user", "content": f"Task input: {_task_input(task, sample)}\n\nCheatsheet:\n{cheatsheet}\n\nSolve the task and respond in the normal harness format: final: <answer>."}]
+    generate_messages = [
+        {
+            "role": "user",
+            "content": f"Task input: {_task_input(task, sample)}\n\nCheatsheet:\n{cheatsheet}\n\nSolve the task and respond in the normal harness format: final: <answer>.",
+        }
+    ]
 
     curated_raw = fixture["responses_by_sample"][sample]["dynamic_cheatsheet_curate"]
     has_tag = "<cheatsheet>" in curated_raw and "</cheatsheet>" in curated_raw
     status = "accepted" if has_tag else "preserved_missing_tag"
 
-    curate_messages = [{"role": "user", "content": (
-        f"Previous cheatsheet:\n{cheatsheet}\n\nTask input: {_task_input(task, sample)}\n\n"
-        f"Raw output: {raw_response}\nParsed answer: {parsed_answer}\nCorrect: {str(is_correct).lower()}\n\n"
-        "Return exactly one <cheatsheet>...</cheatsheet> block with the updated cheatsheet."
-    )}]
+    curate_messages = [
+        {
+            "role": "user",
+            "content": (
+                f"Previous cheatsheet:\n{cheatsheet}\n\nTask input: {_task_input(task, sample)}\n\n"
+                f"Raw output: {raw_response}\nParsed answer: {parsed_answer}\nCorrect: {str(is_correct).lower()}\n\n"
+                "Return exactly one <cheatsheet>...</cheatsheet> block with the updated cheatsheet."
+            ),
+        }
+    ]
 
     method_calls = [
         _method_call("dynamic_cheatsheet_generate", generate_messages, raw_response, model),
@@ -562,10 +643,16 @@ def _build_dynamic_cheatsheet_trial(
     ]
 
     parent_ids = [e["entry_id"] for e in memory_before]
-    source_ids = [e["entry_id"] for e in memory_before if e.get("clean_or_contaminated") == "contaminated"]
+    source_ids = [
+        e["entry_id"] for e in memory_before if e.get("clean_or_contaminated") == "contaminated"
+    ]
     if status == "accepted":
         new_entry_id = f"dc_cheatsheet:{task}:{sample}:{arm}:{model}"
-        new_content = curated_raw.split("<cheatsheet>", 1)[1].split("</cheatsheet>", 1)[0].strip() if has_tag else "updated cheatsheet"
+        new_content = (
+            curated_raw.split("<cheatsheet>", 1)[1].split("</cheatsheet>", 1)[0].strip()
+            if has_tag
+            else "updated cheatsheet"
+        )
         new_entry = {
             "entry_id": new_entry_id,
             "content": new_content,
@@ -616,13 +703,19 @@ def _build_dynamic_cheatsheet_trial(
         "filter_decision": _filter_decision(arm),
         "raw_response": raw_response,
         "parsed_answer": parsed_answer,
-        "verifier_result": VerifierResult(is_correct=is_correct, parsed_answer=parsed_answer, reason="ok" if is_correct else "value_does_not_match_target"),
+        "verifier_result": VerifierResult(
+            is_correct=is_correct,
+            parsed_answer=parsed_answer,
+            reason="ok" if is_correct else "value_does_not_match_target",
+        ),
         "metadata": {},
         "memory_write_event": memory_write_event,
         "memory_after": memory_after,
         "method_calls": method_calls,
         "contamination_exposure": _contamination_exposure(arm, memory_before, []),
-        "bad_memory_uptake_label": "not_applicable" if arm == "clean" or not source_ids else "not_evaluable",
+        "bad_memory_uptake_label": "not_applicable"
+        if arm == "clean" or not source_ids
+        else "not_evaluable",
         "repeated_failure_label": "not_applicable" if is_correct else "first_failure",
         "recovery_after_filter_label": "not_applicable",
         "latency_ms": None,
@@ -643,11 +736,15 @@ def _make_synthetic_rows() -> list[dict]:
                 for arm in ARMS:
                     for model in MODELS:
                         if baseline == "full_history":
-                            row = _build_full_history_trial(task, sample, arm, model, state, fixture)
+                            row = _build_full_history_trial(
+                                task, sample, arm, model, state, fixture
+                            )
                         elif baseline == "reflexion_style":
                             row = _build_reflexion_trial(task, sample, arm, model, state, fixture)
                         else:
-                            row = _build_dynamic_cheatsheet_trial(task, sample, arm, model, state, fixture)
+                            row = _build_dynamic_cheatsheet_trial(
+                                task, sample, arm, model, state, fixture
+                            )
                         rows.append(TrialLog(**row).model_dump(mode="json"))
     return rows
 
@@ -678,8 +775,22 @@ def test_inspector_accepts_complete_synthetic_run(tmp_path: Path) -> None:
 def test_inspector_rejects_cross_arm_entry_copy(tmp_path: Path) -> None:
     run_dir = tmp_path / "bad_run"
     rows = _make_synthetic_rows()
-    target = next(r for r in rows if r["baseline"] == "full_history" and r["arm"] == "clean" and r["sample_id"] == "game24_pilot_001" and r["backbone"] == "gpt4o")
-    foreign = next(r for r in rows if r["baseline"] == "full_history" and r["arm"] == "contaminated" and r["sample_id"] == "game24_pilot_001" and r["backbone"] == "gpt4o")
+    target = next(
+        r
+        for r in rows
+        if r["baseline"] == "full_history"
+        and r["arm"] == "clean"
+        and r["sample_id"] == "game24_pilot_001"
+        and r["backbone"] == "gpt4o"
+    )
+    foreign = next(
+        r
+        for r in rows
+        if r["baseline"] == "full_history"
+        and r["arm"] == "contaminated"
+        and r["sample_id"] == "game24_pilot_001"
+        and r["backbone"] == "gpt4o"
+    )
     foreign["memory_after"].append(target["memory_after"][-1])
     _write_trials_jsonl(run_dir, rows)
 
@@ -687,14 +798,29 @@ def test_inspector_rejects_cross_arm_entry_copy(tmp_path: Path) -> None:
     assert result.returncode != 0
     report = json.loads(result.stdout)
     assert report["isolation"] == "fail"
-    assert any("leaked" in reason.lower() or "cross" in reason.lower() for reason in report.get("reasons", []))
+    assert any(
+        "leaked" in reason.lower() or "cross" in reason.lower()
+        for reason in report.get("reasons", [])
+    )
 
 
 def test_inspector_rejects_extra_reflection_on_success(tmp_path: Path) -> None:
     run_dir = tmp_path / "bad_run"
     rows = _make_synthetic_rows()
-    target = next(r for r in rows if r["baseline"] == "reflexion_style" and r["task_name"] == "math_equation_balancer" and r["sample_id"] == "meb_pilot_001" and r["arm"] == "clean" and r["backbone"] == "gpt4o")
-    target["method_calls"].append(_method_call("reflexion_reflect", [{"role": "user", "content": "reflect"}], "reflect", "gpt4o"))
+    target = next(
+        r
+        for r in rows
+        if r["baseline"] == "reflexion_style"
+        and r["task_name"] == "math_equation_balancer"
+        and r["sample_id"] == "meb_pilot_001"
+        and r["arm"] == "clean"
+        and r["backbone"] == "gpt4o"
+    )
+    target["method_calls"].append(
+        _method_call(
+            "reflexion_reflect", [{"role": "user", "content": "reflect"}], "reflect", "gpt4o"
+        )
+    )
     target["prompt_messages"].extend([{"role": "user", "content": "reflect"}])
     _write_trials_jsonl(run_dir, rows)
 
@@ -726,13 +852,17 @@ def test_inspector_requires_reflection_only_for_game24_pilot_001(tmp_path: Path)
     )
     expected["verifier_result"]["is_correct"] = True
     expected["verifier_result"]["reason"] = "ok"
-    expected["method_calls"] = [call for call in expected["method_calls"] if call["stage"] != "reflexion_reflect"]
+    expected["method_calls"] = [
+        call for call in expected["method_calls"] if call["stage"] != "reflexion_reflect"
+    ]
     expected["memory_write_event"] = None
     expected["memory_after"] = expected["memory_before"]
     misplaced["verifier_result"]["is_correct"] = False
     misplaced["verifier_result"]["reason"] = "value_does_not_match_target"
     misplaced["method_calls"].append(
-        _method_call("reflexion_reflect", [{"role": "user", "content": "reflect"}], "reflect", "gpt4o")
+        _method_call(
+            "reflexion_reflect", [{"role": "user", "content": "reflect"}], "reflect", "gpt4o"
+        )
     )
     misplaced["memory_write_event"] = {"type": "reflexion_append", "status": "accepted"}
     _write_trials_jsonl(run_dir, rows)
@@ -749,14 +879,18 @@ def test_inspector_rejects_wrong_stage_count(tmp_path: Path) -> None:
     rows = _make_synthetic_rows()
     for row in rows:
         if row["baseline"] == "dynamic_cheatsheet_optional":
-            row["method_calls"] = [c for c in row["method_calls"] if c["stage"] != "dynamic_cheatsheet_curate"]
+            row["method_calls"] = [
+                c for c in row["method_calls"] if c["stage"] != "dynamic_cheatsheet_curate"
+            ]
     _write_trials_jsonl(run_dir, rows)
 
     result = _run_inspector(run_dir)
     assert result.returncode != 0
     report = json.loads(result.stdout)
     assert report["stages"] == "fail"
-    assert any("dynamic_cheatsheet_curate" in reason.lower() for reason in report.get("reasons", []))
+    assert any(
+        "dynamic_cheatsheet_curate" in reason.lower() for reason in report.get("reasons", [])
+    )
 
 
 def test_inspector_against_real_canonical_run(tmp_path: Path) -> None:

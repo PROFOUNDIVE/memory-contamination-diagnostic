@@ -120,7 +120,9 @@ def _nodes(lineage: Mapping[str, Mapping[str, Any]]) -> dict[str, Mapping[str, A
         predecessor = node.get("version_predecessor_id")
         if predecessor is not None and (not isinstance(predecessor, str) or not predecessor):
             raise SequentialOutcomeError("FABRICATED_LINEAGE")
-        if node.get("lineage_status") == "exact" and any(parent not in lineage for parent in parents):
+        if node.get("lineage_status") == "exact" and any(
+            parent not in lineage for parent in parents
+        ):
             raise SequentialOutcomeError("FABRICATED_LINEAGE")
         if isinstance(predecessor, str) and predecessor not in lineage:
             raise SequentialOutcomeError("FABRICATED_LINEAGE")
@@ -156,7 +158,9 @@ def _events_by_trial(
         trial_id = _required_id(event, "trial_id")
         if trial_id in result:
             raise SequentialOutcomeError("FABRICATED_LINEAGE")
-        changed_ids = _ids(event.get("new_entry_ids", ())) + _ids(event.get("updated_entry_ids", ()))
+        changed_ids = _ids(event.get("new_entry_ids", ())) + _ids(
+            event.get("updated_entry_ids", ())
+        )
         if any(entry_id not in nodes for entry_id in changed_ids):
             raise SequentialOutcomeError("FABRICATED_LINEAGE")
         result[trial_id] = event
@@ -184,7 +188,10 @@ def _final_roots(
 
 
 def _generic_recurrence(
-    outcomes: Sequence[SequentialTrialOutcome], order_key: int, failure_class: str | None, window: int
+    outcomes: Sequence[SequentialTrialOutcome],
+    order_key: int,
+    failure_class: str | None,
+    window: int,
 ) -> bool:
     return failure_class is not None and any(
         previous.failure_class == failure_class and order_key - previous.order_key <= window
@@ -225,7 +232,9 @@ def _propagation(
         path = _recorded_path(entry_id, set(final_ids), nodes)
         if path and set(_ids(node.get("injected_root_ids", ())) or path[:1]) & final_roots:
             return EvidenceOutcome("supported", True, path)
-    return EvidenceOutcome("approximate", None) if approximate else EvidenceOutcome("supported", False)
+    return (
+        EvidenceOutcome("approximate", None) if approximate else EvidenceOutcome("supported", False)
+    )
 
 
 def _recorded_path(
@@ -257,10 +266,16 @@ def _recorded_path(
 def _retention(trial: Mapping[str, Any], baseline: str) -> EvidenceOutcome:
     retention = trial.get("retention")
     if retention is None:
-        return EvidenceOutcome("unavailable", None) if baseline in _RETENTION_BASELINES else EvidenceOutcome("not_applicable", None)
+        return (
+            EvidenceOutcome("unavailable", None)
+            if baseline in _RETENTION_BASELINES
+            else EvidenceOutcome("not_applicable", None)
+        )
     if baseline not in _RETENTION_BASELINES or not isinstance(retention, Mapping):
         raise SequentialOutcomeError("UNSUPPORTED_BASELINE_OPERATION")
-    persisted = retention.get("root_persists_in_store", retention.get("injected_root_persists_in_store"))
+    persisted = retention.get(
+        "root_persists_in_store", retention.get("injected_root_persists_in_store")
+    )
     if not isinstance(persisted, bool):
         raise SequentialOutcomeError("UNSUPPORTED_BASELINE_OPERATION")
     return EvidenceOutcome("supported", persisted)
@@ -285,7 +300,11 @@ def _eviction(trial: Mapping[str, Any], baseline: str) -> EvidenceOutcome:
             if not isinstance(event, Mapping) or not isinstance(event.get("entry_id"), str):
                 raise SequentialOutcomeError("UNSUPPORTED_BASELINE_OPERATION")
         return EvidenceOutcome("supported", bool(events))
-    return EvidenceOutcome("unavailable", None) if baseline in _RETENTION_BASELINES else EvidenceOutcome("not_applicable", None)
+    return (
+        EvidenceOutcome("unavailable", None)
+        if baseline in _RETENTION_BASELINES
+        else EvidenceOutcome("not_applicable", None)
+    )
 
 
 def _visibility(
@@ -303,7 +322,9 @@ def _visibility(
     else:
         root_visible = None
     descendants = set(nodes) - roots
-    descendant_visible = bool(set(final_ids) & descendants) if "final_context_entry_ids" in trial else None
+    descendant_visible = (
+        bool(set(final_ids) & descendants) if "final_context_entry_ids" in trial else None
+    )
     return root_visible, descendant_visible
 
 
@@ -370,7 +391,9 @@ def _ids(value: Any) -> tuple[str, ...]:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         raise SequentialOutcomeError("FABRICATED_LINEAGE")
     ids = tuple(value)
-    if any(not isinstance(entry_id, str) or not entry_id for entry_id in ids) or len(ids) != len(set(ids)):
+    if any(not isinstance(entry_id, str) or not entry_id for entry_id in ids) or len(ids) != len(
+        set(ids)
+    ):
         raise SequentialOutcomeError("FABRICATED_LINEAGE")
     return ids
 

@@ -93,7 +93,16 @@ def _artifact_paths(tmp_path: Path) -> tuple[Path, Path, Path, Path, dict[str, A
     return config_path, raw_log_path, output_path, public_manifest_path, archive
 
 
-def _artifact_ref(module: Any, metadata: Any, template: Any, paths: tuple[Path, Path, Path, Path]) -> Any:
+def _artifact_ref(
+    module: Any,
+    metadata: Any,
+    template: Any,
+    paths: tuple[Path, Path, Path, Path],
+    *,
+    route_selection_manifest_hash: str | None = None,
+    seed_allocation_manifest_hash: str | None = None,
+    exploratory_activation_manifest_hash: str | None = None,
+) -> Any:
     config_path, raw_log_path, output_path, public_manifest_path = paths
     return module.RunArtifactRef(
         run_id=f"run:{metadata.run_template_id}",
@@ -114,6 +123,9 @@ def _artifact_ref(module: Any, metadata: Any, template: Any, paths: tuple[Path, 
         public_artifact_manifest_hash=canonical_json_hash(
             json.loads(public_manifest_path.read_text(encoding="utf-8"))
         ),
+        route_selection_manifest_hash=route_selection_manifest_hash,
+        seed_allocation_manifest_hash=seed_allocation_manifest_hash,
+        exploratory_activation_manifest_hash=exploratory_activation_manifest_hash,
     )
 
 
@@ -121,11 +133,15 @@ def test_builds_pre_route_selected_route_and_exploratory_manifest_rows(tmp_path:
     module = _manifest_module()
     schema = _fixture("FX-SCHEMA-001.json")
     route = _fixture("FX-ROUTE-001.json")
-    config_path, raw_log_path, output_path, public_manifest_path, archive = _artifact_paths(tmp_path)
+    config_path, raw_log_path, output_path, public_manifest_path, archive = _artifact_paths(
+        tmp_path
+    )
     paths = (config_path, raw_log_path, output_path, public_manifest_path)
     selection = RouteSelectionManifest.model_validate(route["valid_external_selection_manifest"])
     allocation = SeedAllocationManifest.model_validate(route["valid_seed_allocation_manifest"])
-    activation = ExploratoryActivationManifest.model_validate(route["valid_exploratory_activation_manifest"])
+    activation = ExploratoryActivationManifest.model_validate(
+        route["valid_exploratory_activation_manifest"]
+    )
 
     pre_route = _metadata(schema, 0, run_template_id="template-pre-route")
     selected = _metadata(
@@ -142,15 +158,34 @@ def test_builds_pre_route_selected_route_and_exploratory_manifest_rows(tmp_path:
         schema,
         5,
         run_template_id="template-exploratory-scientific",
-        trajectory_seed=activation.exploratory_slot_to_seed["game24|exploratory|exploratory-slot-001"],
+        trajectory_seed=activation.exploratory_slot_to_seed[
+            "game24|exploratory|exploratory-slot-001"
+        ],
         abstract_seed_slot_or_none="game24|exploratory|exploratory-slot-001",
         source_route_selection_manifest_id=selection.manifest_id,
         source_seed_allocation_manifest_id=allocation.manifest_id,
         exploratory_activation_manifest_id=activation.manifest_id,
     )
-    refs = tuple(
-        _artifact_ref(module, metadata, _template(metadata), paths)
-        for metadata in (pre_route, selected, non_scientific, scientific)
+    refs = (
+        _artifact_ref(module, pre_route, _template(pre_route), paths),
+        _artifact_ref(
+            module,
+            selected,
+            _template(selected),
+            paths,
+            route_selection_manifest_hash=selection.artifact_hash,
+            seed_allocation_manifest_hash=allocation.artifact_hash,
+        ),
+        _artifact_ref(module, non_scientific, _template(non_scientific), paths),
+        _artifact_ref(
+            module,
+            scientific,
+            _template(scientific),
+            paths,
+            route_selection_manifest_hash=selection.artifact_hash,
+            seed_allocation_manifest_hash=allocation.artifact_hash,
+            exploratory_activation_manifest_hash=activation.artifact_hash,
+        ),
     )
 
     manifest = module.build_run_manifest(refs)
@@ -176,11 +211,35 @@ def test_builds_pre_route_selected_route_and_exploratory_manifest_rows(tmp_path:
     assert isinstance(loaded.rows[3], module.ExploratoryRunManifestRow)
     assert loaded.rows[0].route_selection_manifest_id is None
     assert loaded.rows[1].seed_allocation_manifest_id == allocation.manifest_id
+    assert loaded.rows[1].route_selection_manifest_hash == selection.artifact_hash
+    assert loaded.rows[1].seed_allocation_manifest_hash == allocation.artifact_hash
     assert loaded.rows[3].exploratory_activation_manifest_id == activation.manifest_id
-    assert loaded.rows[0].raw_record_range == tuple(archive["run_manifest_rows"][0]["raw_record_range"])
+    assert loaded.rows[3].route_selection_manifest_hash == selection.artifact_hash
+    assert loaded.rows[3].seed_allocation_manifest_hash == allocation.artifact_hash
+    assert loaded.rows[3].exploratory_activation_manifest_hash == activation.artifact_hash
+    assert loaded.rows[0].raw_record_range == tuple(
+        archive["run_manifest_rows"][0]["raw_record_range"]
+    )
     assert loaded.rows[0].config_hash == refs[0].config_hash
     assert loaded.rows[0].output_hash == refs[0].output_hash
     assert manifest_hash == canonical_json_hash([row.to_dict() for row in loaded.rows])
+
+    with pytest.raises(module.ManifestError, match="ROUTE_SELECTION_MISMATCH"):
+        module.validate_run_manifest(
+            module.RunManifest((replace(loaded.rows[1], route_selection_manifest_hash=None),)),
+            {selection.manifest_id: selection},
+            {allocation.manifest_id: allocation},
+            {activation.manifest_id: activation},
+        )
+    with pytest.raises(module.ManifestError, match="ACTIVATION_MISMATCH"):
+        module.validate_run_manifest(
+            module.RunManifest(
+                (replace(loaded.rows[3], exploratory_activation_manifest_hash=None),)
+            ),
+            {selection.manifest_id: selection},
+            {allocation.manifest_id: allocation},
+            {activation.manifest_id: activation},
+        )
 
 
 def test_rejects_missing_range_and_orphan_rerun(tmp_path: Path) -> None:

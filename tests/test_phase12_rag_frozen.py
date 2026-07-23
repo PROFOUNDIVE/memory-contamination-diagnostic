@@ -119,13 +119,23 @@ def test_false_correct_irrelevant_candidates_compete_in_matched_band() -> None:
         assert retrieval.retrieved_scores == sorted(retrieval.retrieved_scores, reverse=True)
         assert context.final_entry_ids == retrieval.retrieved_entry_ids
         assert context.removed_entry_ids == []
-        assert [span.entry_id for span in result.outcome.method_calls[0].source_spans] == context.final_entry_ids
+        assert [
+            span.entry_id for span in result.outcome.method_calls[0].source_spans
+        ] == context.final_entry_ids
         assert result.outcome.memory_write_event is None
 
-    assert results["contam"].theory_exposure_document_ids == ("doc-false", "doc-clean-a", "doc-clean-b")
+    assert results["contam"].theory_exposure_document_ids == (
+        "doc-false",
+        "doc-clean-a",
+        "doc-clean-b",
+    )
     assert results["correct"].theory_exposure_document_ids is None
     assert results["irrelevant"].theory_exposure_document_ids is None
-    assert results["correct"].auxiliary_inclusion_document_ids == ("doc-correct", "doc-clean-a", "doc-clean-b")
+    assert results["correct"].auxiliary_inclusion_document_ids == (
+        "doc-correct",
+        "doc-clean-a",
+        "doc-clean-b",
+    )
     assert results["irrelevant"].auxiliary_inclusion_document_ids == (
         "doc-irrelevant",
         "doc-clean-a",

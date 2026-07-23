@@ -118,9 +118,7 @@ def _assert_no_evidence_exposure(artifacts: dict[str, Any]) -> None:
     assert EVIDENCE_MARKER not in json.dumps(runtime_data, sort_keys=True)
 
 
-def _assert_direct_edge_contract(
-    trials: list[TrialLog], memory_events: list[MemoryEvent]
-) -> None:
+def _assert_direct_edge_contract(trials: list[TrialLog], memory_events: list[MemoryEvent]) -> None:
     events_by_trial: dict[str, list[MemoryEvent]] = defaultdict(list)
     for event in memory_events:
         events_by_trial[event.trial_id].append(event)
@@ -178,9 +176,7 @@ def _assert_online_phase11_contract(run_dir: Path) -> None:
     assert len(trials) == 39
     assert all(trial.status == "succeeded" and trial.verifier_result for trial in trials)
     assert not failures
-    identities = {
-        (trial.task_name, trial.baseline, trial.arm, trial.backbone) for trial in trials
-    }
+    identities = {(trial.task_name, trial.baseline, trial.arm, trial.backbone) for trial in trials}
     assert len(identities) == len(trials)
     assert {trial.task_name for trial in trials} == {
         "game24",
@@ -239,7 +235,9 @@ def _assert_online_phase11_contract(run_dir: Path) -> None:
         assert trial.checkpoint_ref is None
         answer_call = calls_by_id[trial.answer_call_id]
         trial_calls = calls_by_trial[trial.trial_id]
-        assert [call.call_id for call in trial_calls] == [call.call_id for call in trial.method_calls]
+        assert [call.call_id for call in trial_calls] == [
+            call.call_id for call in trial.method_calls
+        ]
         assert trial.prompt_messages == answer_call.messages
         assert trial.raw_response == answer_call.response_text
         assert trial.verifier_result is not None
@@ -310,7 +308,9 @@ def _assert_online_phase11_contract(run_dir: Path) -> None:
     classes = {item.contamination_class for item in memory_items}
     assert {"clean", "injected"}.issubset(classes)
     assert classes.issubset({"clean", "injected", "derived", "natural"})
-    injected_ids = {item.entry_id for item in memory_items if item.contamination_class == "injected"}
+    injected_ids = {
+        item.entry_id for item in memory_items if item.contamination_class == "injected"
+    }
     for item in memory_items:
         if item.contamination_class == "injected":
             assert item.injected_root_ids == [item.entry_id]
@@ -390,9 +390,7 @@ def test_phase11_frozen_replay_is_checkpointed_read_only_and_rejects_writers(
     for trial in rag_trials:
         assert trial.checkpoint_ref is not None
         checkpoints.append(json.dumps(trial.checkpoint_ref.model_dump(), sort_keys=True))
-    assert set(checkpoints) == {
-        json.dumps(checkpoint, sort_keys=True)
-    }
+    assert set(checkpoints) == {json.dumps(checkpoint, sort_keys=True)}
     assert all(trial.memory_before == trial.memory_after for trial in rag_trials)
     assert all(trial.memory_write_event is None for trial in rag_trials)
     no_memory_trials = [trial for trial in trials if trial.baseline == "no_memory"]
@@ -424,7 +422,9 @@ def test_phase11_negative_contract_cases_fail_at_the_named_invariant(tmp_path, m
     edge_event = next(event for event in memory_events if event.lineage_edges)
 
     missing_edge = copy.deepcopy(memory_events)
-    next(event for event in missing_edge if event.memory_id == edge_event.memory_id).lineage_edges.pop()
+    next(
+        event for event in missing_edge if event.memory_id == edge_event.memory_id
+    ).lineage_edges.pop()
     with pytest.raises(AssertionError, match="missing or non-direct exact lineage edge"):
         _assert_direct_edge_contract(trials, missing_edge)
 

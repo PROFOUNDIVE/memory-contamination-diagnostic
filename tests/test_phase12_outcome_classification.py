@@ -17,7 +17,9 @@ from memcontam.logging.schema import VerifierResult
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "phase12" / "FX-OUTCOME-001.json"
 
 
-def _outcome_for_case(case: dict[str, object]) -> tuple[BaselineExecutionOutcome, VerifierResult | None]:
+def _outcome_for_case(
+    case: dict[str, object],
+) -> tuple[BaselineExecutionOutcome, VerifierResult | None]:
     case_id = case["id"]
     if case_id == "correct" or case_id == "valid_incorrect":
         verifier = VerifierResult(is_correct=bool(case["verifier"]), parsed_answer="answer")

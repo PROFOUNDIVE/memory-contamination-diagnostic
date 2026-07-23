@@ -5,7 +5,12 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass, replace
 from typing import Literal, Sequence
 
-from memcontam.memory.admission import AdmissionContext, AdmissionDecision, AdmissionError, evaluate_admission
+from memcontam.memory.admission import (
+    AdmissionContext,
+    AdmissionDecision,
+    AdmissionError,
+    evaluate_admission,
+)
 from memcontam.memory.checkpoints import NativeCheckpoint
 from memcontam.memory.cards_v3 import MemoryCardEnvelopeV3
 from memcontam.memory.checkpoint_v3 import (
@@ -153,7 +158,9 @@ def route_candidate_write(
         else:
             quarantine = append_native_entry(quarantine, candidate.entry)
             quarantined_envelopes = (*quarantined_envelopes, candidate.envelope)
-            partition = PartitionDecision(candidate.envelope.entry_id, "quarantine", decision.reason)
+            partition = PartitionDecision(
+                candidate.envelope.entry_id, "quarantine", decision.reason
+            )
     except CheckpointError as error:
         raise AdmissionError(error.code) from error
 
@@ -230,9 +237,15 @@ def validate_partition_preserves_native_contract(
     source: NativeCheckpoint, partition: FilteredNativeState
 ) -> None:
     filtered_identity = replace(source.identity, arm="contaminated_filter")
-    if partition.active.identity != filtered_identity or partition.quarantine.identity != filtered_identity:
+    if (
+        partition.active.identity != filtered_identity
+        or partition.quarantine.identity != filtered_identity
+    ):
         raise ValueError("filtered checkpoints differ in a non-arm identity field")
-    if partition.active.parameters != source.parameters or partition.quarantine.parameters != source.parameters:
+    if (
+        partition.active.parameters != source.parameters
+        or partition.quarantine.parameters != source.parameters
+    ):
         raise ValueError("filtered checkpoint parameters changed")
 
     source_cards = {card.card_id: card for card in source.cards}
@@ -252,7 +265,9 @@ def validate_partition_preserves_native_contract(
         if entry_ids != expected_ids:
             raise ValueError("filtered checkpoint changes native ordering")
         for card, envelope in zip(checkpoint.cards, checkpoint.envelopes, strict=True):
-            if card != source_cards.get(card.card_id) or envelope != source_envelopes.get(envelope.entry_id):
+            if card != source_cards.get(card.card_id) or envelope != source_envelopes.get(
+                envelope.entry_id
+            ):
                 raise ValueError("filtered checkpoint changes native entries")
 
     if tuple(decision.entry_id for decision in partition.decisions) != tuple(source_cards):
@@ -345,8 +360,7 @@ def _validate_candidate(candidate: CandidateWrite, state: FilteredCheckpoint) ->
     ):
         raise AdmissionError("ENTRY_ENVELOPE_MISMATCH")
     existing_ids = {
-        _entry_id(entry)
-        for entry in (*state.active.state.entries, *state.quarantine.state.entries)
+        _entry_id(entry) for entry in (*state.active.state.entries, *state.quarantine.state.entries)
     }
     if candidate.entry.entry_id in existing_ids:
         raise AdmissionError("DUPLICATE_ENTRY")

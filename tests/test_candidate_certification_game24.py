@@ -11,7 +11,9 @@ def test_certifies_fraction_intermediates_counterexample() -> None:
     from memcontam.contamination.phase12.certification import CertificationSuite, certify_triplet
     from memcontam.contamination.phase12.registry import load_candidate_registry
 
-    triplet = next(item for item in load_candidate_registry(REGISTRY_PATH).triplets if item.task == "game24")
+    triplet = next(
+        item for item in load_candidate_registry(REGISTRY_PATH).triplets if item.task == "game24"
+    )
     result = certify_triplet(triplet, CertificationSuite.primary())
 
     assert result.passed

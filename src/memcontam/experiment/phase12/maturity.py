@@ -96,7 +96,9 @@ def _baseline_reasons(
     elif family == "rag":
         if state.get("read_only") is not True:
             reasons.append("RAG_NOT_READ_ONLY")
-        if not _nonempty_string(state.get("corpus_id")) or not _nonempty_string(state.get("index_id")):
+        if not _nonempty_string(state.get("corpus_id")) or not _nonempty_string(
+            state.get("index_id")
+        ):
             reasons.append("RAG_INDEX_UNAVAILABLE")
     elif family == "bot":
         if not _at_least(state.get("templates"), 2):

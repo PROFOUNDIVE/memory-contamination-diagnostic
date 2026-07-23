@@ -17,7 +17,12 @@ from memcontam.baselines.reflexion_phase12 import (
 from memcontam.clients.replay import ReplayClient
 from memcontam.memory.admission import AdmissionContext
 from memcontam.memory.cards_v3 import MEMORY_CARD_V3, MemoryCardEnvelopeV3, canonical_content_hash
-from memcontam.memory.checkpoint_v3 import NATIVE_ENTRY_V1, NativeEntry, NativeState, serialize_checkpoint
+from memcontam.memory.checkpoint_v3 import (
+    NATIVE_ENTRY_V1,
+    NativeEntry,
+    NativeState,
+    serialize_checkpoint,
+)
 from memcontam.memory.filtered_state import partition_native_checkpoint
 from memcontam.memory.writer_registry import WriterRegistry
 from memcontam.tasks.base import TaskInstance
@@ -110,7 +115,9 @@ def test_injected_reflection_conditions_actor_and_records_failed_actor_parent() 
         max_attempts=2,
         responses={
             "reflexion_generate": ["final: wrong", "final: 24"],
-            "reflexion_reflect": _corrective_reflection("Check the controlled route.", [injected.entry_id]),
+            "reflexion_reflect": _corrective_reflection(
+                "Check the controlled route.", [injected.entry_id]
+            ),
         },
     )
     state = ReflexionStateV3(
@@ -144,12 +151,16 @@ def test_failed_actor_produces_supported_admitted_reflection() -> None:
         max_attempts=1,
         responses={
             "reflexion_generate": "final: wrong",
-            "reflexion_reflect": _corrective_reflection("Use the controlled route.", [injected.entry_id]),
+            "reflexion_reflect": _corrective_reflection(
+                "Use the controlled route.", [injected.entry_id]
+            ),
         },
     )
     result = ReflexionPhase12Adapter().execute(
         trial,
-        ReflexionStateV3(reflections=[injected], injected_root_id=injected.entry_id, active_capacity=3),
+        ReflexionStateV3(
+            reflections=[injected], injected_root_id=injected.entry_id, active_capacity=3
+        ),
     )
 
     assert result.write_envelope is not None
@@ -175,7 +186,9 @@ def test_filter_quarantines_unadmitted_reflection_without_expanding_active_capac
         evidence_envelopes=(clean_envelope, injected_envelope),
     )
     filtered = partition_native_checkpoint(
-        serialize_checkpoint(NativeState("reflexion_style", (clean, injected), {"reflections": []})),
+        serialize_checkpoint(
+            NativeState("reflexion_style", (clean, injected), {"reflections": []})
+        ),
         context,
     )
     state = ReflexionStateV3(
@@ -268,7 +281,10 @@ def test_second_reflection_uses_a_later_native_order_than_its_explicit_parent(mo
         ),
     )
 
-    assert [reflection.entry_id for reflection in result.native_reflections] == [first_id, second_id]
+    assert [reflection.entry_id for reflection in result.native_reflections] == [
+        first_id,
+        second_id,
+    ]
     assert result.native_reflections[-1].direct_parent_ids == (first_id,)
     assert result.filter_transition is not None
     assert result.filter_transition.decision.admitted
@@ -292,7 +308,9 @@ def test_target_set_lineage_does_not_erase_explicit_reflection_parent() -> None:
 
     result = ReflexionPhase12Adapter().execute(
         trial,
-        ReflexionStateV3(reflections=[injected], injected_root_id=injected.entry_id, active_capacity=3),
+        ReflexionStateV3(
+            reflections=[injected], injected_root_id=injected.entry_id, active_capacity=3
+        ),
     )
 
     assert result.write_envelope is not None
@@ -317,7 +335,9 @@ def test_active_capacity_evicts_the_oldest_reflection_after_a_new_write() -> Non
 
     assert [event.entry_id for event in result.eviction_events] == [injected.entry_id]
     assert state.first_injected_eviction_trial_id == trial.trial_id
-    assert [entry.entry_id for entry in state.reflections] == [result.native_reflections[-1].entry_id]
+    assert [entry.entry_id for entry in state.reflections] == [
+        result.native_reflections[-1].entry_id
+    ]
 
 
 def test_rejects_future_access_capacity_error_and_visible_parent_union() -> None:

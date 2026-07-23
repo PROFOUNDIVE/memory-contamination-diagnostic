@@ -119,7 +119,11 @@ def _write_admission_bundle(
         payload.update(
             {
                 "trajectory_seed": next(
-                    iter(route["valid_exploratory_activation_manifest"]["exploratory_slot_to_seed"].values())
+                    iter(
+                        route["valid_exploratory_activation_manifest"][
+                            "exploratory_slot_to_seed"
+                        ].values()
+                    )
                 ),
                 "abstract_seed_slot": next(
                     iter(route["valid_exploratory_activation_manifest"]["exploratory_slot_to_seed"])
@@ -141,7 +145,9 @@ def _write_admission_bundle(
 
 def _validated_governance():
     route = _fixture("FX-ROUTE-001.json")
-    reports = tuple(RouteFeasibilityReport.model_validate(item) for item in route["feasibility_reports"])
+    reports = tuple(
+        RouteFeasibilityReport.model_validate(item) for item in route["feasibility_reports"]
+    )
     pilot = PilotBManifest.model_validate(route["valid_pilot_b_manifest"])
     mft = MftManifest.model_validate(route["valid_mft_manifest"])
     selection = RouteSelectionManifest.model_validate(route["valid_external_selection_manifest"])
@@ -154,8 +160,12 @@ def _validated_governance():
     activation = ExploratoryActivationManifest.model_validate(
         route["valid_exploratory_activation_manifest"]
     )
-    return selection, allocation, activation, validated_route, validate_exploratory_activation(
-        plan, resource, activation, validated_route
+    return (
+        selection,
+        allocation,
+        activation,
+        validated_route,
+        validate_exploratory_activation(plan, resource, activation, validated_route),
     )
 
 
@@ -164,8 +174,12 @@ def test_admits_applicable_pre_route_selected_route_and_exploratory_pass_fixture
 ) -> None:
     module = _admission_module()
     certificates = _certificates(tmp_path, "FX-P12I-PASS-001.json")
-    archive = ArchiveValidationReport(True, _fixture("FX-ARCHIVE-001.json")["expected"]["resolved_edges"])
-    selection, allocation, activation, validated_route, validated_activation = _validated_governance()
+    archive = ArchiveValidationReport(
+        True, _fixture("FX-ARCHIVE-001.json")["expected"]["resolved_edges"]
+    )
+    selection, allocation, activation, validated_route, validated_activation = (
+        _validated_governance()
+    )
 
     pilot = module.evaluate_scientific_admission(
         module.ScientificRunRequest("pilot_a", "3w", "text_only", True, 7, None),
@@ -210,13 +224,18 @@ def test_admits_applicable_pre_route_selected_route_and_exploratory_pass_fixture
         validated_activation,
     )
 
-    assert pilot.scientific_admission_ref["p12i_certificate_id"] == certificates.p12i_certificate.certificate_id
+    assert (
+        pilot.scientific_admission_ref["p12i_certificate_id"]
+        == certificates.p12i_certificate.certificate_id
+    )
     assert main.scientific_admission_ref == pilot.scientific_admission_ref
     assert exploratory.scientific_admission_ref == pilot.scientific_admission_ref
     assert not (tmp_path / "runs").exists()
 
     phase12_cli = importlib.import_module("memcontam.experiment.phase12.cli")
-    monkeypatch.setattr(phase12_cli, "validate_archive", lambda _: ArchiveValidationReport(True, 11))
+    monkeypatch.setattr(
+        phase12_cli, "validate_archive", lambda _: ArchiveValidationReport(True, 11)
+    )
     run_root = tmp_path / "cli-runs"
     _run_cli(
         monkeypatch,
@@ -240,7 +259,9 @@ def test_blocks_every_incomplete_or_blocked_fixture(tmp_path: Path, monkeypatch)
     archive = ArchiveValidationReport(True, 11)
     blocked = _certificates(tmp_path, "FX-P12I-001.json")
     passed = _certificates(tmp_path, "FX-P12I-PASS-001.json")
-    selection, allocation, activation, validated_route, validated_activation = _validated_governance()
+    selection, allocation, activation, validated_route, validated_activation = (
+        _validated_governance()
+    )
 
     cases = (
         (
@@ -331,11 +352,15 @@ def test_blocks_every_incomplete_or_blocked_fixture(tmp_path: Path, monkeypatch)
             route_fixture["valid_selected_package_resource_manifest"]
         ),
     }
-    unfunded_payload["selected_package_resource_manifest"]["mandatory_package_status"] = "not_resourced"
+    unfunded_payload["selected_package_resource_manifest"]["mandatory_package_status"] = (
+        "not_resourced"
+    )
     with pytest.raises(module.AdmissionDenied, match="EXPLORATORY_RESOURCE_RESERVATION_NOT_PASS"):
         phase12_cli._validated_activation(unfunded_payload, validated_route)
 
-    monkeypatch.setattr(phase12_cli, "validate_archive", lambda _: ArchiveValidationReport(True, 11))
+    monkeypatch.setattr(
+        phase12_cli, "validate_archive", lambda _: ArchiveValidationReport(True, 11)
+    )
     run_root = tmp_path / "cli-runs"
     with pytest.raises(SystemExit, match="EXPLORATORY_BUDGET_INSUFFICIENT"):
         _run_cli(

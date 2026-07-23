@@ -21,7 +21,9 @@ CONFIG_PATH = ROOT / "configs" / "baseline_fidelity_v2_source_contract_replay.ya
 FIXTURE_PATH = ROOT / "data" / "replay" / "baseline_fidelity_v2_source_contract.yaml"
 INSPECTOR = ROOT / "scripts" / "inspect_baseline_fidelity_v2.py"
 MANIFEST = ROOT / "scripts" / "build_bfv2_evidence_manifest.py"
-SEMANTIC_CALL_FIXTURES = ROOT / "tests" / "fixtures" / "baseline_fidelity_v2_semantic_call_hashes.json"
+SEMANTIC_CALL_FIXTURES = (
+    ROOT / "tests" / "fixtures" / "baseline_fidelity_v2_semantic_call_hashes.json"
+)
 
 
 def test_f1b_config_loads_the_committed_stage_native_fixture() -> None:
@@ -97,7 +99,9 @@ def test_f1b_replay_parses_artifacts_locks_prompt_bytes_and_rejects_mutations(
         for trial in trials
     )
     assert any(
-        trial.baseline == "full_history" and trial.status == "failed" and len(trial.memory_after) > len(trial.memory_before)
+        trial.baseline == "full_history"
+        and trial.status == "failed"
+        and len(trial.memory_after) > len(trial.memory_before)
         for trial in trials
     )
     assert all(
@@ -105,7 +109,12 @@ def test_f1b_replay_parses_artifacts_locks_prompt_bytes_and_rejects_mutations(
         for trial in trials
         if trial.baseline == "retrieval_rag"
     )
-    assert any(call.retrieved_records for trial in trials if trial.baseline == "retrieval_rag" for call in trial.method_calls)
+    assert any(
+        call.retrieved_records
+        for trial in trials
+        if trial.baseline == "retrieval_rag"
+        for call in trial.method_calls
+    )
     assert any(trial.baseline == "dynamic_cheatsheet_rs_optional" for trial in trials)
     assert _semantic_call_hashes(trials) == json.loads(
         SEMANTIC_CALL_FIXTURES.read_text(encoding="utf-8")
@@ -119,16 +128,23 @@ def test_f1b_replay_parses_artifacts_locks_prompt_bytes_and_rejects_mutations(
 
     prompt_mutation = tmp_path / "prompt-mutation"
     shutil.copytree(run_dir, prompt_mutation)
-    rows = [json.loads(line) for line in (prompt_mutation / "trials.jsonl").read_text(encoding="utf-8").splitlines()]
+    rows = [
+        json.loads(line)
+        for line in (prompt_mutation / "trials.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
     rows[0]["method_calls"][0]["messages"][0]["content"] += "!"
-    (prompt_mutation / "trials.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+    (prompt_mutation / "trials.jsonl").write_text(
+        "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
+    )
     assert _inspect(prompt_mutation).returncode == 1
 
     unlocked_prompt_mutation = tmp_path / "unlocked-prompt-mutation"
     shutil.copytree(run_dir, unlocked_prompt_mutation)
     rows = [
         json.loads(line)
-        for line in (unlocked_prompt_mutation / "trials.jsonl").read_text(encoding="utf-8").splitlines()
+        for line in (unlocked_prompt_mutation / "trials.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
     ]
     row = next(
         row
@@ -142,7 +158,9 @@ def test_f1b_replay_parses_artifacts_locks_prompt_bytes_and_rejects_mutations(
     )
     call_rows = [
         json.loads(line)
-        for line in (unlocked_prompt_mutation / "calls.jsonl").read_text(encoding="utf-8").splitlines()
+        for line in (unlocked_prompt_mutation / "calls.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
     ]
     next(call for call in call_rows if call["call_id"] == call_id)["messages"][0]["content"] += "!"
     (unlocked_prompt_mutation / "calls.jsonl").write_text(
@@ -152,20 +170,38 @@ def test_f1b_replay_parses_artifacts_locks_prompt_bytes_and_rejects_mutations(
 
     filter_mutation = tmp_path / "filter-mutation"
     shutil.copytree(run_dir, filter_mutation)
-    (filter_mutation / "filter_events.jsonl").write_text('{"not":"a filter event"}\n', encoding="utf-8")
+    (filter_mutation / "filter_events.jsonl").write_text(
+        '{"not":"a filter event"}\n', encoding="utf-8"
+    )
     assert _inspect(filter_mutation).returncode == 1
 
     span_mutation = tmp_path / "span-mutation"
     shutil.copytree(run_dir, span_mutation)
-    rows = [json.loads(line) for line in (span_mutation / "trials.jsonl").read_text(encoding="utf-8").splitlines()]
+    rows = [
+        json.loads(line)
+        for line in (span_mutation / "trials.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
     span_trial = next(row for row in rows if row["baseline"] == "retrieval_rag")
     span_trial["method_calls"][0]["source_spans"][0]["entry_id"] = "mutated-source-id"
-    (span_mutation / "trials.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+    (span_mutation / "trials.jsonl").write_text(
+        "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
+    )
     assert _inspect(span_mutation).returncode == 1
 
     evidence_manifest = tmp_path / "evidence-manifest.json"
     manifest_result = subprocess.run(
-        [sys.executable, str(MANIFEST), "--config", str(CONFIG_PATH), "--run-dir", str(run_dir), "--inspector-output", str(inspector_output), "--output", str(evidence_manifest)],
+        [
+            sys.executable,
+            str(MANIFEST),
+            "--config",
+            str(CONFIG_PATH),
+            "--run-dir",
+            str(run_dir),
+            "--inspector-output",
+            str(inspector_output),
+            "--output",
+            str(evidence_manifest),
+        ],
         cwd=ROOT,
         text=True,
         capture_output=True,

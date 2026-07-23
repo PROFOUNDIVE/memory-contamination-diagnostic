@@ -6,7 +6,10 @@ from typing import Any, Literal, Mapping
 from memcontam.baselines.contracts import BaselineExecutionOutcome
 from memcontam.baselines.full_history import FullHistoryState
 from memcontam.baselines.full_history_adapter import FullHistoryAdapter
-from memcontam.baselines.full_history_context import FullHistoryContextDecision, render_context_bounded_history
+from memcontam.baselines.full_history_context import (
+    FullHistoryContextDecision,
+    render_context_bounded_history,
+)
 from memcontam.clients.base import LLMClient
 from memcontam.memory.admission import AdmissionContext
 from memcontam.memory.cards_v3 import MEMORY_CARD_V3, MemoryCardEnvelopeV3, canonical_content_hash
@@ -260,7 +263,9 @@ def _route_write(
         trial_record_ids=state.admission_context.trial_record_ids | {trial.trial_id},
         evidence_envelopes=(*state.admission_context.evidence_envelopes, envelope),
     )
-    transition = route_candidate_write(state.filter_state, CandidateWrite(native_entry, envelope), context)
+    transition = route_candidate_write(
+        state.filter_state, CandidateWrite(native_entry, envelope), context
+    )
     state.filter_state = transition.state
     state.admission_context = context
     return transition
@@ -274,7 +279,9 @@ def _retention_telemetry(
 ) -> FullHistoryRetentionTelemetry:
     root_id = state.injected_root_id
     root_visible = root_id is not None and root_id in fit.context.post_record_ids
-    root_in_store = root_id is not None and any(record.entry_id == root_id for record in state.records)
+    root_in_store = root_id is not None and any(
+        record.entry_id == root_id for record in state.records
+    )
     return FullHistoryRetentionTelemetry(
         visible_record_ids=tuple(fit.context.post_record_ids),
         pre_record_ids=tuple(fit.context.pre_record_ids),

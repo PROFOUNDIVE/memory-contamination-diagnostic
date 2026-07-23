@@ -297,7 +297,9 @@ def evaluate_route_call_budget(
         call_cost_registry_hash=costs.artifact_hash,
         conditional_call_rate_registry_id=rates.registry_id,
         conditional_call_rate_registry_hash=rates.artifact_hash,
-        requested_core_counts={key: value for key, value in counts.core_counts.items() if type(value) is int},
+        requested_core_counts={
+            key: value for key, value in counts.core_counts.items() if type(value) is int
+        },
         requested_extension_counts={
             key: value for key, value in counts.extension_counts.items() if type(value) is int
         },
@@ -327,9 +329,11 @@ def _component_cost(
     costs: CallCostRegistry,
     rates: Mapping[str, CallActivationRate],
 ) -> Fraction:
-    return component.calls_per_activation * costs.call_costs[component.call_category] * rates[
-        component.activation_rate_id
-    ].fraction
+    return (
+        component.calls_per_activation
+        * costs.call_costs[component.call_category]
+        * rates[component.activation_rate_id].fraction
+    )
 
 
 def _validate_rates(registry: ConditionalCallRateRegistry) -> None:

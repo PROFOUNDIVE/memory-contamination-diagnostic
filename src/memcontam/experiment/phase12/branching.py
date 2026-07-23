@@ -65,7 +65,10 @@ class BranchSet:
         source_id = self.source_checkpoint.identity.checkpoint_id
         if any(branch.source_checkpoint_id != source_id for branch in branches):
             raise BranchConstructionError("PREFIX_IDENTITY_DRIFT")
-        if self.clean.checkpoint != self.source_checkpoint or self.clean.inserted_entry_id is not None:
+        if (
+            self.clean.checkpoint != self.source_checkpoint
+            or self.clean.inserted_entry_id is not None
+        ):
             raise BranchConstructionError("CLEAN_CHECKPOINT_DRIFT")
         if self.filter.source_checkpoint != self.contam.checkpoint:
             raise BranchConstructionError("FILTER_SOURCE_MISMATCH")
@@ -74,7 +77,9 @@ class BranchSet:
         _validate_branch_entries(self.source_checkpoint, self.contam)
         source_entries = _entry_ids(self.contam.checkpoint)
         partition_entries = _entry_ids(self.filter.active) + _entry_ids(self.filter.quarantine)
-        if set(source_entries) != set(partition_entries) or len(partition_entries) != len(source_entries):
+        if set(source_entries) != set(partition_entries) or len(partition_entries) != len(
+            source_entries
+        ):
             raise BranchConstructionError("FILTER_PARTITION_MISMATCH")
 
     @property
@@ -148,7 +153,9 @@ def build_matched_branches(
         source_checkpoint=prefix,
         clean=MaterializedBranch("clean", source_id, prefix),
         correct=_intervened_branch("correct", source_id, correct, correct_entry, triplet),
-        irrelevant=_intervened_branch("irrelevant", source_id, irrelevant, irrelevant_entry, triplet),
+        irrelevant=_intervened_branch(
+            "irrelevant", source_id, irrelevant, irrelevant_entry, triplet
+        ),
         contam=_intervened_branch("contam", source_id, contam, false_entry, triplet),
         filter=filtered,
         audit_labels=(AuditLabelRecord(false_entry.entry_id, triplet.triplet_id),),
@@ -256,5 +263,6 @@ def _validate_branch_entries(source: Phase12Checkpoint, branch: MaterializedBran
 
 def _entry_ids(checkpoint: Phase12Checkpoint) -> tuple[str, ...]:
     return tuple(
-        entry.entry_id if isinstance(entry, NativeEntry) else entry for entry in checkpoint.state.entries
+        entry.entry_id if isinstance(entry, NativeEntry) else entry
+        for entry in checkpoint.state.entries
     )

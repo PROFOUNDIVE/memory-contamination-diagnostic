@@ -5,7 +5,11 @@ from importlib import import_module
 from pathlib import Path
 
 from memcontam.baselines import full_history
-from memcontam.baselines.full_history import FullHistoryPayload, FullHistoryState, render_full_history
+from memcontam.baselines.full_history import (
+    FullHistoryPayload,
+    FullHistoryState,
+    render_full_history,
+)
 from memcontam.clients.base import LLMResponse
 from memcontam.logging.schema import VerifierResult
 from memcontam.memory.stores import MemoryEntry
@@ -83,7 +87,9 @@ def test_render_full_history_matches_the_committed_raw_record_fixture() -> None:
 
     assert render_full_history("history-1", payload) == fixture["history_record"].replace(
         "{{entry_id}}", "history-1"
-    ).replace("{{task_input}}", payload.task_input).replace("{{raw_response}}", payload.raw_response)
+    ).replace("{{task_input}}", payload.task_input).replace(
+        "{{raw_response}}", payload.raw_response
+    )
 
 
 def test_full_history_renders_raw_records_in_order_and_keeps_valid_incorrect_successful() -> None:
@@ -116,9 +122,10 @@ def test_full_history_renders_raw_records_in_order_and_keeps_valid_incorrect_suc
     assert "must not enter history" not in prompt
     assert "parsed_answer" not in prompt
     assert "parent_entry_ids" not in prompt
-    assert [
-        prompt[span.start : span.end] for span in outcome.method_calls[0].source_spans
-    ] == [first.content, second.content]
+    assert [prompt[span.start : span.end] for span in outcome.method_calls[0].source_spans] == [
+        first.content,
+        second.content,
+    ]
     assert len(state.records) == 3
     appended = state.records[-1]
     assert appended.content == render_full_history(

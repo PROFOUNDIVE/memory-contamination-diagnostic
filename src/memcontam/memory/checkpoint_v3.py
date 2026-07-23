@@ -76,7 +76,10 @@ class NativeState:
     def to_mapping(self) -> dict[str, Any]:
         return {
             "baseline": self.baseline,
-            "entries": [entry.to_mapping() if isinstance(entry, NativeEntry) else entry for entry in self.entries],
+            "entries": [
+                entry.to_mapping() if isinstance(entry, NativeEntry) else entry
+                for entry in self.entries
+            ],
             "native_state": self.native_state,
             "schema_version": self.schema_version,
         }
@@ -119,6 +122,7 @@ FROZEN_CHECKPOINT_IDENTITIES = {
         )
     ),
 }
+
 
 @dataclass(frozen=True)
 class Phase12Checkpoint:
@@ -172,7 +176,9 @@ def deserialize_checkpoint(checkpoint: Phase12Checkpoint, *, registry=None) -> N
     return checkpoint.state
 
 
-def append_native_entry(checkpoint: Phase12Checkpoint, entry: NativeEntry, *, registry=None) -> Phase12Checkpoint:
+def append_native_entry(
+    checkpoint: Phase12Checkpoint, entry: NativeEntry, *, registry=None
+) -> Phase12Checkpoint:
     state = deserialize_checkpoint(checkpoint, registry=registry)
     if entry.entry_id in _entry_ids(state.entries):
         raise CheckpointError("DUPLICATE_ROOT")

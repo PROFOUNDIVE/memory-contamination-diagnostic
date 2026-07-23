@@ -86,7 +86,10 @@ def build_code_matrix(config: Mapping[str, object]) -> CodeMatrixPlan:
     return CodeMatrixPlan(
         plan_id=f"code-matrix-{artifact_hash[:12]}",
         artifact_hash=artifact_hash,
-        **payload,
+        exploratory_run_template_registry_id=registry_id,
+        exploratory_run_template_registry_hash=registry_hash,
+        abstract_slots=slots,
+        estimated_exploratory_calls=calls,
     )
 
 
@@ -130,7 +133,8 @@ def aggregate_code_matrix(
             raise CodeMatrixError("TOOL_MODE_POOLING_FORBIDDEN")
         slot = metadata.abstract_seed_slot_or_none
         if (
-            metadata.exploratory_activation_manifest_id != activation.exploratory_activation_manifest_id
+            metadata.exploratory_activation_manifest_id
+            != activation.exploratory_activation_manifest_id
             or metadata.source_route_selection_manifest_id != activation.route_selection_manifest_id
             or metadata.source_seed_allocation_manifest_id != activation.seed_allocation_manifest_id
             or slot is None
@@ -206,11 +210,13 @@ def _validate_oci_contract(value: object) -> None:
 def _validate_activation(plan: CodeMatrixPlan, activation: ValidatedExploratoryActivation) -> None:
     if not activation.resource_manifest_id or not activation.resource_manifest_hash:
         raise CodeMatrixError("EXPLORATORY_RESOURCE_RESERVATION_REQUIRED")
-    if activation.exploratory_plan_id != plan.plan_id or activation.exploratory_plan_hash != plan.artifact_hash:
+    if (
+        activation.exploratory_plan_id != plan.plan_id
+        or activation.exploratory_plan_hash != plan.artifact_hash
+    ):
         raise CodeMatrixError("STALE_EXPLORATORY_PLAN")
     if (
-        activation.exploratory_run_template_registry_id
-        != plan.exploratory_run_template_registry_id
+        activation.exploratory_run_template_registry_id != plan.exploratory_run_template_registry_id
         or activation.exploratory_run_template_registry_hash
         != plan.exploratory_run_template_registry_hash
     ):
@@ -244,7 +250,9 @@ def _string(value: object) -> str:
 
 
 def _strings(value: object) -> tuple[str, ...]:
-    if not isinstance(value, (tuple, list)) or any(not isinstance(item, str) or not item for item in value):
+    if not isinstance(value, (tuple, list)) or any(
+        not isinstance(item, str) or not item for item in value
+    ):
         return ()
     return tuple(value)
 

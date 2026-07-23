@@ -78,7 +78,9 @@ def test_openai_compatible_client_missing_api_key_raises_runtime_error(monkeypat
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
     with pytest.raises(RuntimeError, match="missing API key env var"):
-        OpenAICompatibleClient(ProviderConfig(provider="openai_compatible", api_key_env="OPENAI_API_KEY"))
+        OpenAICompatibleClient(
+            ProviderConfig(provider="openai_compatible", api_key_env="OPENAI_API_KEY")
+        )
 
 
 def test_openai_compatible_client_uses_custom_api_key_env(monkeypatch) -> None:
@@ -117,10 +119,17 @@ def test_replay_config_runs_without_provider_env_vars(tmp_path, monkeypatch) -> 
     ]
 
     run_dir = run_config(config, run_id="task_T12_full_regression")
-    rows = [json.loads(line) for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()]
+    rows = [
+        json.loads(line)
+        for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
 
     assert rows
-    assert {row["task_name"] for row in rows} == {"game24", "math_equation_balancer", "word_sorting"}
+    assert {row["task_name"] for row in rows} == {
+        "game24",
+        "math_equation_balancer",
+        "word_sorting",
+    }
     assert {row["baseline"] for row in rows} == {"no_memory", "full_history", "reflexion_style"}
 
 

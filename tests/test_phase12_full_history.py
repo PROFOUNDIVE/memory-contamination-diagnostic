@@ -15,7 +15,12 @@ from memcontam.baselines.prompt_budget import count_prompt_tokens
 from memcontam.clients.base import LLMResponse
 from memcontam.memory.admission import AdmissionContext
 from memcontam.memory.cards_v3 import MEMORY_CARD_V3, MemoryCardEnvelopeV3, canonical_content_hash
-from memcontam.memory.checkpoint_v3 import NATIVE_ENTRY_V1, NativeEntry, NativeState, serialize_checkpoint
+from memcontam.memory.checkpoint_v3 import (
+    NATIVE_ENTRY_V1,
+    NativeEntry,
+    NativeState,
+    serialize_checkpoint,
+)
 from memcontam.memory.filtered_state import partition_native_checkpoint
 from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
@@ -48,7 +53,9 @@ def _record(entry_id: str) -> MemoryEntry:
     )
 
 
-def _context_config(*, history_budget: int, policy: str = "oldest_first_pair_atomic") -> dict[str, object]:
+def _context_config(
+    *, history_budget: int, policy: str = "oldest_first_pair_atomic"
+) -> dict[str, object]:
     task_tokens = count_prompt_tokens(
         [{"role": "user", "content": f"TASK:\n{canonical_task_json(_task())}"}], "cl100k_base"
     )
@@ -88,7 +95,9 @@ def test_root_is_visible_then_evicted_but_persists_in_store() -> None:
     adapter = FullHistoryPhase12Adapter()
 
     initially_visible = adapter.execute(
-        _trial(trial_id="trial-1", order_key=1, context_config=_context_config(history_budget=10_000)),
+        _trial(
+            trial_id="trial-1", order_key=1, context_config=_context_config(history_budget=10_000)
+        ),
         state,
     )
     evicted = adapter.execute(
@@ -131,7 +140,9 @@ def test_rejects_an_injected_root_that_cannot_be_shown_initially() -> None:
 
     with pytest.raises(FullHistoryContractError, match="IMMEDIATE_INJECTED_ROOT_TRUNCATION"):
         FullHistoryPhase12Adapter().execute(
-            _trial(trial_id="trial-1", order_key=1, context_config=_context_config(history_budget=1)),
+            _trial(
+                trial_id="trial-1", order_key=1, context_config=_context_config(history_budget=1)
+            ),
             state,
         )
 
@@ -174,9 +185,7 @@ def test_routes_post_trial_writes_through_the_production_filter() -> None:
     partition = partition_native_checkpoint(
         serialize_checkpoint(NativeState("fh_bounded", (entry,), {"records": []})), context
     )
-    state = FullHistoryStateV3(
-        records=[record], filter_state=partition, admission_context=context
-    )
+    state = FullHistoryStateV3(records=[record], filter_state=partition, admission_context=context)
 
     result = FullHistoryPhase12Adapter().execute(
         _trial(

@@ -87,7 +87,8 @@ def _check_shape(trials: list[TrialLog]) -> dict[str, Any]:
         for model in MODELS
     }
     actual_identities = {
-        (trial.task_name, trial.sample_id, trial.baseline, trial.arm, trial.backbone) for trial in trials
+        (trial.task_name, trial.sample_id, trial.baseline, trial.arm, trial.backbone)
+        for trial in trials
     }
     counts = Counter(trial.baseline for trial in trials)
     if len(trials) != 108:
@@ -108,7 +109,9 @@ def _check_dc_rs(trials: list[TrialLog]) -> dict[str, Any]:
     for trial in dc_trials:
         stages = [call.stage for call in trial.method_calls]
         if stages != ["dc_rs_synthesize", "dc_rs_generate"]:
-            reasons.append(f"{trial.trial_id}: DC-RS stages must be synthesize -> generate, got {stages}")
+            reasons.append(
+                f"{trial.trial_id}: DC-RS stages must be synthesize -> generate, got {stages}"
+            )
             continue
         synthesize, generate = trial.method_calls
         if generate.retrieved_records:
@@ -126,12 +129,15 @@ def _check_dc_rs(trials: list[TrialLog]) -> dict[str, Any]:
         before_ids = {entry.get("entry_id") for entry in trial.memory_before}
         after_ids = {entry.get("entry_id") for entry in trial.memory_after}
         if not isinstance(pair_id, str) or pair_id in before_ids or pair_id not in after_ids:
-            reasons.append(f"{trial.trial_id}: current DC-RS pair must first appear in memory_after")
+            reasons.append(
+                f"{trial.trial_id}: current DC-RS pair must first appear in memory_after"
+            )
 
         pair_entries = {
             entry.get("entry_id"): entry
             for entry in trial.memory_before
-            if entry.get("memory_type") == "dc_rs_io_pair" and isinstance(entry.get("entry_id"), str)
+            if entry.get("memory_type") == "dc_rs_io_pair"
+            and isinstance(entry.get("entry_id"), str)
         }
         records = synthesize.retrieved_records
         expected_count = min(3, len(pair_entries))
@@ -147,7 +153,9 @@ def _check_dc_rs(trials: list[TrialLog]) -> dict[str, Any]:
         for record in records:
             entry = pair_entries.get(record.document_id)
             if entry is None:
-                reasons.append(f"{trial.trial_id}: DC-RS retrieved current/future or foreign pair {record.document_id}")
+                reasons.append(
+                    f"{trial.trial_id}: DC-RS retrieved current/future or foreign pair {record.document_id}"
+                )
                 continue
             if record.text != entry.get("content"):
                 reasons.append(f"{trial.trial_id}: DC-RS retrieval provenance is not input-only")
@@ -161,8 +169,12 @@ def _check_dc_rs(trials: list[TrialLog]) -> dict[str, Any]:
         if trial.arm == "contaminated_filter" and any(
             entry.get("clean_or_contaminated") == "contaminated" for entry in trial.memory_before
         ):
-            reasons.append(f"{trial.trial_id}: contaminated-filter DC-RS state retains a corrupted seed")
-    return _result(reasons, trials=len(dc_trials), method_calls=sum(len(t.method_calls) for t in dc_trials))
+            reasons.append(
+                f"{trial.trial_id}: contaminated-filter DC-RS state retains a corrupted seed"
+            )
+    return _result(
+        reasons, trials=len(dc_trials), method_calls=sum(len(t.method_calls) for t in dc_trials)
+    )
 
 
 def _nonempty_cheatsheet(raw_response: str) -> bool:
@@ -181,7 +193,9 @@ def _check_reflexion(trials: list[TrialLog]) -> dict[str, Any]:
         if should_retry:
             retry_trials += 1
             if stages != ["reflexion_generate", "reflexion_reflect", "reflexion_generate"]:
-                reasons.append(f"{trial.trial_id}: Reflexion retry stages must be generate -> reflect -> generate")
+                reasons.append(
+                    f"{trial.trial_id}: Reflexion retry stages must be generate -> reflect -> generate"
+                )
                 continue
             reflection = trial.method_calls[1].raw_response.strip()
             retry_text = "\n".join(message["content"] for message in trial.method_calls[2].messages)
@@ -191,11 +205,22 @@ def _check_reflexion(trials: list[TrialLog]) -> dict[str, Any]:
             if reflection not in retry_text:
                 reasons.append(f"{trial.trial_id}: Reflexion retry does not consume its reflection")
             if event.get("source_trial_id") != trial.trial_id or event.get("status") != "accepted":
-                reasons.append(f"{trial.trial_id}: Reflexion retry does not retain its task/sample identity")
-            if not any(reflection in str(entry.get("content", "")) for entry in trial.memory_after[-3:]):
-                reasons.append(f"{trial.trial_id}: reflection is absent from retry-visible latest-three memory")
-            if trial.raw_response != trial.method_calls[-1].raw_response or not trial.verifier_result.is_correct:
-                reasons.append(f"{trial.trial_id}: final correctness is not the retry verifier result")
+                reasons.append(
+                    f"{trial.trial_id}: Reflexion retry does not retain its task/sample identity"
+                )
+            if not any(
+                reflection in str(entry.get("content", "")) for entry in trial.memory_after[-3:]
+            ):
+                reasons.append(
+                    f"{trial.trial_id}: reflection is absent from retry-visible latest-three memory"
+                )
+            if (
+                trial.raw_response != trial.method_calls[-1].raw_response
+                or not trial.verifier_result.is_correct
+            ):
+                reasons.append(
+                    f"{trial.trial_id}: final correctness is not the retry verifier result"
+                )
         elif stages not in (["reflexion_generate"], ["reflexion_generate", "reflexion_reflect"]):
             reasons.append(f"{trial.trial_id}: unexpected Reflexion stage sequence {stages}")
     if retry_trials != 6:
@@ -214,7 +239,9 @@ def _method_metrics(trials: list[TrialLog]) -> dict[str, int]:
         "method_call_count": len(calls),
         "method_call_error_count": sum(call.error_type is not None for call in calls),
         "prompt_token_total": sum(int(call.token_usage.get("prompt_tokens", 0)) for call in calls),
-        "completion_token_total": sum(int(call.token_usage.get("completion_tokens", 0)) for call in calls),
+        "completion_token_total": sum(
+            int(call.token_usage.get("completion_tokens", 0)) for call in calls
+        ),
         "total_token_total": sum(int(call.token_usage.get("total_tokens", 0)) for call in calls),
         "latency_ms_total": sum(call.latency_ms or 0 for call in calls),
     }
@@ -265,13 +292,19 @@ def inspect_run(run_dir: Path) -> dict[str, Any]:
         },
         "reasons": [reason for result in checks.values() for reason in result["reasons"]],
     }
-    report["overall"] = "pass" if all(value["pass"] == "pass" for value in checks.values()) else "fail"
+    report["overall"] = (
+        "pass" if all(value["pass"] == "pass" for value in checks.values()) else "fail"
+    )
     return report
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Inspect the G0 DC-RS/Reflexion replay fidelity evidence.")
-    parser.add_argument("run_dir", type=Path, help="run directory containing trials.jsonl and aggregate.json")
+    parser = argparse.ArgumentParser(
+        description="Inspect the G0 DC-RS/Reflexion replay fidelity evidence."
+    )
+    parser.add_argument(
+        "run_dir", type=Path, help="run directory containing trials.jsonl and aggregate.json"
+    )
     args = parser.parse_args(argv)
     report = inspect_run(args.run_dir)
     print(json.dumps(report, indent=2))

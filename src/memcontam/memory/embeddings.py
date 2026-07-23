@@ -114,7 +114,7 @@ class FakeEmbeddingProvider:
         return self._encode(text)
 
     def _encode(self, text: str) -> list[float]:
-        values = []
+        values: list[float] = []
         counter = 0
         while len(values) < self._dimension:
             digest = hashlib.sha256(f"{counter}:{text}".encode("utf-8")).digest()
@@ -171,7 +171,9 @@ def _sentence_transformer_class() -> Any:
     global SentenceTransformer
     if SentenceTransformer is None:
         try:
-            SentenceTransformer = importlib.import_module("sentence_transformers").SentenceTransformer
+            SentenceTransformer = importlib.import_module(
+                "sentence_transformers"
+            ).SentenceTransformer
         except ImportError as exc:
             raise RuntimeError("sentence-transformers is not installed") from exc
     return SentenceTransformer

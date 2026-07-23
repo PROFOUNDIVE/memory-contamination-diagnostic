@@ -119,13 +119,17 @@ class _Policy:
 
     def execute(self, task, state, seed: int, trial_id: str):
         del trial_id
-        entry_ids = tuple(entry.entry_id if isinstance(entry, NativeEntry) else entry for entry in state.entries)
+        entry_ids = tuple(
+            entry.entry_id if isinstance(entry, NativeEntry) else entry for entry in state.entries
+        )
         self.calls.append((task.sample_id, entry_ids, seed))
         return self._runner.SuffixStep(state=state)
 
 
 def _factory(runner):
-    policies = {arm: _Policy(runner) for arm in ("clean", "correct", "irrelevant", "contam", "filter")}
+    policies = {
+        arm: _Policy(runner) for arm in ("clean", "correct", "irrelevant", "contam", "filter")
+    }
     return runner.SuffixWriterFactory(policies), policies
 
 
@@ -162,7 +166,9 @@ def test_executes_matched_three_trial_suffix_over_five_arms() -> None:
         entry.entry_id if isinstance(entry, NativeEntry) else entry
         for entry in branches.filter.quarantine.state.entries
     }
-    assert filter_entries.isdisjoint({entry_id for _, entries, _ in policies["filter"].calls for entry_id in entries})
+    assert filter_entries.isdisjoint(
+        {entry_id for _, entries, _ in policies["filter"].calls for entry_id in entries}
+    )
 
 
 def test_rejects_suffix_drift_quarantine_exposure_and_duplicate_nomem() -> None:

@@ -19,7 +19,12 @@ class Document:
     def from_mapping(cls, value: Mapping[str, Any]) -> Document:
         document_id = value.get("id", value.get("document_id"))
         text = value.get("text", value.get("content"))
-        if not isinstance(document_id, str) or not document_id or not isinstance(text, str) or not text:
+        if (
+            not isinstance(document_id, str)
+            or not document_id
+            or not isinstance(text, str)
+            or not text
+        ):
             raise ValueError("INVALID_RAG_DOCUMENT")
         return cls(document_id=document_id, text=text)
 
@@ -33,9 +38,7 @@ class CleanCorpus:
     documents: tuple[Document, ...]
 
     @classmethod
-    def from_documents(
-        cls, documents: list[Mapping[str, Any]], *, corpus_id: str
-    ) -> CleanCorpus:
+    def from_documents(cls, documents: list[Mapping[str, Any]], *, corpus_id: str) -> CleanCorpus:
         parsed = tuple(Document.from_mapping(document) for document in documents)
         if not corpus_id or len({document.document_id for document in parsed}) != len(parsed):
             raise ValueError("INVALID_CLEAN_CORPUS")
@@ -116,13 +119,17 @@ def build_branch_corpora(
     branches = {
         "clean": _branch(clean, "clean", clean_documents, clean_documents),
         "contam": _branch(clean, "contam", (*clean_documents, false), (*clean_documents, false)),
-        "correct": _branch(clean, "correct", (*clean_documents, correct), (*clean_documents, correct)),
+        "correct": _branch(
+            clean, "correct", (*clean_documents, correct), (*clean_documents, correct)
+        ),
         "filter": _branch(clean, "filter", (*clean_documents, false), clean_documents),
         "irrelevant": _branch(
             clean, "irrelevant", (*clean_documents, irrelevant), (*clean_documents, irrelevant)
         ),
     }
-    return BranchCorpusSet(clean=clean, branches=branches, serialization_id=f"{clean.corpus_id}|base")
+    return BranchCorpusSet(
+        clean=clean, branches=branches, serialization_id=f"{clean.corpus_id}|base"
+    )
 
 
 def _branch(

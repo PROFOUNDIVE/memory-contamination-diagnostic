@@ -66,7 +66,11 @@ def _classify_failure_stage(raw: BaselineExecutionOutcome) -> FailureClass:
         return "model_behavior"
     if raw.error_type == "ProviderCallFailure":
         return "provider_api"
-    if raw.error_type in {"RetrievalContractError", "EmbeddingContractError", "CorpusContractError"}:
+    if raw.error_type in {
+        "RetrievalContractError",
+        "EmbeddingContractError",
+        "CorpusContractError",
+    }:
         return "infrastructure"
     if raw.error_type == "VerifierContractError":
         return "verifier"

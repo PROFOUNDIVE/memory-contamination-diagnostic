@@ -37,7 +37,9 @@ def _write_contamination_catalog(
         "content": content,
         "target_baselines": [baseline],
     }
-    (catalog_dir / "catalog_v0.jsonl").write_text(json.dumps(catalog_row) + chr(10), encoding="utf-8")
+    (catalog_dir / "catalog_v0.jsonl").write_text(
+        json.dumps(catalog_row) + chr(10), encoding="utf-8"
+    )
 
 
 def _write_minimal_corpus(tmp_path, records: list[dict[str, Any]]) -> str:
@@ -174,17 +176,20 @@ def test_run_config_writes_replay_trial_log_jsonl(tmp_path) -> None:
     assert row["memory_after"] == []
     assert row["filter_decision"] is None
     assert row["memory_write_event"] is None
-    assert {key: row["contamination_exposure"][key] for key in (
-        "condition",
-        "status",
-        "is_exposed",
-        "answer_call_id",
-        "target_entry_ids",
-        "source_entry_ids",
-        "exposed_source_ids",
-        "exposure_mode",
-        "reason",
-    )} == {
+    assert {
+        key: row["contamination_exposure"][key]
+        for key in (
+            "condition",
+            "status",
+            "is_exposed",
+            "answer_call_id",
+            "target_entry_ids",
+            "source_entry_ids",
+            "exposed_source_ids",
+            "exposure_mode",
+            "reason",
+        )
+    } == {
         "condition": "clean",
         "status": "not_evaluable",
         "is_exposed": None,
@@ -208,10 +213,16 @@ def test_run_config_clean_multitask_replay_emits_all_three_tasks(tmp_path, monke
         "run": {"name": "smoke"},
         "models": ["replay"],
         "tasks": [
-            {"name": "game24", "sample_path": str((repo_root / "data/tasks/game24_pilot.jsonl").resolve()), "limit": 1},
+            {
+                "name": "game24",
+                "sample_path": str((repo_root / "data/tasks/game24_pilot.jsonl").resolve()),
+                "limit": 1,
+            },
             {
                 "name": "math_equation_balancer",
-                "sample_path": str((repo_root / "data/tasks/math_equation_balancer_pilot.jsonl").resolve()),
+                "sample_path": str(
+                    (repo_root / "data/tasks/math_equation_balancer_pilot.jsonl").resolve()
+                ),
                 "limit": 1,
             },
             {
@@ -233,10 +244,17 @@ def test_run_config_clean_multitask_replay_emits_all_three_tasks(tmp_path, monke
     }
 
     run_dir = run_config(config, run_id="multitask_clean_run")
-    rows = [json.loads(line) for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()]
+    rows = [
+        json.loads(line)
+        for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
 
     assert len(rows) == 3
-    assert {row["task_name"] for row in rows} == {"game24", "math_equation_balancer", "word_sorting"}
+    assert {row["task_name"] for row in rows} == {
+        "game24",
+        "math_equation_balancer",
+        "word_sorting",
+    }
     for row in rows:
         TrialLog.model_validate(row)
         assert row["verifier_result"]["is_correct"] is True
@@ -255,7 +273,10 @@ def test_clean_multitask_replay_ignores_catalog(tmp_path, monkeypatch) -> None:
     ]
 
     run_dir = run_config(config, run_id="task_T9_clean_after_c")
-    rows = [json.loads(line) for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()]
+    rows = [
+        json.loads(line)
+        for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
 
     assert rows
     for row in rows:
@@ -487,9 +508,7 @@ def test_run_config_rejects_run_id_path_traversal(tmp_path) -> None:
         run_config(config, run_id="../outside")
 
 
-def test_retrieval_rag_row_contains_provenance_and_stays_read_only(
-    tmp_path, monkeypatch
-) -> None:
+def test_retrieval_rag_row_contains_provenance_and_stays_read_only(tmp_path, monkeypatch) -> None:
     row = _run_rag_in_faithful_config(tmp_path, monkeypatch)
 
     assert row["answer_call_id"] is not None
@@ -561,7 +580,9 @@ def test_bot_style_row_contains_prompt_sections_and_writeback_lineage(
     }
 
 
-def test_reflexion_style_includes_recent_reflection_in_prompt_messages(tmp_path, monkeypatch) -> None:
+def test_reflexion_style_includes_recent_reflection_in_prompt_messages(
+    tmp_path, monkeypatch
+) -> None:
     row = _run_single_baseline(
         tmp_path,
         monkeypatch,
@@ -576,7 +597,9 @@ def test_reflexion_style_includes_recent_reflection_in_prompt_messages(tmp_path,
     assert row["retrieved_scores"] == []
 
 
-def test_contaminated_filter_logs_filter_decision_and_filtered_exposure(tmp_path, monkeypatch) -> None:
+def test_contaminated_filter_logs_filter_decision_and_filtered_exposure(
+    tmp_path, monkeypatch
+) -> None:
     row = _run_rag_in_faithful_config(tmp_path, monkeypatch, arm="contaminated_filter")
 
     assert row["filter_decision"]["filter_name"] == "drop_known_contaminated"
@@ -596,7 +619,9 @@ def test_contaminated_filter_logs_filter_decision_and_filtered_exposure(tmp_path
     assert row["recovery_after_filter_label"] == "not_applicable"
 
 
-def test_contaminated_row_with_no_retrieval_logs_memory_before_exposure(tmp_path, monkeypatch) -> None:
+def test_contaminated_row_with_no_retrieval_logs_memory_before_exposure(
+    tmp_path, monkeypatch
+) -> None:
     row = _run_single_baseline(
         tmp_path,
         monkeypatch,
@@ -605,17 +630,20 @@ def test_contaminated_row_with_no_retrieval_logs_memory_before_exposure(tmp_path
     )
 
     assert row["retrieved_memory"] == []
-    assert {key: row["contamination_exposure"][key] for key in (
-        "condition",
-        "status",
-        "is_exposed",
-        "answer_call_id",
-        "target_entry_ids",
-        "source_entry_ids",
-        "exposed_source_ids",
-        "exposure_mode",
-        "reason",
-    )} == {
+    assert {
+        key: row["contamination_exposure"][key]
+        for key in (
+            "condition",
+            "status",
+            "is_exposed",
+            "answer_call_id",
+            "target_entry_ids",
+            "source_entry_ids",
+            "exposed_source_ids",
+            "exposure_mode",
+            "reason",
+        )
+    } == {
         "condition": "contaminated",
         "status": "not_evaluable",
         "is_exposed": None,
@@ -640,9 +668,7 @@ def test_controlled_exposure_does_not_imply_bad_memory_uptake(tmp_path, monkeypa
     assert row["memory_write_event"] is None
 
 
-def test_no_memory_and_rag_rows_normalize_to_no_memory_event(
-    tmp_path, monkeypatch
-) -> None:
+def test_no_memory_and_rag_rows_normalize_to_no_memory_event(tmp_path, monkeypatch) -> None:
     for baseline in ("no_memory", "retrieval_rag"):
         baseline_tmp = tmp_path / baseline
         baseline_tmp.mkdir()
@@ -772,11 +798,16 @@ def test_faithful_rag_bot_sequence_persists_and_logs(tmp_path, monkeypatch) -> N
     config["embedding"]["cache_path"] = str(tmp_path / "embedding_cache")
     assert config["embedding"]["cache_path"] == str(tmp_path / "embedding_cache")
     config["models"] = ["gpt4o"]
-    config["tasks"] = [{"name": "game24", "sample_path": "data/tasks/game24_pilot.jsonl", "limit": 2}]
+    config["tasks"] = [
+        {"name": "game24", "sample_path": "data/tasks/game24_pilot.jsonl", "limit": 2}
+    ]
     config["arms"] = ["clean"]
 
     run_dir = run_config(config, run_id="faithful_sequence")
-    rows = [json.loads(line) for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()]
+    rows = [
+        json.loads(line)
+        for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
 
     assert len(rows) == 4
     for row in rows:
@@ -811,18 +842,25 @@ def test_faithful_bot_state_isolated_across_conditions(tmp_path, monkeypatch) ->
     config["embedding"]["cache_path"] = str(tmp_path / "embedding_cache")
     assert config["embedding"]["cache_path"] == str(tmp_path / "embedding_cache")
     config["models"] = ["gpt4o", "frontier_reasoning"]
-    config["tasks"] = [{"name": "game24", "sample_path": "data/tasks/game24_pilot.jsonl", "limit": 2}]
+    config["tasks"] = [
+        {"name": "game24", "sample_path": "data/tasks/game24_pilot.jsonl", "limit": 2}
+    ]
     config["baselines"] = ["bot_style"]
     config["arms"] = ["clean", "contaminated"]
 
     run_dir = run_config(config, run_id="faithful_isolation")
-    rows = [json.loads(line) for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()]
+    rows = [
+        json.loads(line)
+        for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
 
     assert len(rows) == 8
     first_clean_gpt4o = next(
         row
         for row in rows
-        if row["sample_id"] == "game24_pilot_001" and row["arm"] == "clean" and row["backbone"] == "gpt4o"
+        if row["sample_id"] == "game24_pilot_001"
+        and row["arm"] == "clean"
+        and row["backbone"] == "gpt4o"
     )
     second_contaminated_gpt4o = next(
         row
@@ -841,23 +879,31 @@ def test_faithful_bot_state_isolated_across_conditions(tmp_path, monkeypatch) ->
 
     clean_gpt4o_id = first_clean_gpt4o["memory_write_event"]["new_entry_id"]
     assert clean_gpt4o_id in {entry["entry_id"] for entry in rows[4]["memory_before"]}
-    assert clean_gpt4o_id not in {entry["entry_id"] for entry in second_contaminated_gpt4o["memory_before"]}
-    assert clean_gpt4o_id not in {entry["entry_id"] for entry in second_clean_frontier["memory_before"]}
+    assert clean_gpt4o_id not in {
+        entry["entry_id"] for entry in second_contaminated_gpt4o["memory_before"]
+    }
+    assert clean_gpt4o_id not in {
+        entry["entry_id"] for entry in second_clean_frontier["memory_before"]
+    }
 
 
 def test_is_faithful_config_accepts_explicit_mode_and_rejects_unknown_mode() -> None:
-    assert cli._is_faithful_config({
-        "run": {"mode": "faithful"},
-        "baselines": ["no_memory"],
-        "arms": ["clean"],
-    })
-
-    with pytest.raises(SystemExit, match="unsupported run.mode: unsupported"):
-        cli._is_faithful_config({
-            "run": {"mode": "unsupported"},
+    assert cli._is_faithful_config(
+        {
+            "run": {"mode": "faithful"},
             "baselines": ["no_memory"],
             "arms": ["clean"],
-        })
+        }
+    )
+
+    with pytest.raises(SystemExit, match="unsupported run.mode: unsupported"):
+        cli._is_faithful_config(
+            {
+                "run": {"mode": "unsupported"},
+                "baselines": ["no_memory"],
+                "arms": ["clean"],
+            }
+        )
 
 
 def test_baseline_outcome_conversion_preserves_read_only_bot_result() -> None:
@@ -927,9 +973,7 @@ def test_validate_config_rejects_no_memory_only_without_clean_arm(tmp_path) -> N
             {
                 "run": {"name": "smoke"},
                 "models": ["replay"],
-                "tasks": [
-                    {"name": "game24", "sample_path": str(sample_path), "limit": 1}
-                ],
+                "tasks": [{"name": "game24", "sample_path": str(sample_path), "limit": 1}],
                 "baselines": ["no_memory"],
                 "arms": ["contaminated", "contaminated_filter"],
                 "logging": {"output_dir": str(tmp_path / "runs")},
@@ -991,7 +1035,10 @@ def test_faithful_native_memory_config_dispatches_without_embedding_or_bot_resou
     monkeypatch.setattr(cli, "BotRuntime", unexpected_resource)
 
     run_dir = run_config(config, run_id="native_memory_resource_free")
-    rows = [json.loads(line) for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()]
+    rows = [
+        json.loads(line)
+        for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
 
     assert len(rows) == 162
     assert {row["baseline"] for row in rows} == {
@@ -1009,38 +1056,55 @@ def test_faithful_native_memory_state_isolated_by_identity(tmp_path, monkeypatch
     config = load_config(repo_root / "configs/g0_fh_reflexion_dc_faithful_replay.yaml")
     config["logging"]["output_dir"] = str(tmp_path / "runs")
     config["models"] = ["gpt4o", "frontier_reasoning"]
-    config["tasks"] = [{"name": "game24", "sample_path": "data/tasks/game24_pilot.jsonl", "limit": 2}]
+    config["tasks"] = [
+        {"name": "game24", "sample_path": "data/tasks/game24_pilot.jsonl", "limit": 2}
+    ]
     config["baselines"] = ["full_history"]
     config["arms"] = ["clean", "contaminated"]
 
     run_dir = run_config(config, run_id="native_memory_isolation")
-    rows = [json.loads(line) for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()]
+    rows = [
+        json.loads(line)
+        for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
 
     first_clean_gpt4o = next(
         row
         for row in rows
-        if row["sample_id"] == "game24_pilot_001" and row["arm"] == "clean" and row["backbone"] == "gpt4o"
+        if row["sample_id"] == "game24_pilot_001"
+        and row["arm"] == "clean"
+        and row["backbone"] == "gpt4o"
     )
     second_clean_gpt4o = next(
         row
         for row in rows
-        if row["sample_id"] == "game24_pilot_002" and row["arm"] == "clean" and row["backbone"] == "gpt4o"
+        if row["sample_id"] == "game24_pilot_002"
+        and row["arm"] == "clean"
+        and row["backbone"] == "gpt4o"
     )
     second_contaminated_gpt4o = next(
         row
         for row in rows
-        if row["sample_id"] == "game24_pilot_002" and row["arm"] == "contaminated" and row["backbone"] == "gpt4o"
+        if row["sample_id"] == "game24_pilot_002"
+        and row["arm"] == "contaminated"
+        and row["backbone"] == "gpt4o"
     )
     second_clean_frontier = next(
         row
         for row in rows
-        if row["sample_id"] == "game24_pilot_002" and row["arm"] == "clean" and row["backbone"] == "frontier_reasoning"
+        if row["sample_id"] == "game24_pilot_002"
+        and row["arm"] == "clean"
+        and row["backbone"] == "frontier_reasoning"
     )
 
     first_entry_id = first_clean_gpt4o["memory_after"][-1]["entry_id"]
     assert first_entry_id in {entry["entry_id"] for entry in second_clean_gpt4o["memory_before"]}
-    assert first_entry_id not in {entry["entry_id"] for entry in second_contaminated_gpt4o["memory_before"]}
-    assert first_entry_id not in {entry["entry_id"] for entry in second_clean_frontier["memory_before"]}
+    assert first_entry_id not in {
+        entry["entry_id"] for entry in second_contaminated_gpt4o["memory_before"]
+    }
+    assert first_entry_id not in {
+        entry["entry_id"] for entry in second_clean_frontier["memory_before"]
+    }
 
 
 def test_faithful_config_rejects_unknown_baseline(tmp_path, monkeypatch) -> None:
@@ -1090,11 +1154,16 @@ def _run_native_memory_config(tmp_path, monkeypatch, **overrides) -> list[dict]:
     config = load_config(repo_root / "configs/g0_fh_reflexion_dc_faithful_replay.yaml")
     config["logging"]["output_dir"] = str(tmp_path / "runs")
     config["models"] = ["gpt4o"]
-    config["tasks"] = [{"name": "game24", "sample_path": "data/tasks/game24_pilot.jsonl", "limit": 2}]
+    config["tasks"] = [
+        {"name": "game24", "sample_path": "data/tasks/game24_pilot.jsonl", "limit": 2}
+    ]
     for key, value in overrides.items():
         config[key] = value
     run_dir = run_config(config, run_id="native_memory_test")
-    return [json.loads(line) for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()]
+    return [
+        json.loads(line)
+        for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
 
 
 @pytest.mark.parametrize("baseline", _NATIVE_MEMORY_BASELINES)
@@ -1115,8 +1184,7 @@ def test_native_memory_arm_semantics(baseline: str, tmp_path, monkeypatch) -> No
     assert clean_row["contamination_exposure"]["is_exposed"] is None
     assert clean_row["contamination_exposure"]["exposure_mode"] == "clean"
     assert all(
-        entry.get("clean_or_contaminated") != "contaminated"
-        for entry in clean_row["memory_before"]
+        entry.get("clean_or_contaminated") != "contaminated" for entry in clean_row["memory_before"]
     )
 
     contaminated_row = arm_rows["contaminated"]
@@ -1134,9 +1202,7 @@ def test_native_memory_arm_semantics(baseline: str, tmp_path, monkeypatch) -> No
     assert corrupted_entry_id not in {
         entry.get("entry_id") for entry in filter_row["memory_before"]
     }
-    assert clean_entry_id in {
-        entry.get("entry_id") for entry in filter_row["memory_before"]
-    }
+    assert clean_entry_id in {entry.get("entry_id") for entry in filter_row["memory_before"]}
     assert filter_row["contamination_exposure"]["status"] == "supported"
     assert filter_row["contamination_exposure"]["is_exposed"] is False
 
@@ -1188,7 +1254,9 @@ def test_native_memory_gold_leakage(tmp_path, monkeypatch) -> None:
     config = load_config(repo_root / "configs/g0_fh_reflexion_dc_faithful_replay.yaml")
     config["logging"]["output_dir"] = str(tmp_path / "runs")
     config["models"] = ["gpt4o"]
-    config["tasks"] = [{"name": "math_equation_balancer", "sample_path": str(sample_path), "limit": 1}]
+    config["tasks"] = [
+        {"name": "math_equation_balancer", "sample_path": str(sample_path), "limit": 1}
+    ]
     config["baselines"] = _NATIVE_MEMORY_BASELINES
     config["arms"] = ["clean", "contaminated", "contaminated_filter"]
     config["replay"] = {
@@ -1204,7 +1272,10 @@ def test_native_memory_gold_leakage(tmp_path, monkeypatch) -> None:
     }
 
     run_dir = run_config(config, run_id="native_memory_gold_leakage")
-    rows = [json.loads(line) for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()]
+    rows = [
+        json.loads(line)
+        for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
 
     assert len(rows) == 9
     canaries = {canary_expected, canary_value, canary_reason}
@@ -1269,9 +1340,7 @@ def test_v0_5_config_without_reflexion_block_validates(monkeypatch) -> None:
 def test_followup_config_validates(monkeypatch) -> None:
     repo_root = Path(__file__).resolve().parents[1]
     monkeypatch.chdir(repo_root)
-    cli.validate_config(
-        repo_root / "configs/g0_dc_rs_reflexion_fidelity_followup_replay.yaml"
-    )
+    cli.validate_config(repo_root / "configs/g0_dc_rs_reflexion_fidelity_followup_replay.yaml")
 
 
 def test_full_matrix_config_rejects_todo_limits(monkeypatch) -> None:
@@ -1307,9 +1376,7 @@ def test_dc_rs_reflexion_followup_gate_emits_108_rows_with_isolated_identities(
 ) -> None:
     repo_root = Path(__file__).resolve().parents[1]
     monkeypatch.chdir(repo_root)
-    config = load_config(
-        repo_root / "configs/g0_dc_rs_reflexion_fidelity_followup_replay.yaml"
-    )
+    config = load_config(repo_root / "configs/g0_dc_rs_reflexion_fidelity_followup_replay.yaml")
     config["logging"]["output_dir"] = str(tmp_path / "runs")
     config["embedding"]["cache_path"] = str(tmp_path / "embedding_cache")
     assert config["embedding"]["cache_path"] == str(tmp_path / "embedding_cache")
@@ -1373,9 +1440,7 @@ def test_dc_rs_reflexion_followup_gate_emits_108_rows_with_isolated_identities(
     )
 
     first_pair_id = first_clean_gpt4o["memory_after"][-1]["entry_id"]
-    assert first_pair_id in {
-        entry["entry_id"] for entry in second_clean_gpt4o["memory_before"]
-    }
+    assert first_pair_id in {entry["entry_id"] for entry in second_clean_gpt4o["memory_before"]}
     assert first_pair_id not in {
         entry["entry_id"] for entry in second_contaminated_gpt4o["memory_before"]
     }
@@ -1384,9 +1449,7 @@ def test_dc_rs_reflexion_followup_gate_emits_108_rows_with_isolated_identities(
 def test_dc_rs_reflexion_followup_uses_offline_embeddings(tmp_path, monkeypatch) -> None:
     repo_root = Path(__file__).resolve().parents[1]
     monkeypatch.chdir(repo_root)
-    config = load_config(
-        repo_root / "configs/g0_dc_rs_reflexion_fidelity_followup_replay.yaml"
-    )
+    config = load_config(repo_root / "configs/g0_dc_rs_reflexion_fidelity_followup_replay.yaml")
     config["logging"]["output_dir"] = str(tmp_path / "runs")
     config["embedding"]["cache_path"] = str(tmp_path / "embedding_cache")
     assert config["embedding"]["cache_path"] == str(tmp_path / "embedding_cache")
@@ -1766,9 +1829,7 @@ def _phase11_config(tmp_path, sample_path: str, corpus_path: str) -> dict[str, A
     return config
 
 
-def test_phase11_runner_writes_law_target_pairing_and_update_context(
-    tmp_path, monkeypatch
-) -> None:
+def test_phase11_runner_writes_law_target_pairing_and_update_context(tmp_path, monkeypatch) -> None:
     sample_path = _write_game24_sample(tmp_path)
     corpus_path = _write_minimal_corpus(
         tmp_path,
@@ -1815,7 +1876,10 @@ def test_phase11_runner_writes_law_target_pairing_and_update_context(
         for line in (run_dir / "trials.jsonl").read_text(encoding="utf-8").splitlines()
     ]
     assert manifest["run_metadata"]["evaluation_law"]["evaluation_law_id"] == "law-online-v1"
-    assert manifest["run_metadata"]["target_contamination_set"]["target_set_id"] == "controlled_injected_derived_v1"
+    assert (
+        manifest["run_metadata"]["target_contamination_set"]["target_set_id"]
+        == "controlled_injected_derived_v1"
+    )
     assert len(trials) == 8
     for trial in trials:
         TrialLog.model_validate(trial)
@@ -1896,9 +1960,7 @@ def _phase11_frozen_config(tmp_path, sample_path: str, corpus_path: str) -> dict
     return config
 
 
-def test_phase11_frozen_read_only_run_logs_checkpoint_context(
-    tmp_path, monkeypatch
-) -> None:
+def test_phase11_frozen_read_only_run_logs_checkpoint_context(tmp_path, monkeypatch) -> None:
     sample_path = _write_game24_sample(tmp_path)
     corpus_path = _write_minimal_corpus(
         tmp_path,
@@ -1962,9 +2024,7 @@ def test_phase11_frozen_read_only_run_logs_checkpoint_context(
         )
 
 
-def test_phase11_frozen_disabled_memory_drift_fails_closed(
-    tmp_path, monkeypatch
-) -> None:
+def test_phase11_frozen_disabled_memory_drift_fails_closed(tmp_path, monkeypatch) -> None:
     sample_path = _write_game24_sample(tmp_path)
     corpus_path = _write_minimal_corpus(
         tmp_path,
@@ -2037,7 +2097,9 @@ def test_strict_failed_multicall_trial_keeps_answer_call_not_failed_curation(
 
     config = _strict_no_memory_config(tmp_path, sample_path, corpus_path)
     config["baselines"] = ["dynamic_cheatsheet_optional"]
-    run_dir = run_config(config, run_id="strict_curation_failure", _client_override=CurationFailureClient())
+    run_dir = run_config(
+        config, run_id="strict_curation_failure", _client_override=CurationFailureClient()
+    )
 
     calls = [
         json.loads(line)
@@ -2055,7 +2117,9 @@ def test_strict_failed_multicall_trial_keeps_answer_call_not_failed_curation(
     assert trial["method_calls"][1]["stage"] == "dynamic_cheatsheet_curate"
 
 
-def test_strict_run_rejects_collision_without_changing_existing_directory(tmp_path, monkeypatch) -> None:
+def test_strict_run_rejects_collision_without_changing_existing_directory(
+    tmp_path, monkeypatch
+) -> None:
     sample_path = _write_game24_sample(tmp_path)
     corpus_path = _write_minimal_corpus(tmp_path, [])
     monkeypatch.chdir(tmp_path)
@@ -2093,7 +2157,9 @@ def test_strict_fatal_writer_error_never_finalizes_completed_run(tmp_path, monke
     assert manifest["status"] == "failed"
 
 
-def test_strict_offline_config_rejects_live_smoke_before_client_creation(tmp_path, monkeypatch) -> None:
+def test_strict_offline_config_rejects_live_smoke_before_client_creation(
+    tmp_path, monkeypatch
+) -> None:
     sample_path = _write_game24_sample(tmp_path)
     corpus_path = _write_minimal_corpus(tmp_path, [])
     config = _strict_no_memory_config(tmp_path, sample_path, corpus_path)

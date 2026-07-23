@@ -56,13 +56,15 @@ def build_conditional_call_scope_registry(
             if not template.baseline_condition_id.startswith("reflexion"):
                 continue
             for activation in ("on_attempt_1_failure", "on_retry_failure"):
-                grouped[(template.model_snapshot, template.task_family, template.baseline_condition_id, activation)].append(
-                    (template_set.candidate_route, template)
-                )
-    scopes = tuple(
-        _scope(key, records)
-        for key, records in sorted(grouped.items())
-    )
+                grouped[
+                    (
+                        template.model_snapshot,
+                        template.task_family,
+                        template.baseline_condition_id,
+                        activation,
+                    )
+                ].append((template_set.candidate_route, template))
+    scopes = tuple(_scope(key, records) for key, records in sorted(grouped.items()))
     payload = {"frozen_at": frozen_at, "scopes": [asdict(scope) for scope in scopes]}
     return ConditionalCallScopeRegistry(
         registry_id=f"conditional-scopes-{canonical_json_hash(payload)[:12]}",
@@ -235,11 +237,13 @@ def freeze_conditional_call_rate_registry(
             raise PlanningError("CONDITIONAL_CALL_SCOPE_MISMATCH")
         if statistic:
             numerator, denominator = statistic.activated_calls, statistic.eligible_opportunities
-            source_kind, source_id, source_hash = "pilot_b", statistic.statistic_id, statistic.artifact_hash
+            source_kind: Literal["pilot_b", "registered_upper_bound"] = "pilot_b"
+            source_id, source_hash = statistic.statistic_id, statistic.artifact_hash
         else:
             assert bound is not None
             numerator, denominator = bound.numerator, bound.denominator
-            source_kind, source_id, source_hash = "registered_upper_bound", bound.bound_id, bound.artifact_hash
+            source_kind = "registered_upper_bound"
+            source_id, source_hash = bound.bound_id, bound.artifact_hash
         rates.append(
             CallActivationRate(
                 rate_id=f"rate-{scope.scope_id}",
@@ -445,7 +449,8 @@ def validate_exploratory_activation(
         or activation.exploratory_run_template_registry_hash
         != plan.exploratory_run_template_registry_hash
         or set(activation.exploratory_slot_to_seed) != set(plan.abstract_slots)
-        or len(set(activation.exploratory_slot_to_seed.values())) != len(activation.exploratory_slot_to_seed)
+        or len(set(activation.exploratory_slot_to_seed.values()))
+        != len(activation.exploratory_slot_to_seed)
         or resource.mandatory_package_status != "fully_resourced"
         or plan.estimated_exploratory_calls > resource.exploratory_call_budget
         or resource.exploratory_call_budget + resource.reproducibility_reserve
@@ -561,7 +566,10 @@ def _registry(
 def _validate_run_template(template: RunTemplateSpec, prefix_keys: set[str]) -> None:
     if template.evidence_layer not in {"build", "calibration", "main", "extension"}:
         raise PlanningError("INVALID_TEMPLATE_EVIDENCE_LAYER")
-    if template.run_family in {"main_a", "main_b", "extension"} and template.model_snapshot != "gpt-4o-v1":
+    if (
+        template.run_family in {"main_a", "main_b", "extension"}
+        and template.model_snapshot != "gpt-4o-v1"
+    ):
         raise PlanningError("INVALID_MODEL_ROLE_ASSIGNMENT")
     if template.run_family == "main_c" and (
         template.model_snapshot != "frontier-model-v1"
@@ -588,7 +596,11 @@ def _validate_rate_rows(
         if rate.denominator <= 0 or rate.numerator < 0 or rate.numerator > rate.denominator:
             raise PlanningError("INVALID_CONDITIONAL_CALL_RATE")
         if rate.activation in {"always", "once_per_seed"}:
-            if rate.scope_id_or_none is not None or rate.scope_hash_or_none is not None or rate.fraction != 1:
+            if (
+                rate.scope_id_or_none is not None
+                or rate.scope_hash_or_none is not None
+                or rate.fraction != 1
+            ):
                 raise PlanningError("INVALID_CONDITIONAL_CALL_RATE")
         elif rate.scope_id_or_none is None or (
             scope_hashes.get(rate.scope_id_or_none) != rate.scope_hash_or_none

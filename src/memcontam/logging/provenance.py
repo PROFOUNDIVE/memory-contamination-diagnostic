@@ -72,9 +72,9 @@ def normalize_memory_event(
         for entry in memory_after
         if entry.entry_id in before_by_id
         and MemoryItemLog.from_memory_entry(entry, memory_after).model_dump(mode="json")
-        != MemoryItemLog.from_memory_entry(
-            before_by_id[entry.entry_id], memory_before
-        ).model_dump(mode="json")
+        != MemoryItemLog.from_memory_entry(before_by_id[entry.entry_id], memory_before).model_dump(
+            mode="json"
+        )
     ]
 
     before_hash = memory_snapshot_hash(memory_before)
@@ -95,19 +95,13 @@ def normalize_memory_event(
         if isinstance(declared_new_id, str) and declared_new_id and declared_new_id not in new_ids:
             raise ValueError(f"accepted memory event new_entry_id is not new: {declared_new_id}")
     elif new_ids:
-        raise ValueError(
-            f"{status} memory event must not claim new entries: {new_ids}"
-        )
+        raise ValueError(f"{status} memory event must not claim new entries: {new_ids}")
     elif snapshot_changed:
-        raise ValueError(
-            f"{status} memory event must not change snapshot hash"
-        )
+        raise ValueError(f"{status} memory event must not change snapshot hash")
 
     parent_entry_ids = normalize_direct_parent_ids(memory_write_event)
     source_entry_ids = _string_list(memory_write_event.get("source_entry_ids"))
-    contaminated_source_ids = _string_list(
-        memory_write_event.get("source_contaminated_entry_ids")
-    )
+    contaminated_source_ids = _string_list(memory_write_event.get("source_contaminated_entry_ids"))
 
     # Only recorded direct-parent evidence can populate exact parents. Source
     # evidence and updater context remain source evidence.
@@ -120,9 +114,7 @@ def normalize_memory_event(
             memory_after, new_ids, "source_contaminated_entry_ids"
         )
         if not contaminated_source_ids:
-            contaminated_source_ids = _contaminated_source_ids_from_entries(
-                memory_after, new_ids
-            )
+            contaminated_source_ids = _contaminated_source_ids_from_entries(memory_after, new_ids)
 
     creation_origin: str | None = None
     memory_version: str | None = None
@@ -261,13 +253,10 @@ class CanonicalLineage:
     direct_parent_ids: list[str]
 
 
-def target_set_membership(
-    item: MemoryItemLog, target_set: TargetContaminationSetSpec
-) -> bool:
+def target_set_membership(item: MemoryItemLog, target_set: TargetContaminationSetSpec) -> bool:
     """Return whether a normalized item is eligible for a fixed target set."""
-    return (
-        item.contamination_class in target_set.included_classes
-        and (not target_set.require_exact_lineage or item.lineage_status == "exact")
+    return item.contamination_class in target_set.included_classes and (
+        not target_set.require_exact_lineage or item.lineage_status == "exact"
     )
 
 
@@ -300,7 +289,9 @@ def canonical_lineage_for_entry(
     declared_basis = metadata.get("lineage_basis")
     declared_class = metadata.get("contamination_class")
 
-    if _is_typed_seed(entry, declared_class, declared_status, declared_basis, direct_parent_ids, declared_roots):
+    if _is_typed_seed(
+        entry, declared_class, declared_status, declared_basis, direct_parent_ids, declared_roots
+    ):
         return CanonicalLineage(
             contamination_class=cast(ContaminationClass, declared_class),
             injected_root_ids=declared_roots,
@@ -486,7 +477,11 @@ def _is_typed_seed(
     if entry.source_trial_id is not None or lineage_status != "exact" or lineage_basis != "seed":
         return False
     if contamination_class == "clean":
-        return not direct_parent_ids and not injected_root_ids and entry.clean_or_contaminated == "clean"
+        return (
+            not direct_parent_ids
+            and not injected_root_ids
+            and entry.clean_or_contaminated == "clean"
+        )
     return (
         contamination_class == "injected"
         and not direct_parent_ids
@@ -519,9 +514,11 @@ def build_prompt_with_sources(
     message_index: int = 0,
     entries: list[MemoryEntry] | None = None,
 ) -> tuple[str, list[PromptSourceSpan]]:
-    entry_table = entries if entries is not None else [
-        part.entry for part in parts if isinstance(part, PromptSourcePart)
-    ]
+    entry_table = (
+        entries
+        if entries is not None
+        else [part.entry for part in parts if isinstance(part, PromptSourcePart)]
+    )
     content_parts: list[str] = []
     spans: list[PromptSourceSpan] = []
     offset = 0
@@ -819,9 +816,8 @@ def _unique_entry_ids(spans: list[PromptSourceSpan]) -> list[str]:
 
 
 def _exact_target_span(span: PromptSourceSpan, target_set: TargetContaminationSetSpec) -> bool:
-    return (
-        span.contamination_class in target_set.included_classes
-        and (not target_set.require_exact_lineage or span.lineage_status == "exact")
+    return span.contamination_class in target_set.included_classes and (
+        not target_set.require_exact_lineage or span.lineage_status == "exact"
     )
 
 

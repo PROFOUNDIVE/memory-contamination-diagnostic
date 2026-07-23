@@ -135,7 +135,10 @@ def test_inspector_accepts_complete_synthetic_run(tmp_path: Path) -> None:
         baseline="retrieval_rag",
         sample_id="s1",
         prompt_messages=[
-            {"role": "user", "content": "Retrieved memory:\n#1 entry_id=rag-doc-1 Useful strategy for game24.\n\nSolve: ..."}
+            {
+                "role": "user",
+                "content": "Retrieved memory:\n#1 entry_id=rag-doc-1 Useful strategy for game24.\n\nSolve: ...",
+            }
         ],
         retrieved_memory=[
             {
@@ -168,7 +171,9 @@ def test_inspector_accepts_complete_synthetic_run(tmp_path: Path) -> None:
             "new_entry_id": "bot-template:s1",
             "update_reason": "distilled_thought_template",
         },
-        memory_after=[_bot_template_entry("bot-template:s1", "run:game24:s1:bot_style:clean:replay")],
+        memory_after=[
+            _bot_template_entry("bot-template:s1", "run:game24:s1:bot_style:clean:replay")
+        ],
     )
 
     bot_s2 = _trial_row(
@@ -176,8 +181,12 @@ def test_inspector_accepts_complete_synthetic_run(tmp_path: Path) -> None:
         baseline="bot_style",
         sample_id="s2",
         prompt_messages=[{"role": "user", "content": "distill and solve"}],
-        memory_before=[_bot_template_entry("bot-template:s1", "run:game24:s1:bot_style:clean:replay")],
-        retrieved_memory=[_bot_template_entry("bot-template:s1", "run:game24:s1:bot_style:clean:replay")],
+        memory_before=[
+            _bot_template_entry("bot-template:s1", "run:game24:s1:bot_style:clean:replay")
+        ],
+        retrieved_memory=[
+            _bot_template_entry("bot-template:s1", "run:game24:s1:bot_style:clean:replay")
+        ],
         retrieved_scores=[0.95],
         method_calls=_bot_method_calls(),
         memory_write_event={
@@ -211,7 +220,11 @@ def test_inspector_accepts_complete_synthetic_run(tmp_path: Path) -> None:
             "new_entry_id": "bot-template:s1-contaminated",
             "update_reason": "distilled_thought_template",
         },
-        memory_after=[_bot_template_entry("bot-template:s1-contaminated", "run:game24:s1:bot_style:contaminated:replay")],
+        memory_after=[
+            _bot_template_entry(
+                "bot-template:s1-contaminated", "run:game24:s1:bot_style:contaminated:replay"
+            )
+        ],
     )
 
     _write_trials_jsonl(run_dir, [rag_row, bot_s1, bot_s2, foreign_bot])
@@ -264,7 +277,9 @@ def test_inspector_rejects_nonpersistent_and_misaligned_run(tmp_path: Path) -> N
             "new_entry_id": "bot-template:s1",
             "update_reason": "distilled_thought_template",
         },
-        memory_after=[_bot_template_entry("bot-template:s1", "run:game24:s1:bot_style:clean:replay")],
+        memory_after=[
+            _bot_template_entry("bot-template:s1", "run:game24:s1:bot_style:clean:replay")
+        ],
     )
 
     _write_trials_jsonl(run_dir, [misaligned_rag, nonpersistent_bot])
@@ -278,4 +293,6 @@ def test_inspector_rejects_nonpersistent_and_misaligned_run(tmp_path: Path) -> N
     assert report["isolation"] == "pass"
     assert report["logging"] == "pass"
     assert "rag" in " ".join(report.get("reasons", [])).lower() or "prompt" in result.stdout.lower()
-    assert "persist" in " ".join(report.get("reasons", [])).lower() or "reuse" in result.stdout.lower()
+    assert (
+        "persist" in " ".join(report.get("reasons", [])).lower() or "reuse" in result.stdout.lower()
+    )

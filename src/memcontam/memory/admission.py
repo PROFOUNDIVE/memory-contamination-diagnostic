@@ -4,7 +4,11 @@ from dataclasses import dataclass, field
 from typing import Mapping, Sequence
 
 from memcontam.memory.cards import MemoryCard, MemoryCardEnvelope
-from memcontam.memory.cards_v3 import MemoryCardEnvelopeV3, MemoryEnvelopeError, validate_memory_envelope
+from memcontam.memory.cards_v3 import (
+    MemoryCardEnvelopeV3,
+    MemoryEnvelopeError,
+    validate_memory_envelope,
+)
 from memcontam.memory.writer_registry import WriterRegistry
 
 
@@ -88,12 +92,9 @@ def validate_parent_graph(
     admitted_envelopes: Sequence[MemoryCardEnvelope] = (),
 ) -> None:
     current_envelopes = tuple(envelopes)
-    if (
-        len(current_envelopes) != sum(
-            isinstance(envelope, MemoryCardEnvelope) for envelope in current_envelopes
-        )
-        or len({envelope.entry_id for envelope in current_envelopes}) != len(current_envelopes)
-    ):
+    if len(current_envelopes) != sum(
+        isinstance(envelope, MemoryCardEnvelope) for envelope in current_envelopes
+    ) or len({envelope.entry_id for envelope in current_envelopes}) != len(current_envelopes):
         raise AdmissionGraphError("invalid_schema")
     issues = _parent_issues(current_envelopes, admitted_envelopes)
     if issues:
@@ -188,10 +189,9 @@ def evaluate_admission_graph(
         for envelope in context.admitted_envelopes
         if isinstance(envelope, MemoryCardEnvelope)
     )
-    if (
-        len(admitted_entries) != len(context.admitted_envelopes)
-        or len({envelope.entry_id for envelope in admitted_entries}) != len(admitted_entries)
-    ):
+    if len(admitted_entries) != len(context.admitted_envelopes) or len(
+        {envelope.entry_id for envelope in admitted_entries}
+    ) != len(admitted_entries):
         issues.update(
             {
                 envelope.entry_id: "invalid_schema"
@@ -221,7 +221,11 @@ def evaluate_admission_graph(
     for entry_id in _cycle_entry_ids(envelopes):
         issues[entry_id] = "cycle"
 
-    by_id = {envelope.entry_id: envelope for envelope in envelopes if isinstance(envelope, MemoryCardEnvelope)}
+    by_id = {
+        envelope.entry_id: envelope
+        for envelope in envelopes
+        if isinstance(envelope, MemoryCardEnvelope)
+    }
     decisions: dict[str, AdmissionDecision] = {}
 
     def evaluate(entry_id: str) -> AdmissionDecision:
@@ -230,7 +234,9 @@ def evaluate_admission_graph(
         envelope = by_id[entry_id]
         if entry_id in issues:
             decision = AdmissionDecision(entry_id, False, issues[entry_id])
-        elif context.authorized_writers is None or not context.authorized_writers.permits(envelope.writer_id):
+        elif context.authorized_writers is None or not context.authorized_writers.permits(
+            envelope.writer_id
+        ):
             decision = AdmissionDecision(entry_id, False, "unauthorized_writer")
         elif any(
             not evaluate(parent_id).admitted
@@ -289,9 +295,13 @@ def _parent_issues(
 
 
 def _cycle_entry_ids(envelopes: Sequence[object]) -> frozenset[str]:
-    candidate_ids = {envelope.entry_id for envelope in envelopes if isinstance(envelope, MemoryCardEnvelope)}
+    candidate_ids = {
+        envelope.entry_id for envelope in envelopes if isinstance(envelope, MemoryCardEnvelope)
+    }
     parents = {
-        envelope.entry_id: tuple(parent for parent in envelope.declared_parent_ids if parent in candidate_ids)
+        envelope.entry_id: tuple(
+            parent for parent in envelope.declared_parent_ids if parent in candidate_ids
+        )
         for envelope in envelopes
         if isinstance(envelope, MemoryCardEnvelope)
     }

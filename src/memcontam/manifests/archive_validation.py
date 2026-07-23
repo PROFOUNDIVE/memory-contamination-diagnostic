@@ -103,7 +103,9 @@ def _validate_archive(root: Path) -> int:
 
     governance = _read_governance(root)
     try:
-        validate_run_manifest(runs, governance.routes, governance.allocations, governance.activations)
+        validate_run_manifest(
+            runs, governance.routes, governance.allocations, governance.activations
+        )
     except ManifestError as error:
         raise ArchiveError(error.code) from error
 
@@ -140,7 +142,9 @@ def _read_governance(root: Path) -> _Governance:
     directory = root / "governance"
     return _Governance(
         routes=_read_models(directory / _GOVERNANCE_PATHS["routes"], RouteSelectionManifest),
-        allocations=_read_models(directory / _GOVERNANCE_PATHS["allocations"], SeedAllocationManifest),
+        allocations=_read_models(
+            directory / _GOVERNANCE_PATHS["allocations"], SeedAllocationManifest
+        ),
         activations=_read_models(
             directory / _GOVERNANCE_PATHS["activations"], ExploratoryActivationManifest
         ),
@@ -210,7 +214,10 @@ def _validate_route_provenance(manifest: RunManifest, governance: _Governance) -
         row.route_selection_manifest_id
         for row in manifest.rows
         if isinstance(row, SelectedRouteRunManifestRow)
-        or (isinstance(row, ExploratoryRunManifestRow) and row.metadata_kind == "exploratory_code_scientific")
+        or (
+            isinstance(row, ExploratoryRunManifestRow)
+            and row.metadata_kind == "exploratory_code_scientific"
+        )
     }
     for selection_id in selections:
         if selection_id is None:
@@ -229,9 +236,15 @@ def _validate_route_provenance(manifest: RunManifest, governance: _Governance) -
         if mft is None or mft.artifact_hash != report.mft_manifest_hash:
             raise ArchiveError("MFT_MANIFEST_HASH_MISMATCH")
         try:
-            validate_route_selection(tuple(governance.reports.values()), pilot, mft, selection, allocation)
+            validate_route_selection(
+                tuple(governance.reports.values()), pilot, mft, selection, allocation
+            )
         except PlanningError as error:
-            code = "ROUTE_SELECTION_MISMATCH" if error.code == "ROUTE_SELECTION_INVALID" else error.code
+            code = (
+                "ROUTE_SELECTION_MISMATCH"
+                if error.code == "ROUTE_SELECTION_INVALID"
+                else error.code
+            )
             raise ArchiveError(code) from error
         for row in manifest.rows:
             if (
@@ -247,7 +260,10 @@ def _validate_route_provenance(manifest: RunManifest, governance: _Governance) -
 
 def _validate_activation_provenance(manifest: RunManifest, governance: _Governance) -> None:
     for row in manifest.rows:
-        if not isinstance(row, ExploratoryRunManifestRow) or row.metadata_kind != "exploratory_code_scientific":
+        if (
+            not isinstance(row, ExploratoryRunManifestRow)
+            or row.metadata_kind != "exploratory_code_scientific"
+        ):
             continue
         activation_id = row.exploratory_activation_manifest_id
         if activation_id is None:
@@ -264,7 +280,8 @@ def _validate_activation_provenance(manifest: RunManifest, governance: _Governan
         if (
             resource.exploratory_plan_id != plan.plan_id
             or resource.exploratory_plan_hash != plan.artifact_hash
-            or activation.exploratory_run_template_registry_id != plan.exploratory_run_template_registry_id
+            or activation.exploratory_run_template_registry_id
+            != plan.exploratory_run_template_registry_id
             or activation.exploratory_run_template_registry_hash
             != plan.exploratory_run_template_registry_hash
         ):
@@ -278,7 +295,10 @@ def _validate_activation_provenance(manifest: RunManifest, governance: _Governan
             raise ArchiveError("EXPLORATORY_RESOURCE_RESERVATION_NOT_PASS")
         if plan.estimated_exploratory_calls > resource.exploratory_call_budget:
             raise ArchiveError("EXPLORATORY_BUDGET_INSUFFICIENT")
-        if resource.exploratory_call_budget + resource.reproducibility_reserve > resource.remaining_call_capacity:
+        if (
+            resource.exploratory_call_budget + resource.reproducibility_reserve
+            > resource.remaining_call_capacity
+        ):
             raise ArchiveError("REPRODUCIBILITY_RESERVE_INSUFFICIENT")
         selection = governance.routes.get(activation.route_selection_manifest_id)
         allocation = governance.allocations.get(activation.seed_allocation_manifest_id)

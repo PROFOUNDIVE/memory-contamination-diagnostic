@@ -4,11 +4,28 @@ import ast
 import json
 from pathlib import Path
 
-from memcontam.tools.base import ToolInfrastructureError, ToolPolicyError, ToolRequest, ToolRuntimeContract
+from memcontam.tools.base import (
+    ToolInfrastructureError,
+    ToolPolicyError,
+    ToolRequest,
+    ToolRuntimeContract,
+)
 
 
 _NETWORK_IMPORTS = frozenset(
-    {"aiohttp", "asyncore", "ftplib", "http", "httpx", "requests", "smtplib", "socket", "ssl", "telnetlib", "urllib"}
+    {
+        "aiohttp",
+        "asyncore",
+        "ftplib",
+        "http",
+        "httpx",
+        "requests",
+        "smtplib",
+        "socket",
+        "ssl",
+        "telnetlib",
+        "urllib",
+    }
 )
 _NETWORK_CALLS = frozenset({"connect", "create_connection", "request", "urlopen", "urlretrieve"})
 
@@ -18,7 +35,14 @@ def load_tool_runtime_contract(path: Path, *, scientific: bool) -> ToolRuntimeCo
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise ToolInfrastructureError("SANDBOX_LOCK_UNAVAILABLE") from error
-    required = {"oci_image", "python_version", "runtime_identity", "network_enabled", "forbidden_imports", "timeout_seconds"}
+    required = {
+        "oci_image",
+        "python_version",
+        "runtime_identity",
+        "network_enabled",
+        "forbidden_imports",
+        "timeout_seconds",
+    }
     if set(payload) - {"schema_version", "recipe_sha256", *required} or required - set(payload):
         raise ToolPolicyError("SANDBOX_LOCK_INVALID")
     try:
@@ -77,7 +101,11 @@ def _validate_import(name: str, contract: ToolRuntimeContract) -> None:
 
 def _validate_call(node: ast.Call, contract: ToolRuntimeContract) -> None:
     if isinstance(node.func, ast.Name) and node.func.id == "__import__":
-        if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+        if (
+            node.args
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, str)
+        ):
             _validate_import(node.args[0].value, contract)
         raise ToolPolicyError("FORBIDDEN_IMPORT")
     if isinstance(node.func, ast.Attribute):

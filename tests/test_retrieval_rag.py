@@ -22,7 +22,9 @@ from memcontam.tasks.base import TaskInstance
 from memcontam.tasks.dispatch import canonical_task_json
 
 
-def _entry(entry_id: str, content: str, *, source: str = "fixture", contaminated: bool = False) -> MemoryEntry:
+def _entry(
+    entry_id: str, content: str, *, source: str = "fixture", contaminated: bool = False
+) -> MemoryEntry:
     return MemoryEntry(
         entry_id=entry_id,
         content=content,
@@ -126,13 +128,13 @@ def test_retrieval_rag_adapter_records_answer_source_spans(tmp_path: Path) -> No
         {
             "role": "user",
             "content": (
-            "Retrieved documents:\n"
-            + render_retrieved_documents(
-                RetrievalDocumentPayload(record.text) for record in call.retrieved_records
-            )
-            + "\n\nCurrent task:\n"
-            + canonical_task_json(task)
-        ),
+                "Retrieved documents:\n"
+                + render_retrieved_documents(
+                    RetrievalDocumentPayload(record.text) for record in call.retrieved_records
+                )
+                + "\n\nCurrent task:\n"
+                + canonical_task_json(task)
+            ),
         },
     ]
     assert call.messages == expected_messages
@@ -141,7 +143,7 @@ def test_retrieval_rag_adapter_records_answer_source_spans(tmp_path: Path) -> No
     for span, record in zip(call.source_spans, call.retrieved_records):
         assert isinstance(span, PromptSourceSpan)
         assert span.message_index == 1
-        assert content[span.start:span.end] == record.text
+        assert content[span.start : span.end] == record.text
         assert span.rendered_hash == hashlib.sha256(record.text.encode("utf-8")).hexdigest()
         assert span.entry_id == record.document_id
         assert span.clean_or_contaminated == "clean"

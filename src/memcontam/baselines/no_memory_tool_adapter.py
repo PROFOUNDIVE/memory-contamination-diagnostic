@@ -10,7 +10,12 @@ from memcontam.clients.recording import MethodCallRecorder
 from memcontam.logging.schema import VerifierResult
 from memcontam.memory.stores import MemoryState
 from memcontam.tasks.base import TaskInstance
-from memcontam.tools.base import ToolExecutionError, ToolExecutor, ToolPolicyError, ToolRuntimeContract
+from memcontam.tools.base import (
+    ToolExecutionError,
+    ToolExecutor,
+    ToolPolicyError,
+    ToolRuntimeContract,
+)
 from memcontam.tools.execution_loop import LlmCall, ToolProtocolError, run_tool_loop
 
 

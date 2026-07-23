@@ -3,7 +3,6 @@ from __future__ import annotations
 from memcontam.logging.schema import VerifierResult
 
 
-
 def verify_words(answer_words: list[str], sorted_words: list[str]) -> VerifierResult:
     if not isinstance(answer_words, list) or not answer_words:
         return VerifierResult(

@@ -117,9 +117,7 @@ def _assert_no_leakage(text: str, entry_id: str) -> None:
     lowered = text.lower()
     for substring in _FORBIDDEN_ANSWER_SUBSTRINGS:
         if substring.lower() in lowered:
-            raise ValueError(
-                f"record {entry_id!r} contains raw evaluation answer {substring!r}"
-            )
+            raise ValueError(f"record {entry_id!r} contains raw evaluation answer {substring!r}")
 
 
 class CorpusRecord(BaseModel):

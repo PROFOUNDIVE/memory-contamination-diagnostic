@@ -6,7 +6,9 @@ from memcontam.tasks.word_sorting import build_instance as build_word_sorting_in
 
 
 def main() -> None:
-    game24 = build_game24_instance({"sample_id": "game24_pilot_001", "numbers": [1, 3, 4, 6], "target": 24})
+    game24 = build_game24_instance(
+        {"sample_id": "game24_pilot_001", "numbers": [1, 3, 4, 6], "target": 24}
+    )
     assert game24.sample_id == "game24_pilot_001"
     assert game24.task_name == "game24"
     assert game24.input == {"numbers": [1, 3, 4, 6]}

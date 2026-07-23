@@ -166,9 +166,7 @@ class PromptSourceSpan(BaseModel):
         if self.end <= self.start:
             raise ValueError("source span end must be greater than start")
         _validate_phase11_lineage_fields(self)
-        _validate_contamination_compatibility(
-            self.clean_or_contaminated, self.contamination_class
-        )
+        _validate_contamination_compatibility(self.clean_or_contaminated, self.contamination_class)
         return self
 
 
@@ -267,9 +265,7 @@ class MemoryItemLog(BaseModel):
     @model_validator(mode="after")
     def _validate_phase11_lineage(self) -> MemoryItemLog:
         _validate_phase11_lineage_fields(self)
-        _validate_contamination_compatibility(
-            self.clean_or_contaminated, self.contamination_class
-        )
+        _validate_contamination_compatibility(self.clean_or_contaminated, self.contamination_class)
         return self
 
     @classmethod
@@ -297,7 +293,9 @@ class MemoryItemLog(BaseModel):
         creation_origin = metadata.get("creation_origin", metadata.get("origin"))
         if not isinstance(creation_origin, str) or not creation_origin:
             reflection_lineage = metadata.get("reflection_lineage")
-            if isinstance(reflection_lineage, dict) and isinstance(reflection_lineage.get("stage"), str):
+            if isinstance(reflection_lineage, dict) and isinstance(
+                reflection_lineage.get("stage"), str
+            ):
                 creation_origin = reflection_lineage["stage"]
             else:
                 creation_origin = "seed" if entry.source_trial_id is None else entry.memory_type
@@ -316,13 +314,15 @@ class MemoryItemLog(BaseModel):
                 "memory_error_status",
             )
         )
-        contamination_class = lineage.contamination_class
+        contamination_class: ContaminationClass | None = lineage.contamination_class
         if not has_phase11_lineage and entry.clean_or_contaminated == "contaminated":
             contamination_class = None
         canonical_binary_class = (
             entry.clean_or_contaminated
             if contamination_class is None
-            else "clean" if contamination_class == "clean" else "contaminated"
+            else "clean"
+            if contamination_class == "clean"
+            else "contaminated"
         )
         return cls(
             entry_id=entry.entry_id,
@@ -341,7 +341,9 @@ class MemoryItemLog(BaseModel):
             lineage_status=lineage.lineage_status if contamination_class is not None else None,
             lineage_basis=lineage.lineage_basis if contamination_class is not None else None,
             direct_parent_ids=lineage.direct_parent_ids if contamination_class is not None else [],
-            target_set_id=target_set_id if isinstance(target_set_id, str) and target_set_id else None,
+            target_set_id=target_set_id
+            if isinstance(target_set_id, str) and target_set_id
+            else None,
             is_target_contamination=is_target_contamination
             if isinstance(is_target_contamination, bool)
             else None,
@@ -516,7 +518,9 @@ class TrialLog(BaseModel):
     def _validate_versioned_contract(self) -> TrialLog:
         if self.schema_version == "legacy":
             if self.contamination_exposure.status == "supported":
-                raise ValueError("legacy rows cannot report supported exposure without answer-call source spans")
+                raise ValueError(
+                    "legacy rows cannot report supported exposure without answer-call source spans"
+                )
             return self
 
         version = self.schema_version
@@ -535,7 +539,9 @@ class TrialLog(BaseModel):
         if not self.prompt_messages:
             raise ValueError(f"{version} requires exact answer prompt_messages")
 
-        answer_call = next((call for call in self.method_calls if call.call_id == self.answer_call_id), None)
+        answer_call = next(
+            (call for call in self.method_calls if call.call_id == self.answer_call_id), None
+        )
         if answer_call is None:
             raise ValueError("answer_call_id must identify a method_calls entry")
         if answer_call.messages != self.prompt_messages:
@@ -559,7 +565,9 @@ class TrialLog(BaseModel):
                 for span in answer_call.source_spans
                 for source_id in [*span.source_ids, span.entry_id]
             }
-            if exposure.is_exposed and not set(exposure.exposed_source_ids).issubset(span_source_ids):
+            if exposure.is_exposed and not set(exposure.exposed_source_ids).issubset(
+                span_source_ids
+            ):
                 raise ValueError("exposed source IDs must be present in final-call source spans")
         if self.schema_version == LOGGING_V2:
             self._validate_logging_v2_contract(answer_call)
@@ -581,7 +589,10 @@ class TrialLog(BaseModel):
         if self.contamination_exposure.status == "supported":
             if self.contamination_exposure.evidence_lineage_status is None:
                 raise ValueError("logging_v2 supported exposure requires evidence_lineage_status")
-            if self.contamination_exposure.is_exposed and not self.contamination_exposure.exposed_entry_ids:
+            if (
+                self.contamination_exposure.is_exposed
+                and not self.contamination_exposure.exposed_entry_ids
+            ):
                 raise ValueError("logging_v2 exposed evidence requires exposed_entry_ids")
         for span in answer_call.source_spans:
             for field_name in (
@@ -594,10 +605,14 @@ class TrialLog(BaseModel):
                 if getattr(span, field_name) is None:
                     raise ValueError(f"logging_v2 source spans require {field_name}")
             if span.target_set_id != self.target_set_id:
-                raise ValueError("logging_v2 source span target_set_id must match trial target_set_id")
+                raise ValueError(
+                    "logging_v2 source span target_set_id must match trial target_set_id"
+                )
         expected_source_ids = _unique_span_entry_ids(answer_call.source_spans)
         if self.contamination_exposure.source_entry_ids != expected_source_ids:
-            raise ValueError("logging_v2 source_entry_ids must equal rendered answer span entry IDs")
+            raise ValueError(
+                "logging_v2 source_entry_ids must equal rendered answer span entry IDs"
+            )
         writing_baselines = {
             "full_history",
             "reflexion_style",

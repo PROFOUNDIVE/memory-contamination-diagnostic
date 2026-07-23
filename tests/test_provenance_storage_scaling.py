@@ -52,7 +52,9 @@ def _chain(length: int) -> tuple[list[MemoryEntry], list[MemoryEvent]]:
 def _canonical_lineage_bytes(length: int) -> tuple[int, int]:
     entries, events = _chain(length)
     payload = {
-        "entries": [MemoryItemLog.from_memory_entry(entry, entries).model_dump() for entry in entries],
+        "entries": [
+            MemoryItemLog.from_memory_entry(entry, entries).model_dump() for entry in entries
+        ],
         "edges": [edge.model_dump() for event in events for edge in event.lineage_edges],
     }
     return len(json.dumps(payload, sort_keys=True, separators=(",", ":"))), len(payload["edges"])

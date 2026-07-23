@@ -26,7 +26,10 @@ class PythonSandbox:
     ) -> None:
         self.contract = contract
         self.executor = executor or _OciExecutor()
-        self.lock_path = lock_path or Path(__file__).resolve().parents[3] / "containers/python-sandbox/image.lock.json"
+        self.lock_path = (
+            lock_path
+            or Path(__file__).resolve().parents[3] / "containers/python-sandbox/image.lock.json"
+        )
 
     def execute(self, request: ToolRequest) -> ToolResult:
         validate_scientific_runtime_contract(self.contract, self.lock_path)

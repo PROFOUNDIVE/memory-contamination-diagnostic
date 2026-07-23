@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 from pydantic import ValidationError
 
 from memcontam.experiment.phase12.contracts import (
@@ -57,7 +57,9 @@ class BehaviorRegistryBundle:
             {
                 "behavior_tests": self.behavior_tests.model_dump(mode="json"),
                 "metric_registry": self.metric_registry.model_dump(mode="json"),
-                "embedding_runtime_contract": self.embedding_runtime_contract.model_dump(mode="json"),
+                "embedding_runtime_contract": self.embedding_runtime_contract.model_dump(
+                    mode="json"
+                ),
                 "fidelity_certificate": self.fidelity_certificate.model_dump(mode="json"),
             }
         )
@@ -130,7 +132,9 @@ def validate_registry_bundle(bundle: BehaviorRegistryBundle) -> RegistryValidati
 
 def _load_rows(path: Path) -> list[BehaviorTestRow]:
     try:
-        payloads = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+        payloads = [
+            json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line
+        ]
     except (OSError, json.JSONDecodeError) as exc:
         raise BehaviorRegistryError("REGISTRY_READ_ERROR") from exc
     try:
@@ -174,4 +178,6 @@ def _registry_hash(rows: tuple[BehaviorTestRow, ...]) -> str:
 
 
 def _is_outcome_tuned(refs: Mapping[str, str]) -> bool:
-    return any("outcome" in key.lower() or "outcome" in value.lower() for key, value in refs.items())
+    return any(
+        "outcome" in key.lower() or "outcome" in value.lower() for key, value in refs.items()
+    )

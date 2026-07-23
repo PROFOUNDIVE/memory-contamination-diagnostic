@@ -6,7 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from memcontam.logging.schema_v3 import PreRouteRunMetadata, MemoryArmExecutionKey, parse_log_record_v3
+from memcontam.logging.schema_v3 import (
+    PreRouteRunMetadata,
+    MemoryArmExecutionKey,
+    parse_log_record_v3,
+)
 
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "phase12" / "FX-AGG-001.json"
@@ -78,7 +82,11 @@ def test_reconstructs_paired_five_arm_seed_aggregate() -> None:
 
 
 def test_rejects_incomplete_mixed_or_trial_resampled_inputs() -> None:
-    from memcontam.evaluation.phase12_aggregate import AggregateError, AggregateSpec, aggregate_phase12
+    from memcontam.evaluation.phase12_aggregate import (
+        AggregateError,
+        AggregateSpec,
+        aggregate_phase12,
+    )
 
     incomplete = tuple(
         run

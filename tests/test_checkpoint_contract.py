@@ -118,7 +118,9 @@ def test_native_renderer_inserts_one_root_without_changing_existing_checkpoint_d
     clean = _clean_checkpoint()
     contaminated = checkpoints.clone_checkpoint_to_arm(clean, "contaminated")
 
-    rendered = contracts.NativeContaminationRenderer().render(contaminated, (_contamination_root(),))
+    rendered = contracts.NativeContaminationRenderer().render(
+        contaminated, (_contamination_root(),)
+    )
 
     assert rendered.identity == contaminated.identity
     assert rendered.cards[:-1] == contaminated.cards

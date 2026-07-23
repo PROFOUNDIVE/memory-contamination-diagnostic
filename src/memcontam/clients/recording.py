@@ -28,9 +28,7 @@ class MethodCallRecorder:
         call_id = f"{trial_id}:call:{call_index}"
 
         decoding_params = {
-            key: config[key]
-            for key in ("temperature", "top_p", "max_tokens")
-            if key in config
+            key: config[key] for key in ("temperature", "top_p", "max_tokens") if key in config
         }
         retry_count = config.get("retry_count", 0)
         source_spans = self._normalize_source_spans(config.get("source_spans", []))
@@ -150,6 +148,7 @@ class MethodCallRecorder:
             error_type=event.error_type,
             source_spans=event.source_spans,
         )
+
 
 def _timestamp() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")

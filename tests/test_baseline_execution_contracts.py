@@ -92,9 +92,12 @@ def test_reflexion_policy_build_prompt_delegates_to_the_adapter_renderer() -> No
         ]
     )
 
-    assert ReflexionStylePolicy().build_prompt(task, memory) == _generation_messages(
-        task, visible_reflections(ReflexionState(reflections=[reflection]))
-    )[0]
+    assert (
+        ReflexionStylePolicy().build_prompt(task, memory)
+        == _generation_messages(
+            task, visible_reflections(ReflexionState(reflections=[reflection]))
+        )[0]
+    )
 
 
 def test_bot_problem_and_instantiate_stages_have_strict_read_and_solve_contracts() -> None:

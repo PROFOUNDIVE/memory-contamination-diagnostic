@@ -14,6 +14,7 @@ from memcontam.logging.schema_v3 import (
     NoMemExecutionKey,
     BaseSensitivityCellRef,
     ScientificExploratoryCodeRunMetadata,
+    ScientificAdmissionReference,
     ToolEvent,
 )
 
@@ -50,7 +51,9 @@ def _activation(plan) -> ValidatedExploratoryActivation:
         exploratory_plan_hash=plan.artifact_hash,
         exploratory_run_template_registry_id=plan.exploratory_run_template_registry_id,
         exploratory_run_template_registry_hash=plan.exploratory_run_template_registry_hash,
-        exploratory_slot_to_seed={slot: 7 + index for index, slot in enumerate(plan.abstract_slots)},
+        exploratory_slot_to_seed={
+            slot: 7 + index for index, slot in enumerate(plan.abstract_slots)
+        },
         route_selection_manifest_id="route-001",
         route_selection_manifest_hash="route-hash",
         seed_allocation_manifest_id="allocation-001",
@@ -91,7 +94,7 @@ def _metadata(baseline: str, mode: str, plan, activation: ValidatedExploratoryAc
         behavior_registry_version="behavior-v1",
         run_template_registry_version=plan.exploratory_run_template_registry_hash,
         rerun_policy_version="rerun-v1",
-        scientific_admission_ref={"p12i_certificate_id": "p12i-001"},
+        scientific_admission_ref=ScientificAdmissionReference(p12i_certificate_id="p12i-001"),
         source_route_selection_manifest_id=activation.route_selection_manifest_id,
         source_seed_allocation_manifest_id=activation.seed_allocation_manifest_id,
         exploratory_activation_manifest_id=activation.exploratory_activation_manifest_id,
@@ -120,7 +123,9 @@ def _tool_event(baseline: str) -> ToolEvent:
 
 
 def _run(baseline: str, mode: str, score: Literal[0, 1], plan, activation):
-    CodeMatrixRun = importlib.import_module("memcontam.experiment.phase12.code_matrix").CodeMatrixRun
+    CodeMatrixRun = importlib.import_module(
+        "memcontam.experiment.phase12.code_matrix"
+    ).CodeMatrixRun
 
     return CodeMatrixRun(
         run=ValidatedRun(
@@ -162,17 +167,24 @@ def test_plans_inactive_matrix_and_aggregates_activated_paired_seed() -> None:
     assert plan == module.build_code_matrix(_config())
     assert plan.abstract_slots == (SLOT,)
     assert aggregate.activation_manifest_id == activation.exploratory_activation_manifest_id
-    assert [(item.baseline_condition_id, item.mean_score_delta) for item in aggregate.diagnostics] == [
+    assert [
+        (item.baseline_condition_id, item.mean_score_delta) for item in aggregate.diagnostics
+    ] == [
         ("bot_style", 1.0),
         ("dc_rs", -1.0),
         ("nomem", 1.0),
     ]
-    assert {item.baseline_condition_id: item.nomem_adjusted_mean_score_delta for item in aggregate.diagnostics} == {
+    assert {
+        item.baseline_condition_id: item.nomem_adjusted_mean_score_delta
+        for item in aggregate.diagnostics
+    } == {
         "bot_style": 0.0,
         "dc_rs": -2.0,
         "nomem": None,
     }
-    assert {item.baseline_condition_id: item.tool_event_count for item in aggregate.diagnostics} == {
+    assert {
+        item.baseline_condition_id: item.tool_event_count for item in aggregate.diagnostics
+    } == {
         "bot_style": 1,
         "dc_rs": 1,
         "nomem": 1,

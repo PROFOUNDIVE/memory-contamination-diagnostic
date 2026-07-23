@@ -11,7 +11,11 @@ from memcontam.baselines.contracts import BaselineExecutionOutcome
 from memcontam.contamination.phase12.registry import load_candidate_registry
 from memcontam.contamination.phase12.renderers import RendererRegistry
 from memcontam.experiment.phase12 import cli as phase12_cli
-from memcontam.experiment.phase12.branching import BranchSet, NoMemAliasRecord, build_matched_branches
+from memcontam.experiment.phase12.branching import (
+    BranchSet,
+    NoMemAliasRecord,
+    build_matched_branches,
+)
 from memcontam.experiment.phase12.contracts import canonical_json_hash
 from memcontam.experiment.phase12.eligibility import compute_joint_eligibility
 from memcontam.experiment.phase12.maturity import MaturityDecision
@@ -174,10 +178,15 @@ def _validate_fixture_contract(
     if {spec.p12i_fixture_id, spec.branch_fixture_id} - set(e2e.get("compose", ())):
         raise P12IReplayError("P12I_COMPOSE_REFERENCE_MISSING")
     bfv2 = p12i.get("bfv2", {})
-    if bfv2.get("f1a") != "pass" or bfv2.get("f1b") != "pass" or bfv2.get("f1c") not in {
-        "pass",
-        "blocked",
-    }:
+    if (
+        bfv2.get("f1a") != "pass"
+        or bfv2.get("f1b") != "pass"
+        or bfv2.get("f1c")
+        not in {
+            "pass",
+            "blocked",
+        }
+    ):
         raise P12IReplayError("P12I_BFV2_INPUT_INVALID")
     if p12i.get("expected", {}).get("p12i_overall") != "pass":
         raise P12IReplayError("P12I_FIXTURE_EXPECTATION_INVALID")
@@ -205,18 +214,27 @@ def _validate_prefix(prefix: Any, fixture: dict[str, Any]) -> None:
     if (
         checkpoint.identity.checkpoint_id != expected["expected_checkpoint_id"]
         or checkpoint.identity.sha256 != expected["expected_checkpoint_sha256"]
-        or serialize_checkpoint(deserialize_checkpoint(checkpoint)).canonical_bytes != checkpoint.canonical_bytes
+        or serialize_checkpoint(deserialize_checkpoint(checkpoint)).canonical_bytes
+        != checkpoint.canonical_bytes
     ):
         raise P12IReplayError(_GATE_REASON_CODES["prefix_checkpoint"])
 
 
 def _build_branches(prefix: Any, fixture: dict[str, Any]) -> BranchSet:
-    registry_path = Path(__file__).resolve().parents[3] / "data" / "phase12" / "registries" / "candidate_registry_v1.json"
+    registry_path = (
+        Path(__file__).resolve().parents[3]
+        / "data"
+        / "phase12"
+        / "registries"
+        / "candidate_registry_v1.json"
+    )
     branches = build_matched_branches(
         prefix.checkpoint,
         load_candidate_registry(registry_path).triplets[0],
         RendererRegistry.native(),
-        phase12_cli._admission_context(prefix.checkpoint.state.baseline, prefix.checkpoint.state.entries),
+        phase12_cli._admission_context(
+            prefix.checkpoint.state.baseline, prefix.checkpoint.state.entries
+        ),
     )
     if not isinstance(branches, BranchSet):
         raise P12IReplayError(_GATE_REASON_CODES["five_arm_branch"])
@@ -237,9 +255,7 @@ def _prefix_payload(prefix: Any) -> dict[str, Any]:
 
 
 def _branch_payload(branches: BranchSet) -> dict[str, Any]:
-    branch_ids = {
-        branch.arm: branch.checkpoint.identity.sha256 for branch in branches.materialized
-    }
+    branch_ids = {branch.arm: branch.checkpoint.identity.sha256 for branch in branches.materialized}
     if set(branch_ids) != {"clean", "correct", "irrelevant", "contam"}:
         raise P12IReplayError(_GATE_REASON_CODES["five_arm_branch"])
     return {
@@ -318,7 +334,9 @@ def _logging_payload(run_dir: Path) -> dict[str, Any]:
 
 
 def _denominator_payload(fixtures: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    expected = {case["id"]: case["expected"] for case in _fixture(fixtures, "FX-OUTCOME-001")["cases"]}
+    expected = {
+        case["id"]: case["expected"] for case in _fixture(fixtures, "FX-OUTCOME-001")["cases"]
+    }
     malformed = classify_baseline_outcome(
         BaselineExecutionOutcome(
             status="failed",
@@ -372,9 +390,7 @@ def _eligibility_payload(fixtures: dict[str, dict[str, Any]]) -> dict[str, Any]:
         for family, indices in fixture["baseline_eligible"].items()
         for index in indices
     ]
-    decisions.append(
-        MaturityDecision("nomem-3", "no_memory", "nomem-t3", 3, horizon, True)
-    )
+    decisions.append(MaturityDecision("nomem-3", "no_memory", "nomem-t3", 3, horizon, True))
     result = compute_joint_eligibility(decisions, horizon)
     base_checkpoint = select_timing_checkpoint(result.joint_eligible_indices, "base")
     if (

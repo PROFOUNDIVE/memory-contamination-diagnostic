@@ -117,7 +117,9 @@ def test_partition_preserves_source_entries_in_disjoint_ordered_clones() -> None
     assert partition.quarantine.envelopes == (source.envelopes[1],)
     assert partition.active.parameters == source.parameters
     assert partition.quarantine.parameters == source.parameters
-    assert [(decision.entry_id, decision.state, decision.reason) for decision in partition.decisions] == [
+    assert [
+        (decision.entry_id, decision.state, decision.reason) for decision in partition.decisions
+    ] == [
         ("first", "active", "admitted"),
         ("second", "quarantine", "unauthorized_writer"),
         ("third", "active", "admitted"),
@@ -162,7 +164,9 @@ def test_partition_fails_closed_for_missing_duplicate_and_unknown_decisions() ->
         )
 
 
-def test_partition_serialization_is_deterministic_and_native_contract_validation_fails_closed() -> None:
+def test_partition_serialization_is_deterministic_and_native_contract_validation_fails_closed() -> (
+    None
+):
     checkpoints = importlib.import_module("memcontam.memory.checkpoints")
     filtered_state = importlib.import_module("memcontam.memory.filtered_state")
     source = _source_checkpoint(checkpoints)

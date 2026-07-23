@@ -43,10 +43,7 @@ def bootstrap_seeds(panel: Mapping[Any, Any], config: BootstrapConfig) -> Interv
         raise _aggregate_error("TRIAL_RESAMPLING_FORBIDDEN")
     metrics = _metrics(panel)
     generator = Random(config.random_seed)
-    intervals = {
-        name: _interval(values, config, generator)
-        for name, values in metrics.items()
-    }
+    intervals = {name: _interval(values, config, generator) for name, values in metrics.items()}
     return IntervalSet(intervals)
 
 
@@ -70,8 +67,7 @@ def _interval(values: Mapping[Any, Any], config: BootstrapConfig, generator: Ran
     ):
         return Interval(NOT_ESTIMABLE, NOT_ESTIMABLE, NOT_ESTIMABLE, NOT_ESTIMABLE)
     samples = sorted(
-        mean(generator.choice(numeric) for _ in numeric)
-        for _ in range(config.replicates)
+        mean(generator.choice(numeric) for _ in numeric) for _ in range(config.replicates)
     )
     tail = (1 - config.confidence_level) / 2
     return Interval(

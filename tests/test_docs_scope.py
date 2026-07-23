@@ -24,9 +24,7 @@ HISTORICAL_BASELINE_REPORTS = (
     V05_DOC,
     ROOT / "docs" / "g0-baseline-fidelity-gate-v0.6.md",
 )
-SUPERSESSION_NOTICE = (
-    "This historical report cannot support a Baseline-Fidelity-V2 fidelity claim."
-)
+SUPERSESSION_NOTICE = "This historical report cannot support a Baseline-Fidelity-V2 fidelity claim."
 
 
 def test_baseline_fidelity_v2_docs_are_the_only_current_authority() -> None:
@@ -173,9 +171,7 @@ def test_g0_doc_states_partial_rag_bot_scope() -> None:
         "full method reproduction",
     ]
     for phrase in misleading:
-        assert phrase not in text, (
-            f"G0 doc must not contain misleading claim: {phrase!r}"
-        )
+        assert phrase not in text, f"G0 doc must not contain misleading claim: {phrase!r}"
 
 
 def test_g0_doc_names_pinned_checkpoint_revision() -> None:
@@ -225,26 +221,17 @@ def test_readme_does_not_overstate_baseline_fidelity() -> None:
     assert "not a complete reproduction" in text, (
         "README must retain the no-complete-reproduction caveat"
     )
-    assert "all baselines pass G0" not in text, (
-        "README must not claim all baselines pass G0"
-    )
-    assert "exact reproduction" not in text, (
-        "README must not claim exact reproduction"
-    )
+    assert "all baselines pass G0" not in text, "README must not claim all baselines pass G0"
+    assert "exact reproduction" not in text, "README must not claim exact reproduction"
 
 
 def test_readme_points_to_v0_4_config_and_inspector() -> None:
     text = README.read_text(encoding="utf-8")
-    assert "configs/g0_rag_bot_faithful_replay.yaml" in text, (
-        "README must point to the v0.4 config"
-    )
+    assert "configs/g0_rag_bot_faithful_replay.yaml" in text, "README must point to the v0.4 config"
     assert "scripts/inspect_g0_rag_bot_fidelity.py" in text, (
         "README must point to the v0.4 fidelity inspector"
     )
-    assert "g0_rag_bot_faithful_replay" in text, (
-        "README must reference the v0.4 canonical run id"
-    )
-
+    assert "g0_rag_bot_faithful_replay" in text, "README must reference the v0.4 canonical run id"
 
 
 def test_v05_doc_exists() -> None:
@@ -291,9 +278,7 @@ def test_v05_doc_contains_approved_baseline_labels() -> None:
 
 def test_v05_doc_contains_limitation_language() -> None:
     text = V05_DOC.read_text(encoding="utf-8")
-    assert "not an exact reproduction" in text, (
-        "v0.5 doc must contain explicit limitation language"
-    )
+    assert "not an exact reproduction" in text, "v0.5 doc must contain explicit limitation language"
 
 
 def test_v05_doc_contains_official_sources_and_shas() -> None:
@@ -328,9 +313,7 @@ def test_v05_doc_does_not_contain_forbidden_overclaims() -> None:
         "admission-control proof",
     ]
     for phrase in forbidden:
-        assert phrase not in text, (
-            f"v0.5 doc must not contain forbidden overclaim: {phrase!r}"
-        )
+        assert phrase not in text, f"v0.5 doc must not contain forbidden overclaim: {phrase!r}"
     assert not _affirmative_exact_reproduction(text), (
         "v0.5 doc must not make an affirmative exact-reproduction claim"
     )
@@ -350,12 +333,8 @@ def test_readme_contains_v05_section() -> None:
     assert "g0_fh_reflexion_dc_faithful_replay" in text, (
         "README must reference the v0.5 canonical run id"
     )
-    assert "docs/g0-baseline-fidelity-gate-v0.5.md" in text, (
-        "README must link to the v0.5 report"
-    )
-    assert "docs/g0-baseline-fidelity-gate-v0.4.md" in text, (
-        "README must keep the v0.4 report link"
-    )
+    assert "docs/g0-baseline-fidelity-gate-v0.5.md" in text, "README must link to the v0.5 report"
+    assert "docs/g0-baseline-fidelity-gate-v0.4.md" in text, "README must keep the v0.4 report link"
     assert "fidelity/QA artifact" in text, (
         "README must state that replay output is a fidelity/QA artifact"
     )
@@ -378,15 +357,11 @@ def test_followup_doc_contains_section_title_and_scope() -> None:
     assert "# G0 DC-RS and Reflexion Same-Sample Retry Fidelity Follow-up" in text, (
         "Follow-up doc must use the approved title"
     )
-    assert "post-`v0.5` follow-up" in text, (
-        "Follow-up doc must identify itself as post-v0.5"
-    )
+    assert "post-`v0.5` follow-up" in text, "Follow-up doc must identify itself as post-v0.5"
     assert "optional appendix comparator" in text, (
         "Follow-up doc must label DC-RS as optional appendix comparator"
     )
-    assert "same-sample retry" in text, (
-        "Follow-up doc must mention same-sample retry"
-    )
+    assert "same-sample retry" in text, "Follow-up doc must mention same-sample retry"
 
 
 def test_followup_doc_contains_official_sources() -> None:
@@ -397,9 +372,7 @@ def test_followup_doc_contains_official_sources() -> None:
     assert "https://github.com/suzgunmirac/dynamic-cheatsheet" in text, (
         "Follow-up doc must cite the Dynamic Cheatsheet repository"
     )
-    assert "https://arxiv.org/abs/2303.11366" in text, (
-        "Follow-up doc must cite the Reflexion paper"
-    )
+    assert "https://arxiv.org/abs/2303.11366" in text, "Follow-up doc must cite the Reflexion paper"
     assert "https://github.com/noahshinn/reflexion" in text, (
         "Follow-up doc must cite the Reflexion repository"
     )
@@ -463,9 +436,7 @@ def test_followup_doc_contains_exact_artifacts_and_counts() -> None:
         "Follow-up doc must name the exact inspector"
     )
     assert "108 trial rows" in text, "Follow-up doc must state 108 trial rows"
-    assert "174 native method calls" in text, (
-        "Follow-up doc must state 174 native method calls"
-    )
+    assert "174 native method calls" in text, "Follow-up doc must state 174 native method calls"
     assert '"dc_rs_calls": 108' in text, "Follow-up doc must record dc_rs_calls 108"
     assert '"reflexion_calls": 66' in text, "Follow-up doc must record reflexion_calls 66"
     assert '"method_calls": 174' in text, "Follow-up doc must record method_calls 174"
@@ -494,9 +465,7 @@ def test_followup_doc_does_not_contain_forbidden_overclaims() -> None:
         "manuscript evidence",
     ]
     for phrase in forbidden:
-        assert phrase not in text, (
-            f"Follow-up doc must not contain forbidden overclaim: {phrase!r}"
-        )
+        assert phrase not in text, f"Follow-up doc must not contain forbidden overclaim: {phrase!r}"
 
 
 def test_readme_contains_followup_section() -> None:
@@ -543,9 +512,7 @@ def test_readme_and_followup_forbid_overclaim_phrases() -> None:
             "benchmark evidence",
             "manuscript evidence",
         ]:
-            assert phrase not in text, (
-                f"{path.name} must not contain forbidden phrase: {phrase!r}"
-            )
+            assert phrase not in text, f"{path.name} must not contain forbidden phrase: {phrase!r}"
 
 
 def test_phase11_docs_exist_and_name_executable_contract() -> None:

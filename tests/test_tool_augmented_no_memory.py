@@ -69,7 +69,9 @@ def test_rejects_any_memory_state_or_event() -> None:
         adapter.execute(
             task,
             MemoryState(
-                entries=[MemoryEntry(entry_id="forbidden", content="memory", memory_type="strategy")]
+                entries=[
+                    MemoryEntry(entry_id="forbidden", content="memory", memory_type="strategy")
+                ]
             ),
             client=client,
             model="replay",

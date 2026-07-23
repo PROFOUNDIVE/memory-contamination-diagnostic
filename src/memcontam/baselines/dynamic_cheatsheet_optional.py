@@ -58,7 +58,10 @@ class DynamicCheatsheetRetrievalSynthesisPolicy:
     ) -> dict[str, Any]:
         if self.embedding_provider is None:
             raise ValueError("DC-RS requires an explicit shared embedding provider")
-        call_config = {**(config or {}), "sample_id": (config or {}).get("sample_id", task.sample_id)}
+        call_config = {
+            **(config or {}),
+            "sample_id": (config or {}).get("sample_id", task.sample_id),
+        }
         trial_id = _trial_id(task, call_config, model)
         memory_before = [entry.model_dump() for entry in memory.entries]
         pair_entries = [entry for entry in memory.entries if entry.memory_type == "dc_rs_io_pair"]
@@ -145,9 +148,7 @@ class DynamicCheatsheetRetrievalSynthesisPolicy:
             content=canonical_task,
             memory_type="dc_rs_io_pair",
             clean_or_contaminated=(
-                "contaminated"
-                if generation_lineage["source_contaminated_entry_ids"]
-                else "clean"
+                "contaminated" if generation_lineage["source_contaminated_entry_ids"] else "clean"
             ),
             source_trial_id=trial_id,
             metadata={
@@ -262,7 +263,10 @@ class DynamicCheatsheetOptionalPolicy:
         config: dict[str, Any] | None = None,
         verifier: Verifier | None = None,
     ) -> dict[str, Any]:
-        call_config = {**(config or {}), "sample_id": (config or {}).get("sample_id", task.sample_id)}
+        call_config = {
+            **(config or {}),
+            "sample_id": (config or {}).get("sample_id", task.sample_id),
+        }
         cheatsheet, lineage = _current_cheatsheet(memory)
         memory_before = [entry.model_dump() for entry in memory.entries]
         trial_id = _trial_id(task, call_config, model)
@@ -294,7 +298,11 @@ class DynamicCheatsheetOptionalPolicy:
             else _default_verifier(parsed_answer)
         )
         curated = recorder.chat(
-            [_curation_message(task, cheatsheet, generated.content, parsed_answer, verifier_result.is_correct)],
+            [
+                _curation_message(
+                    task, cheatsheet, generated.content, parsed_answer, verifier_result.is_correct
+                )
+            ],
             model=model,
             config={**call_config, "method_stage": "dynamic_cheatsheet_curate"},
         )
@@ -447,7 +455,9 @@ def _generation_message_with_sources(
     for index, entry in enumerate(entries):
         if index:
             parts.append("\n")
-        text = entry.content if len(entries) == 1 and _is_cheatsheet(entry) else f"- {entry.content}"
+        text = (
+            entry.content if len(entries) == 1 and _is_cheatsheet(entry) else f"- {entry.content}"
+        )
         parts.append(PromptSourcePart(text, entry))
     parts.append(suffix)
     content, spans = build_prompt_with_sources(parts, message_index=0)
@@ -556,9 +566,7 @@ def _dc_rs_generation_message(
             lineage_basis="none" if target_set_id else None,
             direct_parent_ids=direct_parent_ids,
             target_set_id=target_set_id,
-            is_target_contamination=(
-                False if target_set_id else None
-            ),
+            is_target_contamination=(False if target_set_id else None),
         )
     ]
 

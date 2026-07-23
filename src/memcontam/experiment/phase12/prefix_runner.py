@@ -18,7 +18,12 @@ from memcontam.logging.schema_v3 import (
 )
 from memcontam.memory.admission import AdmissionContext, evaluate_admission
 from memcontam.memory.cards_v3 import MemoryCardEnvelopeV3
-from memcontam.memory.checkpoint_v3 import NativeEntry, NativeState, Phase12Checkpoint, serialize_checkpoint
+from memcontam.memory.checkpoint_v3 import (
+    NativeEntry,
+    NativeState,
+    Phase12Checkpoint,
+    serialize_checkpoint,
+)
 
 
 __all__ = [
@@ -244,8 +249,8 @@ def run_clean_prefix(
         _append_trial(writer, trial_id, trial)
         for event in trial_memory_events:
             _append_memory_event(writer, event)
-        for event in trial_admissions:
-            _append_event(writer, event)
+        for admission_event in trial_admissions:
+            _append_event(writer, admission_event)
         if checkpoint_event is not None:
             _append_event(writer, checkpoint_event)
 

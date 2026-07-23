@@ -115,8 +115,16 @@ def test_recorder_preserves_stage_order_and_usage() -> None:
     assert records[1].max_tokens is None
     assert records[0].latency_ms == 42
     assert records[1].latency_ms == 100
-    assert records[0].token_usage == {"prompt_tokens": 3, "completion_tokens": 7, "total_tokens": 10}
-    assert records[1].token_usage == {"prompt_tokens": 5, "completion_tokens": 9, "total_tokens": 14}
+    assert records[0].token_usage == {
+        "prompt_tokens": 3,
+        "completion_tokens": 7,
+        "total_tokens": 10,
+    }
+    assert records[1].token_usage == {
+        "prompt_tokens": 5,
+        "completion_tokens": 9,
+        "total_tokens": 14,
+    }
     assert records[0].retry_count == 0
     assert records[1].retry_count == 0
     assert records[0].error_type is None
@@ -230,7 +238,10 @@ def test_recorder_increments_call_index_per_trial_context() -> None:
     recorder.chat([{"role": "user", "content": "b"}], "m", {"method_stage": "s2"})
 
     assert [event.call_id for event in events] == ["trial-1:call:1", "trial-1:call:2"]
-    assert [record.call_id for record in recorder.get_records()] == ["trial-1:call:1", "trial-1:call:2"]
+    assert [record.call_id for record in recorder.get_records()] == [
+        "trial-1:call:1",
+        "trial-1:call:2",
+    ]
 
 
 def test_recorder_carries_source_spans_from_config() -> None:

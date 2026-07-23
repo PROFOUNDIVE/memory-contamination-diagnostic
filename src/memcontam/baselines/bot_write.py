@@ -101,7 +101,11 @@ def distill_thought_template(
     used_ids = validate_explicitly_used_memory_ids(
         result.explicitly_used_memory_ids, [entry.entry_id for entry in rendered_memory]
     )
-    if require_executed_programming and result.category == "programming-based" and not rendered_trajectory:
+    if (
+        require_executed_programming
+        and result.category == "programming-based"
+        and not rendered_trajectory
+    ):
         raise BoTToolContractError("BOT_UNEXECUTED_VALIDATION")
     return BoTTemplatePayload(
         description=result.description,

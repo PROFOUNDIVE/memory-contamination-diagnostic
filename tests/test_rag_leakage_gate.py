@@ -36,13 +36,27 @@ def test_rejects_stale_leaked_extreme_mixed_or_inv03_leaking_inputs() -> None:
     for kwargs, code in (
         ({"affinity_band": "extreme"}, "AFFINITY_BAND_FORBIDDEN"),
         ({"rag_mode": "online"}, "RAG_MODE_MISMATCH"),
-        ({"input_surfaces": {"embedding": {"inv03_metadata": "leaked"}}}, "INV03_METADATA_REACHED_EMBEDDING"),
-        ({"input_surfaces": {"renderer": {"inv03_metadata": "leaked"}}}, "INV03_METADATA_REACHED_RENDERER"),
-        ({"input_surfaces": {"filter": {"inv03_metadata": "leaked"}}}, "INV03_METADATA_REACHED_FILTER"),
-        ({"input_surfaces": {"verifier": {"inv03_metadata": "leaked"}}}, "INV03_METADATA_REACHED_VERIFIER"),
+        (
+            {"input_surfaces": {"embedding": {"inv03_metadata": "leaked"}}},
+            "INV03_METADATA_REACHED_EMBEDDING",
+        ),
+        (
+            {"input_surfaces": {"renderer": {"inv03_metadata": "leaked"}}},
+            "INV03_METADATA_REACHED_RENDERER",
+        ),
+        (
+            {"input_surfaces": {"filter": {"inv03_metadata": "leaked"}}},
+            "INV03_METADATA_REACHED_FILTER",
+        ),
+        (
+            {"input_surfaces": {"verifier": {"inv03_metadata": "leaked"}}},
+            "INV03_METADATA_REACHED_VERIFIER",
+        ),
         ({"input_surfaces": {"ranking": {"inv03_metadata": "leaked"}}}, "INV03_RANKING_CHANGED"),
     ):
         with pytest.raises(RagContractError, match=code):
             validate_rag_frozen_inputs(
-                corpus, {"corpus_hash": corpus.clean.content_hash, "splits": {}}, **cast(Any, kwargs)
+                corpus,
+                {"corpus_hash": corpus.clean.content_hash, "splits": {}},
+                **cast(Any, kwargs),
             )

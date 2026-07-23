@@ -1,7 +1,7 @@
 {
   "game24:game24_pilot_001:bot_style:bot_instantiate_solve:1": "2ed70bac4fabf401efe2906df02b78c8ed8bba6a903aa6b55484d2a0ca4bcf4f",
   "game24:game24_pilot_001:bot_style:bot_problem_distill:1": "6cec2f6ebe12bc685403763860b1f0c531b49561d7246f390bf05553523feef8",
-  "game24:game24_pilot_001:bot_style:bot_thought_distill:1": "7c9ee40bae7c204e2c0043ba4527622c542ec9c1adcad264f537d601c966c206",
+  "game24:game24_pilot_001:bot_style:bot_thought_distill:1": "52a7b92ccac0230b58563182742a98071598ae3e106070fd8b759707980b6a77",
   "game24:game24_pilot_001:dynamic_cheatsheet_rs_optional:dc_rs_generate:1": "17eb37f544e1ee5eb97a9edfeca831deea3be6e12b010037cf9a36c21531dfbd",
   "game24:game24_pilot_001:dynamic_cheatsheet_rs_optional:dc_rs_synthesize:1": "7fab80cdd82e36cbb94be95e92e4adb25251f91b3801ca0a0b0ad4bcd9e47177",
   "game24:game24_pilot_001:full_history:full_history_generate:1": "8d7a9c4a78cff0255f953c6af93a4705731562ecfd69ebabfcecf41ddb1d7e94",
@@ -10,7 +10,7 @@
   "game24:game24_pilot_001:retrieval_rag:rag_generate:1": "3882948a94ae638ac7bedb580f33005269030ce9ea7422ae3abd16d7b0e201ab",
   "game24:game24_pilot_002:bot_style:bot_instantiate_solve:1": "47a5b46f3da1b7690db39889daa2d79677363f1ba07bad830fb39caff3f3ddda",
   "game24:game24_pilot_002:bot_style:bot_problem_distill:1": "0979724aaf41a86377d8bb4705491638c606dd8ca4cdaffc4945062c8230df34",
-  "game24:game24_pilot_002:bot_style:bot_thought_distill:1": "1c07c2477cfe06bc63673ff1180ab1492910b1c1ec0cd9b17a336a7dc1ce51f1",
+  "game24:game24_pilot_002:bot_style:bot_thought_distill:1": "821ff2a5ea9a6e6651df075a8eb404228e129ea8d8b0d93f5f5b7757a2e1a6f8",
   "game24:game24_pilot_002:dynamic_cheatsheet_rs_optional:dc_rs_generate:1": "f126b32734108e10af8250756f2a50f2544c9697d5d612748f62ca086598f24b",
   "game24:game24_pilot_002:dynamic_cheatsheet_rs_optional:dc_rs_synthesize:1": "c856b7faf58240478a2a1e352b3f7f6d846ed41dac252c60d7da872ef9aded50",
   "game24:game24_pilot_002:full_history:full_history_generate:1": "cf96a947ebdf88b2c0d63ac42407352f5af6007ebd7c8f81d14e95f315d916c5",

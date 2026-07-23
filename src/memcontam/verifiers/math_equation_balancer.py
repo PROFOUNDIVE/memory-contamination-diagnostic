@@ -3,7 +3,6 @@ from __future__ import annotations
 from memcontam.logging.schema import VerifierResult
 
 
-
 def verify_answer(answer: str, spec: dict) -> VerifierResult:
     if not isinstance(answer, str):
         return VerifierResult(

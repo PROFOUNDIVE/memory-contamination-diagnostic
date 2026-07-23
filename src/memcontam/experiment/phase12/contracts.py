@@ -6,6 +6,8 @@ from typing import Annotated, Any, Literal, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from memcontam.phase12_types import RunFamily
+
 
 RouteCandidateId = Literal["3w", "5w"]
 ExperimentalArm = Literal["clean", "correct", "irrelevant", "contam", "filter"]
@@ -14,18 +16,6 @@ RagMode = Literal["frozen", "online_ext", "online_self", "not_applicable"]
 FidelityLabel = Literal["negative_control", "source_aligned", "adapted", "style_proxy", "bounded"]
 ToolMode = Literal["text_only", "python_sandbox"]
 EvidenceLayer = Literal["build", "calibration", "main", "extension"]
-RunFamily = Literal[
-    "readiness",
-    "pilot_a",
-    "pilot_b",
-    "behavioral",
-    "main_a",
-    "main_b",
-    "main_c",
-    "sequential",
-    "extension",
-    "exploratory_code",
-]
 
 
 class _StrictModel(BaseModel):

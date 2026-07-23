@@ -70,7 +70,10 @@ def test_links_one_execution_to_one_continuation_and_final_answer() -> None:
 
     assert result.answer == "final: 43"
     assert result.answer_call_id == "trial-1:call:2"
-    assert [record.call_id for record in recorder.get_records()] == ["trial-1:call:1", "trial-1:call:2"]
+    assert [record.call_id for record in recorder.get_records()] == [
+        "trial-1:call:1",
+        "trial-1:call:2",
+    ]
     assert len(result.tool_events) == 1
     event = result.tool_events[0]
     assert event.action == "execute_python"
@@ -144,7 +147,9 @@ def test_enforces_maximum_rounds_without_judging_successful_output() -> None:
     recorder = MethodCallRecorder(client, trial_context={"trial_id": "trial-1"})
 
     with pytest.raises(ToolProtocolError, match="MAX_TOOL_ROUNDS_EXCEEDED"):
-        run_tool_loop(_initial_call(recorder, max_rounds=1), recorder, SubprocessTestDouble(), _policy())
+        run_tool_loop(
+            _initial_call(recorder, max_rounds=1), recorder, SubprocessTestDouble(), _policy()
+        )
 
 
 def test_preserves_syntactically_successful_wrong_execution_for_the_final_call() -> None:

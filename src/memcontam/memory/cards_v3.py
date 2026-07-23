@@ -121,7 +121,9 @@ def _validate_schema(envelope: MemoryCardEnvelopeV3) -> None:
         raise MemoryEnvelopeError("INVALID_SCHEMA")
     if envelope.created_trial_id is not None and not _nonempty(envelope.created_trial_id):
         raise MemoryEnvelopeError("INVALID_SCHEMA")
-    if envelope.version_predecessor_id is not None and not _nonempty(envelope.version_predecessor_id):
+    if envelope.version_predecessor_id is not None and not _nonempty(
+        envelope.version_predecessor_id
+    ):
         raise MemoryEnvelopeError("INVALID_SCHEMA")
     if envelope.source_outcome is not None and not isinstance(envelope.source_outcome, bool):
         raise MemoryEnvelopeError("INVALID_SCHEMA")
@@ -183,7 +185,11 @@ def _has_cycle(entries: dict[str, MemoryCardEnvelopeV3]) -> bool:
 
 
 def _identifier_tuple(value: object) -> bool:
-    return isinstance(value, tuple) and len(value) == len(set(value)) and all(_nonempty(item) for item in value)
+    return (
+        isinstance(value, tuple)
+        and len(value) == len(set(value))
+        and all(_nonempty(item) for item in value)
+    )
 
 
 def _nonempty(value: object) -> bool:

@@ -62,8 +62,14 @@ class RunState:
 
         entry = ThoughtTemplate(
             entry_id=str(update_event["new_entry_id"]),
-            content=str(update_event.get("distilled_content") or update_event.get("candidate_content") or ""),
-            source_trial_id=str(update_event.get("source_trial_id") or update_event.get("parent_trial_id") or sample_id),
+            content=str(
+                update_event.get("distilled_content") or update_event.get("candidate_content") or ""
+            ),
+            source_trial_id=str(
+                update_event.get("source_trial_id")
+                or update_event.get("parent_trial_id")
+                or sample_id
+            ),
             source_entry_ids=list(update_event.get("source_entry_ids", [])),
             metadata={**WARMUP_METADATA, "warmup_sample_id": sample_id},
         )

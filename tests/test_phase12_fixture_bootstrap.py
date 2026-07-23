@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_ROOT = ROOT / "tests" / "fixtures" / "phase12"
-APPENDIX_B_MANIFEST_SHA256 = "dde9b189475f773368b5f6d61ca10357d64f2e7b68a205dc436f51a796313308"
+APPENDIX_B_MANIFEST_SHA256 = "b129d5a66166b0ec5fc8bb4b32c2ab2a76e09238d074b91687322a97828adda8"
 
 
 @dataclass(frozen=True)
@@ -117,7 +117,9 @@ def test_bootstrap_missing_reference_reports_reference_code(tmp_path: Path) -> N
     path = fixture_root / "FX-E2E-001.json"
     payload = json.loads(path.read_text(encoding="utf-8"))
     payload["compose"] = ["FX-CONFIG-001", "FX-DOES-NOT-EXIST-001"]
-    path.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8"
+    )
 
     manifest = load_bootstrap_manifest(fixture_root / "manifest.json")
     report = verify_bootstrap_fixtures(fixture_root, manifest)
@@ -129,7 +131,9 @@ def test_bootstrap_manifest_byte_mutation_reports_manifest_hash_code(tmp_path: P
     fixture_root = tmp_path / "phase12"
     shutil.copytree(FIXTURE_ROOT, fixture_root)
     manifest_path = fixture_root / "manifest.json"
-    manifest_path.write_bytes(manifest_path.read_bytes().replace(b"phase12-fixtures-v13", b"phase12-fixtures-v14", 1))
+    manifest_path.write_bytes(
+        manifest_path.read_bytes().replace(b"phase12-fixtures-v13", b"phase12-fixtures-v14", 1)
+    )
 
     manifest = load_bootstrap_manifest(manifest_path)
     report = verify_bootstrap_fixtures(fixture_root, manifest)

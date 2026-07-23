@@ -81,7 +81,9 @@ def test_rejects_failed_stale_foreign_or_falsified_inputs(tmp_path: Path) -> Non
         replay_id=result.replay_id,
         scientific_result=False,
         subgates=tuple(
-            gate.__class__(gate.gate_id, "fail", "P12I_GATE_FAILED", gate.evidence_path, gate.evidence_hash)
+            gate.__class__(
+                gate.gate_id, "fail", "P12I_GATE_FAILED", gate.evidence_path, gate.evidence_hash
+            )
             for gate in result.subgates
         ),
         overall_status="fail",

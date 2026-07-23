@@ -118,7 +118,9 @@ def _prompt_text(client: _QueuedClient) -> str:
     return "\n".join(message["content"] for messages, _, _ in client.calls for message in messages)
 
 
-def test_dc_rs_zero_candidates_synthesizes_before_generation_and_appends_afterward(tmp_path) -> None:
+def test_dc_rs_zero_candidates_synthesizes_before_generation_and_appends_afterward(
+    tmp_path,
+) -> None:
     memory = MemoryState(entries=[_cheatsheet()])
     client = _QueuedClient(["<cheatsheet>new cheatsheet</cheatsheet>", "final: current output"])
 
@@ -135,12 +137,16 @@ def test_dc_rs_zero_candidates_synthesizes_before_generation_and_appends_afterwa
     assert result["memory_before"] == [entry.model_dump() for entry in memory.entries]
     assert memory.entries == [_cheatsheet()]
 
-    appended = next(entry for entry in result["memory_after"] if entry["memory_type"] == "dc_rs_io_pair")
+    appended = next(
+        entry for entry in result["memory_after"] if entry["memory_type"] == "dc_rs_io_pair"
+    )
     assert appended["content"] == canonical_task_json(_task())
     assert appended["metadata"]["generated_output"] == "final: current output"
     assert appended["metadata"]["parsed_answer"] == "current output"
     assert appended["entry_id"].startswith("dc_rs_pair:run-1:game24:sample-1:")
-    assert appended["entry_id"] not in [record.document_id for record in result["retrieved_records"]]
+    assert appended["entry_id"] not in [
+        record.document_id for record in result["retrieved_records"]
+    ]
     assert "current output" not in _prompt_text(client)
     assert result["memory_write_event"]["synthesis_update"]["status"] == "replaced"
     assert result["memory_write_event"]["pair_appended"]["entry_id"] == appended["entry_id"]
@@ -310,7 +316,11 @@ def test_dc_rs_top_three_breaks_ties_by_entry_id_and_recovers_outputs(tmp_path) 
         verifier=_verifier,
     )
 
-    assert [record.document_id for record in result["retrieved_records"]] == ["alpha", "bravo", "charlie"]
+    assert [record.document_id for record in result["retrieved_records"]] == [
+        "alpha",
+        "bravo",
+        "charlie",
+    ]
     synthesis_prompt = client.calls[0][0][0]["content"]
     assert "OUTPUT_ALPHA" in synthesis_prompt
     assert "OUTPUT_BRAVO" in synthesis_prompt
@@ -458,7 +468,9 @@ def test_dc_rs_malformed_synthesis_still_appends_pair(
     assert event.before_snapshot_hash != event.after_snapshot_hash
 
 
-def test_dc_rs_synthesizes_raw_solution_history_and_generates_from_cheatsheet_only(tmp_path) -> None:
+def test_dc_rs_synthesizes_raw_solution_history_and_generates_from_cheatsheet_only(
+    tmp_path,
+) -> None:
     raw_prior_output = "STRATEGY_MARKER: make a factor table\nCODE_MARKER: for candidate in options"
     memory = MemoryState(entries=[_cheatsheet(), _pair("prior", "PRIOR_INPUT", raw_prior_output)])
     client = _QueuedClient(
@@ -475,9 +487,7 @@ def test_dc_rs_synthesizes_raw_solution_history_and_generates_from_cheatsheet_on
     synthesis_prompt = client.calls[0][0][0]["content"]
     generation_prompt = client.calls[1][0][0]["content"]
     appended = next(
-        entry
-        for entry in result["memory_after"]
-        if entry["entry_id"].startswith("dc_rs_pair:")
+        entry for entry in result["memory_after"] if entry["entry_id"].startswith("dc_rs_pair:")
     )
     assert raw_prior_output in synthesis_prompt
     assert "prior parsed answer" not in synthesis_prompt
@@ -486,7 +496,10 @@ def test_dc_rs_synthesizes_raw_solution_history_and_generates_from_cheatsheet_on
     assert "synthesized transferable strategy" in generation_prompt
     assert raw_prior_output not in generation_prompt
     assert appended["content"] == canonical_task_json(_task())
-    assert appended["metadata"]["generated_output"] == "Reasoning for the current task\nfinal: current final answer"
+    assert (
+        appended["metadata"]["generated_output"]
+        == "Reasoning for the current task\nfinal: current final answer"
+    )
     assert appended["metadata"]["parsed_answer"] == "current final answer"
 
 
@@ -515,9 +528,7 @@ def test_dc_rs_synthesis_lineage_excludes_nonretrieved_contaminated_pairs(tmp_pa
         entry for entry in result["memory_after"] if entry["memory_type"] == "dynamic_cheatsheet"
     )
     appended = next(
-        entry
-        for entry in result["memory_after"]
-        if entry["entry_id"].startswith("dc_rs_pair:")
+        entry for entry in result["memory_after"] if entry["entry_id"].startswith("dc_rs_pair:")
     )
     assert [record.document_id for record in result["retrieved_records"]] == [
         "alpha",
@@ -545,7 +556,9 @@ def test_dc_rs_invalid_final_answer_retains_raw_pair_before_parser_failure(tmp_p
         verifier=verifier_must_not_run,
     )
 
-    appended = next(entry for entry in result["memory_after"] if entry["memory_type"] == "dc_rs_io_pair")
+    appended = next(
+        entry for entry in result["memory_after"] if entry["memory_type"] == "dc_rs_io_pair"
+    )
     assert result["status"] == "failed"
     assert result["failure_disposition"] == "dc_rs_invalid_final_answer"
     assert result["scientific_ineligibility_reason"] == "invalid_final_answer"
@@ -568,7 +581,9 @@ def test_dc_rs_verifier_failure_retains_synthesized_state_and_appended_pair(tmp_
         verifier=raising_verifier,
     )
 
-    appended = next(entry for entry in result["memory_after"] if entry["memory_type"] == "dc_rs_io_pair")
+    appended = next(
+        entry for entry in result["memory_after"] if entry["memory_type"] == "dc_rs_io_pair"
+    )
     assert result["status"] == "failed"
     assert result["failure_disposition"] == "verifier_contract_failed"
     assert result["memory_write_event"]["synthesis_update"]["status"] == "replaced"

@@ -14,7 +14,12 @@ from memcontam.baselines.dynamic_cheatsheet_phase12 import (
 from memcontam.clients.replay import ReplayClient
 from memcontam.memory.admission import AdmissionContext
 from memcontam.memory.cards_v3 import MEMORY_CARD_V3, MemoryCardEnvelopeV3, canonical_content_hash
-from memcontam.memory.checkpoint_v3 import NATIVE_ENTRY_V1, NativeEntry, NativeState, serialize_checkpoint
+from memcontam.memory.checkpoint_v3 import (
+    NATIVE_ENTRY_V1,
+    NativeEntry,
+    NativeState,
+    serialize_checkpoint,
+)
 from memcontam.memory.filtered_state import partition_native_checkpoint
 from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
@@ -85,11 +90,14 @@ def _archive_root() -> MemoryEntry:
 def test_archive_root_yields_exact_strategy_only_with_declared_parent(tmp_path) -> None:
     state = DcRsStateV3(archive=[_archive_root()])
 
-    result = DcRsPhase12Adapter(embedding_provider=_EmbeddingProvider(), cache_dir=tmp_path).execute(
-        _trial(), state
-    )
+    result = DcRsPhase12Adapter(
+        embedding_provider=_EmbeddingProvider(), cache_dir=tmp_path
+    ).execute(_trial(), state)
 
-    assert [call.stage for call in result.outcome.method_calls] == ["dc_rs_synthesize", "dc_rs_generate"]
+    assert [call.stage for call in result.outcome.method_calls] == [
+        "dc_rs_synthesize",
+        "dc_rs_generate",
+    ]
     assert result.strategy_candidate.lineage_status == "exact"
     assert result.strategy_entry is not None
     assert result.strategy_entry.direct_parent_ids == ("archive-root",)
@@ -110,7 +118,9 @@ def test_rejects_direct_strategy_post_outcome_and_implicit_parent_union(tmp_path
 
     adapter = DcRsPhase12Adapter(embedding_provider=_EmbeddingProvider(), cache_dir=tmp_path)
     with pytest.raises(DcRsContractError, match="CURRENT_OUTCOME_LEAKAGE"):
-        adapter.execute(replace(_trial(), current_outcome=False), DcRsStateV3(archive=[_archive_root()]))
+        adapter.execute(
+            replace(_trial(), current_outcome=False), DcRsStateV3(archive=[_archive_root()])
+        )
 
     with pytest.raises(DcRsContractError, match="IMPLICIT_PARENT_UNION"):
         curate_pre_generation(
@@ -142,11 +152,11 @@ def test_quarantined_archive_parent_rejects_candidate_and_retains_active_strateg
         "dc_rs_synthesize",
         parents=(clean.entry_id,),
     )
-    quarantined_envelope = _envelope(
-        quarantined, None, 3, "protocol_injector", "protocol_inject"
-    )
+    quarantined_envelope = _envelope(quarantined, None, 3, "protocol_injector", "protocol_inject")
     context = AdmissionContext(
-        writer_event_ids=frozenset({clean_envelope.writer_event_id, strategy_envelope.writer_event_id}),
+        writer_event_ids=frozenset(
+            {clean_envelope.writer_event_id, strategy_envelope.writer_event_id}
+        ),
         trial_record_ids=frozenset({"prefix-clean", "prefix-strategy"}),
         evidence_envelopes=(clean_envelope, strategy_envelope, quarantined_envelope),
     )
@@ -183,15 +193,17 @@ def test_quarantined_archive_parent_rejects_candidate_and_retains_active_strateg
         admission_context=context,
     )
 
-    result = DcRsPhase12Adapter(embedding_provider=_EmbeddingProvider(), cache_dir=tmp_path).execute(
-        trial, state
-    )
+    result = DcRsPhase12Adapter(
+        embedding_provider=_EmbeddingProvider(), cache_dir=tmp_path
+    ).execute(trial, state)
 
     assert result.strategy_candidate.lineage_status == "approximate"
     assert result.strategy_admission.reason == "PARENT_QUARANTINED"
     assert not result.strategy_admission.admitted
     assert "Use the active route." in result.outcome.method_calls[-1].messages[0]["content"]
-    assert "Use the quarantined route." not in result.outcome.method_calls[-1].messages[0]["content"]
+    assert (
+        "Use the quarantined route." not in result.outcome.method_calls[-1].messages[0]["content"]
+    )
 
 
 def _archive_memory(entry_id: str) -> MemoryEntry:

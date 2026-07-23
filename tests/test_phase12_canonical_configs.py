@@ -11,7 +11,9 @@ from memcontam.config.phase12 import (
     load_all_canonical_configs,
     load_phase12_config,
 )
+from memcontam.experiment.phase12.contracts import canonical_json_hash
 from memcontam.experiment.phase12.code_matrix import build_code_matrix
+from memcontam.phase12_types import CANONICAL_RUN_FAMILY_MEMBERS
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -41,6 +43,13 @@ def test_all_pre_route_and_candidate_configs_resolve_without_selection() -> None
     assert {item.logging_schema_version for item in resolved.values()} == {"logging_v3"}
     assert all(item.source.route_selection_manifest_id is None for item in resolved.values())
     assert all(item.source.seed_allocation_manifest_id is None for item in resolved.values())
+    assert CANONICAL_RUN_FAMILY_MEMBERS == {
+        "readiness": ("readiness",),
+        "pilot_a": ("pilot_a",),
+        "pilot_b": ("pilot_b",),
+        "main": ("main_a", "main_b", "main_c"),
+        "exploratory_code": ("exploratory_code",),
+    }
 
     for name in ("main_3w.yaml", "main_5w.yaml"):
         source = resolved[name].source
@@ -56,9 +65,17 @@ def test_all_pre_route_and_candidate_configs_resolve_without_selection() -> None
             "oci_contract_path": ROOT / exploratory.oci_contract_path,
         }
     )
-    assert plan.exploratory_run_template_registry_id == exploratory.registry_ids[
-        "exploratory_run_templates"
-    ]
+    assert (
+        plan.exploratory_run_template_registry_id
+        == exploratory.registry_ids["exploratory_run_templates"]
+    )
+    assert exploratory.exploratory_run_template_registry_hash == canonical_json_hash(
+        {
+            "abstract_slots": exploratory.abstract_slots,
+            "estimated_exploratory_calls": exploratory.estimated_exploratory_calls,
+            "registry_id": exploratory.exploratory_run_template_registry_id,
+        }
+    )
 
 
 def test_configs_reject_missing_or_cross_layer_ids(tmp_path: Path) -> None:
@@ -100,3 +117,11 @@ def test_configs_reject_missing_or_cross_layer_ids(tmp_path: Path) -> None:
 
     with pytest.raises(Phase12ConfigError, match="FROZEN_REGISTRY_HASH_UNKNOWN"):
         load_phase12_config(stale_code_path)
+
+    mutated_registry = _yaml(CONFIG_ROOT / "exploratory_code.yaml")
+    mutated_registry["abstract_slots"] = ["game24|exploratory|slot-002"]
+    mutated_registry_path = tmp_path / "mutated-registry.yaml"
+    mutated_registry_path.write_text(yaml.safe_dump(mutated_registry), encoding="utf-8")
+
+    with pytest.raises(Phase12ConfigError, match="FROZEN_REGISTRY_HASH_UNKNOWN"):
+        load_phase12_config(mutated_registry_path)

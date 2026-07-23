@@ -17,7 +17,18 @@ def build_manifest(config_path: Path, run_dir: Path, inspector_output: Path) -> 
     config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     root = config_path.parents[1]
     fixture_path = config.get("replay", {}).get("fixture_path")
-    artifacts = [config_path, run_dir / "run.json", run_dir / "resolved_config.json", run_dir / "provider_profile.json", run_dir / "trials.jsonl", run_dir / "calls.jsonl", run_dir / "failures.jsonl", run_dir / "filter_events.jsonl", run_dir / "memory_events.jsonl", inspector_output]
+    artifacts = [
+        config_path,
+        run_dir / "run.json",
+        run_dir / "resolved_config.json",
+        run_dir / "provider_profile.json",
+        run_dir / "trials.jsonl",
+        run_dir / "calls.jsonl",
+        run_dir / "failures.jsonl",
+        run_dir / "filter_events.jsonl",
+        run_dir / "memory_events.jsonl",
+        inspector_output,
+    ]
     if isinstance(fixture_path, str):
         artifacts.append((config_path.parent / fixture_path).resolve())
     prompt_dir = root / "tests" / "fixtures" / "prompts" / "baseline_fidelity_v2"
@@ -33,7 +44,9 @@ def build_manifest(config_path: Path, run_dir: Path, inspector_output: Path) -> 
     provider_profile = json.loads((run_dir / "provider_profile.json").read_text(encoding="utf-8"))
     corpus_path = config.get("memory", {}).get("corpus_manifest_path")
     corpus_manifest = (
-        json.loads((root / corpus_path).read_text(encoding="utf-8")) if isinstance(corpus_path, str) else None
+        json.loads((root / corpus_path).read_text(encoding="utf-8"))
+        if isinstance(corpus_path, str)
+        else None
     )
     inspector = json.loads(inspector_output.read_text(encoding="utf-8"))
     return {
@@ -44,13 +57,26 @@ def build_manifest(config_path: Path, run_dir: Path, inspector_output: Path) -> 
             "prompt_version": resolved["logging"]["prompt_version"],
             "memory_policy_version": resolved["logging"]["memory_policy_version"],
             "retry_policy_version": resolved["run"]["retry_policy_version"],
-            "baseline_execution_contract_version": resolved["run"]["baseline_execution_contract_version"],
+            "baseline_execution_contract_version": resolved["run"][
+                "baseline_execution_contract_version"
+            ],
             "failure_taxonomy_version": resolved["run"]["failure_taxonomy_version"],
         },
         "embedding_identity": provider_profile,
         "corpus_identity": corpus_manifest,
-        "commands": [{"command": "inspect_baseline_fidelity_v2", "exit_code": 0 if inspector.get("overall") == "pass" else 1}],
-        "strict_streams": ["trials.jsonl", "calls.jsonl", "failures.jsonl", "filter_events.jsonl", "memory_events.jsonl"],
+        "commands": [
+            {
+                "command": "inspect_baseline_fidelity_v2",
+                "exit_code": 0 if inspector.get("overall") == "pass" else 1,
+            }
+        ],
+        "strict_streams": [
+            "trials.jsonl",
+            "calls.jsonl",
+            "failures.jsonl",
+            "filter_events.jsonl",
+            "memory_events.jsonl",
+        ],
         "artifacts": {str(path): _sha256(path) for path in artifacts},
     }
 

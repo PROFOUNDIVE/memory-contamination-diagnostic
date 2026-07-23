@@ -26,6 +26,8 @@ class CertificationSuite:
 def certify_triplet(triplet: CandidateTriplet, suite: CertificationSuite) -> CertificationResult:
     _validate_triplet(triplet, suite)
     false_rule = _load_false_rule(triplet)
+    false_result: bool | int
+    correct_result: bool | int
     if triplet.task == "game24":
         false_result, correct_result = false_rule(1, 3), True
     elif triplet.task == "math_equation_balancer":

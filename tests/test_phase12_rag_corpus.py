@@ -44,9 +44,9 @@ def test_builds_five_branch_indices_and_certifies_inv03_equivalence() -> None:
     indices = build_branch_indices(corpora, FixtureEmbedder(fixture), filter_policy=None)
 
     assert tuple(corpora.branches) == ("clean", "contam", "correct", "filter", "irrelevant")
-    assert {
-        branch: index.artifact_hash for branch, index in indices.branches.items()
-    } == fixture["expected_branch_index_sha256"]
+    assert {branch: index.artifact_hash for branch, index in indices.branches.items()} == fixture[
+        "expected_branch_index_sha256"
+    ]
     assert indices.branches["clean"].artifact_hash == indices.branches["filter"].artifact_hash
     assert tuple(document.document_id for document in indices.branches["filter"].documents) == (
         "doc-clean-a",
@@ -61,6 +61,9 @@ def test_builds_five_branch_indices_and_certifies_inv03_equivalence() -> None:
         )
     ) == ("doc-clean-a", "doc-clean-b")
 
-    invalid_contract = {**fixture, "embedding_contract": {**fixture["embedding_contract"], "production_identity": "other"}}
+    invalid_contract = {
+        **fixture,
+        "embedding_contract": {**fixture["embedding_contract"], "production_identity": "other"},
+    }
     with pytest.raises(ValueError, match="BGE_M3_IDENTITY_MISMATCH"):
         build_branch_indices(corpora, FixtureEmbedder(invalid_contract), filter_policy=None)

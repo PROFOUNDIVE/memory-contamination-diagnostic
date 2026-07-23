@@ -111,7 +111,11 @@ def test_retrieval_decision_returns_empty_buffer_without_embedding() -> None:
 
 @pytest.mark.parametrize(
     "metadata",
-    [{"category": "procedure-based"}, {"description": "only"}, {"description": "only", "category": ""}],
+    [
+        {"category": "procedure-based"},
+        {"description": "only"},
+        {"description": "only", "category": ""},
+    ],
 )
 def test_retrieval_rejects_templates_without_explicit_description_and_category(
     metadata: dict[str, str],
@@ -119,7 +123,9 @@ def test_retrieval_rejects_templates_without_explicit_description_and_category(
     bot_read = importlib.import_module("memcontam.baselines.bot_read")
 
     with pytest.raises(ValueError, match="description and category"):
-        bot_read.retrieve_top_template(_problem(), [_entry(metadata=metadata)], _SimilarityProvider(1.0))
+        bot_read.retrieve_top_template(
+            _problem(), [_entry(metadata=metadata)], _SimilarityProvider(1.0)
+        )
 
 
 def test_miss_prompt_renders_all_coarse_structures_and_requires_a_selection() -> None:

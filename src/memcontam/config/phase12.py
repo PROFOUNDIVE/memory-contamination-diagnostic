@@ -17,6 +17,7 @@ from memcontam.experiment.phase12.contracts import (
     RouteGovernanceArtifact,
     canonical_json_hash,
 )
+from memcontam.phase12_types import CanonicalRunFamily
 
 
 _REPOSITORY_COMMIT = "830b89c8c169ffa9cdea472887fdae134dbae7cf"
@@ -92,7 +93,6 @@ _ROUTE_TEMPLATE_REGISTRIES = {
         "292c01743ab78b27724a210ebef5e4320171fd19a8ba9d70c1e85476aca16404",
     ),
 }
-_EXPLORATORY_RUN_TEMPLATE_HASH = "exploratory-registry-hash"
 
 
 class Phase12ConfigError(ValueError):
@@ -132,7 +132,7 @@ class InvalidVariantSpec(_ConfigModel):
     id: str
     reason: str
     remove: str | None = None
-    patch: dict[str, Any] | None = None
+    patch: dict[str, object] | None = None
 
 
 class CanonicalRouteInput(_ConfigModel):
@@ -160,7 +160,7 @@ class CanonicalPrimaryConfig(_ConfigModel):
     repository_commit: str
     authoritative_experiment_design: ExperimentDesignRef
     logging_contract: LoggingContractRef
-    run_family: Literal["readiness", "pilot_a", "pilot_b", "main"]
+    run_family: CanonicalRunFamily
     evidence_layer: Literal["build", "calibration", "main"]
     arms: tuple[Literal["clean", "correct", "irrelevant", "contam", "filter"], ...]
     tasks: tuple[str, ...]
@@ -176,6 +176,8 @@ class CanonicalPrimaryConfig(_ConfigModel):
     @model_validator(mode="after")
     def _validate_canonical_contract(self) -> CanonicalPrimaryConfig:
         _validate_canonical_common(self)
+        if self.run_family == "exploratory_code":
+            raise ValueError("CANONICAL_RUN_FAMILY_INVALID")
         _validate_registry_ids(self.registry_ids, _PRIMARY_REGISTRY_IDS)
         _validate_registry_ids(self.registry_hashes, _PRIMARY_REGISTRY_HASHES)
         if self.run_family == "main":
@@ -197,7 +199,7 @@ class CanonicalExploratoryConfig(_ConfigModel):
     repository_commit: str
     authoritative_experiment_design: ExperimentDesignRef
     logging_contract: LoggingContractRef
-    run_family: Literal["exploratory_code"]
+    run_family: CanonicalRunFamily
     evidence_layer: Literal["main"]
     selection_status: Literal["unselected"]
     candidate_route: None = None
@@ -219,13 +221,32 @@ class CanonicalExploratoryConfig(_ConfigModel):
     @model_validator(mode="after")
     def _validate_canonical_contract(self) -> CanonicalExploratoryConfig:
         _validate_canonical_common(self)
+        if self.run_family != "exploratory_code":
+            raise ValueError("CANONICAL_RUN_FAMILY_INVALID")
         _validate_registry_ids(self.registry_ids, _EXPLORATORY_REGISTRY_IDS)
         _validate_registry_ids(self.registry_hashes, _PRIMARY_REGISTRY_HASHES)
-        if self.exploratory_run_template_registry_id != self.registry_ids["exploratory_run_templates"]:
+        if (
+            self.exploratory_run_template_registry_id
+            != self.registry_ids["exploratory_run_templates"]
+        ):
             raise ValueError("CROSS_LAYER_REGISTRY_ID")
-        if self.exploratory_run_template_registry_hash != _EXPLORATORY_RUN_TEMPLATE_HASH:
+        if self.exploratory_run_template_registry_hash != _exploratory_registry_hash(self):
             raise ValueError("FROZEN_REGISTRY_HASH_UNKNOWN")
         return self
+
+
+class TemplatePackageSpec(_ConfigModel):
+    model_config = ConfigDict(extra="allow", frozen=True)
+
+    runtime_refs: dict[str, object]
+    call_policy: dict[str, object]
+    core: dict[str, object]
+    sensitivity: tuple[dict[str, object], ...]
+    replication: dict[str, object]
+    extension: dict[str, object]
+    model_role_contract: dict[str, object]
+    expected_template_counts_by_route: dict[str, object]
+    legal_evidence_layers: tuple[str, ...]
 
 
 class Phase12StudyConfig(_ConfigModel):
@@ -238,7 +259,7 @@ class Phase12StudyConfig(_ConfigModel):
     tasks: tuple[str, ...]
     conditions: tuple[BaselineConditionSpec, ...]
     sensitivity_cells: tuple[SensitivityCellSpec, ...]
-    template_package: dict[str, Any]
+    template_package: TemplatePackageSpec
     route_candidates: tuple[RouteCandidateConfigSpec, ...]
     registry_ids: dict[str, str]
     registry_hashes: dict[str, str]
@@ -252,7 +273,7 @@ class Phase12StudyConfig(_ConfigModel):
     route_selection_manifest_id: str | None
     seed_allocation_manifest_id: str | None
     invalid_variants: tuple[InvalidVariantSpec, ...]
-    canonical_candidate_template_sets: dict[RouteCandidateId, dict[str, Any]]
+    canonical_candidate_template_sets: dict[RouteCandidateId, CandidateTemplateSet]
 
     @model_validator(mode="before")
     @classmethod
@@ -309,43 +330,39 @@ class Phase12StudyConfig(_ConfigModel):
             raise ValueError("LOGGING_CONTRACT_MISMATCH")
         if set(self.arms) != {"clean", "correct", "irrelevant", "contam", "filter"}:
             raise ValueError("REQUIRED_CONFIG_CELL_MISSING")
-        missing = _REQUIRED_TEMPLATE_PACKAGE_FIELDS - set(self.template_package)
-        if missing or not self.sensitivity_cells:
+        if not self.sensitivity_cells:
             raise ValueError("REQUIRED_CONFIG_CELL_MISSING")
         if self.tool_mode != "text_only":
             raise ValueError("PRIMARY_TOOL_FORBIDDEN")
-        runtime_refs = self.template_package["runtime_refs"]
-        call_policy = self.template_package["call_policy"]
-        if (
-            not isinstance(runtime_refs, dict)
-            or not isinstance(call_policy, dict)
-            or _REQUIRED_RUNTIME_REF_FIELDS - set(runtime_refs)
-            or _REQUIRED_CALL_POLICY_FIELDS - set(call_policy)
+        runtime_refs = self.template_package.runtime_refs
+        call_policy = self.template_package.call_policy
+        if _REQUIRED_RUNTIME_REF_FIELDS - set(runtime_refs) or _REQUIRED_CALL_POLICY_FIELDS - set(
+            call_policy
         ):
             raise ValueError("REQUIRED_CONFIG_CELL_MISSING")
-        if set(self.template_package.get("legal_evidence_layers", ())) != _LEGAL_EVIDENCE_LAYERS:
+        if set(self.template_package.legal_evidence_layers) != _LEGAL_EVIDENCE_LAYERS:
             raise ValueError("INVALID_TEMPLATE_EVIDENCE_LAYER")
-        roles = self.template_package["model_role_contract"]
-        core = self.template_package["core"]
-        replication = self.template_package["replication"]
-        extension = self.template_package["extension"]
-        if not all(isinstance(value, dict) for value in (roles, core, replication, extension)):
-            raise ValueError("REQUIRED_CONFIG_CELL_MISSING")
+        roles = self.template_package.model_role_contract
+        core = self.template_package.core
+        replication = self.template_package.replication
+        extension = self.template_package.extension
         if (
             core.get("model_snapshot") != roles.get("main_backbone_snapshot")
             or replication.get("model_snapshot") != roles.get("replication_backbone_snapshot")
             or extension.get("model_snapshot") != roles.get("main_backbone_snapshot")
         ):
             raise ValueError("INVALID_MODEL_ROLE_ASSIGNMENT")
-        sensitivity = self.template_package["sensitivity"]
-        if not isinstance(sensitivity, list) or {
-            item.get("family") for item in sensitivity if isinstance(item, dict)
-        } != {"timing", "horizon", "affinity", "fh_budget", "behavior", "embedding"}:
+        sensitivity = self.template_package.sensitivity
+        if {item.get("family") for item in sensitivity} != {
+            "timing",
+            "horizon",
+            "affinity",
+            "fh_budget",
+            "behavior",
+            "embedding",
+        }:
             raise ValueError("REQUIRED_CONFIG_CELL_MISSING")
-        if any(
-            not isinstance(item, dict) or item.get("evidence_layer") not in _LEGAL_EVIDENCE_LAYERS
-            for item in sensitivity
-        ):
+        if any(item.get("evidence_layer") not in _LEGAL_EVIDENCE_LAYERS for item in sensitivity):
             raise ValueError("INVALID_TEMPLATE_EVIDENCE_LAYER")
         if len(self.sensitivity_cells) != 12 or len(self.route_candidates) != 2:
             raise ValueError("REQUIRED_CONFIG_CELL_MISSING")
@@ -452,18 +469,21 @@ def build_candidate_template_set(
         for route in config.source.route_candidates
         if route.candidate_route == candidate
     )
+    canonical_payload = payload.model_dump(mode="json")
     if (
-        payload.get("candidate_route") != candidate
-        or payload.get("repository_commit") != config.repository_commit
-        or payload.get("authoritative_experiment_design_sha256")
+        payload.candidate_route != candidate
+        or payload.repository_commit != config.repository_commit
+        or payload.authoritative_experiment_design_sha256
         != config.authoritative_experiment_design.sha256
-        or payload.get("template_package_hash") != config.template_package_hash
-        or payload.get("artifact_hash") != expected_hash
-        or canonical_json_hash({key: value for key, value in payload.items() if key != "artifact_hash"})
+        or payload.template_package_hash != config.template_package_hash
+        or payload.artifact_hash != expected_hash
+        or canonical_json_hash(
+            {key: value for key, value in canonical_payload.items() if key != "artifact_hash"}
+        )
         != expected_hash
     ):
         raise Phase12ConfigError("CANONICAL_CANDIDATE_TEMPLATE_MISMATCH")
-    return CandidateTemplateSet.model_validate(payload)
+    return payload
 
 
 def _parse_route_governance_shape(record: dict[str, Any]) -> RouteGovernanceArtifact:
@@ -496,3 +516,13 @@ def _validate_registry_ids(actual: dict[str, str], expected: dict[str, str]) -> 
     if any(value in _EXPLORATORY_REGISTRY_IDS.values() for value in actual.values()):
         raise ValueError("CROSS_LAYER_REGISTRY_ID")
     raise ValueError("FROZEN_REGISTRY_ID_UNKNOWN")
+
+
+def _exploratory_registry_hash(config: CanonicalExploratoryConfig) -> str:
+    return canonical_json_hash(
+        {
+            "abstract_slots": config.abstract_slots,
+            "estimated_exploratory_calls": config.estimated_exploratory_calls,
+            "registry_id": config.exploratory_run_template_registry_id,
+        }
+    )

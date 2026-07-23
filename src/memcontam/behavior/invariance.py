@@ -87,7 +87,9 @@ def evaluate_invariance(
     interval = _coerce_interval(paired_metrics, test_id)
     values = _numeric_interval(interval)
     if values is None:
-        return _result(test_id, "inconclusive", rule, "INTERVAL_NOT_ESTIMABLE", evidence=paired_metrics)
+        return _result(
+            test_id, "inconclusive", rule, "INTERVAL_NOT_ESTIMABLE", evidence=paired_metrics
+        )
     estimate, lower, upper = values
     threshold = _THRESHOLDS[canonical_id][1]
     if lower >= -threshold and upper <= threshold:
@@ -129,7 +131,9 @@ def _registered_spec(spec: BehaviorTestRow | Mapping[str, Any] | str) -> tuple[s
     if canonical_id is None or canonical_id not in _THRESHOLDS:
         raise BehaviorEvaluationError("UNREGISTERED_BEHAVIOR_THRESHOLD")
     expected_kind, expected_value = _THRESHOLDS[canonical_id]
-    if rule is not None and not _registered_rule(canonical_id, str(rule), expected_kind, expected_value):
+    if rule is not None and not _registered_rule(
+        canonical_id, str(rule), expected_kind, expected_value
+    ):
         raise BehaviorEvaluationError("UNREGISTERED_BEHAVIOR_THRESHOLD")
     return test_id, "registered" if rule is None else str(rule), canonical_id
 

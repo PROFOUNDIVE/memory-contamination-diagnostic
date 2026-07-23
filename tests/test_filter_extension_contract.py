@@ -78,10 +78,14 @@ def test_evaluator_admits_authorized_roots_and_recursively_admitted_parents() ->
         ("root", True, "admitted"),
         ("child", True, "admitted"),
     ]
-    assert admission.evaluate_entry_admission(child[0], child[1], _context(admission, prior=(root[1],))).admitted
+    assert admission.evaluate_entry_admission(
+        child[0], child[1], _context(admission, prior=(root[1],))
+    ).admitted
 
 
-def test_evaluator_rejects_unauthorized_schema_support_missing_future_and_rejected_parents() -> None:
+def test_evaluator_rejects_unauthorized_schema_support_missing_future_and_rejected_parents() -> (
+    None
+):
     admission = importlib.import_module("memcontam.memory.admission")
     context = _context(admission)
     unauthorized = _entry("unauthorized", writer_id="unknown")
@@ -129,7 +133,9 @@ def test_evaluator_rejects_cycles_without_mutating_entries_or_reading_hidden_met
     original_envelopes = tuple(envelope for _, envelope in source_entries)
 
     first_pass = admission.evaluate_admission_graph(source_entries, _context(admission))
-    second_pass = admission.evaluate_admission_graph(tuple(reversed(source_entries)), _context(admission))
+    second_pass = admission.evaluate_admission_graph(
+        tuple(reversed(source_entries)), _context(admission)
+    )
 
     assert {decision.entry_id: decision.reason for decision in first_pass} == {
         "first": "cycle",

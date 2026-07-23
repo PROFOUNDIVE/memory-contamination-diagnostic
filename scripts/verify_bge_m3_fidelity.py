@@ -53,7 +53,11 @@ class _MockCompletions:
                 )
             )
         if "selected_structure, solution_trace, final_answer" in content:
-            selected = "retrieved-template" if "Set selected_structure to retrieved-template" in content else "procedure-based"
+            selected = (
+                "retrieved-template"
+                if "Set selected_structure to retrieved-template" in content
+                else "procedure-based"
+            )
             answer = "(2 * 7) + (3 + 7)" if "game24_pilot_002" in content else "6 / (1 - (3 / 4))"
             return _MockResponse(
                 json.dumps(
@@ -139,7 +143,9 @@ def _validate_run(run_dir: Path) -> dict[str, object]:
         raise AssertionError("RAG corpus identity does not join the pinned provider")
     if not any(trial["memory_before"] for trial in bot_trials):
         raise AssertionError("BoT did not exercise retrieval/admission with a non-empty buffer")
-    if not any((trial.get("memory_write_event") or {}).get("status") == "accepted" for trial in bot_trials):
+    if not any(
+        (trial.get("memory_write_event") or {}).get("status") == "accepted" for trial in bot_trials
+    ):
         raise AssertionError("BoT did not write an admitted memory entry")
     if not calls or any(call["model"] != "f1c_mocked_live" for call in calls):
         raise AssertionError("mocked live answer dispatch was not recorded")

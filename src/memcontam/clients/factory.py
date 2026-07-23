@@ -6,7 +6,9 @@ from memcontam.clients.openai_compatible import OpenAICompatibleClient
 from memcontam.clients.replay import ReplayClient
 
 
-def validate_provider_selection(config: ProviderConfig, *, stage: str, execution_class: str) -> None:
+def validate_provider_selection(
+    config: ProviderConfig, *, stage: str, execution_class: str
+) -> None:
     if (stage, execution_class, config.provider) == ("replay", "offline_contract_replay", "replay"):
         return
     if (

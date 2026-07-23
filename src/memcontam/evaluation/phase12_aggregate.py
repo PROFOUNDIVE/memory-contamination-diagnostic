@@ -8,7 +8,11 @@ from statistics import mean
 from typing import Any, Literal, cast
 
 from memcontam.evaluation.compatibility import CompatibilityError, build_compatibility_key
-from memcontam.evaluation.estimability import EstimabilityDecision, EstimabilityRule, evaluate_estimability
+from memcontam.evaluation.estimability import (
+    EstimabilityDecision,
+    EstimabilityRule,
+    evaluate_estimability,
+)
 from memcontam.evaluation.phase12_observables import ObservableRecord
 from memcontam.evaluation.sequential import SequentialTrialOutcome
 from memcontam.experiment.phase12.contracts import (
@@ -93,7 +97,9 @@ def aggregate_phase12(runs: Sequence[ValidatedRun], spec: AggregateSpec) -> Phas
     for run in runs:
         _validate_run(run, trial_ids)
         groups[_population_key(run)].append(run)
-    return Phase12Aggregate(tuple(_aggregate_cell(key, cell_runs, spec) for key, cell_runs in groups.items()))
+    return Phase12Aggregate(
+        tuple(_aggregate_cell(key, cell_runs, spec) for key, cell_runs in groups.items())
+    )
 
 
 def _validate_spec(spec: AggregateSpec) -> None:
@@ -133,14 +139,16 @@ def _validate_governance(run: ValidatedRun) -> None:
             or metadata.route_selection_manifest_id != selection.route_selection_manifest_id
             or metadata.seed_allocation_manifest_id != selection.seed_allocation_manifest_id
             or not metadata.abstract_seed_slot_or_none
-            or selection.slot_to_seed.get(metadata.abstract_seed_slot_or_none) != metadata.trajectory_seed
+            or selection.slot_to_seed.get(metadata.abstract_seed_slot_or_none)
+            != metadata.trajectory_seed
         ):
             raise AggregateError("SEED_ASSIGNMENT_MISMATCH")
     elif isinstance(metadata, ScientificExploratoryCodeRunMetadata):
         activation = run.exploratory_activation
         if (
             activation is None
-            or metadata.exploratory_activation_manifest_id != activation.exploratory_activation_manifest_id
+            or metadata.exploratory_activation_manifest_id
+            != activation.exploratory_activation_manifest_id
             or metadata.source_route_selection_manifest_id != activation.route_selection_manifest_id
             or metadata.source_seed_allocation_manifest_id != activation.seed_allocation_manifest_id
             or not metadata.abstract_seed_slot_or_none
@@ -160,8 +168,12 @@ def _population_key(run: ValidatedRun) -> tuple[str, ...]:
         metadata.task_family,
         metadata.baseline_condition_id,
         _canonical(metadata.sensitivity_cell_ref),
-        _governance_id(metadata, "route_selection_manifest_id", "source_route_selection_manifest_id"),
-        _governance_id(metadata, "seed_allocation_manifest_id", "source_seed_allocation_manifest_id"),
+        _governance_id(
+            metadata, "route_selection_manifest_id", "source_route_selection_manifest_id"
+        ),
+        _governance_id(
+            metadata, "seed_allocation_manifest_id", "source_seed_allocation_manifest_id"
+        ),
         _governance_id(metadata, "exploratory_activation_manifest_id"),
     )
 
@@ -202,8 +214,12 @@ def _aggregate_cell(
             ("irrelevant_minus_contam", "irrelevant", "contam"),
         )
     }
-    decisions = [evaluate_estimability(values, spec.estimability_rule) for values in contrast_values.values()]
-    estimability = next((decision for decision in decisions if not decision.estimable), decisions[0])
+    decisions = [
+        evaluate_estimability(values, spec.estimability_rule) for values in contrast_values.values()
+    ]
+    estimability = next(
+        (decision for decision in decisions if not decision.estimable), decisions[0]
+    )
     contrasts: dict[str, float | str] = {
         name: mean(values.values()) if decision.estimable else NOT_ESTIMABLE
         for (name, values), decision in zip(contrast_values.items(), decisions, strict=True)
@@ -257,7 +273,9 @@ def _contrast(scores: Mapping[str, float], left: str, right: str) -> float:
     return scores[left] - scores[right]
 
 
-def _metrics(records_by_seed: Mapping[int, Sequence[AggregateTrial]]) -> dict[str, float | int | str]:
+def _metrics(
+    records_by_seed: Mapping[int, Sequence[AggregateTrial]],
+) -> dict[str, float | int | str]:
     records = [record for seed_records in records_by_seed.values() for record in seed_records]
     exposures = [
         record
@@ -267,7 +285,9 @@ def _metrics(records_by_seed: Mapping[int, Sequence[AggregateTrial]]) -> dict[st
         and record.observables.exposure.status == "supported"
         and record.observables.exposure.is_exposed is not None
     ]
-    exposure_values = [bool(record.observables.exposure.is_exposed) for record in exposures if record.observables]
+    exposure_values = [
+        bool(record.observables.exposure.is_exposed) for record in exposures if record.observables
+    ]
     supported_contrast = [
         record
         for record in exposures
@@ -293,9 +313,14 @@ def _metrics(records_by_seed: Mapping[int, Sequence[AggregateTrial]]) -> dict[st
         for record in records
         if record.observables is not None and record.observables.use.status == "supported"
     ]
-    eligible = [all(record.eligible is True for record in seed_records) for seed_records in records_by_seed.values()]
+    eligible = [
+        all(record.eligible is True for record in seed_records)
+        for seed_records in records_by_seed.values()
+    ]
     return {
-        "model_behavior_row_count": sum(record.failure_class == "model_behavior" for record in records),
+        "model_behavior_row_count": sum(
+            record.failure_class == "model_behavior" for record in records
+        ),
         "invalidated_row_count": sum(record.analysis_inclusion != "included" for record in records),
         "exposure_rate": mean(exposure_values) if exposure_values else NOT_ESTIMABLE,
         "exposure_score_contrast": (
@@ -304,7 +329,9 @@ def _metrics(records_by_seed: Mapping[int, Sequence[AggregateTrial]]) -> dict[st
             else NOT_ESTIMABLE
         ),
         "generic_recurrence_rate": (
-            mean(outcome.generic_recurrence for outcome in sequentials) if sequentials else NOT_ESTIMABLE
+            mean(outcome.generic_recurrence for outcome in sequentials)
+            if sequentials
+            else NOT_ESTIMABLE
         ),
         "exact_lineage_recurrence_rate": (
             mean(outcome.same_root_exact_lineage_recurrence for outcome in sequentials)
@@ -312,7 +339,9 @@ def _metrics(records_by_seed: Mapping[int, Sequence[AggregateTrial]]) -> dict[st
             else NOT_ESTIMABLE
         ),
         "propagation_rate": (
-            mean(outcome.propagation.value is True for outcome in sequentials) if sequentials else NOT_ESTIMABLE
+            mean(outcome.propagation.value is True for outcome in sequentials)
+            if sequentials
+            else NOT_ESTIMABLE
         ),
         "eligible_seed_rate": mean(eligible) if eligible else NOT_ESTIMABLE,
         "operational_use_rate": mean(uses) if uses else NOT_ESTIMABLE,

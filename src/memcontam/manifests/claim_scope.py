@@ -71,7 +71,9 @@ def validate_claim_scope(ledger: ClaimScopeLedger, aggregate_manifest: Aggregate
 def write_claim_scope(ledger: ClaimScopeLedger, path: Path | str) -> str:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text("".join(_canonical_json(row.to_dict()) for row in ledger.rows), encoding="utf-8")
+    destination.write_text(
+        "".join(_canonical_json(row.to_dict()) for row in ledger.rows), encoding="utf-8"
+    )
     return canonical_json_hash([row.to_dict() for row in ledger.rows])
 
 
@@ -103,7 +105,8 @@ def _build_row(
         evidence_layer=_required_string(source.get("evidence_layer")),
         exclusions=_strings(source.get("exclusions", ()), "UNSUPPORTED_CLAIM"),
         prohibited_extrapolations=_strings(
-            source.get("prohibited_extrapolations", source.get("prohibited", ())), "UNSUPPORTED_CLAIM"
+            source.get("prohibited_extrapolations", source.get("prohibited", ())),
+            "UNSUPPORTED_CLAIM",
         ),
         status=_status(source.get("status", "supported")),
         scope=_optional_string(source.get("scope")),
@@ -223,14 +226,21 @@ def _optional_string(value: Any) -> str | None:
 
 
 def _strings(value: Any, code: str) -> tuple[str, ...]:
-    if not isinstance(value, (list, tuple)) or any(not isinstance(item, str) or not item for item in value):
+    if not isinstance(value, (list, tuple)) or any(
+        not isinstance(item, str) or not item for item in value
+    ):
         raise ClaimScopeError(code)
     return tuple(value)
 
 
 def _population(value: Any) -> Mapping[str, str | None]:
-    if not isinstance(value, Mapping) or not value or any(
-        not isinstance(key, str) or not isinstance(item, str | type(None)) for key, item in value.items()
+    if (
+        not isinstance(value, Mapping)
+        or not value
+        or any(
+            not isinstance(key, str) or not isinstance(item, str | type(None))
+            for key, item in value.items()
+        )
     ):
         raise ClaimScopeError("UNSUPPORTED_CLAIM")
     return dict(value)
@@ -256,7 +266,9 @@ def _weights(value: Any) -> Mapping[str, float] | None:
     return {key: float(weight) for key, weight in value.items()}
 
 
-def _validate_weights(original: Mapping[str, float] | None, reported: Mapping[str, float] | None) -> None:
+def _validate_weights(
+    original: Mapping[str, float] | None, reported: Mapping[str, float] | None
+) -> None:
     if original != reported:
         raise ClaimScopeError("WEIGHT_RENORMALIZATION_FORBIDDEN")
 

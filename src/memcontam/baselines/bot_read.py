@@ -108,6 +108,11 @@ def retrieve_top_template(
 def _template_description(entry: MemoryEntry) -> str:
     description = entry.metadata.get("description")
     category = entry.metadata.get("category")
-    if not isinstance(description, str) or not description.strip() or not isinstance(category, str) or not category.strip():
+    if (
+        not isinstance(description, str)
+        or not description.strip()
+        or not isinstance(category, str)
+        or not category.strip()
+    ):
         raise ValueError("V2 BoT templates require explicit description and category metadata")
     return description

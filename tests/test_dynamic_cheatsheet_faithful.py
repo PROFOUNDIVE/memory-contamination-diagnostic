@@ -287,9 +287,7 @@ def test_accepted_dc_cu_update_normalizes_replace_mutation() -> None:
         ("<cheatsheet> \n </cheatsheet>", "preserved_empty"),
     ],
 )
-def test_preserved_dc_cu_update_normalizes_no_mutation(
-    curator_output: str, status: str
-) -> None:
+def test_preserved_dc_cu_update_normalizes_no_mutation(curator_output: str, status: str) -> None:
     memory = MemoryState(
         entries=[
             MemoryEntry(
@@ -308,9 +306,7 @@ def test_preserved_dc_cu_update_normalizes_no_mutation(
         _task(), memory, client=client, model="replay", verifier=_verifier
     )
 
-    source_trial_id = (
-        "unknown_run:game24:game24_001:dynamic_cheatsheet_optional:clean:replay"
-    )
+    source_trial_id = "unknown_run:game24:game24_001:dynamic_cheatsheet_optional:clean:replay"
     before = [MemoryEntry.model_validate(entry) for entry in result["memory_before"]]
     after = [MemoryEntry.model_validate(entry) for entry in result["memory_after"]]
     event = normalize_memory_event(

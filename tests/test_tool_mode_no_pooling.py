@@ -12,6 +12,7 @@ from memcontam.logging.schema_v3 import (
     NoMemExecutionKey,
     NonScientificExploratoryCodeRunMetadata,
     ScientificExploratoryCodeRunMetadata,
+    ScientificAdmissionReference,
 )
 
 
@@ -19,7 +20,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SLOT = "game24|exploratory|slot-001"
 
 
-def _config(contract_path: Path = ROOT / "containers" / "python-sandbox" / "image.lock.json") -> dict[str, object]:
+def _config(
+    contract_path: Path = ROOT / "containers" / "python-sandbox" / "image.lock.json",
+) -> dict[str, object]:
     return {
         "protocol_version": "phase12_code_exploratory_v1",
         "activation_status": "inactive",
@@ -57,7 +60,9 @@ def _activation(plan) -> ValidatedExploratoryActivation:
 
 
 def _run(mode: str, plan, activation, suffix_id: str = "suffix-001"):
-    CodeMatrixRun = importlib.import_module("memcontam.experiment.phase12.code_matrix").CodeMatrixRun
+    CodeMatrixRun = importlib.import_module(
+        "memcontam.experiment.phase12.code_matrix"
+    ).CodeMatrixRun
 
     metadata = ScientificExploratoryCodeRunMetadata(
         metadata_kind="exploratory_code_scientific",
@@ -82,7 +87,7 @@ def _run(mode: str, plan, activation, suffix_id: str = "suffix-001"):
         behavior_registry_version="behavior-v1",
         run_template_registry_version=plan.exploratory_run_template_registry_hash,
         rerun_policy_version="rerun-v1",
-        scientific_admission_ref={"p12i_certificate_id": "p12i-001"},
+        scientific_admission_ref=ScientificAdmissionReference(p12i_certificate_id="p12i-001"),
         source_route_selection_manifest_id=activation.route_selection_manifest_id,
         source_seed_allocation_manifest_id=activation.seed_allocation_manifest_id,
         exploratory_activation_manifest_id=activation.exploratory_activation_manifest_id,
@@ -132,7 +137,10 @@ def test_rejects_cross_tool_superiority_claim_unpaired_suffix_and_unactivated_sc
             activation.model_copy(update={"resource_manifest_id": ""}),
             "EXPLORATORY_RESOURCE_RESERVATION_REQUIRED",
         ),
-        (activation.model_copy(update={"exploratory_plan_hash": "stale"}), "STALE_EXPLORATORY_PLAN"),
+        (
+            activation.model_copy(update={"exploratory_plan_hash": "stale"}),
+            "STALE_EXPLORATORY_PLAN",
+        ),
         (
             activation.model_copy(update={"exploratory_run_template_registry_hash": "stale"}),
             "STALE_EXPLORATORY_REGISTRY",

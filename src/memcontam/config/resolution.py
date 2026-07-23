@@ -49,7 +49,10 @@ def _validate_full_history_budget(config: dict[str, Any]) -> None:
         raise ValueError("full_history must be a mapping")
     if full_history.get("mode") != "context_bounded_pair_atomic":
         raise ValueError("full_history mode must be context_bounded_pair_atomic")
-    if not isinstance(full_history.get("token_encoding"), str) or not full_history["token_encoding"]:
+    if (
+        not isinstance(full_history.get("token_encoding"), str)
+        or not full_history["token_encoding"]
+    ):
         raise ValueError("full_history token_encoding must be a non-empty string")
     try:
         spec = PromptBudgetSpec(

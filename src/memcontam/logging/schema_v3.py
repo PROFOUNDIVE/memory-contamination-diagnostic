@@ -4,6 +4,8 @@ from typing import Annotated, Any, Literal, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
+from memcontam.phase12_types import RunFamily
+
 
 LOGGING_V3: Literal["logging_v3"] = "logging_v3"
 ProtocolIndex = Literal["clean", "contam", "filter"]
@@ -17,6 +19,18 @@ class Phase12SchemaError(ValueError):
 
 class _StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+class ScientificAdmissionReference(_StrictModel):
+    p12i_certificate_id: str
+    bfv2_certificate_id: str | None = None
+    readiness_bundle_hash: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_reference(self) -> ScientificAdmissionReference:
+        if not self.p12i_certificate_id:
+            raise ValueError("SCIENTIFIC_ADMISSION_REQUIRED")
+        return self
 
 
 class PrefixExecutionKey(_StrictModel):
@@ -110,7 +124,9 @@ def _validate_arm_projection(record: Any) -> None:
     if not hasattr(record, "protocol_index_or_none"):
         return
     if isinstance(execution_key, MemoryArmExecutionKey):
-        projection = execution_key.arm if execution_key.arm in {"clean", "contam", "filter"} else None
+        projection = (
+            execution_key.arm if execution_key.arm in {"clean", "contam", "filter"} else None
+        )
         if record.protocol_index_or_none != projection:
             if execution_key.arm == "clean" and record.protocol_index_or_none is None:
                 raise Phase12SchemaError("NOMEM_ARM_FORBIDDEN")
@@ -124,18 +140,7 @@ class _RunMetadataBase(_StrictModel):
     contract_level: Literal["phase12"] = "phase12"
     protocol_version: ProtocolVersion
     evidence_layer: Literal["build", "calibration", "main", "extension"]
-    run_family: Literal[
-        "readiness",
-        "pilot_a",
-        "pilot_b",
-        "behavioral",
-        "main_a",
-        "main_b",
-        "main_c",
-        "sequential",
-        "extension",
-        "exploratory_code",
-    ]
+    run_family: RunFamily
     run_template_id: str
     prefix_template_key_or_none: str | None
     task_family: str
@@ -157,9 +162,15 @@ class _RunMetadataBase(_StrictModel):
     @model_validator(mode="after")
     def _validate_execution_key(self) -> _RunMetadataBase:
         _validate_arm_projection(self)
-        if isinstance(self.execution_key, PrefixExecutionKey) and not self.prefix_template_key_or_none:
+        if (
+            isinstance(self.execution_key, PrefixExecutionKey)
+            and not self.prefix_template_key_or_none
+        ):
             raise ValueError("PREFIX_EXECUTION_KEY_REQUIRED")
-        if isinstance(self.execution_key, NoMemExecutionKey) and self.prefix_template_key_or_none is not None:
+        if (
+            isinstance(self.execution_key, NoMemExecutionKey)
+            and self.prefix_template_key_or_none is not None
+        ):
             raise ValueError("NOMEM_ARM_FORBIDDEN")
         return self
 
@@ -167,7 +178,7 @@ class _RunMetadataBase(_StrictModel):
 class PreRouteRunMetadata(_RunMetadataBase):
     metadata_kind: Literal["pre_route"]
     scientific_result: bool
-    scientific_admission_ref_or_none: dict[str, Any] | None
+    scientific_admission_ref_or_none: ScientificAdmissionReference | None
     route_selection_manifest_id: str | None = None
     seed_allocation_manifest_id: str | None = None
 
@@ -189,7 +200,7 @@ class PreRouteRunMetadata(_RunMetadataBase):
 class SelectedRouteRunMetadata(_RunMetadataBase):
     metadata_kind: Literal["selected_route"]
     scientific_result: Literal[True]
-    scientific_admission_ref: dict[str, Any] | None = None
+    scientific_admission_ref: ScientificAdmissionReference | None = None
     route_selection_manifest_id: str | None = None
     seed_allocation_manifest_id: str | None = None
 
@@ -209,7 +220,7 @@ class SelectedRouteRunMetadata(_RunMetadataBase):
 class NonScientificExploratoryCodeRunMetadata(_RunMetadataBase):
     metadata_kind: Literal["exploratory_code_non_scientific"]
     scientific_result: Literal[False]
-    scientific_admission_ref_or_none: dict[str, Any] | None = None
+    scientific_admission_ref_or_none: ScientificAdmissionReference | None = None
     source_route_selection_manifest_id: str | None = None
     source_seed_allocation_manifest_id: str | None = None
     exploratory_activation_manifest_id: str | None = None
@@ -232,7 +243,7 @@ class NonScientificExploratoryCodeRunMetadata(_RunMetadataBase):
 class ScientificExploratoryCodeRunMetadata(_RunMetadataBase):
     metadata_kind: Literal["exploratory_code_scientific"]
     scientific_result: Literal[True]
-    scientific_admission_ref: dict[str, Any] | None = None
+    scientific_admission_ref: ScientificAdmissionReference | None = None
     source_route_selection_manifest_id: str | None = None
     source_seed_allocation_manifest_id: str | None = None
     exploratory_activation_manifest_id: str | None = None
@@ -274,8 +285,8 @@ class _TrialLogBase(_StrictModel):
     context_event_id_or_none: str | None
     retrieval_event_ids: list[str]
     tool_event_ids: list[str]
-    auxiliary_context_inclusion_or_none: dict[str, Any] | None
-    operational_attribution_or_none: dict[str, Any] | None
+    auxiliary_context_inclusion_or_none: dict[str, object] | None
+    operational_attribution_or_none: dict[str, object] | None
 
 
 class PrefixTrialLog(_TrialLogBase):
@@ -453,9 +464,10 @@ _EVENT_TYPES = {
 
 def parse_log_record_v3(record: Mapping[str, Any]) -> Phase12Record:
     payload = dict(record)
-    if payload.get("schema_version", LOGGING_V3) != LOGGING_V3 or payload.get(
-        "contract_level", "phase12"
-    ) != "phase12":
+    if (
+        payload.get("schema_version", LOGGING_V3) != LOGGING_V3
+        or payload.get("contract_level", "phase12") != "phase12"
+    ):
         raise Phase12SchemaError("SCHEMA_CONTRACT_MISMATCH")
     if "metadata_kind" in payload:
         return _RUN_METADATA_ADAPTER.validate_python(payload)

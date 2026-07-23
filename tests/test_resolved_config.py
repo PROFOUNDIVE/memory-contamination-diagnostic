@@ -18,7 +18,9 @@ from memcontam.logging.audit_artifacts import (
 
 def test_resolved_config_records_taxonomy_version_and_redacts_provider_secrets(tmp_path) -> None:
     profile = normalize_provider_profile(
-        ProviderConfig(provider="replay"), served_models=["replay"], model_snapshots={"replay": "v1"}
+        ProviderConfig(provider="replay"),
+        served_models=["replay"],
+        model_snapshots={"replay": "v1"},
     )
     config = {
         "run": {"name": "audit", "provider": "replay"},
@@ -41,7 +43,9 @@ def test_resolved_config_records_taxonomy_version_and_redacts_provider_secrets(t
 
 def test_resolved_config_hash_is_canonical_after_default_resolution() -> None:
     profile = normalize_provider_profile(
-        ProviderConfig(provider="replay"), served_models=["replay"], model_snapshots={"replay": "v1"}
+        ProviderConfig(provider="replay"),
+        served_models=["replay"],
+        model_snapshots={"replay": "v1"},
     )
     resolved = resolve_run_config({"run": {"provider": "replay"}}, provider_profile=profile)
     expected = json.dumps(resolved, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -49,7 +53,9 @@ def test_resolved_config_hash_is_canonical_after_default_resolution() -> None:
     assert hashlib.sha256(expected).hexdigest()
 
 
-def test_invalid_provider_dispatch_and_missing_live_credential_fail_before_run_directory(tmp_path, monkeypatch) -> None:
+def test_invalid_provider_dispatch_and_missing_live_credential_fail_before_run_directory(
+    tmp_path, monkeypatch
+) -> None:
     invalid = {
         "run": {
             "stage": "replay",
@@ -91,7 +97,9 @@ def test_run_writes_redacted_audit_artifacts_before_the_first_provider_call(tmp_
             return LLMResponse(content="final: 6 / (1 - 3 / 4)", raw={}, token_usage={})
 
     sample_path = tmp_path / "sample.jsonl"
-    sample_path.write_text('{"sample_id":"sample","numbers":[1,3,4,6],"target":24}\n', encoding="utf-8")
+    sample_path.write_text(
+        '{"sample_id":"sample","numbers":[1,3,4,6],"target":24}\n', encoding="utf-8"
+    )
     config = {
         "run": {
             "stage": "replay",
@@ -110,6 +118,9 @@ def test_run_writes_redacted_audit_artifacts_before_the_first_provider_call(tmp_
     resolved = json.loads((run_dir / "resolved_config.json").read_text(encoding="utf-8"))
     trial = json.loads((run_dir / "trials.jsonl").read_text(encoding="utf-8"))
     assert resolved["run"]["failure_taxonomy_version"] == "baseline_fidelity_v1"
-    assert trial["metadata"]["config_hash"] == hashlib.sha256(
-        json.dumps(resolved, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
+    assert (
+        trial["metadata"]["config_hash"]
+        == hashlib.sha256(
+            json.dumps(resolved, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+    )

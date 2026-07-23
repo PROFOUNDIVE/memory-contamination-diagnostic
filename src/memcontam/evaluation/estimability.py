@@ -22,11 +22,17 @@ class EstimabilityDecision:
     required_seed_count: int
 
 
-def evaluate_estimability(panel: Mapping[Any, Any] | Sequence[Any], rule: EstimabilityRule) -> EstimabilityDecision:
+def evaluate_estimability(
+    panel: Mapping[Any, Any] | Sequence[Any], rule: EstimabilityRule
+) -> EstimabilityDecision:
     values = tuple(panel.values()) if isinstance(panel, Mapping) else tuple(panel)
-    complete = [value for value in values if isinstance(value, (int, float)) and not isinstance(value, bool)]
+    complete = [
+        value for value in values if isinstance(value, (int, float)) and not isinstance(value, bool)
+    ]
     if len(complete) != len(values):
-        return EstimabilityDecision(False, "INCOMPLETE_SEED_PANEL", len(complete), rule.minimum_seeds)
+        return EstimabilityDecision(
+            False, "INCOMPLETE_SEED_PANEL", len(complete), rule.minimum_seeds
+        )
     if not complete:
         return EstimabilityDecision(False, "NO_ELIGIBLE_SEEDS", 0, rule.minimum_seeds)
     if len(complete) < rule.minimum_seeds:

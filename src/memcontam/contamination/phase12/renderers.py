@@ -3,7 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from memcontam.contamination.phase12.models import CandidateTriplet, CandidateVariant
-from memcontam.memory.checkpoint_v3 import CheckpointError, NativeEntry, Phase12Checkpoint, deserialize_checkpoint
+from memcontam.memory.checkpoint_v3 import (
+    CheckpointError,
+    NativeEntry,
+    Phase12Checkpoint,
+    deserialize_checkpoint,
+)
 from memcontam.memory.serializer_registry import SerializerRegistry
 
 
@@ -13,15 +18,21 @@ class RendererError(ValueError):
         self.code = code
 
 
-def render_false(beta: str, triplet: CandidateTriplet, checkpoint: Phase12Checkpoint) -> NativeEntry:
+def render_false(
+    beta: str, triplet: CandidateTriplet, checkpoint: Phase12Checkpoint
+) -> NativeEntry:
     return _render(beta, triplet.false_candidate, checkpoint)
 
 
-def render_correct(beta: str, triplet: CandidateTriplet, checkpoint: Phase12Checkpoint) -> NativeEntry:
+def render_correct(
+    beta: str, triplet: CandidateTriplet, checkpoint: Phase12Checkpoint
+) -> NativeEntry:
     return _render(beta, triplet.correct_twin, checkpoint)
 
 
-def render_irrelevant(beta: str, triplet: CandidateTriplet, checkpoint: Phase12Checkpoint) -> NativeEntry:
+def render_irrelevant(
+    beta: str, triplet: CandidateTriplet, checkpoint: Phase12Checkpoint
+) -> NativeEntry:
     return _render(beta, triplet.irrelevant_control, checkpoint)
 
 

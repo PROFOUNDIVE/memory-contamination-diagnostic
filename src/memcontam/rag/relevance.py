@@ -19,7 +19,9 @@ class RelevanceRelation:
         return document_id in self.relevant_document_ids
 
 
-def recall_at_k(retrieved_document_ids: tuple[str, ...], relevant_document_ids: set[str], k: int) -> float:
+def recall_at_k(
+    retrieved_document_ids: tuple[str, ...], relevant_document_ids: set[str], k: int
+) -> float:
     if k <= 0 or not relevant_document_ids:
         return 0.0
     return len(set(retrieved_document_ids[:k]) & relevant_document_ids) / len(relevant_document_ids)

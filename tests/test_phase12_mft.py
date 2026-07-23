@@ -103,7 +103,9 @@ def test_distinguishes_model_failure_from_mft04_contract_failure() -> None:
 
     assert behavior_fixture["expected"]["valid_model_failure_blocks_route"] is False
     assert any(case.status == "model_behavior" for case in result.cases if case.test_id == "MFT-01")
-    assert all(case.status == "contract_failure" for case in result.cases if case.test_id == "MFT-04")
+    assert all(
+        case.status == "contract_failure" for case in result.cases if case.test_id == "MFT-04"
+    )
     assert outcome_fixture["cases"][2]["expected"][1] == "model_behavior"
     assert route_fixture["completed_failed_mft_manifest"]["mft04_status"] == "fail"
     assert (manifest.mft04_status, manifest.route_gate_status) == ("fail", "blocked")

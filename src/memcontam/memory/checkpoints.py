@@ -52,9 +52,7 @@ def clone_checkpoint_to_arm(
     )
 
 
-def validate_stream_pair(
-    first: NativeCheckpoint, second: NativeCheckpoint
-) -> StreamPairKey:
+def validate_stream_pair(first: NativeCheckpoint, second: NativeCheckpoint) -> StreamPairKey:
     if first.identity.arm == second.identity.arm:
         raise ValueError("matched checkpoints must have different arms")
     first_key = stream_pair_key(first.identity)

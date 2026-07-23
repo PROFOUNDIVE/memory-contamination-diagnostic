@@ -83,7 +83,9 @@ def _fingerprint(record: Mapping[str, Any]) -> str:
 
 def _contains_inv03_metadata(value: Any) -> bool:
     if isinstance(value, Mapping):
-        return "inv03_metadata" in value or any(_contains_inv03_metadata(item) for item in value.values())
+        return "inv03_metadata" in value or any(
+            _contains_inv03_metadata(item) for item in value.values()
+        )
     if isinstance(value, (list, tuple)):
         return any(_contains_inv03_metadata(item) for item in value)
     return False

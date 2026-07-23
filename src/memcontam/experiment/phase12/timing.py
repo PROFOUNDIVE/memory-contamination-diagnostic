@@ -13,8 +13,14 @@ TIMING_QUANTILES: dict[Literal["early", "base", "late"], Decimal] = {
 }
 
 
-def select_lower_quantile_checkpoint(eligible_indices: Sequence[int], quantile: Decimal) -> int | None:
-    if not isinstance(quantile, Decimal) or not quantile.is_finite() or not Decimal(0) <= quantile <= Decimal(1):
+def select_lower_quantile_checkpoint(
+    eligible_indices: Sequence[int], quantile: Decimal
+) -> int | None:
+    if (
+        not isinstance(quantile, Decimal)
+        or not quantile.is_finite()
+        or not Decimal(0) <= quantile <= Decimal(1)
+    ):
         raise EligibilityError("INVALID_QUANTILE")
     if not eligible_indices:
         return None

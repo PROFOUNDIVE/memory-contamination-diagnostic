@@ -168,14 +168,19 @@ def test_generates_both_candidate_registries_and_feasibility_reports() -> None:
     costs = _costs()
     rate_and_components = {
         registry.candidate_route: _rate_and_components(
-            registry, scopes, counts[registry.candidate_route], expected_base[registry.candidate_route]
+            registry,
+            scopes,
+            counts[registry.candidate_route],
+            expected_base[registry.candidate_route],
         )
         for registry in bare_registries
     }
     registries = generate_candidate_route_registries(
         template_sets,
         scopes,
-        components_by_route={route: components for route, (_, components) in rate_and_components.items()},
+        components_by_route={
+            route: components for route, (_, components) in rate_and_components.items()
+        },
     )
     reports = {
         registry.candidate_route: estimate_route_feasibility(
@@ -215,7 +220,9 @@ def test_generates_both_candidate_registries_and_feasibility_reports() -> None:
         for registry in registries
         for template in registry.run_templates
     )
-    frozen_reports = {item["candidate_route"]: item for item in _route_fixture()["feasibility_reports"]}
+    frozen_reports = {
+        item["candidate_route"]: item for item in _route_fixture()["feasibility_reports"]
+    }
     assert reports["3w"].estimated_calls == frozen_reports["3w"]["estimated_calls"] == 15509
     assert reports["3w"].call_capacity == frozen_reports["3w"]["call_capacity"] == 17000
     assert reports["3w"].feasible is True
@@ -225,5 +232,9 @@ def test_generates_both_candidate_registries_and_feasibility_reports() -> None:
     assert reports["5w"].reasons == ("CALL_CAPACITY_EXCEEDED",)
     assert (budgets["3w"].base_calls, budgets["3w"].rerun_allowance_calls) == (14770, 739)
     assert (budgets["5w"].base_calls, budgets["5w"].rerun_allowance_calls) == (28336, 1417)
-    assert all(report.call_budget_breakdown_id == f"budget-{route}" for route, report in reports.items())
-    assert all(report.call_budget_breakdown_hash and report.artifact_hash for report in reports.values())
+    assert all(
+        report.call_budget_breakdown_id == f"budget-{route}" for route, report in reports.items()
+    )
+    assert all(
+        report.call_budget_breakdown_hash and report.artifact_hash for report in reports.values()
+    )
