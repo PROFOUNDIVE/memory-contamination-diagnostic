@@ -1,0 +1,8 @@
+registry_id: phase12-metric-registry-v1
+version: phase12-metric-registry-v1
+metric_ids:
+  - verified_score
+  - contamination_exposure
+  - filter_recovery
+  - retained_root
+artifact_hash: phase12-metric-registry-v1

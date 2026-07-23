@@ -1,0 +1,5 @@
+contract_id: phase12-bge-m3-cache-only-v1
+model_id: BAAI/bge-m3
+model_revision: 5617a9f61b028005a4858fdac845db406aefb181
+corpus_version: branch-corpus-v3
+artifact_hash: phase12-bge-m3-cache-only-v1
