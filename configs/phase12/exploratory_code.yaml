@@ -1,0 +1,37 @@
+config_kind: phase12_canonical_exploratory_v1
+config_id: phase12-exploratory-code-v1
+protocol_version: phase12_code_exploratory_v1
+repository_commit: 830b89c8c169ffa9cdea472887fdae134dbae7cf
+authoritative_experiment_design:
+  path: Phase 12-Compatible Pilot Main and Exploratory Experiment Design(3).md
+  sha256: 984fe2881690d93a8ccced87abf03de4bf0012158462cf07ed23505414073eb0
+logging_contract:
+  contract_level: phase12
+  schema_version: logging_v3
+run_family: exploratory_code
+evidence_layer: main
+selection_status: unselected
+candidate_route: null
+activation_status: inactive
+task_family: game24
+baseline_condition_ids: [nomem, bot_style, dc_rs]
+registry_ids:
+  behavior: behavior-registry-v2-complete
+  candidate: candidate-v1
+  embedding: bge-m3-pinned-v1
+  inv03_equivalence: inv03-equivalence-registry-v1
+  metric: metric-v1
+  split: split-v1
+  exploratory_run_templates: exploratory-registry-v1
+registry_hashes:
+  behavior: 52627253c96cd0f1592e74a32e26f81bd68749f7b1c76c15396abaf0ae02cd36
+  inv03_equivalence: ffdb247dc187d462208dbe9f7a4ead8bfa27def24a3052baedca77c50aa2e620
+exploratory_run_template_registry_id: exploratory-registry-v1
+exploratory_run_template_registry_hash: exploratory-registry-hash
+abstract_slots: [game24|exploratory|slot-001]
+estimated_exploratory_calls: 12
+oci_contract_path: containers/python-sandbox/image.lock.json
+route_selection_manifest_id: null
+seed_allocation_manifest_id: null
+selected_package_resource_manifest_id: null
+exploratory_activation_manifest_id: null

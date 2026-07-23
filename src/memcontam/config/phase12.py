@@ -58,6 +58,41 @@ _REQUIRED_CALL_POLICY_FIELDS = {
     "pilot_call_statistics_manifest_hash",
     "reflexion_terminal_failure_reflection",
 }
+_CANONICAL_CONFIG_NAMES = (
+    "readiness.yaml",
+    "pilot_a.yaml",
+    "pilot_b.yaml",
+    "main_3w.yaml",
+    "main_5w.yaml",
+    "exploratory_code.yaml",
+)
+_PRIMARY_REGISTRY_IDS = {
+    "behavior": "behavior-registry-v2-complete",
+    "candidate": "candidate-v1",
+    "embedding": "bge-m3-pinned-v1",
+    "inv03_equivalence": "inv03-equivalence-registry-v1",
+    "metric": "metric-v1",
+    "split": "split-v1",
+}
+_PRIMARY_REGISTRY_HASHES = {
+    "behavior": "52627253c96cd0f1592e74a32e26f81bd68749f7b1c76c15396abaf0ae02cd36",
+    "inv03_equivalence": "ffdb247dc187d462208dbe9f7a4ead8bfa27def24a3052baedca77c50aa2e620",
+}
+_EXPLORATORY_REGISTRY_IDS = {
+    **_PRIMARY_REGISTRY_IDS,
+    "exploratory_run_templates": "exploratory-registry-v1",
+}
+_ROUTE_TEMPLATE_REGISTRIES = {
+    "3w": (
+        "registry-3w-complete-v3",
+        "e4048b1dc6af2b68d187a99e14ea3a4b8f8388d64a020f428b90de62b4d88fc0",
+    ),
+    "5w": (
+        "registry-5w-complete-v3",
+        "292c01743ab78b27724a210ebef5e4320171fd19a8ba9d70c1e85476aca16404",
+    ),
+}
+_EXPLORATORY_RUN_TEMPLATE_HASH = "exploratory-registry-hash"
 
 
 class Phase12ConfigError(ValueError):
@@ -98,6 +133,99 @@ class InvalidVariantSpec(_ConfigModel):
     reason: str
     remove: str | None = None
     patch: dict[str, Any] | None = None
+
+
+class CanonicalRouteInput(_ConfigModel):
+    candidate_route: RouteCandidateId
+    max_calls: int
+    requested_core_counts: dict[str, int]
+    requested_extension_counts: dict[str, int]
+    run_template_registry_id: str
+    run_template_registry_hash: str
+
+    @model_validator(mode="after")
+    def _validate_frozen_registry(self) -> CanonicalRouteInput:
+        expected_id, expected_hash = _ROUTE_TEMPLATE_REGISTRIES[self.candidate_route]
+        if self.run_template_registry_id != expected_id:
+            raise ValueError("FROZEN_REGISTRY_ID_UNKNOWN")
+        if self.run_template_registry_hash != expected_hash:
+            raise ValueError("FROZEN_REGISTRY_HASH_UNKNOWN")
+        return self
+
+
+class CanonicalPrimaryConfig(_ConfigModel):
+    config_kind: Literal["phase12_canonical_primary_v1"]
+    config_id: str
+    protocol_version: Literal["phase12_primary_v1"]
+    repository_commit: str
+    authoritative_experiment_design: ExperimentDesignRef
+    logging_contract: LoggingContractRef
+    run_family: Literal["readiness", "pilot_a", "pilot_b", "main"]
+    evidence_layer: Literal["build", "calibration", "main"]
+    arms: tuple[Literal["clean", "correct", "irrelevant", "contam", "filter"], ...]
+    tasks: tuple[str, ...]
+    tool_mode: Literal["text_only"]
+    selection_status: Literal["unselected", "candidate"]
+    candidate_route: RouteCandidateId | None
+    registry_ids: dict[str, str]
+    registry_hashes: dict[str, str]
+    candidate_routes: tuple[CanonicalRouteInput, ...]
+    route_selection_manifest_id: None = None
+    seed_allocation_manifest_id: None = None
+
+    @model_validator(mode="after")
+    def _validate_canonical_contract(self) -> CanonicalPrimaryConfig:
+        _validate_canonical_common(self)
+        _validate_registry_ids(self.registry_ids, _PRIMARY_REGISTRY_IDS)
+        _validate_registry_ids(self.registry_hashes, _PRIMARY_REGISTRY_HASHES)
+        if self.run_family == "main":
+            if self.selection_status != "candidate" or self.candidate_route is None:
+                raise ValueError("CANDIDATE_ROUTE_REQUIRED")
+            if {route.candidate_route for route in self.candidate_routes} != {self.candidate_route}:
+                raise ValueError("CANDIDATE_ROUTE_REQUIRED")
+        elif self.selection_status != "unselected" or self.candidate_route is not None:
+            raise ValueError("PREMATURE_ROUTE_SELECTION")
+        elif {route.candidate_route for route in self.candidate_routes} != {"3w", "5w"}:
+            raise ValueError("CANDIDATE_ROUTE_REQUIRED")
+        return self
+
+
+class CanonicalExploratoryConfig(_ConfigModel):
+    config_kind: Literal["phase12_canonical_exploratory_v1"]
+    config_id: str
+    protocol_version: Literal["phase12_code_exploratory_v1"]
+    repository_commit: str
+    authoritative_experiment_design: ExperimentDesignRef
+    logging_contract: LoggingContractRef
+    run_family: Literal["exploratory_code"]
+    evidence_layer: Literal["main"]
+    selection_status: Literal["unselected"]
+    candidate_route: None = None
+    activation_status: Literal["inactive"]
+    task_family: Literal["game24"]
+    baseline_condition_ids: tuple[Literal["nomem", "bot_style", "dc_rs"], ...]
+    registry_ids: dict[str, str]
+    registry_hashes: dict[str, str]
+    exploratory_run_template_registry_id: str
+    exploratory_run_template_registry_hash: str
+    abstract_slots: tuple[str, ...]
+    estimated_exploratory_calls: int
+    oci_contract_path: str
+    route_selection_manifest_id: None = None
+    seed_allocation_manifest_id: None = None
+    selected_package_resource_manifest_id: None = None
+    exploratory_activation_manifest_id: None = None
+
+    @model_validator(mode="after")
+    def _validate_canonical_contract(self) -> CanonicalExploratoryConfig:
+        _validate_canonical_common(self)
+        _validate_registry_ids(self.registry_ids, _EXPLORATORY_REGISTRY_IDS)
+        _validate_registry_ids(self.registry_hashes, _PRIMARY_REGISTRY_HASHES)
+        if self.exploratory_run_template_registry_id != self.registry_ids["exploratory_run_templates"]:
+            raise ValueError("CROSS_LAYER_REGISTRY_ID")
+        if self.exploratory_run_template_registry_hash != _EXPLORATORY_RUN_TEMPLATE_HASH:
+            raise ValueError("FROZEN_REGISTRY_HASH_UNKNOWN")
+        return self
 
 
 class Phase12StudyConfig(_ConfigModel):
@@ -244,7 +372,7 @@ class Phase12StudyConfig(_ConfigModel):
 
 
 class ResolvedPhase12Config(_ConfigModel):
-    source: Phase12StudyConfig
+    source: Phase12StudyConfig | CanonicalPrimaryConfig | CanonicalExploratoryConfig
     repository_commit: str
     authoritative_experiment_design: ExperimentDesignRef
     logging_schema_version: Literal["logging_v3"]
@@ -252,34 +380,72 @@ class ResolvedPhase12Config(_ConfigModel):
     template_package_hash: str
 
 
-def load_phase12_config(path: Path) -> Phase12StudyConfig:
+def load_phase12_config(
+    path: Path,
+) -> Phase12StudyConfig | CanonicalPrimaryConfig | CanonicalExploratoryConfig:
     try:
         text = path.read_text(encoding="utf-8")
         payload = json.loads(text) if path.suffix == ".json" else yaml.safe_load(text)
+        if not isinstance(payload, dict):
+            raise ValueError("REQUIRED_CONFIG_CELL_MISSING")
+        if payload.get("config_kind") == "phase12_canonical_primary_v1":
+            return CanonicalPrimaryConfig.model_validate(payload)
+        if payload.get("config_kind") == "phase12_canonical_exploratory_v1":
+            return CanonicalExploratoryConfig.model_validate(payload)
         return Phase12StudyConfig.model_validate(payload)
     except (OSError, json.JSONDecodeError, ValidationError, yaml.YAMLError) as exc:
         message = str(exc)
-        if "UNRELATED_SENSITIVITY_FIELD" in message:
-            raise Phase12ConfigError("UNRELATED_SENSITIVITY_FIELD") from exc
+        for code in (
+            "UNRELATED_SENSITIVITY_FIELD",
+            "FROZEN_REGISTRY_ID_MISSING",
+            "CROSS_LAYER_REGISTRY_ID",
+            "FROZEN_REGISTRY_ID_UNKNOWN",
+            "FROZEN_REGISTRY_HASH_UNKNOWN",
+        ):
+            if code in message:
+                raise Phase12ConfigError(code) from exc
         raise Phase12ConfigError(
             "REQUIRED_CONFIG_CELL_MISSING" if "Field required" in message else message
         ) from exc
 
 
-def resolve_phase12_config(config: Phase12StudyConfig) -> ResolvedPhase12Config:
+def resolve_phase12_config(
+    config: Phase12StudyConfig | CanonicalPrimaryConfig | CanonicalExploratoryConfig,
+) -> ResolvedPhase12Config:
     return ResolvedPhase12Config(
         source=config,
         repository_commit=config.repository_commit,
         authoritative_experiment_design=config.authoritative_experiment_design,
         logging_schema_version="logging_v3",
         contract_level="phase12",
-        template_package_hash=config.template_package_hash,
+        template_package_hash=(
+            config.template_package_hash
+            if isinstance(config, Phase12StudyConfig)
+            else canonical_json_hash(config.model_dump(mode="json"))
+        ),
     )
+
+
+def load_all_canonical_configs(root: Path) -> dict[str, ResolvedPhase12Config]:
+    configs: dict[str, ResolvedPhase12Config] = {}
+    for name in _CANONICAL_CONFIG_NAMES:
+        path = root / name
+        try:
+            configs[name] = resolve_phase12_config(load_phase12_config(path))
+        except Phase12ConfigError:
+            raise
+        except OSError as exc:
+            raise Phase12ConfigError("CANONICAL_CONFIG_MISSING") from exc
+    if {path.name for path in root.glob("*.yaml")} != set(_CANONICAL_CONFIG_NAMES):
+        raise Phase12ConfigError("CANONICAL_CONFIG_SET_MISMATCH")
+    return configs
 
 
 def build_candidate_template_set(
     config: ResolvedPhase12Config, candidate: RouteCandidateId
 ) -> CandidateTemplateSet:
+    if not isinstance(config.source, Phase12StudyConfig):
+        raise Phase12ConfigError("CANONICAL_TEMPLATE_PAYLOAD_REQUIRED")
     payload = config.source.canonical_candidate_template_sets[candidate]
     expected_hash = next(
         route.expected_candidate_template_set_hash
@@ -306,3 +472,27 @@ def _parse_route_governance_shape(record: dict[str, Any]) -> RouteGovernanceArti
 
 def _parse_exploratory_governance_shape(record: dict[str, Any]) -> ExploratoryGovernanceArtifact:
     return TypeAdapter(ExploratoryGovernanceArtifact).validate_python(record)
+
+
+def _validate_canonical_common(
+    config: CanonicalPrimaryConfig | CanonicalExploratoryConfig,
+) -> None:
+    if config.repository_commit != _REPOSITORY_COMMIT:
+        raise ValueError("REPOSITORY_COMMIT_MISMATCH")
+    if config.authoritative_experiment_design.sha256 != _DESIGN_SHA256:
+        raise ValueError("EXPERIMENT_DESIGN_HASH_MISMATCH")
+    if (
+        config.logging_contract.contract_level != "phase12"
+        or config.logging_contract.schema_version != "logging_v3"
+    ):
+        raise ValueError("LOGGING_CONTRACT_MISMATCH")
+
+
+def _validate_registry_ids(actual: dict[str, str], expected: dict[str, str]) -> None:
+    if set(actual) != set(expected):
+        raise ValueError("FROZEN_REGISTRY_ID_MISSING")
+    if actual == expected:
+        return
+    if any(value in _EXPLORATORY_REGISTRY_IDS.values() for value in actual.values()):
+        raise ValueError("CROSS_LAYER_REGISTRY_ID")
+    raise ValueError("FROZEN_REGISTRY_ID_UNKNOWN")

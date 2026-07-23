@@ -1,0 +1,36 @@
+config_kind: phase12_canonical_primary_v1
+config_id: phase12-main-3w-candidate-v1
+protocol_version: phase12_primary_v1
+repository_commit: 830b89c8c169ffa9cdea472887fdae134dbae7cf
+authoritative_experiment_design:
+  path: Phase 12-Compatible Pilot Main and Exploratory Experiment Design(3).md
+  sha256: 984fe2881690d93a8ccced87abf03de4bf0012158462cf07ed23505414073eb0
+logging_contract:
+  contract_level: phase12
+  schema_version: logging_v3
+run_family: main
+evidence_layer: main
+arms: [clean, correct, irrelevant, contam, filter]
+tasks: [game24, math_equation_balancer, word_sorting]
+tool_mode: text_only
+selection_status: candidate
+candidate_route: 3w
+registry_ids:
+  behavior: behavior-registry-v2-complete
+  candidate: candidate-v1
+  embedding: bge-m3-pinned-v1
+  inv03_equivalence: inv03-equivalence-registry-v1
+  metric: metric-v1
+  split: split-v1
+registry_hashes:
+  behavior: 52627253c96cd0f1592e74a32e26f81bd68749f7b1c76c15396abaf0ae02cd36
+  inv03_equivalence: ffdb247dc187d462208dbe9f7a4ead8bfa27def24a3052baedca77c50aa2e620
+candidate_routes:
+  - candidate_route: 3w
+    max_calls: 17000
+    requested_core_counts: {game24: 10, math_equation_balancer: 10, word_sorting: 10}
+    requested_extension_counts: {}
+    run_template_registry_id: registry-3w-complete-v3
+    run_template_registry_hash: e4048b1dc6af2b68d187a99e14ea3a4b8f8388d64a020f428b90de62b4d88fc0
+route_selection_manifest_id: null
+seed_allocation_manifest_id: null
