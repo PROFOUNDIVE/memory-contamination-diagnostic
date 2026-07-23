@@ -563,7 +563,35 @@ def _dc_rs_generation_message(
     ]
 
 
+def _dc_rs_tool_generation_message(
+    canonical_task: str,
+    cheatsheet: str,
+    synthesis_call_id: str | None,
+    synthesis_spans: list[Any],
+    target_set_id: str | None = None,
+) -> tuple[dict[str, str], list[Any]]:
+    message, spans = _dc_rs_generation_message(
+        canonical_task,
+        cheatsheet,
+        synthesis_call_id,
+        synthesis_spans,
+        target_set_id,
+    )
+    return {
+        **message,
+        "content": (
+            f"{message['content']}\n\n"
+            "You may use the Python sandbox to check the solution. Return exactly one JSON action: "
+            '{"action":"execute_python","code":"..."} or '
+            '{"action":"final","answer":"final: <answer>"}. '
+        ),
+    }, spans
+
+
 def _generated_output(entry: MemoryEntry) -> str:
+    tool_trace = entry.metadata.get("tool_trace")
+    if isinstance(tool_trace, str):
+        return tool_trace
     output = entry.metadata.get("generated_output")
     if not isinstance(output, str):
         raise ValueError(f"V2 DC-RS pair {entry.entry_id!r} requires generated_output")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from dataclasses import dataclass, replace
 from typing import Any, Literal, Mapping, Sequence
 
@@ -22,6 +23,15 @@ from memcontam.memory.filtered_state import (
 from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
 from memcontam.tasks.dispatch import canonical_task_json
+from memcontam.tools.base import (
+    ToolExecutionError,
+    ToolExecutor,
+    ToolInfrastructureError,
+    ToolPolicyError,
+    ToolResult,
+    ToolRuntimeContract,
+)
+from memcontam.tools.execution_loop import LlmCall, ToolProtocolError, run_tool_loop
 
 
 __all__ = [
@@ -29,6 +39,7 @@ __all__ = [
     "DcRsContractError",
     "DcRsPhase12Adapter",
     "DcRsStateV3",
+    "DcRsToolContractError",
     "DcRsTrialContextV3",
     "StrategyCandidateState",
     "curate_pre_generation",
@@ -38,11 +49,18 @@ __all__ = [
 Branch = Literal["clean", "correct", "irrelevant", "contam", "filter"]
 LineageStatus = Literal["exact", "unavailable", "approximate"]
 
+_MAX_TOOL_TRACE_EVENTS = 3
+_MAX_TOOL_TRACE_CHARS = 4096
+
 
 class DcRsContractError(ValueError):
     def __init__(self, code: str) -> None:
         self.code = code
         super().__init__(code)
+
+
+class DcRsToolContractError(DcRsContractError):
+    pass
 
 
 @dataclass(frozen=True)
@@ -187,8 +205,14 @@ class DcRsPhase12Adapter:
         curated = recorder.chat(
             [curation_message],
             model=trial.model,
-            config={**call_config, "method_stage": "dc_rs_synthesize", "source_spans": curation_spans},
+            config={
+                **_curator_call_config(call_config),
+                "method_stage": "dc_rs_synthesize",
+                "source_spans": curation_spans,
+            },
         )
+        if _is_tool_action(curated.content):
+            raise DcRsToolContractError("CURATOR_TOOL_FORBIDDEN")
         candidate = curate_pre_generation(
             curated.content,
             fallback_strategy=prior_content,
@@ -204,29 +228,47 @@ class DcRsPhase12Adapter:
 
         admitted_strategies = _active_strategies(state)
         strategy_content = "" if not admitted_strategies else admitted_strategies[-1].content
-        generation_message, generation_spans = legacy_dc._dc_rs_generation_message(
+        tool_mode = _tool_mode(call_config)
+        generation_builder = (
+            legacy_dc._dc_rs_tool_generation_message
+            if tool_mode == "python_sandbox"
+            else legacy_dc._dc_rs_generation_message
+        )
+        generation_message, generation_spans = generation_builder(
             canonical_task,
             strategy_content,
             recorder.get_records()[-1].call_id,
             curation_spans,
             trial.config.get("_logging_target_set_id"),
         )
-        generated = recorder.chat(
-            [generation_message],
-            model=trial.model,
-            config={**call_config, "method_stage": "dc_rs_generate", "source_spans": generation_spans},
-        )
-        archive_entry = _archive_write(generated.content, canonical_task, trial)
+        generation_config = {
+            **call_config,
+            "method_stage": "dc_rs_generate",
+            "source_spans": generation_spans,
+        }
+        generated = recorder.chat([generation_message], model=trial.model, config=generation_config)
+        tool_events: tuple[Any, ...] = ()
+        tool_trace: str | None = None
+        if tool_mode == "python_sandbox":
+            tool_result = _run_generation_tool_loop(
+                trial, recorder, generation_message, generation_config, generated.content
+            )
+            generated_output = tool_result.answer
+            tool_events = tool_result.tool_events
+            tool_trace = _canonical_tool_trace(recorder, tool_events, generated_output)
+        else:
+            generated_output = generated.content
+        archive_entry = _archive_write(generated_output, canonical_task, trial, tool_trace=tool_trace)
         state.archive.append(archive_entry)
         archive_envelope = _archive_envelope(archive_entry, trial)
         archive_transition = _route_write(state, _archive_native(archive_entry), archive_envelope, trial)
 
         try:
-            parsed_answer = parse_final_answer(generated.content)
+            parsed_answer = parse_final_answer(generated_output)
         except ValueError:
             outcome = _outcome(
                 "failed",
-                generated.content,
+                generated_output,
                 None,
                 None,
                 recorder,
@@ -237,6 +279,7 @@ class DcRsPhase12Adapter:
                 "BaselineOutputError",
                 "dc_rs_invalid_final_answer",
                 "invalid_final_answer",
+                metadata={"tool_events": tool_events},
             )
         else:
             archive_entry.metadata["parsed_answer"] = parsed_answer
@@ -245,7 +288,7 @@ class DcRsPhase12Adapter:
             except Exception:
                 outcome = _outcome(
                     "failed",
-                    generated.content,
+                    generated_output,
                     parsed_answer,
                     None,
                     recorder,
@@ -256,11 +299,12 @@ class DcRsPhase12Adapter:
                     "VerifierContractError",
                     "verifier_contract_failed",
                     "verifier_contract_failed",
+                    metadata={"tool_events": tool_events},
                 )
             else:
                 outcome = _outcome(
                     "succeeded",
-                    generated.content,
+                    generated_output,
                     parsed_answer,
                     verifier_result,
                     recorder,
@@ -268,6 +312,7 @@ class DcRsPhase12Adapter:
                     retrieved_records,
                     trial,
                     memory_before,
+                    metadata={"tool_events": tool_events},
                 )
         return BaselineStepResultV3(
             outcome=outcome,
@@ -299,6 +344,148 @@ def _validate_trial_and_state(trial: DcRsTrialContextV3, state: DcRsStateV3) -> 
         raise DcRsContractError("CURRENT_OUTCOME_LEAKAGE")
     if any(key in trial.config for key in ("inferred_parent_ids", "direct_parent_ids", "parent_entry_ids")):
         raise DcRsContractError("IMPLICIT_PARENT_UNION")
+    if any(
+        key in trial.config
+        for key in (
+            "current_outcome",
+            "outcome",
+            "verifier_result",
+            "current_verifier_result",
+            "current_generated_output",
+            "current_parsed_answer",
+        )
+    ):
+        raise DcRsContractError("CURRENT_OUTCOME_LEAKAGE")
+
+
+def _curator_call_config(config: Mapping[str, Any]) -> dict[str, Any]:
+    forbidden = {
+        "tool_executor",
+        "tool_runtime_contract",
+        "max_tool_rounds",
+        "_tool_event_writer",
+        "current_outcome",
+        "outcome",
+        "verifier_result",
+        "current_verifier_result",
+        "current_generated_output",
+        "current_parsed_answer",
+        "verifier",
+    }
+    return {key: value for key, value in config.items() if key not in forbidden} | {
+        "tool_mode": "text_only"
+    }
+
+
+def _is_tool_action(content: str) -> bool:
+    try:
+        value = json.loads(content)
+    except json.JSONDecodeError:
+        return False
+    return isinstance(value, dict) and isinstance(value.get("action"), str)
+
+
+def _tool_mode(config: Mapping[str, Any]) -> Literal["text_only", "python_sandbox"]:
+    mode = config.get("tool_mode", "text_only")
+    if mode not in {"text_only", "python_sandbox"}:
+        raise DcRsToolContractError("INVALID_TOOL_MODE")
+    return mode
+
+
+class _BoundedToolExecutor:
+    def __init__(self, executor: ToolExecutor) -> None:
+        self._executor = executor
+        self.scientific_capable = executor.scientific_capable
+
+    def execute(self, request: Any, contract: ToolRuntimeContract) -> ToolResult:
+        if len(request.code) > _MAX_TOOL_TRACE_CHARS:
+            raise ToolExecutionError("UNBOUNDED_TOOL_TRACE")
+        result = self._executor.execute(request, contract)
+        if len(result.stdout) > _MAX_TOOL_TRACE_CHARS or len(result.stderr) > _MAX_TOOL_TRACE_CHARS:
+            raise ToolExecutionError("UNBOUNDED_TOOL_TRACE")
+        return result
+
+
+def _run_generation_tool_loop(
+    trial: DcRsTrialContextV3,
+    recorder: MethodCallRecorder,
+    generation_message: dict[str, str],
+    generation_config: Mapping[str, Any],
+    initial_content: str,
+) -> Any:
+    executor = trial.config.get("tool_executor")
+    policy = trial.config.get("tool_runtime_contract")
+    rounds = trial.config.get("max_tool_rounds", _MAX_TOOL_TRACE_EVENTS)
+    if (
+        executor is None
+        or not hasattr(executor, "execute")
+        or not hasattr(executor, "scientific_capable")
+        or not isinstance(policy, ToolRuntimeContract)
+    ):
+        raise DcRsToolContractError("TOOL_CONTRACT_REQUIRED")
+    if type(rounds) is not int or not 1 <= rounds <= _MAX_TOOL_TRACE_EVENTS:
+        raise DcRsToolContractError("UNBOUNDED_TOOL_TRACE")
+    calls = recorder.get_records()
+    if not calls or calls[-1].call_id is None:
+        raise DcRsToolContractError("MISSING_INITIAL_CALL")
+    try:
+        return run_tool_loop(
+            LlmCall(
+                call_id=calls[-1].call_id,
+                content=initial_content,
+                messages=[generation_message],
+                model=trial.model,
+                config=generation_config,
+                run_id=trial.run_id,
+                trial_id=trial.trial_id,
+                max_rounds=rounds,
+            ),
+            recorder,
+            _BoundedToolExecutor(executor),
+            policy,
+            writer=trial.config.get("_tool_event_writer"),
+        )
+    except (ToolExecutionError, ToolInfrastructureError, ToolPolicyError, ToolProtocolError) as error:
+        raise DcRsToolContractError(error.code) from error
+
+
+def _canonical_tool_trace(
+    recorder: MethodCallRecorder, tool_events: Sequence[Any], final_answer: str
+) -> str:
+    if len(tool_events) > _MAX_TOOL_TRACE_EVENTS or len(final_answer) > _MAX_TOOL_TRACE_CHARS:
+        raise DcRsToolContractError("UNBOUNDED_TOOL_TRACE")
+    calls = {call.call_id: call for call in recorder.get_records()}
+    executions: list[dict[str, Any]] = []
+    for event in tool_events:
+        if (
+            not isinstance(event.output, str)
+            or not isinstance(event.stderr, str)
+            or len(event.output) > _MAX_TOOL_TRACE_CHARS
+            or len(event.stderr) > _MAX_TOOL_TRACE_CHARS
+        ):
+            raise DcRsToolContractError("UNBOUNDED_TOOL_TRACE")
+        parent = calls.get(event.parent_call_id)
+        if parent is None or event.continuation_call_id not in calls:
+            raise DcRsToolContractError("MALFORMED_TOOL_TRACE")
+        try:
+            action = json.loads(parent.raw_response or "")
+        except json.JSONDecodeError as error:
+            raise DcRsToolContractError("MALFORMED_TOOL_TRACE") from error
+        code = action.get("code") if action.get("action") == "execute_python" else None
+        if not isinstance(code, str) or len(code) > _MAX_TOOL_TRACE_CHARS:
+            raise DcRsToolContractError("MALFORMED_TOOL_TRACE")
+        if hashlib.sha256(code.encode("utf-8")).hexdigest() != event.code_hash:
+            raise DcRsToolContractError("MALFORMED_TOOL_TRACE")
+        executions.append(
+            {
+                "code": code,
+                "code_hash": event.code_hash,
+                "exit_code": event.exit_code,
+                "stderr": event.stderr,
+                "stdout": event.output,
+            }
+        )
+    return json.dumps({"executions": executions, "final": final_answer}, sort_keys=True, separators=(",", ":"))
 
 
 def _active_archive(state: DcRsStateV3) -> list[MemoryEntry]:
@@ -414,22 +601,31 @@ def _route_write(
     return transition
 
 
-def _archive_write(raw_output: str, canonical_task: str, trial: DcRsTrialContextV3) -> MemoryEntry:
+def _archive_write(
+    raw_output: str,
+    canonical_task: str,
+    trial: DcRsTrialContextV3,
+    *,
+    tool_trace: str | None = None,
+) -> MemoryEntry:
+    metadata: dict[str, Any] = {"generated_output": raw_output, "parsed_answer": None}
+    if tool_trace is not None:
+        metadata["tool_trace"] = tool_trace
     return MemoryEntry(
         entry_id=f"dc_rs_pair:{trial.trial_id}",
         content=canonical_task,
         memory_type="dc_rs_io_pair",
         source_trial_id=trial.trial_id,
-        metadata={"generated_output": raw_output, "parsed_answer": None},
+        metadata=metadata,
     )
 
 
 def _archive_native(entry: MemoryEntry) -> NativeEntry:
-    content = json.dumps(
-        {"input": entry.content, "raw_output": entry.metadata["generated_output"]},
-        sort_keys=True,
-        separators=(",", ":"),
-    )
+    payload = {"input": entry.content, "raw_output": entry.metadata["generated_output"]}
+    tool_trace = entry.metadata.get("tool_trace")
+    if tool_trace is not None:
+        payload["tool_trace"] = tool_trace
+    content = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return NativeEntry(
         entry_id=entry.entry_id,
         semantic_kind="dc_rs_io_pair",
@@ -477,6 +673,7 @@ def _outcome(
     error_type: Any = None,
     failure_disposition: Any = None,
     scientific_ineligibility_reason: Any = None,
+    metadata: Mapping[str, Any] | None = None,
 ) -> BaselineExecutionOutcome:
     calls = recorder.get_records()
     return BaselineExecutionOutcome(
@@ -500,6 +697,7 @@ def _outcome(
         error_type=error_type,
         failure_disposition=failure_disposition,
         scientific_ineligibility_reason=scientific_ineligibility_reason,
+        metadata={} if metadata is None else dict(metadata),
     )
 
 
@@ -531,12 +729,15 @@ def _archive_entry(entry: MemoryEntry | NativeEntry) -> MemoryEntry:
         NATIVE_ENTRY_V1,
     ):
         raise DcRsContractError("INVALID_ARCHIVE_COMPONENT")
-    input_text, raw_output = _native_archive_values(entry.content)
+    input_text, raw_output, tool_trace = _native_archive_values(entry.content)
+    metadata = {"generated_output": raw_output}
+    if tool_trace is not None:
+        metadata["tool_trace"] = tool_trace
     return MemoryEntry(
         entry_id=entry.entry_id,
         content=input_text,
         memory_type="dc_rs_io_pair",
-        metadata={"generated_output": raw_output},
+        metadata=metadata,
     )
 
 
@@ -544,6 +745,8 @@ def _strategy_entry(entry: MemoryEntry | NativeEntry) -> NativeEntry:
     if isinstance(entry, NativeEntry):
         native = entry
     elif isinstance(entry, MemoryEntry) and entry.memory_type == "dynamic_cheatsheet":
+        if not entry.metadata.get("direct_parent_ids"):
+            raise DcRsContractError("DIRECT_STRATEGY_INJECTION")
         parents = _metadata_ids(entry, "direct_parent_ids")
         native = NativeEntry(
             entry_id=entry.entry_id,
@@ -576,14 +779,17 @@ def _strategy_memory(entry: NativeEntry) -> MemoryEntry:
     )
 
 
-def _native_archive_values(content: str) -> tuple[str, str]:
+def _native_archive_values(content: str) -> tuple[str, str, str | None]:
     try:
         value = json.loads(content)
     except json.JSONDecodeError:
-        return content, content
+        return content, content, None
     if not isinstance(value, dict) or not all(isinstance(value.get(key), str) for key in ("input", "raw_output")):
         raise DcRsContractError("INVALID_ARCHIVE_COMPONENT")
-    return value["input"], value["raw_output"]
+    tool_trace = value.get("tool_trace")
+    if tool_trace is not None and not isinstance(tool_trace, str):
+        raise DcRsContractError("INVALID_ARCHIVE_COMPONENT")
+    return value["input"], value["raw_output"], tool_trace
 
 
 def _metadata_ids(entry: MemoryEntry, key: str) -> tuple[str, ...]:
