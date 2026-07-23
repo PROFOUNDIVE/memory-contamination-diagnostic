@@ -367,12 +367,20 @@ class RetrievalEvent(_EventBase):
     retrieval_id: str
     query_hash: str
     retrieved_entry_ids: list[str]
+    retrieved_scores: list[float] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_scores(self) -> RetrievalEvent:
+        if self.retrieved_scores and len(self.retrieved_scores) != len(self.retrieved_entry_ids):
+            raise ValueError("RETRIEVAL_SCORE_COUNT_MISMATCH")
+        return self
 
 
 class ContextEvent(_EventBase):
     record_type: Literal["context_event"]
     context_id: str
     final_entry_ids: list[str]
+    removed_entry_ids: list[str] = Field(default_factory=list)
 
 
 class AdmissionEvent(_EventBase):
