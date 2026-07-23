@@ -10,6 +10,7 @@ from memcontam.memory.stores import MemoryEntry
 
 LOGGING_V1 = "logging_v1"
 LOGGING_V2 = "logging_v2"
+LOGGING_V3 = "logging_v3"
 
 BadMemoryUptakeLabel = Literal[
     "not_applicable", "not_evaluable", "no_uptake_detected", "uptake_detected"
