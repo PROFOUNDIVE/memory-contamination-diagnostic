@@ -357,9 +357,17 @@ class _EventBase(_StrictModel):
 
 class ToolEvent(_EventBase):
     record_type: Literal["tool_event"]
-    tool_mode: Literal["text_only", "python_sandbox"]
-    action: str
-    status: str
+    tool_mode: Literal["python_sandbox"]
+    action: Literal["execute_python"]
+    code_hash: str
+    output: str
+    stderr: str
+    exit_code: int
+    status: Literal["completed"]
+    duration_ms: int = Field(ge=0)
+    executor_identity: str
+    parent_call_id: str
+    continuation_call_id: str
 
 
 class RetrievalEvent(_EventBase):
