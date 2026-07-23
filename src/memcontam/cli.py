@@ -2069,7 +2069,7 @@ def main() -> None:
     aggregate.add_argument("run_dir", type=Path)
     aggregate.add_argument("--stage", type=str, default=None)
     aggregate.add_argument("--allow-legacy", action="store_true")
-    aggregate.add_argument("--contract", choices=["phase10", "phase11"], default=None)
+    aggregate.add_argument("--contract", choices=["phase10", "phase11", "phase12"], default=None)
 
     args = parser.parse_args()
 
