@@ -32,6 +32,12 @@ class TemplateDistillationResult(BaseModel):
     explicitly_used_memory_ids: tuple[str, ...]
 
 
+class BoTToolContractError(ValueError):
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(code)
+
+
 @dataclass(frozen=True)
 class BoTTemplatePayload:
     description: str
@@ -59,10 +65,13 @@ def distill_thought_template(
     client: LLMClient,
     model: str,
     config: dict[str, Any],
+    executed_trajectory: Sequence[dict[str, Any]] = (),
+    require_executed_programming: bool = False,
 ) -> BoTTemplatePayload:
     rendered_memory = tuple(visible_memory)
     if rendered_memory != visible_memory_for_retrieval_decision(retrieval_decision):
         raise ValueError("visible BoT memory must exactly match the retrieval decision")
+    rendered_trajectory = [dict(item) for item in executed_trajectory]
     call_config = dict(config)
     call_config["method_stage"] = "bot_thought_distill"
     response = client.chat(
@@ -76,6 +85,7 @@ def distill_thought_template(
                     f"Retrieval decision JSON:\n{render_retrieval_decision(retrieval_decision)}\n\n"
                     f"Selected reasoning structure:\n{selected_structure}\n\n"
                     f"Solution trace:\n{solution_trace}\n\n"
+                    f"Executed trajectory JSON:\n{json.dumps(rendered_trajectory, sort_keys=True, separators=(',', ':'))}\n\n"
                     f"Final answer:\n{final_answer}\n\n"
                     f"Visible memory JSON:\n{render_visible_bot_memory(rendered_memory)}"
                 ),
@@ -91,6 +101,8 @@ def distill_thought_template(
     used_ids = validate_explicitly_used_memory_ids(
         result.explicitly_used_memory_ids, [entry.entry_id for entry in rendered_memory]
     )
+    if require_executed_programming and result.category == "programming-based" and not rendered_trajectory:
+        raise BoTToolContractError("BOT_UNEXECUTED_VALIDATION")
     return BoTTemplatePayload(
         description=result.description,
         template=result.template,

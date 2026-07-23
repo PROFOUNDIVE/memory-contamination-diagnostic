@@ -31,17 +31,30 @@ def render_bot_solve_prompt(
     task: TaskInstance,
     problem: DistilledProblem,
     retrieval_decision: BoTRetrievalDecision,
+    *,
+    tool_mode: Literal["text_only", "python_sandbox"] = "text_only",
 ) -> tuple[str, list[Any]]:
     prefix = (
         "Distilled problem JSON:\n"
         f"{json.dumps(problem.model_dump(), sort_keys=True, separators=(',', ':'))}\n\n"
         "Reasoning structure:\n"
     )
+    result_contract = (
+        "Return only strict unfenced JSON with exactly these non-empty string fields: "
+        "selected_structure, solution_trace, final_answer."
+        if tool_mode == "text_only"
+        else (
+            "Use the Python sandbox only when execution would validate the solution. Return exactly one "
+            'JSON action: {"action":"execute_python","code":"..."} or '
+            '{"action":"final","answer":"<strict BoT solve JSON>"}. '
+            "The final action answer must be strict unfenced JSON with exactly these non-empty string fields: "
+            "selected_structure, solution_trace, final_answer."
+        )
+    )
     suffix = (
         "\n\nTask input:\n"
         f"{canonical_task_json(task)}\n\n"
-        "Return only strict unfenced JSON with exactly these non-empty string fields: "
-        "selected_structure, solution_trace, final_answer."
+        + result_contract
     )
     entry = retrieval_decision.matched_entry
     if retrieval_decision.decision == "matched" and isinstance(entry, MemoryEntry):
@@ -63,6 +76,26 @@ def render_bot_solve_prompt(
         "prompt-based, procedure-based, or programming-based.\n\n"
     )
     return prefix + selection + structures + suffix, []
+
+
+def render_tool_augmented_bot_solve_messages(
+    task: TaskInstance,
+    problem: DistilledProblem,
+    retrieval_decision: BoTRetrievalDecision,
+) -> tuple[list[dict[str, str]], list[Any]]:
+    content, source_spans = render_bot_solve_prompt(
+        task, problem, retrieval_decision, tool_mode="python_sandbox"
+    )
+    return (
+        [
+            {
+                "role": "system",
+                "content": "Apply the thought structure. You may use the Python sandbox for validation.",
+            },
+            {"role": "user", "content": content},
+        ],
+        source_spans,
+    )
 
 
 def parse_bot_solve_result(

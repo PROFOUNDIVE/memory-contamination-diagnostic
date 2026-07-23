@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, dataclass
 from typing import Any, Callable, Literal
 
 from memcontam.baselines.bot_read import BoTRetrievalDecision, retrieve_top_template
-from memcontam.baselines.bot_solve import parse_bot_solve_result
+from memcontam.baselines.bot_solve import (
+    parse_bot_solve_result,
+    render_tool_augmented_bot_solve_messages,
+)
 from memcontam.baselines.bot_style import BotStylePolicy
 from memcontam.baselines.bot_write import (
     BoTTemplatePayload,
+    BoTToolContractError,
     build_template_entry,
     distill_thought_template,
     visible_memory_for_retrieval_decision,
@@ -32,6 +37,13 @@ from memcontam.memory.embeddings import EmbeddingProvider
 from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
 from memcontam.tasks.dispatch import canonical_task_json
+from memcontam.tools.base import (
+    ToolExecutionError,
+    ToolInfrastructureError,
+    ToolPolicyError,
+    ToolRuntimeContract,
+)
+from memcontam.tools.execution_loop import LlmCall, ToolProtocolError, run_tool_loop
 
 
 Verifier = Callable[[str], VerifierResult | bool]
@@ -71,10 +83,17 @@ class BotRuntime:
             raise ValueError("BoT runtime requires an explicit embedding_provider")
         recorder = MethodCallRecorder(client)
         memory_before = tuple(entry.model_dump() for entry in buffer_snapshot)
-        metadata: dict[str, Any] = {"bot_buffer_identity": asdict(identity)}
+        tool_mode = _tool_mode(call_config)
+        metadata: dict[str, Any] = {
+            "bot_buffer_identity": asdict(identity),
+            "tool_mode": tool_mode,
+            "tool_events": (),
+            "executed_trajectory": [],
+        }
+        text_call_config = _text_call_config(call_config)
 
         try:
-            distilled = self.policy.problem_distillation(task, recorder, model, call_config)
+            distilled = self.policy.problem_distillation(task, recorder, model, text_call_config)
         except ValueError:
             return _failure_outcome(
                 recorder, memory_before, metadata, "bot_invalid_problem_distillation", None
@@ -83,10 +102,33 @@ class BotRuntime:
         metadata["distilled_problem"] = distilled.model_dump()
         retrieval_decision = retrieve_top_template(distilled, buffer_snapshot, embedding_provider)
         metadata["retrieval_decision"] = _retrieval_decision_metadata(retrieval_decision)
-        raw_solve = self.policy.template_instantiation_solve(
-            task, distilled, recorder, model, call_config, retrieval_decision=retrieval_decision
-        )
-        answer_call_id = recorder.get_records()[-1].call_id
+        if tool_mode == "text_only":
+            raw_solve = self.policy.template_instantiation_solve(
+                task, distilled, recorder, model, text_call_config, retrieval_decision=retrieval_decision
+            )
+            answer_call_id = recorder.get_records()[-1].call_id
+        else:
+            try:
+                raw_solve, answer_call_id, tool_events, trajectory = _tool_augmented_solve(
+                    identity=identity,
+                    task=task,
+                    distilled_problem=distilled,
+                    retrieval_decision=retrieval_decision,
+                    recorder=recorder,
+                    model=model,
+                    config=call_config,
+                )
+            except (ToolExecutionError, ToolInfrastructureError, ToolPolicyError, ToolProtocolError) as error:
+                metadata["tool_error_code"] = error.code
+                return _failure_outcome(
+                    recorder,
+                    memory_before,
+                    metadata,
+                    "bot_invalid_solve_result",
+                    recorder.get_records()[-1].call_id if recorder.get_records() else None,
+                )
+            metadata["tool_events"] = tool_events
+            metadata["executed_trajectory"] = trajectory
         try:
             solve_result = parse_bot_solve_result(raw_solve, retrieval_decision)
         except ValueError:
@@ -115,6 +157,7 @@ class BotRuntime:
         visible_memory = visible_memory_for_retrieval_decision(retrieval_decision)
         visible_entry_ids = [entry.entry_id for entry in visible_memory]
         call_config["visible_memory_ids"] = visible_entry_ids
+        text_call_config["visible_memory_ids"] = visible_entry_ids
         try:
             payload = distill_thought_template(
                 canonical_task=canonical_task_json(task),
@@ -126,7 +169,20 @@ class BotRuntime:
                 visible_memory=visible_memory,
                 client=recorder,
                 model=model,
-                config=call_config,
+                config=text_call_config,
+                executed_trajectory=metadata["executed_trajectory"],
+                require_executed_programming=tool_mode == "python_sandbox",
+            )
+        except BoTToolContractError as error:
+            metadata["tool_contract_error"] = error.code
+            return invalid_distillation_failure_outcome(
+                recorder=recorder,
+                memory_before=memory_before,
+                metadata=metadata,
+                answer_call_id=answer_call_id,
+                final_response=solve_result.final_answer,
+                parsed_answer=parsed_answer,
+                retrieval_decision=retrieval_decision,
             )
         except ValueError:
             return invalid_distillation_failure_outcome(
@@ -348,6 +404,107 @@ def _verify(verifier: Verifier | None, parsed_answer: str) -> bool:
     if isinstance(result, bool):
         return result
     raise TypeError("BoT verifier must return VerifierResult or bool")
+
+
+def _tool_mode(config: dict[str, Any]) -> Literal["text_only", "python_sandbox"]:
+    tool_mode = config.get("tool_mode", "text_only")
+    if tool_mode not in {"text_only", "python_sandbox"}:
+        raise ValueError("unsupported BoT tool mode")
+    return tool_mode
+
+
+def _text_call_config(config: dict[str, Any]) -> dict[str, Any]:
+    forbidden_keys = {
+        "tool_executor",
+        "tool_runtime_contract",
+        "max_tool_rounds",
+        "_tool_event_writer",
+    }
+    return {key: value for key, value in config.items() if key not in forbidden_keys} | {
+        "tool_mode": "text_only"
+    }
+
+
+def _tool_augmented_solve(
+    *,
+    identity: BotBufferIdentity,
+    task: TaskInstance,
+    distilled_problem: Any,
+    retrieval_decision: BoTRetrievalDecision,
+    recorder: MethodCallRecorder,
+    model: str,
+    config: dict[str, Any],
+) -> tuple[str, str, tuple[Any, ...], list[dict[str, Any]]]:
+    executor = config.get("tool_executor")
+    policy = config.get("tool_runtime_contract")
+    if executor is None or policy is None:
+        raise ToolPolicyError("BOT_TOOL_CONTRACT_REQUIRED")
+    if not isinstance(policy, ToolRuntimeContract):
+        raise ToolPolicyError("BOT_TOOL_CONTRACT_REQUIRED")
+    messages, source_spans = render_tool_augmented_bot_solve_messages(
+        task, distilled_problem, retrieval_decision
+    )
+    solve_config = {
+        **config,
+        "sample_id": config.get("sample_id", task.sample_id),
+        "method_stage": "bot_instantiate_solve",
+        "_bot_retrieval_decision": retrieval_decision.decision,
+        "source_spans": source_spans,
+    }
+    response = recorder.chat(messages, model, solve_config)
+    initial_record = recorder.get_records()[-1]
+    if initial_record.call_id is None:
+        raise ToolProtocolError("MISSING_INITIAL_CALL")
+    tool_result = run_tool_loop(
+        LlmCall(
+            call_id=initial_record.call_id,
+            content=response.content,
+            messages=messages,
+            model=model,
+            config=solve_config,
+            run_id=identity.run_id,
+            trial_id=_trial_id(identity, task),
+            max_rounds=int(config.get("max_tool_rounds", 3)),
+        ),
+        recorder,
+        executor,
+        policy,
+        writer=config.get("_tool_event_writer"),
+    )
+    return (
+        tool_result.answer,
+        tool_result.answer_call_id,
+        tool_result.tool_events,
+        _executed_trajectory(recorder, tool_result.tool_events),
+    )
+
+
+def _executed_trajectory(
+    recorder: MethodCallRecorder, tool_events: tuple[Any, ...]
+) -> list[dict[str, Any]]:
+    calls = {call.call_id: call for call in recorder.get_records()}
+    trajectory: list[dict[str, Any]] = []
+    for event in tool_events:
+        parent = calls.get(event.parent_call_id)
+        if parent is None:
+            raise ToolProtocolError("MISSING_EXECUTED_CODE")
+        try:
+            action = json.loads(parent.raw_response or "")
+        except json.JSONDecodeError as error:
+            raise ToolProtocolError("MISSING_EXECUTED_CODE") from error
+        code = action.get("code") if action.get("action") == "execute_python" else None
+        if not isinstance(code, str):
+            raise ToolProtocolError("MISSING_EXECUTED_CODE")
+        trajectory.append(
+            {
+                "code": code,
+                "code_hash": event.code_hash,
+                "exit_code": event.exit_code,
+                "stderr": event.stderr,
+                "stdout": event.output,
+            }
+        )
+    return trajectory
 
 
 def _trial_id(identity: BotBufferIdentity, task: TaskInstance) -> str:
