@@ -23,8 +23,22 @@ from memcontam.experiment.phase12.contracts import (
     RunTemplateSpec,
 )
 from memcontam.experiment.phase12.planner import (
+    PlanningError,
     build_conditional_call_scope_registry,
     generate_candidate_route_registries,
+    validate_exploratory_activation,
+    validate_route_selection,
+)
+from memcontam.experiment.phase12.contracts import (
+    CodeMatrixPlan,
+    ExploratoryActivationManifest,
+    FidelityCertificate,
+    MftManifest,
+    PilotBManifest,
+    RouteFeasibilityReport,
+    RouteSelectionManifest,
+    SeedAllocationManifest,
+    SelectedPackageResourceManifest,
 )
 from memcontam.experiment.phase12.prefix_runner import (
     PrefixEventLedger,
@@ -51,6 +65,13 @@ from memcontam.logging.writer_v3 import Phase12RunWriter
 from memcontam.memory.admission import AdmissionContext
 from memcontam.memory.cards_v3 import MEMORY_CARD_V3, MemoryCardEnvelopeV3, canonical_content_hash
 from memcontam.memory.checkpoint_v3 import NativeState
+from memcontam.manifests.archive_validation import ArchiveValidationReport, validate_archive
+from memcontam.readiness.scientific_admission import (
+    AdmissionDenied,
+    CertificateBundle,
+    ScientificRunRequest,
+    evaluate_scientific_admission,
+)
 from memcontam.tasks.base import TaskInstance
 
 
@@ -97,6 +118,8 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
         run.add_argument("--run-family", default="readiness")
         run.add_argument("--scientific", action="store_true")
         run.add_argument("--scientific-result", choices=("true", "false"), default="false")
+        run.add_argument("--admission-bundle", type=Path)
+        run.add_argument("--admission-only", action="store_true")
 
     aggregate = commands.add_parser("aggregate")
     _add_replay_or_run_dir(aggregate)
@@ -112,11 +135,13 @@ def run(args: argparse.Namespace) -> None:
     elif args.phase12_command == "plan":
         print(json.dumps(_plan(args.config), sort_keys=True))
     elif args.phase12_command == "run-prefix":
-        _validate_run_request(args)
-        print(json.dumps(_run_prefix(args), sort_keys=True))
+        decision = _validate_run_request(args)
+        result = _admission_result(decision) if args.admission_only else _run_prefix(args)
+        print(json.dumps(result, sort_keys=True))
     elif args.phase12_command == "run-branch":
-        _validate_run_request(args)
-        print(json.dumps(_run_branch(args), sort_keys=True))
+        decision = _validate_run_request(args)
+        result = _admission_result(decision) if args.admission_only else _run_branch(args)
+        print(json.dumps(result, sort_keys=True))
     elif args.phase12_command == "aggregate":
         print(json.dumps(_aggregate(args), sort_keys=True))
     elif args.phase12_command == "validate-archive":
@@ -155,13 +180,129 @@ def _plan(path: Path) -> dict[str, Any]:
     }
 
 
-def _validate_run_request(args: argparse.Namespace) -> None:
-    if args.scientific or args.scientific_result == "true":
+def _validate_run_request(args: argparse.Namespace):
+    scientific_result = args.scientific or args.scientific_result == "true"
+    if args.replay and scientific_result:
         raise SystemExit("phase12 readiness gate not activated")
-    if args.mode != "text_only":
+    if args.mode != "text_only" and not args.admission_only:
         raise SystemExit(f"unsupported phase12 mode: {args.mode}")
     if args.candidate not in _CANDIDATES:
         raise SystemExit(f"unsupported phase12 candidate: {args.candidate}")
+    if not scientific_result and args.admission_bundle is not None:
+        raise SystemExit("ADMISSION_EVIDENCE_FORBIDDEN")
+    if not scientific_result and args.mode == "text_only":
+        return None
+    try:
+        request, certificates, archive, route, activation = _load_admission_evidence(
+            args, scientific_result
+        )
+        return evaluate_scientific_admission(request, certificates, archive, route, activation)
+    except AdmissionDenied as error:
+        raise SystemExit(error.code) from error
+
+
+def _admission_result(decision: Any) -> dict[str, Any]:
+    return {
+        "admitted": decision is not None,
+        "scientific_admission_ref": None if decision is None else decision.scientific_admission_ref,
+    }
+
+
+def _load_admission_evidence(
+    args: argparse.Namespace, scientific_result: bool
+) -> tuple[Any, CertificateBundle, ArchiveValidationReport, Any, Any]:
+    if args.admission_bundle is None:
+        if scientific_result:
+            raise SystemExit("SCIENTIFIC_ADMISSION_REQUIRED")
+        return (
+            ScientificRunRequest(args.run_family, args.candidate, args.mode, False, None, None),
+            CertificateBundle.empty(),
+            ArchiveValidationReport(True, 0),
+            None,
+            None,
+        )
+    try:
+        from memcontam.readiness.phase12_certificate import load_p12i
+
+        payload = json.loads(args.admission_bundle.read_text(encoding="utf-8"))
+        request = ScientificRunRequest(
+            args.run_family,
+            args.candidate,
+            args.mode,
+            scientific_result,
+            payload.get("trajectory_seed"),
+            payload.get("abstract_seed_slot"),
+            _manifest_id(payload, "route_selection_manifest"),
+            _manifest_id(payload, "seed_allocation_manifest"),
+            _manifest_id(payload, "exploratory_activation_manifest"),
+        )
+        certificates = CertificateBundle(
+            FidelityCertificate.model_validate(payload["bfv2_certificate"]),
+            load_p12i(payload["p12i_certificate"]),
+            payload["p12i_artifacts"],
+        )
+        archive_root = payload.get("archive_root")
+        archive = (
+            validate_archive(Path(archive_root))
+            if isinstance(archive_root, str) and archive_root
+            else ArchiveValidationReport(False, 0)
+        )
+        route = _validated_route(payload)
+        activation = _validated_activation(payload, route)
+        return request, certificates, archive, route, activation
+    except AdmissionDenied:
+        raise
+    except (KeyError, OSError, TypeError, ValueError) as error:
+        raise SystemExit("ADMISSION_EVIDENCE_INVALID") from error
+
+
+def _manifest_id(payload: dict[str, Any], key: str) -> str | None:
+    value = payload.get(key)
+    return value.get("manifest_id") if isinstance(value, dict) else None
+
+
+def _validated_route(payload: dict[str, Any]):
+    selection_payload = payload.get("route_selection_manifest")
+    allocation_payload = payload.get("seed_allocation_manifest")
+    if selection_payload is None or allocation_payload is None:
+        return None
+    try:
+        return validate_route_selection(
+            tuple(RouteFeasibilityReport.model_validate(item) for item in payload["feasibility_reports"]),
+            PilotBManifest.model_validate(payload["pilot_b_manifest"]),
+            MftManifest.model_validate(payload["mft_manifest"]),
+            RouteSelectionManifest.model_validate(selection_payload),
+            SeedAllocationManifest.model_validate(allocation_payload),
+        )
+    except PlanningError as error:
+        raise AdmissionDenied(error.code) from error
+
+
+def _validated_activation(payload: dict[str, Any], route: Any):
+    activation_payload = payload.get("exploratory_activation_manifest")
+    if activation_payload is None:
+        return None
+    if route is None:
+        return None
+    try:
+        plan = CodeMatrixPlan.model_validate(payload["exploratory_plan"])
+        resource_payload = payload.get("selected_package_resource_manifest")
+        if (
+            not isinstance(resource_payload, dict)
+            or resource_payload.get("mandatory_package_status") != "fully_resourced"
+        ):
+            raise AdmissionDenied("EXPLORATORY_RESOURCE_RESERVATION_NOT_PASS")
+        resource = SelectedPackageResourceManifest.model_validate(resource_payload)
+        activation = ExploratoryActivationManifest.model_validate(activation_payload)
+        if resource.mandatory_package_status != "fully_resourced":
+            raise AdmissionDenied("EXPLORATORY_RESOURCE_RESERVATION_NOT_PASS")
+        if plan.estimated_exploratory_calls > resource.exploratory_call_budget:
+            raise AdmissionDenied("EXPLORATORY_BUDGET_INSUFFICIENT")
+        if resource.exploratory_call_budget + resource.reproducibility_reserve > resource.remaining_call_capacity:
+            raise AdmissionDenied("REPRODUCIBILITY_RESERVE_INSUFFICIENT")
+        return validate_exploratory_activation(plan, resource, activation, route)
+    except PlanningError as error:
+        raise AdmissionDenied(error.code) from error
 
 
 def _run_prefix(args: argparse.Namespace) -> dict[str, Any]:
