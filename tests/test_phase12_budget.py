@@ -264,7 +264,7 @@ def test_rejects_invalid_config_runtime_and_governance_variants() -> None:
         variance_summary_hash="variance-hash",
         frozen_at="2026-07-23T00:00:00Z",
     )
-    with pytest.raises(PlanningError, match="ROUTE_SELECTION_INVALID"):
+    with pytest.raises(PlanningError, match="MFT_GATE_NOT_PASS"):
         validate_route_selection(
             (_report("3w", feasible=True), _report("5w", feasible=False)),
             pilot,

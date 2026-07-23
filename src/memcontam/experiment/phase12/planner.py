@@ -368,6 +368,12 @@ def validate_route_selection(
     selection: RouteSelectionManifest,
     allocation: SeedAllocationManifest,
 ) -> ValidatedRouteSelection:
+    if (
+        not mft.all_registered_cases_attempted
+        or mft.mft04_status != "pass"
+        or mft.route_gate_status != "pass"
+    ):
+        raise PlanningError("MFT_GATE_NOT_PASS")
     reports_by_id = {report.report_id: report for report in reports}
     if set(report.candidate_route for report in reports) != {"3w", "5w"}:
         raise PlanningError("ROUTE_REPORT_MISSING")
