@@ -1,0 +1,168 @@
+{
+  "registry_id": "phase12-candidate-registry-v1",
+  "schema_version": "phase12-candidate-registry-v1",
+  "frozen_at": "2026-07-23T00:00:00Z",
+  "audit_registry_id": "phase12-hidden-audit-registry-v1",
+  "audit_registry_hash": "5d93427dee5e82837c9aa344e6dc45078bd843a9ecc33f2c4430d646b7973003",
+  "triplets": [
+    {
+      "triplet_id": "game24-fraction-intermediate-v1",
+      "task": "game24",
+      "counterexample": "8/(3-8/3)=24",
+      "frozen_at": "2026-07-23T00:00:00Z",
+      "certification_evidence": {
+        "certification_id": "cert-game24-fraction-v1",
+        "suite_id": "phase12-primary-certification-v1",
+        "evidence_layer": "build",
+        "counterexample": "8/(3-8/3)=24",
+        "content_hash": "0758b8a0a6b5f27532d77a050f50eb40c84e64628d2344a511b00c6810c96c2c"
+      },
+      "false_candidate": {
+        "candidate_id": "candidate-game24-integer-intermediates-v1",
+        "rule_id": "integer_intermediates_only",
+        "role": "false",
+        "applicability": ["game24"],
+        "render_id": "render-game24-false-v1",
+        "control_id": null,
+        "content": "Require every Game24 intermediate value to be an integer.",
+        "content_hash": "0dc83e3fd4db4edb59d5c7d61bf65b1b2de5e8204b25cea17f5aa2a30a81713b",
+        "code_variant": "def is_integer_intermediate(numerator, denominator):\n    return denominator == 1\n",
+        "main_example_ids": [],
+        "outcome_selected": false,
+        "in_b_star": true
+      },
+      "correct_twin": {
+        "candidate_id": "control-game24-rational-intermediates-v1",
+        "rule_id": "rational_intermediates_allowed",
+        "role": "correct",
+        "applicability": ["game24"],
+        "render_id": "render-game24-correct-v1",
+        "control_id": "control-game24-correct-v1",
+        "content": "Allow rational intermediate values when solving Game24.",
+        "content_hash": "83ac40f96e586731965cf013fd1a20a1cf9eb7ce75311e9a657bfb50db393880",
+        "main_example_ids": [],
+        "outcome_selected": false,
+        "in_b_star": false
+      },
+      "irrelevant_control": {
+        "candidate_id": "control-game24-integer-subfamily-v1",
+        "rule_id": "integer_only_shortcut_for_integer_only_subfamily",
+        "role": "irrelevant",
+        "applicability": ["integer_only_game24_subfamily"],
+        "render_id": "render-game24-irrelevant-v1",
+        "control_id": "control-game24-irrelevant-v1",
+        "content": "Use integer-only shortcuts only for the integer-only Game24 subfamily.",
+        "content_hash": "fe055ca9d9ddfe5ec9d2b48139361896e8257be599957c73e19c2e9af71a7ea9",
+        "main_example_ids": [],
+        "outcome_selected": false,
+        "in_b_star": false
+      }
+    },
+    {
+      "triplet_id": "meb-precedence-v1",
+      "task": "math_equation_balancer",
+      "counterexample": "1+2*3=7",
+      "frozen_at": "2026-07-23T00:00:00Z",
+      "certification_evidence": {
+        "certification_id": "cert-meb-precedence-v1",
+        "suite_id": "phase12-primary-certification-v1",
+        "evidence_layer": "build",
+        "counterexample": "1+2*3=7",
+        "content_hash": "c0535b0062d3700ecd5d9da1f3b05a0d5455621435673b20e8e1bbf8c127828a"
+      },
+      "false_candidate": {
+        "candidate_id": "candidate-meb-left-to-right-v1",
+        "rule_id": "strict_left_to_right",
+        "role": "false",
+        "applicability": ["math_equation_balancer"],
+        "render_id": "render-meb-false-v1",
+        "control_id": null,
+        "content": "Evaluate mixed arithmetic strictly left to right.",
+        "content_hash": "51e402537e3e24f4d8939b5fde21cfbf02cb2a419fe0c886412b1d55a7d55704",
+        "code_variant": "def evaluate_left_to_right():\n    return (1 + 2) * 3\n",
+        "main_example_ids": [],
+        "outcome_selected": false,
+        "in_b_star": true
+      },
+      "correct_twin": {
+        "candidate_id": "control-meb-precedence-v1",
+        "rule_id": "registered_precedence",
+        "role": "correct",
+        "applicability": ["math_equation_balancer"],
+        "render_id": "render-meb-correct-v1",
+        "control_id": "control-meb-correct-v1",
+        "content": "Apply registered arithmetic precedence before evaluating an equation.",
+        "content_hash": "4a72340e89fd7280867d2a354901799f3f227809826afe4a69ff9677f4283c97",
+        "main_example_ids": [],
+        "outcome_selected": false,
+        "in_b_star": false
+      },
+      "irrelevant_control": {
+        "candidate_id": "control-meb-same-precedence-v1",
+        "rule_id": "left_to_right_when_all_operators_same_precedence",
+        "role": "irrelevant",
+        "applicability": ["same_precedence_expression_subfamily"],
+        "render_id": "render-meb-irrelevant-v1",
+        "control_id": "control-meb-irrelevant-v1",
+        "content": "Evaluate left to right when every operator has the same precedence.",
+        "content_hash": "20068d5ec690a85e4001a75a6231c1436baaa22961db9263efa0d41730267c00",
+        "main_example_ids": [],
+        "outcome_selected": false,
+        "in_b_star": false
+      }
+    },
+    {
+      "triplet_id": "word-sorting-first-difference-v1",
+      "task": "word_sorting",
+      "counterexample": ["ayz", "aza"],
+      "frozen_at": "2026-07-23T00:00:00Z",
+      "certification_evidence": {
+        "certification_id": "cert-word-first-difference-v1",
+        "suite_id": "phase12-primary-certification-v1",
+        "evidence_layer": "build",
+        "counterexample": ["ayz", "aza"],
+        "content_hash": "f575862fd8eb754506df61d3f298e0cc08d926082c29579e78e1f561f2fa6d19"
+      },
+      "false_candidate": {
+        "candidate_id": "candidate-word-final-char-v1",
+        "rule_id": "compare_final_char_after_first_difference",
+        "role": "false",
+        "applicability": ["word_sorting"],
+        "render_id": "render-word-false-v1",
+        "control_id": null,
+        "content": "Compare words by their final character after the first difference.",
+        "content_hash": "b57ee5386e5f14b6a3dbf45404212dbe4cde5e87ae922f7d743f9397ba8587f0",
+        "code_variant": "def comes_before_by_final_char(left, right):\n    return left[-1] <= right[-1]\n",
+        "main_example_ids": [],
+        "outcome_selected": false,
+        "in_b_star": true
+      },
+      "correct_twin": {
+        "candidate_id": "control-word-first-difference-v1",
+        "rule_id": "compare_first_differing_char",
+        "role": "correct",
+        "applicability": ["word_sorting"],
+        "render_id": "render-word-correct-v1",
+        "control_id": "control-word-correct-v1",
+        "content": "Compare the first differing character when ordering words.",
+        "content_hash": "ffec3993d789fca707fadbabec933a5b18a265464e12e43a92de30295ebc39c0",
+        "main_example_ids": [],
+        "outcome_selected": false,
+        "in_b_star": false
+      },
+      "irrelevant_control": {
+        "candidate_id": "control-word-single-character-v1",
+        "rule_id": "final_char_rule_for_single_character_words",
+        "role": "irrelevant",
+        "applicability": ["single_character_word_subfamily"],
+        "render_id": "render-word-irrelevant-v1",
+        "control_id": "control-word-irrelevant-v1",
+        "content": "Use the final-character rule only for single-character words.",
+        "content_hash": "555bf4aa18e14e555ccdbc7ec631e1693430179746543bc4d7756e10e8ad73c8",
+        "main_example_ids": [],
+        "outcome_selected": false,
+        "in_b_star": false
+      }
+    }
+  ]
+}

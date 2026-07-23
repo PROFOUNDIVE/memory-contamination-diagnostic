@@ -1,0 +1,28 @@
+{
+  "registry_id": "phase12-hidden-audit-registry-v1",
+  "schema_version": "phase12-hidden-audit-registry-v1",
+  "frozen_at": "2026-07-23T00:00:00Z",
+  "origins": [
+    {
+      "candidate_id": "candidate-game24-integer-intermediates-v1",
+      "origin_class": "protocol_injected",
+      "source_reference": "design-phase12-candidate-v1",
+      "independent_of_outcomes": true,
+      "content_hash": "f7e74cefa567024fffb889da1d063113085f8cfffb006ebdc829d34f2271b318"
+    },
+    {
+      "candidate_id": "candidate-meb-left-to-right-v1",
+      "origin_class": "protocol_injected",
+      "source_reference": "design-phase12-candidate-v1",
+      "independent_of_outcomes": true,
+      "content_hash": "63b52e77f98c2175e944987229eed1488c47e5e2161ba9bc3e717523ae774fc0"
+    },
+    {
+      "candidate_id": "candidate-word-final-char-v1",
+      "origin_class": "protocol_injected",
+      "source_reference": "design-phase12-candidate-v1",
+      "independent_of_outcomes": true,
+      "content_hash": "8f5af91bff86b31f0d4633375519bca69d05fa80cc360a5540fdc317d3f1e9de"
+    }
+  ]
+}
