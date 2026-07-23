@@ -245,6 +245,9 @@ class ReflexionAdapter:
                 visible_entries,
                 config,
             )
+            phase12_hook = config.get("_phase12_reflection_hook")
+            if callable(phase12_hook):
+                phase12_hook(entry, state, attempt_index, max_attempts)
             record_reflection_event(
                 reflection_events,
                 attempt_id=attempt_id,
