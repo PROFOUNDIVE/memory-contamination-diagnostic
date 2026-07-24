@@ -1,3 +1,4 @@
+# Python/local build state
 .venv/
 __pycache__/
 *.pyc
@@ -5,9 +6,13 @@ __pycache__/
 .ruff_cache/
 *.egg-info/
 .env
+
+# Local agent/session state. These must stay untracked; see tests/test_gitignore_contract.py.
 .sisyphus/
 .opencode/
 AGENTS.md
 opencode.json
+
+# Generated run artifacts; keep only the directory placeholder.
 runs/*
 !runs/.gitkeep
