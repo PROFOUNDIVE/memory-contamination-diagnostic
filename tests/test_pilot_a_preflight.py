@@ -238,3 +238,16 @@ def test_preflight_rejects_main_or_extension_evidence_layers(
 
     with pytest.raises(SystemExit, match="main_extension_data_forbidden"):
         _run_cli(monkeypatch, repo_root, config_path)
+
+
+def test_preflight_uses_the_checkout_dotenv_over_inherited_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo_root, _, config_path = _prepare_checkout(tmp_path)
+    monkeypatch.setenv("MEMCONTAM_ARTIFACT_ROOT", "/inherited/artifacts")
+    monkeypatch.setenv("MEMCONTAM_BGE_CACHE_DIR", "/inherited/cache")
+    monkeypatch.setenv("MEMCONTAM_THEORETICAL_ARTIFACT_ROOT", "/inherited/authority")
+
+    _run_cli(monkeypatch, repo_root, config_path)
+
+    assert json.loads(capsys.readouterr().out)["status"] == "pass"

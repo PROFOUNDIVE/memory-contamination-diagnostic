@@ -178,7 +178,7 @@ def _preflight_environment(repo_root: Path) -> dict[str, str]:
     if tracked.returncode != 1:
         raise PreflightError("git_commit_unavailable")
     values = _dotenv_values(env_path)
-    environment = {**values, **os.environ}
+    environment = {**os.environ, **values}
     if not environment.get("OPENAI_API_KEY"):
         raise PreflightError("missing_api_key")
     return environment
