@@ -4,6 +4,7 @@ import hashlib
 import importlib
 import importlib.util
 import json
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -74,17 +75,62 @@ def test_rejects_dc_style_pre_generation_ordering_in_other_baselines(tmp_path: P
     assert report["reason_code"] == "BASELINE_PRE_GENERATION_ORDERING_FAILED"
 
 
-def test_python_candidate_must_parse_terminate_and_fail_only_semantically(tmp_path: Path) -> None:
+def test_rejects_unresolved_context_event_reference(tmp_path: Path) -> None:
+    module, run_dir = _run_dir(tmp_path)
+    trials_path = run_dir / "trials.jsonl"
+    trials = [json.loads(line) for line in trials_path.read_text(encoding="utf-8").splitlines()]
+    trials[1]["context_event_id_or_none"] = "context:missing"
+    trials_path.write_text(
+        "".join(json.dumps(trial, sort_keys=True, separators=(",", ":")) + "\n" for trial in trials),
+        encoding="utf-8",
+    )
+    _rewrite_manifest(run_dir)
+
+    report = module.inspect_run(run_dir)
+
+    assert report["overall"] == "fail"
+    assert report["reason_code"] == "UNRESOLVED_REFERENCE"
+
+
+def test_python_candidate_validation_never_executes_archive_code(
+    tmp_path: Path, monkeypatch
+) -> None:
+    module, run_dir = _run_dir(tmp_path)
+    called = False
+
+    def unexpected_run(*_args, **_kwargs):
+        nonlocal called
+        called = True
+        return subprocess.CompletedProcess([], 0)
+
+    monkeypatch.setattr(subprocess, "run", unexpected_run)
+
+    report = module.inspect_run(run_dir)
+
+    assert report["overall"] == "pass"
+    assert called is False
+
+
+def test_python_candidate_must_have_static_parser_runtime_timeout_and_semantic_statuses(
+    tmp_path: Path,
+) -> None:
     module, run_dir = _run_dir(tmp_path)
     ledger_path = run_dir / "decision_ledger.jsonl"
     ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
 
-    for code, expected in (
-        ("def broken(", "PYTHON_CANDIDATE_PARSER_FAILURE"),
-        ("raise RuntimeError('broken')", "PYTHON_CANDIDATE_RUNTIME_FAILURE"),
-        ("while True: pass", "PYTHON_CANDIDATE_TIMEOUT"),
+    for field, value, expected in (
+        ("parser_status", "parser_failure", "PYTHON_CANDIDATE_PARSER_FAILURE"),
+        ("runtime_status", "runtime_failure", "PYTHON_CANDIDATE_RUNTIME_FAILURE"),
+        ("termination_status", "timeout", "PYTHON_CANDIDATE_TIMEOUT"),
+        ("semantic_result", "unknown", "PYTHON_CANDIDATE_SEMANTIC_STATUS_INVALID"),
     ):
-        ledger["python_candidate"]["code"] = code
+        ledger["python_candidate"].update(
+            parser_status="parsed",
+            runtime_status="not_executed",
+            termination_status="within_limit",
+            semantic_result="semantic_invalid",
+        )
+        ledger["python_candidate"][field] = value
         ledger_path.write_text(
             json.dumps(ledger, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8"
         )

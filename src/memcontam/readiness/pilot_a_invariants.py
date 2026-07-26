@@ -5,8 +5,6 @@ import hashlib
 import json
 import os
 import re
-import subprocess
-import sys
 from pathlib import Path
 from typing import Any, Callable
 
@@ -234,8 +232,12 @@ def _replay_files(config_path: Path, run_id: str) -> dict[str, Any]:
         "operations": {"cost_total": 0.0, "retry_total": 0},
         "python_candidate": {
             "code": "def is_integer_intermediate(numerator, denominator):\n    return denominator == 1\n",
+            "parser_status": "parsed",
+            "runtime_status": "not_executed",
             "semantic_result": "semantic_invalid",
+            "termination_status": "within_limit",
             "timeout_seconds": 0.1,
+            "validation_mode": "static_metadata",
         },
         "rag": {"branch_corpus_id": "corpus:clean", "branch_index_id": "index:clean"},
         "scientific_result": False,
@@ -504,6 +506,9 @@ def _validate_references(raw: dict[str, Any]) -> None:
         intervention = trial.get("intervention_event_id_or_none")
         if intervention is not None and intervention not in ids["intervention_events.jsonl"]:
             raise PilotAInvariantError("UNRESOLVED_REFERENCE")
+        context = trial.get("context_event_id_or_none")
+        if context is not None and context not in ids["context_events.jsonl"]:
+            raise PilotAInvariantError("UNRESOLVED_REFERENCE")
 
 
 def _run_invariants(data: dict[str, Any]) -> list[dict[str, str | None]]:
@@ -592,23 +597,19 @@ def _check_rag(data: dict[str, Any]) -> str | None:
 
 def _check_python_candidate(data: dict[str, Any]) -> str | None:
     candidate = data["ledger"]["python_candidate"]
-    code = candidate["code"]
+    code = candidate.get("code")
+    if not isinstance(code, str):
+        return "PYTHON_CANDIDATE_PARSER_FAILURE"
     try:
         ast.parse(code)
     except SyntaxError:
         return "PYTHON_CANDIDATE_PARSER_FAILURE"
-    try:
-        completed = subprocess.run(
-            [sys.executable, "-I", "-c", code],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=float(candidate["timeout_seconds"]),
-        )
-    except subprocess.TimeoutExpired:
-        return "PYTHON_CANDIDATE_TIMEOUT"
-    if completed.returncode != 0:
+    if candidate.get("validation_mode") != "static_metadata" or candidate.get("parser_status") != "parsed":
+        return "PYTHON_CANDIDATE_PARSER_FAILURE"
+    if candidate.get("runtime_status") != "not_executed":
         return "PYTHON_CANDIDATE_RUNTIME_FAILURE"
+    if candidate.get("termination_status") != "within_limit":
+        return "PYTHON_CANDIDATE_TIMEOUT"
     return None if candidate["semantic_result"] in {"semantic_invalid", "semantic_valid"} else "PYTHON_CANDIDATE_SEMANTIC_STATUS_INVALID"
 
 
