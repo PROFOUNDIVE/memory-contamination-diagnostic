@@ -130,6 +130,11 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
         run.add_argument("--admission-bundle", type=Path)
         run.add_argument("--admission-only", action="store_true")
 
+    replay = commands.add_parser("run-replay")
+    replay.add_argument("--config", type=Path, required=True)
+    replay.add_argument("--run-id", required=True)
+    replay.add_argument("--artifact-root", type=Path)
+
     aggregate = commands.add_parser("aggregate")
     _add_replay_or_run_dir(aggregate)
 
@@ -664,3 +669,13 @@ def _load_replay_fixture(root: Path, fixture_id: str) -> dict[str, Any]:
 
 def _jsonl(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+    archive.add_argument("--output", type=Path)
+    if (args.run_dir / "archive_seal.json").is_file():
+        from memcontam.readiness.pilot_a_invariants import validate_archive as validate_pilot_a_archive
+
+        report = validate_pilot_a_archive(args.run_dir)
+        _write_output(getattr(args, "output", None), report)
+        if report["overall"] != "pass":
+            raise SystemExit(report["reason_code"])
+        return report
+
