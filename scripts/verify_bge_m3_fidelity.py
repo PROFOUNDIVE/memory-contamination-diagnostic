@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import json
 import os
-import socket
 import sys
 import tempfile
-from contextlib import contextmanager, redirect_stdout
+from contextlib import redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Iterator
+from typing import Any
 
 from memcontam.clients import openai_compatible as openai_compatible_module
 from memcontam.clients.config import ProviderConfig
@@ -16,6 +15,13 @@ from memcontam.clients.openai_compatible import OpenAICompatibleClient
 from memcontam.clients.provider_profile import normalize_provider_profile, provider_profile_id
 from memcontam.cli import load_config, run_config
 from memcontam.memory.embeddings import BgeM3EmbeddingProvider
+from memcontam.readiness import (
+    RetrievalSmokeError,
+    deny_network,
+    resolve_bge_cache_path,
+    runtime_metadata,
+    validate_bge_provider,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -89,24 +95,7 @@ class _MockOpenAI:
         self.chat = SimpleNamespace(completions=_MockCompletions())
 
 
-@contextmanager
-def _network_denied() -> Iterator[None]:
-    original_connect = socket.socket.connect
-    original_create_connection = socket.create_connection
-
-    def deny(*_args: Any, **_kwargs: Any) -> None:
-        raise AssertionError("network access is forbidden during BGE-M3 fidelity verification")
-
-    socket.socket.connect = deny
-    socket.create_connection = deny
-    try:
-        yield
-    finally:
-        socket.socket.connect = original_connect
-        socket.create_connection = original_create_connection
-
-
-def _validate_run(run_dir: Path) -> dict[str, object]:
+def _validate_run(run_dir: Path, runtime: dict[str, object]) -> dict[str, object]:
     resolved = json.loads((run_dir / "resolved_config.json").read_text(encoding="utf-8"))
     profile = json.loads((run_dir / "provider_profile.json").read_text(encoding="utf-8"))
     trials = [
@@ -120,7 +109,14 @@ def _validate_run(run_dir: Path) -> dict[str, object]:
         if line
     ]
     provider_identity = f"{BgeM3EmbeddingProvider.MODEL_ID}@{BgeM3EmbeddingProvider.REVISION}"
-    if resolved["embedding"]["mode"] != "pinned_semantic":
+    if resolved["embedding"] != {
+        "mode": "pinned_semantic",
+        "model_id": BgeM3EmbeddingProvider.MODEL_ID,
+        "revision": BgeM3EmbeddingProvider.REVISION,
+        "vector_dimension": BgeM3EmbeddingProvider.VECTOR_DIMENSION,
+        "normalize_embeddings": True,
+        "cache_path": resolved["embedding"].get("cache_path"),
+    }:
         raise AssertionError("F1C did not use pinned_semantic embeddings")
     if profile["provider"] != "openai_compatible":
         raise AssertionError("F1C did not use the mocked live provider profile")
@@ -155,39 +151,77 @@ def _validate_run(run_dir: Path) -> dict[str, object]:
         "rag_retrieval_count": len(rag_trials[0]["retrieved_memory"]),
         "bot_nonempty_buffer": True,
         "calls": len(calls),
+        "runtime": runtime,
+        "reason_code": None,
     }
 
 
+def _blocked(reason_code: str, detail: str, runtime: dict[str, object]) -> int:
+    print(
+        json.dumps(
+            {
+                "overall": "blocked",
+                "blocker": reason_code,
+                "reason_code": reason_code,
+                "detail": detail,
+                "runtime": runtime,
+            },
+            sort_keys=True,
+        )
+    )
+    return 1
+
+
 def main() -> int:
+    runtime = runtime_metadata()
+    try:
+        cache_root = resolve_bge_cache_path()
+    except RetrievalSmokeError as error:
+        detail = (
+            f"{BgeM3EmbeddingProvider.MODEL_ID}@{BgeM3EmbeddingProvider.REVISION}: {error.code}"
+        )
+        return _blocked("missing_cached_bge_m3", detail, runtime)
     config = load_config(CONFIG_PATH)
+    config["embedding"]["cache_path"] = str(cache_root)
     config["logging"]["output_dir"] = tempfile.mkdtemp(prefix="f1c-bge-m3-")
     provider_config = ProviderConfig.from_run_config(config)
     os.environ.setdefault(provider_config.api_key_env or "OPENAI_API_KEY", "mocked-transport-only")
     original_openai = openai_compatible_module.OpenAI
+    original_provider_init = BgeM3EmbeddingProvider.__init__
+    providers: list[BgeM3EmbeddingProvider] = []
+
+    def capture_provider(self: BgeM3EmbeddingProvider, *args: Any, **kwargs: Any) -> None:
+        original_provider_init(self, *args, **kwargs)
+        providers.append(self)
+
     openai_compatible_module.OpenAI = _MockOpenAI
+    BgeM3EmbeddingProvider.__init__ = capture_provider
+    guard = None
     try:
         client = OpenAICompatibleClient(provider_config)
-        with _network_denied():
+        with deny_network() as guard:
             with redirect_stdout(sys.stderr):
                 run_dir = run_config(config, "f1c-bge-m3", _client_override=client)
+        if not providers:
+            raise AssertionError("F1C did not initialize a BGE-M3 provider")
+        runtime = validate_bge_provider(providers[0])
     except RuntimeError as exc:
+        if guard is not None and guard.attempted:
+            return _blocked("network_attempt", "network access is forbidden", runtime)
         message = str(exc)
         if BgeM3EmbeddingProvider.MODEL_ID in message and "from cache" in message:
-            print(
-                json.dumps(
-                    {
-                        "overall": "blocked",
-                        "blocker": "missing_cached_bge_m3",
-                        "detail": message,
-                    },
-                    sort_keys=True,
-                )
-            )
-            return 1
+            return _blocked("missing_cached_bge_m3", message, runtime)
         raise
+    except Exception as exc:
+        if guard is not None and guard.attempted:
+            return _blocked("network_attempt", "network access is forbidden", runtime)
+        return _blocked("f1c_validation_failed", str(exc), runtime)
     finally:
         openai_compatible_module.OpenAI = original_openai
-    print(json.dumps(_validate_run(run_dir), sort_keys=True))
+        BgeM3EmbeddingProvider.__init__ = original_provider_init
+    if guard is not None and guard.attempted:
+        return _blocked("network_attempt", "network access is forbidden", runtime)
+    print(json.dumps(_validate_run(run_dir, runtime), sort_keys=True))
     return 0
 
 

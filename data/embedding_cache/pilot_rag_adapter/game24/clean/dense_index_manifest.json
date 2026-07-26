@@ -1,0 +1,10 @@
+{
+  "corpus_hash": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "embedding_library_version": "fake",
+  "embedding_model_id": "fake-deterministic-embedding",
+  "embedding_revision": "local",
+  "index_format": "memcontam-dense-json-v1",
+  "manifest_hash": "sha256:072a12ae7c73c87c772858174c9d77b27a41f67fb7de896271d96dc6900b6f0f",
+  "normalize_embeddings": true,
+  "vector_dimension": 16
+}

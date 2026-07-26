@@ -37,9 +37,19 @@ class BgeM3EmbeddingProvider:
         sentence_transformer = _sentence_transformer_class()
         self.cache_folder = None if cache_folder is None else str(cache_folder)
         self.batch_size = batch_size
+        model_name_or_path = self.MODEL_ID
+        if cache_folder is not None:
+            snapshot = (
+                Path(cache_folder)
+                / f"models--{self.MODEL_ID.replace('/', '--')}"
+                / "snapshots"
+                / self.REVISION
+            )
+            if snapshot.is_dir():
+                model_name_or_path = str(snapshot)
         try:
             self.model = sentence_transformer(
-                model_name_or_path=self.MODEL_ID,
+                model_name_or_path=model_name_or_path,
                 revision=self.REVISION,
                 cache_folder=self.cache_folder,
                 local_files_only=local_files_only,
