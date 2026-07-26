@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import copy
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -366,6 +367,47 @@ def test_run_config_live_smoke_enabled_without_api_key_fails(tmp_path, monkeypat
 
     with pytest.raises(SystemExit, match="missing API key env var"):
         run_config(config, run_id="smoke_run")
+
+
+def test_run_config_live_smoke_executes_with_mocked_openai_transport(tmp_path, monkeypatch) -> None:
+    requests: list[dict[str, object]] = []
+
+    class FakeUsage:
+        def model_dump(self) -> dict[str, int]:
+            return {"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3}
+
+    class FakeResponse:
+        choices = [SimpleNamespace(message=SimpleNamespace(content="final: 6 / (1 - 3 / 4)"))]
+        usage = FakeUsage()
+
+        def model_dump(self) -> dict[str, object]:
+            return {"choices": [{"message": {"content": "final: 6 / (1 - 3 / 4)"}}]}
+
+    class FakeOpenAI:
+        def __init__(self, **_kwargs: object) -> None:
+            self.chat = SimpleNamespace(completions=self)
+
+        def create(self, **kwargs: object) -> FakeResponse:
+            requests.append(kwargs)
+            return FakeResponse()
+
+    monkeypatch.setattr("memcontam.clients.openai_compatible.OpenAI", FakeOpenAI)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    config = {
+        "run": {"name": "smoke"},
+        "models": ["openai_compatible"],
+        "tasks": [{"name": "game24", "sample_path": _write_game24_sample(tmp_path), "limit": 1}],
+        "baselines": ["no_memory"],
+        "arms": ["clean"],
+        "logging": {"output_dir": str(tmp_path / "runs")},
+        "live_smoke": {"enabled": True},
+    }
+
+    run_dir = run_config(config, run_id="smoke_run")
+
+    row = json.loads((run_dir / "trials.jsonl").read_text(encoding="utf-8"))
+    assert row["verifier_result"]["is_correct"] is True
+    assert requests[0]["model"] == "openai_compatible"
 
 
 def test_run_config_live_smoke_enabled_with_mocked_client_emits_trial_log(

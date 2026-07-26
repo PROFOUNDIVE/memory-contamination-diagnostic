@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from memcontam.clients.base import LLMClient
 from memcontam.clients.config import ProviderConfig
 from memcontam.clients.openai_compatible import OpenAICompatibleClient
@@ -28,14 +30,17 @@ def build_llm_client(
     execution_class: str,
     replay_responses: list[str] | None = None,
     allow_live_calls: bool = False,
+    legacy_live_smoke: bool = False,
 ) -> LLMClient:
     validate_provider_selection(config, stage=stage, execution_class=execution_class)
     if config.provider == "replay":
         return ReplayClient(replay_responses)
+    if not config.live_calls_enabled and not legacy_live_smoke:
+        raise LiveCallNotAuthorized("live calls require config.live_calls.enabled=true")
+    if not allow_live_calls and not legacy_live_smoke:
+        raise LiveCallNotAuthorized("live calls require --allow-live-calls")
+    if legacy_live_smoke:
+        config = replace(config, live_calls_enabled=True)
     if config.provider == "openai_responses":
-        if not config.live_calls_enabled:
-            raise LiveCallNotAuthorized("live calls require config.live_calls.enabled=true")
-        if not allow_live_calls:
-            raise LiveCallNotAuthorized("live calls require --allow-live-calls")
         return OpenAIResponsesClient(config, allow_live_calls=True)
-    return OpenAICompatibleClient(config)
+    return OpenAICompatibleClient(config, allow_live_calls=True)

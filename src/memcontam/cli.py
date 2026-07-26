@@ -2076,6 +2076,7 @@ def run_config(
     run_config = config["run"]
     replay_config = config.get("replay", {})
     replay_responses = replay_config.get("responses")
+    legacy_live_smoke = bool(config.get("live_smoke", {}).get("enabled", False))
     try:
         validate_provider_selection(
             provider_config,
@@ -2091,6 +2092,7 @@ def run_config(
                 execution_class=run_config["execution_class"],
                 replay_responses=replay_responses,
                 allow_live_calls=allow_live_calls,
+                legacy_live_smoke=legacy_live_smoke,
             )
         )
     except (RuntimeError, ValueError) as exc:

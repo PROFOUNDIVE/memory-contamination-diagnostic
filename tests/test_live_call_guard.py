@@ -39,6 +39,30 @@ def test_responses_factory_rejects_missing_caller_authorization_before_client_co
         )
 
 
+@pytest.mark.parametrize(
+    ("config", "allow_live_calls", "match"),
+    [
+        (ProviderConfig(provider="openai_compatible", live_calls_enabled=False), True, "live_calls.enabled"),
+        (ProviderConfig(provider="openai_compatible", live_calls_enabled=True), False, "allow-live-calls"),
+    ],
+)
+def test_compatible_factory_rejects_unapproved_live_dispatch_before_client_construction(
+    monkeypatch, config: ProviderConfig, allow_live_calls: bool, match: str
+) -> None:
+    def unexpected_client(*_args, **_kwargs):
+        raise AssertionError("live client should not be constructed")
+
+    monkeypatch.setattr("memcontam.clients.factory.OpenAICompatibleClient", unexpected_client)
+
+    with pytest.raises(LiveCallNotAuthorized, match=match):
+        build_llm_client(
+            config,
+            stage="pilot",
+            execution_class="live",
+            allow_live_calls=allow_live_calls,
+        )
+
+
 def test_replay_factory_behavior_is_unchanged_without_live_authorization() -> None:
     client = build_llm_client(
         ProviderConfig(provider="replay"),
