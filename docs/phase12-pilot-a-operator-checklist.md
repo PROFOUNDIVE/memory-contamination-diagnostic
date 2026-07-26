@@ -37,7 +37,7 @@ immediately:
 
 ```bash
 python -m memcontam.cli phase12 validate-archive \
-  --run-dir runs/runs/phase12-pilot-a-plumbing \
+  --run-dir "${MEMCONTAM_ARTIFACT_ROOT}/runs/phase12-pilot-a-plumbing" \
   --mode clean-plumbing \
   --output .sisyphus/evidence/pilot-a-unblock/t7-plumbing.json
 ```
