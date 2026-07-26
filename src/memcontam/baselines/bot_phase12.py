@@ -122,6 +122,18 @@ class BoTPhase12Adapter:
             verifier=trial.verifier,
         )
         prompt_decision, retrieval_event, context_event = _prompt_events(trial, outcome)
+        if outcome.status != "succeeded":
+            return BaselineStepResultV3(
+                outcome,
+                retrieval_event,
+                context_event,
+                prompt_decision,
+                NativeNoveltyDecision(False, None, None),
+                None,
+                None,
+                None,
+                "unavailable",
+            )
         novelty = _native_novelty(outcome)
         candidate = _candidate_entry(outcome, novelty)
         if candidate is None:

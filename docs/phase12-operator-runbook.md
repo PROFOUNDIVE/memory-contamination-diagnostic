@@ -199,7 +199,13 @@ causal use, or production contamination diagnosis.
 
 - `command:phase12 validate`
 - `command:phase12 plan`
+- `command:phase12 preflight`
 - `command:phase12 run-prefix`
 - `command:phase12 run-branch`
+- `command:phase12 run-replay`
 - `command:phase12 aggregate`
 - `command:phase12 validate-archive`
+- `command:phase12 retrieval-smoke`
+- `command:phase12 cost-preview`
+- `command:phase12 run-plumbing`
+- `command:phase12 pilot-a`

@@ -32,8 +32,12 @@ _EVIDENCE_PATH = Path(".sisyphus/evidence/pilot-a-unblock/t0-preflight.json")
 _REQUIRED_CONFIG_FIELDS = {
     "config_kind",
     "base_audit_commit",
+    "cost",
+    "decoding",
     "task_family",
+    "live_calls",
     "provider",
+    "retry",
     "tool_mode",
     "evidence_layers",
 }
@@ -114,6 +118,25 @@ def load_preflight_config(path: Path) -> PilotAPreflightConfig:
     if not isinstance(base_audit_commit, str) or not _COMMIT_RE.fullmatch(base_audit_commit):
         raise PreflightError("invalid_preflight_config")
     if payload.get("task_family") != "game24" or payload.get("tool_mode") != "text_only":
+        raise PreflightError("invalid_preflight_config")
+    if payload.get("decoding") != {
+        "temperature": 0.0,
+        "top_p": 1.0,
+        "max_output_tokens": 2048,
+        "requested_seed": 0,
+    } or payload.get("retry") != {
+        "retries_after_initial_attempt": 3,
+        "backoff_seconds": [1, 2, 4],
+    }:
+        raise PreflightError("invalid_preflight_config")
+    if payload.get("cost") != {
+        "currency": "USD",
+        "warning": 3.0,
+        "hard_ceiling": 5.0,
+        "input_per_1m_tokens": 2.5,
+        "cached_input_per_1m_tokens": 1.25,
+        "output_per_1m_tokens": 10.0,
+    } or payload.get("live_calls") != {"enabled": True}:
         raise PreflightError("invalid_preflight_config")
     evidence_layers = payload.get("evidence_layers")
     if not isinstance(evidence_layers, list) or set(evidence_layers) & {"main", "extension"}:

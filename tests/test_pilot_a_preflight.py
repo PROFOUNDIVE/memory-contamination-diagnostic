@@ -56,6 +56,22 @@ def _write_config(path: Path, base_audit_commit: str, *, model_id: str = "gpt-4o
                     "service_tier": "default",
                     "store": False,
                 },
+                "decoding": {
+                    "temperature": 0.0,
+                    "top_p": 1.0,
+                    "max_output_tokens": 2048,
+                    "requested_seed": 0,
+                },
+                "retry": {"retries_after_initial_attempt": 3, "backoff_seconds": [1, 2, 4]},
+                "cost": {
+                    "currency": "USD",
+                    "warning": 3.0,
+                    "hard_ceiling": 5.0,
+                    "input_per_1m_tokens": 2.5,
+                    "cached_input_per_1m_tokens": 1.25,
+                    "output_per_1m_tokens": 10.0,
+                },
+                "live_calls": {"enabled": True},
                 "tool_mode": "text_only",
                 "evidence_layers": ["build", "calibration"],
             }

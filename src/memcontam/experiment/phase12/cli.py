@@ -140,6 +140,31 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
 
     archive = commands.add_parser("validate-archive")
     _add_replay_or_run_dir(archive)
+    archive.add_argument("--mode", choices=("clean-plumbing",))
+    archive.add_argument("--output", type=Path)
+
+    retrieval_smoke = commands.add_parser("retrieval-smoke")
+    retrieval_smoke.add_argument("--config", type=Path, required=True)
+    retrieval_smoke.add_argument("--registry", type=Path, required=True)
+    retrieval_smoke.add_argument("--thresholds", required=True)
+    retrieval_smoke.add_argument("--primary-threshold", type=float, required=True)
+    retrieval_smoke.add_argument("--output", type=Path, required=True)
+
+    cost_preview = commands.add_parser("cost-preview")
+    cost_preview.add_argument("--config", type=Path, required=True)
+
+    plumbing = commands.add_parser("run-plumbing")
+    plumbing.add_argument("--config", type=Path, required=True)
+    plumbing.add_argument("--run-id", required=True)
+    plumbing.add_argument("--arm", required=True)
+    plumbing.add_argument("--instances", type=int, required=True)
+    plumbing.add_argument("--allow-live-calls", action="store_true")
+    plumbing.add_argument("--scientific-result", choices=("true", "false"), default="false")
+
+    pilot_a = commands.add_parser("pilot-a")
+    pilot_a.add_argument("--config", type=Path, required=True)
+    pilot_a.add_argument("--admission-only", action="store_true")
+    pilot_a.add_argument("--allow-live-calls", action="store_true")
 
 
 def run(args: argparse.Namespace) -> None:
@@ -158,10 +183,79 @@ def run(args: argparse.Namespace) -> None:
         decision = _validate_run_request(args)
         result = _admission_result(decision) if args.admission_only else _run_branch(args)
         print(json.dumps(result, sort_keys=True))
+    elif args.phase12_command == "run-replay":
+        from memcontam.readiness.pilot_a_invariants import PilotAInvariantError, run_replay
+
+        try:
+            run_dir = run_replay(args.config, args.run_id, artifact_root=args.artifact_root)
+        except PilotAInvariantError as error:
+            raise SystemExit(error.code) from error
+        print(
+            json.dumps(
+                {
+                    "live_provider_calls": 0,
+                    "run_dir": str(run_dir),
+                    "scientific_result": False,
+                },
+                sort_keys=True,
+            )
+        )
     elif args.phase12_command == "aggregate":
         print(json.dumps(_aggregate(args), sort_keys=True))
     elif args.phase12_command == "validate-archive":
         print(json.dumps(_validate_archive(args), sort_keys=True))
+    elif args.phase12_command == "retrieval-smoke":
+        from memcontam.readiness import run_retrieval_smoke
+
+        try:
+            thresholds = tuple(float(value) for value in args.thresholds.split(","))
+            result = run_retrieval_smoke(
+                config_path=args.config,
+                registry_path=args.registry,
+                thresholds=thresholds,
+                primary_threshold=args.primary_threshold,
+                output_path=args.output,
+            )
+        except ValueError as error:
+            raise SystemExit(str(error)) from error
+        print(json.dumps(result, sort_keys=True))
+    elif args.phase12_command == "cost-preview":
+        from memcontam.readiness.pilot_a_launch import PilotALaunchError, cost_preview
+
+        try:
+            print(json.dumps(cost_preview(args.config), sort_keys=True))
+        except PilotALaunchError as error:
+            raise SystemExit(error.code) from error
+    elif args.phase12_command == "run-plumbing":
+        from memcontam.readiness.pilot_a_launch import PilotALaunchError, run_plumbing
+
+        try:
+            result = run_plumbing(
+                args.config,
+                arm=args.arm,
+                instances=args.instances,
+                allow_live_calls=args.allow_live_calls,
+                scientific_result=args.scientific_result == "true",
+                run_id=args.run_id,
+            )
+        except PilotALaunchError as error:
+            raise SystemExit(error.code) from error
+        print(json.dumps(result, sort_keys=True))
+    elif args.phase12_command == "pilot-a":
+        from memcontam.readiness.pilot_a_launch import PilotALaunchError, evaluate_pilot_a_admission
+
+        try:
+            result = evaluate_pilot_a_admission(args.config)
+        except PilotALaunchError as error:
+            raise SystemExit(error.code) from error
+        if args.admission_only:
+            print(json.dumps(result, sort_keys=True))
+        elif not args.allow_live_calls:
+            raise SystemExit("LIVE_CALL_AUTHORIZATION_REQUIRED")
+        elif not result["admitted"]:
+            raise SystemExit(str(result["reason_code"]))
+        else:
+            raise SystemExit("SCIENTIFIC_PILOT_A_LAUNCH_NOT_IMPLEMENTED")
     else:
         raise SystemExit(f"unsupported phase12 command: {args.phase12_command}")
 
@@ -620,6 +714,15 @@ def _aggregate(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _validate_archive(args: argparse.Namespace) -> dict[str, Any]:
+    if getattr(args, "mode", None) == "clean-plumbing":
+        assert args.run_dir is not None
+        from memcontam.readiness.pilot_a_launch import validate_plumbing_archive
+
+        report = validate_plumbing_archive(args.run_dir)
+        _write_output(getattr(args, "output", None), report)
+        if report["overall"] != "pass":
+            raise SystemExit(str(report["reason_code"]))
+        return report
     if args.replay:
         fixture = _load_replay_fixture(args.fixture_root, args.replay)
         expected = fixture.get("expected", {})
@@ -628,6 +731,14 @@ def _validate_archive(args: argparse.Namespace) -> dict[str, Any]:
             "resolved_edges": expected.get("resolved_edges", 0),
         }
     assert args.run_dir is not None
+    if (args.run_dir / "archive_seal.json").is_file():
+        from memcontam.readiness.pilot_a_invariants import validate_archive as validate_pilot_a_archive
+
+        report = validate_pilot_a_archive(args.run_dir)
+        _write_output(getattr(args, "output", None), report)
+        if report["overall"] != "pass":
+            raise SystemExit(report["reason_code"])
+        return report
     manifest_path = args.run_dir / "public_artifact_manifest.json"
     if not manifest_path.exists():
         raise SystemExit(f"phase12 archive manifest not found: {manifest_path}")
@@ -647,7 +758,16 @@ def _validate_archive(args: argparse.Namespace) -> dict[str, Any]:
         for row in _jsonl(args.run_dir / filename):
             if filename != "calls.jsonl" and filename != "memory_events.jsonl":
                 parse_log_record_v3({key: value for key, value in row.items() if key != "trial_id"})
-    return {"archive_valid": True, "run_dir": str(args.run_dir)}
+    report = {"archive_valid": True, "run_dir": str(args.run_dir)}
+    _write_output(getattr(args, "output", None), report)
+    return report
+
+
+def _write_output(path: Path | None, payload: dict[str, Any]) -> None:
+    if path is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
 
 
 def _load_replay_fixture(root: Path, fixture_id: str) -> dict[str, Any]:
@@ -669,13 +789,3 @@ def _load_replay_fixture(root: Path, fixture_id: str) -> dict[str, Any]:
 
 def _jsonl(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
-    archive.add_argument("--output", type=Path)
-    if (args.run_dir / "archive_seal.json").is_file():
-        from memcontam.readiness.pilot_a_invariants import validate_archive as validate_pilot_a_archive
-
-        report = validate_pilot_a_archive(args.run_dir)
-        _write_output(getattr(args, "output", None), report)
-        if report["overall"] != "pass":
-            raise SystemExit(report["reason_code"])
-        return report
-
