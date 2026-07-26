@@ -11,11 +11,13 @@ from memcontam.clients.config import ProviderConfig
 
 @dataclass(frozen=True)
 class ProviderProfile:
-    provider: Literal["replay", "openai_compatible"]
+    provider: Literal["replay", "openai_compatible", "openai_responses"]
     normalized_base_url: str | None
     api_key_env: str | None
     timeout_seconds: int | None
     max_retries: int | None
+    service_tier: str
+    store: bool
     served_models: tuple[str, ...]
     model_snapshots: Mapping[str, str]
 
@@ -26,6 +28,8 @@ class ProviderProfile:
             "api_key_env": self.api_key_env,
             "timeout_seconds": self.timeout_seconds,
             "max_retries": self.max_retries,
+            "service_tier": self.service_tier,
+            "store": self.store,
             "served_models": list(self.served_models),
             "model_snapshots": dict(self.model_snapshots),
         }
@@ -56,6 +60,8 @@ def normalize_provider_profile(
         api_key_env=config.api_key_env,
         timeout_seconds=config.timeout_seconds,
         max_retries=config.max_retries,
+        service_tier=config.service_tier,
+        store=config.store,
         served_models=tuple(sorted(served_models)),
         model_snapshots={model: model_snapshots[model] for model in sorted(model_snapshots)},
     )

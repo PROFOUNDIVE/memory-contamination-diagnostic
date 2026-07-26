@@ -2058,7 +2058,11 @@ def _run_faithful_config(
 
 
 def run_config(
-    config: dict[str, Any], run_id: str, _client_override: LLMClient | None = None
+    config: dict[str, Any],
+    run_id: str,
+    _client_override: LLMClient | None = None,
+    *,
+    allow_live_calls: bool = False,
 ) -> Path:
     _validate_run_id(run_id)
     _validate_run_config(config)
@@ -2086,6 +2090,7 @@ def run_config(
                 stage=run_config["stage"],
                 execution_class=run_config["execution_class"],
                 replay_responses=replay_responses,
+                allow_live_calls=allow_live_calls,
             )
         )
     except (RuntimeError, ValueError) as exc:
@@ -2145,6 +2150,7 @@ def main() -> None:
     run = sub.add_parser("run")
     run.add_argument("config", type=Path)
     run.add_argument("--run-id", required=True)
+    run.add_argument("--allow-live-calls", action="store_true")
 
     aggregate = sub.add_parser("aggregate")
     aggregate.add_argument("run_dir", type=Path)
@@ -2161,7 +2167,7 @@ def main() -> None:
 
         run_phase12(args)
     elif args.command == "run":
-        run_config(load_config(args.config), args.run_id)
+        run_config(load_config(args.config), args.run_id, allow_live_calls=args.allow_live_calls)
     elif args.command == "aggregate":
         if not args.run_dir.exists():
             raise SystemExit(f"run dir not found: {args.run_dir}")

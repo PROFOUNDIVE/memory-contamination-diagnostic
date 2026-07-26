@@ -1,1 +1,1 @@
-"""Package module."""
+"""Client implementations."""
