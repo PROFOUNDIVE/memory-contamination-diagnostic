@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -55,7 +56,9 @@ def test_f1c_mocked_live_dispatch_joins_provider_profile_and_resolved_config(mon
     monkeypatch.setattr(openai, "OpenAI", _OpenAITransport)
     monkeypatch.setattr(openai_compatible_module, "OpenAI", _OpenAITransport)
     monkeypatch.setenv("F1C_MOCKED_LIVE_API_KEY", "mocked-transport-only")
-    client = OpenAICompatibleClient(provider_config)
+    client = OpenAICompatibleClient(
+        replace(provider_config, live_calls_enabled=True), allow_live_calls=True
+    )
     response = client.chat(
         [{"role": "user", "content": "solve"}], config["models"][0], {"max_tokens": 32}
     )

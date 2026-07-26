@@ -5,6 +5,7 @@ import os
 import sys
 import tempfile
 from contextlib import redirect_stdout
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -198,7 +199,9 @@ def main() -> int:
     BgeM3EmbeddingProvider.__init__ = capture_provider
     guard = None
     try:
-        client = OpenAICompatibleClient(provider_config)
+        client = OpenAICompatibleClient(
+            replace(provider_config, live_calls_enabled=True), allow_live_calls=True
+        )
         with deny_network() as guard:
             with redirect_stdout(sys.stderr):
                 run_dir = run_config(config, "f1c-bge-m3", _client_override=client)

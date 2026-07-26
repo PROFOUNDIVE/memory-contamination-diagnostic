@@ -8,10 +8,11 @@ from openai import OpenAI
 
 from memcontam.clients.base import LLMResponse
 from memcontam.clients.config import ProviderConfig
+from memcontam.clients.openai_responses import LiveCallNotAuthorized
 
 
 class OpenAICompatibleClient:
-    def __init__(self, config: ProviderConfig):
+    def __init__(self, config: ProviderConfig, *, allow_live_calls: bool = False):
         if config.provider != "openai_compatible":
             raise ValueError("OpenAICompatibleClient requires provider=openai_compatible")
         api_key_env = config.api_key_env or "OPENAI_API_KEY"
@@ -23,9 +24,12 @@ class OpenAICompatibleClient:
             options["timeout"] = config.timeout_seconds
         if config.max_retries is not None:
             options["max_retries"] = config.max_retries
+        self._config = config
+        self._allow_live_calls = allow_live_calls
         self.client = OpenAI(**options)
 
     def chat(self, messages: list[dict[str, str]], model: str, config: dict) -> LLMResponse:
+        self._assert_live_call_authorized()
         start = time.perf_counter()
         response = self.client.chat.completions.create(
             model=model,
@@ -43,3 +47,9 @@ class OpenAICompatibleClient:
             token_usage={k: int(v) for k, v in usage.items() if isinstance(v, int)},
             latency_ms=latency_ms,
         )
+
+    def _assert_live_call_authorized(self) -> None:
+        if not self._config.live_calls_enabled:
+            raise LiveCallNotAuthorized("live calls require config.live_calls.enabled=true")
+        if not self._allow_live_calls:
+            raise LiveCallNotAuthorized("live calls require --allow-live-calls")

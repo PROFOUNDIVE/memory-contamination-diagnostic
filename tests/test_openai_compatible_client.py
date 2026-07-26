@@ -10,6 +10,7 @@ import pytest
 from memcontam.clients import openai_compatible as openai_compatible_module
 from memcontam.clients.config import ProviderConfig
 from memcontam.clients.openai_compatible import OpenAICompatibleClient
+from memcontam.clients.openai_responses import LiveCallNotAuthorized
 from memcontam.clients.base import LLMResponse
 from memcontam.clients.recording import MethodCallRecorder
 from memcontam.cli import load_config, run_config
@@ -63,7 +64,9 @@ def test_openai_compatible_client_mocked_chat(monkeypatch) -> None:
             api_key_env="OPENAI_API_KEY",
             timeout_seconds=30,
             max_retries=2,
-        )
+            live_calls_enabled=True,
+        ),
+        allow_live_calls=True,
     )
     response = client.chat([{"role": "user", "content": "solve"}], model="gpt-4o", config={})
 
@@ -81,6 +84,17 @@ def test_openai_compatible_client_missing_api_key_raises_runtime_error(monkeypat
         OpenAICompatibleClient(
             ProviderConfig(provider="openai_compatible", api_key_env="OPENAI_API_KEY")
         )
+
+
+def test_openai_compatible_client_rejects_unapproved_chat_before_transport(monkeypatch) -> None:
+    monkeypatch.setattr(openai_compatible_module, "OpenAI", _FakeOpenAI)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    client = OpenAICompatibleClient(
+        ProviderConfig(provider="openai_compatible", live_calls_enabled=False)
+    )
+
+    with pytest.raises(LiveCallNotAuthorized, match="live_calls.enabled"):
+        client.chat([{"role": "user", "content": "solve"}], model="gpt-4o", config={})
 
 
 def test_openai_compatible_client_uses_custom_api_key_env(monkeypatch) -> None:
@@ -143,7 +157,9 @@ def test_recorder_does_not_persist_secrets_or_raw_payload(monkeypatch) -> None:
             provider="openai_compatible",
             base_url="https://example.invalid/v1",
             api_key_env="OPENAI_API_KEY",
-        )
+            live_calls_enabled=True,
+        ),
+        allow_live_calls=True,
     )
     events = []
     recorder = MethodCallRecorder(
