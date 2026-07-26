@@ -113,6 +113,9 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
     plan = commands.add_parser("plan")
     plan.add_argument("--config", type=Path, required=True)
 
+    preflight = commands.add_parser("preflight")
+    preflight.add_argument("--config", type=Path, required=True)
+
     for name in ("run-prefix", "run-branch"):
         run = commands.add_parser(name)
         run.add_argument("--replay")
@@ -140,6 +143,8 @@ def run(args: argparse.Namespace) -> None:
         print(f"valid phase12 config: {args.config}")
     elif args.phase12_command == "plan":
         print(json.dumps(_plan(args.config), sort_keys=True))
+    elif args.phase12_command == "preflight":
+        print(json.dumps(_preflight(args.config), sort_keys=True))
     elif args.phase12_command == "run-prefix":
         decision = _validate_run_request(args)
         result = _admission_result(decision) if args.admission_only else _run_prefix(args)
@@ -187,6 +192,15 @@ def _plan(path: Path) -> dict[str, Any]:
         "registry_ids": [registry.registry_id for registry in registries],
         "scientific_result": False,
     }
+
+
+def _preflight(path: Path) -> dict[str, str]:
+    from memcontam.readiness.pilot_a_preflight import PreflightError, run_preflight
+
+    try:
+        return run_preflight(path)
+    except PreflightError as error:
+        raise SystemExit(error.code) from error
 
 
 def _validate_run_request(args: argparse.Namespace):

@@ -1,0 +1,12 @@
+config_kind: phase12_pilot_a_preflight_v1
+base_audit_commit: 0f769bb84dbbbeb552d3ee01c56c4a2ca5d9c453
+task_family: game24
+provider:
+  provider: openai
+  endpoint: responses
+  model_family: gpt-4o
+  model_id: gpt-4o-2024-11-20
+  service_tier: default
+  store: false
+tool_mode: text_only
+evidence_layers: [build, calibration]
