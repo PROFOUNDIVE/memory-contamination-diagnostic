@@ -26,6 +26,8 @@ from memcontam.verifiers.game24 import verify_expression
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "configs" / "phase12" / "pilot_a_game24_minimal.yaml"
+CHECKLIST = ROOT / "docs" / "phase12-pilot-a-operator-checklist.md"
+LEGACY_PLUMBING_ARCHIVE = ROOT / "runs" / "runs" / "phase12-pilot-a-plumbing-r2"
 
 
 def _module():
@@ -40,6 +42,16 @@ def _run_cli(monkeypatch: pytest.MonkeyPatch, *args: str) -> None:
 def _write_evidence(root: Path, name: str, payload: dict[str, object]) -> None:
     root.mkdir(parents=True, exist_ok=True)
     (root / name).write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _rewrite_archive_manifest(run_dir: Path) -> None:
+    manifest_path = run_dir / "public_artifact_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    for filename, record in manifest["artifacts"].items():
+        path = run_dir / filename
+        record["count"] = len(path.read_text(encoding="utf-8").splitlines()) if filename.endswith(".jsonl") else 1
+        record["sha256"] = __import__("hashlib").sha256(path.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
 
 
 def _passing_evidence(root: Path) -> None:
@@ -199,6 +211,13 @@ def test_cost_preview_is_safe_for_the_frozen_plumbing_plan_and_fails_above_ceili
         )
 
 
+def test_operator_checklist_uses_the_artifact_root_run_path() -> None:
+    checklist = CHECKLIST.read_text(encoding="utf-8")
+
+    assert '"${MEMCONTAM_ARTIFACT_ROOT}/runs/phase12-pilot-a-plumbing"' in checklist
+    assert "runs/runs/phase12-pilot-a-plumbing" not in checklist
+
+
 @pytest.mark.parametrize(
     ("arm", "instances", "allow_live_calls", "scientific_result", "code"),
     [
@@ -296,6 +315,123 @@ def test_mocked_clean_plumbing_accepts_a_prefix_of_bot_calls_after_parse_failure
     )
 
     assert report["overall"] == "pass"
+
+
+@pytest.mark.parametrize(
+    ("mutation", "reason_code"),
+    [
+        ("trial_calls", "TRIAL_CALL_REFERENCE_FAILED"),
+        ("call_trial", "CALL_TRIAL_REFERENCE_FAILED"),
+        ("answer_call", "ANSWER_CALL_REFERENCE_FAILED"),
+        ("retrieval_trial", "EVENT_TRIAL_REFERENCE_FAILED"),
+        ("context_trial", "EVENT_TRIAL_REFERENCE_FAILED"),
+        ("live_provider_calls", "OPERATIONS_RECONCILIATION_FAILED"),
+        ("retry_total", "OPERATIONS_RECONCILIATION_FAILED"),
+        ("cost_total", "OPERATIONS_RECONCILIATION_FAILED"),
+    ],
+)
+def test_plumbing_archive_reconciles_references_and_operation_totals(
+    tmp_path: Path, mutation: str, reason_code: str
+) -> None:
+    module = _module()
+    module.run_plumbing(
+        CONFIG,
+        arm="Clean",
+        instances=1,
+        allow_live_calls=True,
+        scientific_result=False,
+        run_id="plumbing-reconcile",
+        artifact_root=tmp_path,
+        evidence_root=tmp_path / "evidence",
+        client_factory=_Client,
+        context_factory=_runtime_context,
+    )
+    run_dir = tmp_path / "runs" / "plumbing-reconcile"
+    paths = {
+        "trials": run_dir / "trials.jsonl",
+        "calls": run_dir / "calls.jsonl",
+        "retrieval": run_dir / "retrieval_events.jsonl",
+        "context": run_dir / "context_events.jsonl",
+        "ledger": run_dir / "decision_ledger.json",
+    }
+    if mutation in {"trial_calls", "answer_call"}:
+        trials = [json.loads(line) for line in paths["trials"].read_text(encoding="utf-8").splitlines()]
+        trials[0]["calls" if mutation == "trial_calls" else "answer_call_id"] = "missing:call"
+        paths["trials"].write_text(
+            "".join(json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n" for row in trials),
+            encoding="utf-8",
+        )
+    elif mutation == "call_trial":
+        calls = [json.loads(line) for line in paths["calls"].read_text(encoding="utf-8").splitlines()]
+        calls[0]["trial_id"] = "missing:trial"
+        paths["calls"].write_text(
+            "".join(json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n" for row in calls),
+            encoding="utf-8",
+        )
+    elif mutation in {"retrieval_trial", "context_trial"}:
+        path = paths["retrieval" if mutation == "retrieval_trial" else "context"]
+        rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+        rows[0]["trial_id"] = "missing:trial"
+        path.write_text(
+            "".join(json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n" for row in rows),
+            encoding="utf-8",
+        )
+    else:
+        ledger = json.loads(paths["ledger"].read_text(encoding="utf-8"))
+        ledger[mutation] = 1.0 if mutation == "cost_total" else 999
+        paths["ledger"].write_text(json.dumps(ledger, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+    _rewrite_archive_manifest(run_dir)
+
+    report = module.validate_plumbing_archive(run_dir)
+
+    assert report["overall"] == "fail"
+    assert report["reason_code"] == reason_code
+
+
+@pytest.mark.parametrize(
+    ("answer_call_id", "expected_overall", "expected_reason_code"),
+    [
+        ("unknown:call:2", "pass", None),
+        ("unknown:call:4", "fail", "ANSWER_CALL_REFERENCE_FAILED"),
+    ],
+)
+def test_plumbing_archive_resolves_legacy_answer_calls_only_when_declared_for_same_trial(
+    tmp_path: Path, answer_call_id: str, expected_overall: str, expected_reason_code: str | None
+) -> None:
+    module = _module()
+    module.run_plumbing(
+        CONFIG,
+        arm="Clean",
+        instances=1,
+        allow_live_calls=True,
+        scientific_result=False,
+        run_id="plumbing-legacy-answer-call",
+        artifact_root=tmp_path,
+        evidence_root=tmp_path / "evidence",
+        client_factory=_Client,
+        context_factory=_runtime_context,
+    )
+    run_dir = tmp_path / "runs" / "plumbing-legacy-answer-call"
+    trials_path = run_dir / "trials.jsonl"
+    trials = [json.loads(line) for line in trials_path.read_text(encoding="utf-8").splitlines()]
+    trials[3]["answer_call_id"] = answer_call_id
+    trials_path.write_text(
+        "".join(json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n" for row in trials),
+        encoding="utf-8",
+    )
+    _rewrite_archive_manifest(run_dir)
+
+    report = module.validate_plumbing_archive(run_dir)
+
+    assert report["overall"] == expected_overall
+    assert report["reason_code"] == expected_reason_code
+
+
+def test_preserved_legacy_plumbing_archive_validates_without_provider_access() -> None:
+    report = _module().validate_plumbing_archive(LEGACY_PLUMBING_ARCHIVE)
+
+    assert report["overall"] == "pass"
+    assert report["unresolved_references"] == 0
 
 
 def test_clean_plumbing_archive_cli_mode_writes_a_canonical_report(

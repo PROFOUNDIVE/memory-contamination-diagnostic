@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import subprocess
@@ -167,6 +168,14 @@ def validate_plumbing_archive(run_dir: Path) -> dict[str, object]:
         return _failed_archive(run_dir, "BASELINE_PANEL_MISMATCH")
     if any(row.get("arm") != "Clean" or row.get("scientific_result") is not False for row in trials if isinstance(row, dict)):
         return _failed_archive(run_dir, "PLUMBING_SCOPE_VIOLATION")
+    reference_failure = _validate_plumbing_references(
+        trials,
+        calls,
+        payloads["retrieval_events.jsonl"],
+        payloads["context_events.jsonl"],
+    )
+    if reference_failure is not None:
+        return _failed_archive(run_dir, reference_failure)
     stages = {
         baseline: [row.get("stage") for row in calls if isinstance(row, dict) and row.get("baseline") == baseline]
         for baseline in PLUMBING_BASELINES
@@ -181,6 +190,8 @@ def validate_plumbing_archive(run_dir: Path) -> dict[str, object]:
     if len(rag_calls) != 1 or not rag_calls[0].get("source_span_ids"):
         return _failed_archive(run_dir, "ANSWER_SOURCE_SPAN_JOIN_FAILED")
     if ledger.get("cost_total", 5.0) >= 5.0 or ledger.get("scientific_result") is not False:
+        return _failed_archive(run_dir, "OPERATIONS_RECONCILIATION_FAILED")
+    if not _operations_reconcile(ledger, calls):
         return _failed_archive(run_dir, "OPERATIONS_RECONCILIATION_FAILED")
     provider_profile = payloads["provider_profile.json"]
     if not isinstance(provider_profile, dict):
@@ -204,6 +215,108 @@ def validate_plumbing_archive(run_dir: Path) -> dict[str, object]:
         "secret_findings": 0,
         "unresolved_references": 0,
     }
+
+
+def _validate_plumbing_references(
+    trials: list[object], calls: list[object], retrieval_events: object, context_events: object
+) -> str | None:
+    if not all(isinstance(row, dict) for row in trials):
+        return "ARCHIVE_JSON_INVALID"
+    trial_rows = [cast(dict[str, object], row) for row in trials]
+    trial_ids = [row.get("trial_id") for row in trial_rows]
+    if any(not isinstance(trial_id, str) for trial_id in trial_ids) or len(set(trial_ids)) != len(trial_ids):
+        return "TRIAL_CALL_REFERENCE_FAILED"
+    if not all(isinstance(row, dict) for row in calls):
+        return "ARCHIVE_JSON_INVALID"
+    calls_by_trial: dict[str, list[str]] = {trial_id: [] for trial_id in trial_ids if isinstance(trial_id, str)}
+    call_ids: set[str] = set()
+    for row in calls:
+        call = cast(dict[str, object], row)
+        call_id = call.get("call_id")
+        trial_id = call.get("trial_id")
+        if not isinstance(call_id, str) or call_id in call_ids or not isinstance(trial_id, str) or trial_id not in calls_by_trial:
+            return "CALL_TRIAL_REFERENCE_FAILED"
+        call_ids.add(call_id)
+        calls_by_trial[trial_id].append(call_id)
+    for trial in trial_rows:
+        trial_id = cast(str, trial["trial_id"])
+        declared_calls = trial.get("calls")
+        answer_call_id = trial.get("answer_call_id")
+        if (
+            not isinstance(declared_calls, list)
+            or any(not isinstance(call_id, str) for call_id in declared_calls)
+            or len(set(declared_calls)) != len(declared_calls)
+            or set(declared_calls) != set(calls_by_trial[trial_id])
+        ):
+            return "TRIAL_CALL_REFERENCE_FAILED"
+        if (
+            not isinstance(answer_call_id, str)
+            or _resolve_answer_call_id(answer_call_id, trial.get("baseline"), declared_calls) is None
+        ):
+            return "ANSWER_CALL_REFERENCE_FAILED"
+    for events in (retrieval_events, context_events):
+        if not isinstance(events, list) or any(
+            not isinstance(event, dict)
+            or not _event_trial_id_resolves(event.get("trial_id"), calls_by_trial)
+            for event in events
+        ):
+            return "EVENT_TRIAL_REFERENCE_FAILED"
+    return None
+
+
+def _resolve_answer_call_id(
+    answer_call_id: str, baseline: object, declared_calls: list[str]
+) -> str | None:
+    if answer_call_id in declared_calls:
+        return answer_call_id
+    match = re.fullmatch(r".+:call:(\d+)", answer_call_id)
+    if not isinstance(baseline, str) or match is None:
+        return None
+    normalized_call_id = f"{baseline}:{match.group(1)}"
+    return normalized_call_id if normalized_call_id in declared_calls else None
+
+
+def _event_trial_id_resolves(event_trial_id: object, calls_by_trial: dict[str, list[str]]) -> bool:
+    if isinstance(event_trial_id, str) and event_trial_id in calls_by_trial:
+        return True
+    prefixes = {trial_id.rpartition(":")[0] for trial_id in calls_by_trial}
+    return (
+        isinstance(event_trial_id, str)
+        and len(prefixes) == 1
+        and event_trial_id == f"{prefixes.pop()}:build-1"
+    )
+
+
+def _operations_reconcile(ledger: dict[str, object], calls: list[object]) -> bool:
+    if not all(isinstance(call, dict) for call in calls):
+        return False
+    call_rows = [cast(dict[str, object], call) for call in calls]
+    retry_counts = [call.get("retry_count") for call in call_rows]
+    if (
+        any(type(retry_count) is not int or retry_count < 0 for retry_count in retry_counts)
+        or type(ledger.get("live_provider_calls")) is not int
+        or type(ledger.get("retry_total")) is not int
+        or type(ledger.get("cost_total")) not in {int, float}
+    ):
+        return False
+    counts_and_retries_match = (
+        ledger["live_provider_calls"] == len(call_rows)
+        and ledger["retry_total"] == sum(cast(int, retry_count) for retry_count in retry_counts)
+    )
+    cost_presence = ["cost_usd" in call for call in call_rows]
+    if not any(cost_presence):
+        return counts_and_retries_match and float(cast(float, ledger["cost_total"])) >= 0
+    costs = [call.get("cost_usd") for call in call_rows]
+    return (
+        all(cost_presence)
+        and all(type(cost) in {int, float} and float(cast(float, cost)) >= 0 for cost in costs)
+        and counts_and_retries_match
+        and math.isclose(
+            float(cast(float, ledger["cost_total"])),
+            sum(float(cast(float, cost)) for cost in costs),
+            abs_tol=1e-12,
+        )
+    )
 
 
 def evaluate_pilot_a_admission(
@@ -425,6 +538,8 @@ def _write_plumbing_archive(
         result = results[baseline]
         outcome = result.outcome
         calls_for_trial = []
+        trial_id = f"{run_dir.name}:{baseline}"
+        call_id_map: dict[str, str] = {}
         for index, call in enumerate(outcome.method_calls, start=1):
             source_ids = [
                 span.entry_id
@@ -432,45 +547,46 @@ def _write_plumbing_archive(
                 if getattr(span, "entry_id", None) is not None
             ]
             call_id = f"{baseline}:{index}"
+            call_id_map[str(call.call_id)] = call_id
             calls.append(
                 {
                     "baseline": baseline,
                     "call_id": call_id,
+                    "cost_usd": _call_cost(call.token_usage, provider),
                     "latency_ms": call.latency_ms,
                     "retry_count": call.retry_count,
                     "source_span_ids": source_ids,
                     "stage": call.stage,
                     "token_usage": dict(call.token_usage),
-                    "trial_id": f"{run_dir.name}:{baseline}",
+                    "trial_id": trial_id,
                 }
             )
             calls_for_trial.append(call_id)
         trials.append(
             {
-                "answer_call_id": outcome.answer_call_id,
+                "answer_call_id": call_id_map.get(str(outcome.answer_call_id)),
                 "arm": "Clean",
                 "baseline": baseline,
                 "calls": calls_for_trial,
                 "metadata": _jsonable(outcome.metadata),
                 "scientific_result": False,
                 "status": outcome.status,
-                "trial_id": f"{run_dir.name}:{baseline}",
+                "trial_id": trial_id,
             }
         )
         if result.retrieval_event is not None:
-            retrieval.append(_jsonable(result.retrieval_event))
+            retrieval.append(_plumbing_event(result.retrieval_event, trial_id, "retrieval"))
         if result.context_event is not None:
-            contexts.append(_jsonable(result.context_event))
+            contexts.append(_plumbing_event(result.context_event, trial_id, "context"))
         if outcome.status != "succeeded":
             failures.append(
                 {
                     "baseline": baseline,
                         "failure_class": outcome.failure_disposition,
-                    "trial_id": f"{run_dir.name}:{baseline}",
+                    "trial_id": trial_id,
                 }
             )
-    cost_guard = getattr(client, "cost_guard", None)
-    cost_total = float(getattr(cost_guard, "spent_usd", 0.0))
+    cost_total = sum(float(cast(float, call["cost_usd"])) for call in calls)
     retry_total = sum(
         int(retry_count)
         for call in calls
@@ -528,6 +644,31 @@ def _write_plumbing_archive(
             "status": "completed",
         },
     )
+
+
+def _call_cost(token_usage: dict[str, int], provider: ProviderConfig) -> float:
+    prompt_tokens = token_usage.get("prompt_tokens", 0)
+    cached_tokens = token_usage.get("cached_prompt_tokens", 0)
+    completion_tokens = token_usage.get("completion_tokens", 0)
+    if (
+        any(type(value) is not int or value < 0 for value in (prompt_tokens, cached_tokens, completion_tokens))
+        or cached_tokens > prompt_tokens
+    ):
+        raise PilotALaunchError("COST_ACCOUNTING_INVALID")
+    return (
+        (prompt_tokens - cached_tokens) * provider.input_per_million_usd
+        + cached_tokens * provider.cached_input_per_million_usd
+        + completion_tokens * provider.output_per_million_usd
+    ) / 1_000_000
+
+
+def _plumbing_event(event: object, trial_id: str, kind: str) -> dict[str, object]:
+    payload = _jsonable(event)
+    event_id = f"{trial_id}:{kind}"
+    payload["event_id"] = event_id
+    payload["trial_id"] = trial_id
+    payload[f"{kind}_id"] = event_id
+    return payload
 
 
 def _artifact_root() -> Path:
