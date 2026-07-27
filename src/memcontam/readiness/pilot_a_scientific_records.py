@@ -42,10 +42,35 @@ def record_prefix(rows, seed, contexts, prefix, provider) -> None:  # noqa: ANN0
             _event(
                 trial_id,
                 "eligibility",
+                baseline=baseline,
+                baseline_family=decision.baseline_family,
+                checkpoint_id=decision.checkpoint_id,
+                checkpoint_index=decision.checkpoint_index,
+                condition_id=decision.condition_id,
                 eligible=decision.eligible,
+                horizon=decision.horizon,
                 reason_codes=list(decision.reason_codes),
+                seed=seed,
             )
         )
+    joint = prefix.selection.joint_eligibility
+    rows["seed_status"].append(
+        {
+            "seed": seed,
+            "eligible": not prefix.selection.blocked,
+            "status": "blocked" if prefix.selection.blocked else "selected",
+            "reason": prefix.selection.block_reason,
+            "selected_checkpoint": prefix.selection.selected_trial_index,
+            "fallback_checkpoint_used": False,
+            "joint_eligible_indices": list(joint.joint_eligible_indices),
+            "primary_intersection": list(joint.primary_intersection),
+            "baseline_eligible": joint.baseline_eligible,
+            "ineligibility_reasons": {
+                baseline: list(reasons) for baseline, reasons in joint.ineligibility_reasons.items()
+            },
+            "not_estimable": joint.not_estimable,
+        }
+    )
 
 
 def record_suffix(rows, seed, memory_runs, nomem_trials, branches, provider) -> None:  # noqa: ANN001
@@ -77,13 +102,19 @@ def record_suffix(rows, seed, memory_runs, nomem_trials, branches, provider) -> 
                 )
         filtered = branches[baseline].arms["filter"]
         filter_trial = next(item for item in run.trials if item.arm == "filter")
+        decision = next(
+            item
+            for item in filtered.filter_state.decisions
+            if item.entry_id == filtered.injected_root_id
+        )
         rows["admission_events"].append(
             _event(
                 _trial_id(seed, filter_trial),
                 "admission",
                 entry_id=filtered.injected_root_id,
-                decision="quarantine",
-                policy_version="operational-evidence-filter-v3",
+                decision=decision.state,
+                reason=decision.reason,
+                policy_version="operational-evidence-filter-v4",
             )
         )
         rows["audit_labels"].append(
@@ -98,7 +129,7 @@ def record_suffix(rows, seed, memory_runs, nomem_trials, branches, provider) -> 
         _record_suffix_trial(rows, seed, trial, provider)
 
 
-def artifacts(config_path, config, run_id, provider, rows, parent_run_id=None):  # noqa: ANN001
+def artifacts(config_path, config, run_id, provider, rows, parent_run_id=None, run_status="completed", status_reason=None):  # noqa: ANN001
     seeds = [int(item["seed"]) for item in config["trajectory_seeds"]]
     eligible = [item["seed"] for item in rows["seed_status"] if item["eligible"]]
     cost_total = sum(call["cost_usd"] for call in rows["calls"])
@@ -110,8 +141,9 @@ def artifacts(config_path, config, run_id, provider, rows, parent_run_id=None): 
             "parent_run_id": parent_run_id,
             "run_family": "pilot_a",
             "run_id": run_id,
+            "status": run_status,
+            **({"status_reason": status_reason} if status_reason is not None else {}),
             "scientific_result": True,
-            "status": "completed",
         },
         "resolved_config.json": {
             "config": config,
@@ -131,6 +163,19 @@ def artifacts(config_path, config, run_id, provider, rows, parent_run_id=None): 
             "retry_total": retry_total,
             "scientific_result": True,
             "trajectory_seeds": seeds,
+            "prefix": {
+                "completed_trials": sum(
+                    trial["trial_kind"] == "branch_free_prefix" for trial in rows["trials"]
+                )
+            },
+            "eligibility": rows["eligibility_events"],
+            "joint": rows["seed_status"],
+            "failure": rows["failures"],
+            "provenance": {
+                "implementation_commit": _git_head(),
+                "parent_run_id": parent_run_id,
+                "run_id": run_id,
+            },
         },
         "trials.jsonl": rows["trials"],
         "calls.jsonl": rows["calls"],
@@ -142,8 +187,21 @@ def artifacts(config_path, config, run_id, provider, rows, parent_run_id=None): 
         "intervention_events.jsonl": rows["intervention_events"],
         "checkpoint_events.jsonl": rows["checkpoint_events"],
         "eligibility_events.jsonl": rows["eligibility_events"],
+        "seed_status.jsonl": rows["seed_status"],
         "audit/audit_labels.jsonl": rows["audit_labels"],
     }
+
+
+def record_terminal_failure(rows, error: BaseException, status: str, reason: str) -> None:  # noqa: ANN001
+    rows["failures"].append(
+        {
+            "error_type": type(error).__name__,
+            "failure_class": reason,
+            "failure_kind": "runner",
+            "provenance": "scientific_pilot_a_runner",
+            "status": status,
+        }
+    )
 
 
 def _record_suffix_trial(rows, seed: int, trial: LiveSuffixTrial, provider: ProviderConfig) -> None:  # noqa: ANN001
@@ -272,4 +330,4 @@ def _git_head() -> str:
     ).stdout.strip()
 
 
-__all__ = ["ROW_NAMES", "artifacts", "record_prefix", "record_suffix"]
+__all__ = ["ROW_NAMES", "artifacts", "record_prefix", "record_suffix", "record_terminal_failure"]

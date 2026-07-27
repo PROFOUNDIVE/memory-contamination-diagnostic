@@ -14,7 +14,7 @@ from memcontam.baselines.reflexion_phase12 import ReflexionStateV3
 from memcontam.baselines.retrieval_rag_phase12 import RagFrozenStateV3
 from memcontam.clients.base import LLMResponse
 from memcontam.clients.base import LLMClient
-from memcontam.clients.cost_guard import CostGuard
+from memcontam.clients.cost_guard import CostGuard, CostLimitExceeded
 from memcontam.experiment.phase12.game24_runner import (
     Game24RuntimeContext,
     RuntimeIdentities,
@@ -74,6 +74,43 @@ def _passing_evidence(root: Path) -> None:
             "scientific_result": False,
         },
     )
+
+
+def _partial_scientific_rows(row_names: tuple[str, ...]) -> dict[str, list[dict[str, object]]]:
+    rows: dict[str, list[dict[str, object]]] = {name: [] for name in row_names}
+    trial_id = "seed:0:branch_free_prefix:fh_bounded:clean:game24-pilot-1"
+    rows["trials"].append({"trial_id": trial_id, "trial_kind": "branch_free_prefix"})
+    rows["calls"].append(
+        {"trial_id": trial_id, "call_id": f"{trial_id}:call:1", "cost_usd": 0.01, "retry_count": 1}
+    )
+    rows["retrieval_events"].append({"trial_id": trial_id})
+    rows["context_events"].append({"trial_id": trial_id})
+    rows["eligibility_events"].append(
+        {
+            "trial_id": trial_id,
+            "seed": 0,
+            "condition_id": "fh_bounded-clean",
+            "baseline": "fh_bounded",
+            "baseline_family": "full_history",
+            "checkpoint_id": "pilot-a-t1",
+            "checkpoint_index": 1,
+            "horizon": 1,
+            "eligible": False,
+            "reason_codes": ["TEST_ONLY_BLOCK"],
+        }
+    )
+    rows["seed_status"].append(
+        {
+            "seed": 0,
+            "eligible": False,
+            "status": "blocked",
+            "reason": "joint_checkpoint_blocked",
+            "selected_checkpoint": None,
+            "fallback_checkpoint_used": False,
+            "joint_eligible_indices": [],
+        }
+    )
+    return rows
 
 
 class _Client:
@@ -685,16 +722,73 @@ def test_mocked_scientific_pilot_a_executes_two_seed_live_archive(tmp_path: Path
     assert all(call["latency_ms"] == 0 for call in calls)
     assert run["parent_run_id"] == "pilot-a-attempt-1"
     assert module.validate_scientific_pilot_a_archive(run_dir)["overall"] == "pass"
+    ledger = json.loads((run_dir / "decision_ledger.json").read_text(encoding="utf-8"))
+    assert ledger["prefix"]["completed_trials"] == sum(
+        row["trial_kind"] == "branch_free_prefix" for row in trials
+    )
+    assert ledger["eligibility"]
+    assert ledger["joint"]
+    assert {
+        "baseline",
+        "baseline_family",
+        "checkpoint_id",
+        "checkpoint_index",
+        "condition_id",
+        "eligible",
+        "horizon",
+        "reason_codes",
+        "seed",
+    } <= set(ledger["eligibility"][0])
+    assert {
+        "baseline_eligible",
+        "fallback_checkpoint_used",
+        "joint_eligible_indices",
+        "not_estimable",
+        "primary_intersection",
+        "selected_checkpoint",
+    } <= set(ledger["joint"][0])
+    assert all(row["fallback_checkpoint_used"] is False for row in ledger["joint"])
+
+
+def test_scientific_pilot_a_writes_sidecars_before_constructing_the_provider_client(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    module = importlib.import_module("memcontam.readiness.pilot_a_scientific")
+    run_dir = tmp_path / "runs" / "pilot-a-sidecars-first"
+    rows = _partial_scientific_rows(module.ROW_NAMES)
+
+    def client_factory() -> _Client:
+        assert all(
+            (run_dir / filename).is_file()
+            for filename in (
+                "run.json",
+                "resolved_config.json",
+                "provider_profile.json",
+                "decision_ledger.json",
+            )
+        )
+        return _Client()
+
+    monkeypatch.setattr(module, "_run_seeds", lambda *_args, **_kwargs: rows)
+
+    report = module.run_scientific_pilot_a(
+        SCIENTIFIC_CONFIG,
+        allow_live_calls=True,
+        artifact_root=tmp_path,
+        client_factory=client_factory,
+        run_id="pilot-a-sidecars-first",
+    )
+
+    assert report["overall"] == "pass"
 
 
 def test_scientific_pilot_a_stops_when_joint_checkpoint_eligibility_is_empty(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     module = importlib.import_module("memcontam.readiness.pilot_a_scientific")
-    rows: dict[str, list[dict[str, object]]] = {name: [] for name in module.ROW_NAMES}
+    rows = _partial_scientific_rows(module.ROW_NAMES)
     rows["seed_status"] = [
-        {"seed": 0, "eligible": False},
-        {"seed": 1, "eligible": False},
+        {"seed": 0, "eligible": False, "fallback_checkpoint_used": False}
     ]
     monkeypatch.setattr(module, "_run_seeds", lambda *_args, **_kwargs: rows)
 
@@ -707,7 +801,99 @@ def test_scientific_pilot_a_stops_when_joint_checkpoint_eligibility_is_empty(
             run_id="pilot-a-empty-eligibility",
         )
 
-    assert not (tmp_path / "runs" / "pilot-a-empty-eligibility" / "run.json").exists()
+    run_dir = tmp_path / "runs" / "pilot-a-empty-eligibility"
+    run = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    assert run["status"] == "invalidated"
+    assert run["status_reason"] == "joint_checkpoint_eligibility_empty"
+    assert module.validate_scientific_pilot_a_archive(run_dir)["overall"] == "pass"
+
+
+@pytest.mark.parametrize(
+    ("error", "status", "reason"),
+    [
+        (RuntimeError("provider unavailable"), "interrupted", "provider_failure"),
+        (CostLimitExceeded("cost ceiling reached"), "blocked", "cost_limit_exceeded"),
+        (KeyboardInterrupt(), "interrupted", "interrupted"),
+    ],
+)
+def test_scientific_pilot_a_seals_partial_archive_before_propagating_terminal_stop(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    error: BaseException,
+    status: str,
+    reason: str,
+) -> None:
+    module = importlib.import_module("memcontam.readiness.pilot_a_scientific")
+    run_id = f"pilot-a-{reason}"
+
+    def stop_after_progress(*_args, **kwargs) -> None:  # noqa: ANN001
+        rows = kwargs["rows"]
+        rows.update(_partial_scientific_rows(module.ROW_NAMES))
+        raise error
+
+    monkeypatch.setattr(module, "_run_seeds", stop_after_progress)
+
+    with pytest.raises(type(error)):
+        module.run_scientific_pilot_a(
+            SCIENTIFIC_CONFIG,
+            allow_live_calls=True,
+            artifact_root=tmp_path,
+            client_factory=_Client,
+            run_id=run_id,
+        )
+
+    run_dir = tmp_path / "runs" / run_id
+    run = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    ledger = json.loads((run_dir / "decision_ledger.json").read_text(encoding="utf-8"))
+    failures = [json.loads(line) for line in (run_dir / "failures.jsonl").read_text().splitlines()]
+    assert run["status"] == status
+    assert run["status_reason"] == reason
+    assert run["scientific_result"] is True
+    assert ledger["live_provider_calls"] == 1
+    assert ledger["cost_total"] == 0.01
+    assert ledger["retry_total"] == 1
+    assert ledger["prefix"]["completed_trials"] == 1
+    assert ledger["eligibility"]
+    assert ledger["joint"][0]["fallback_checkpoint_used"] is False
+    assert failures[-1]["provenance"] == "scientific_pilot_a_runner"
+    assert (run_dir / "seed_status.jsonl").is_file()
+    assert (run_dir / "public_artifact_manifest.json").is_file()
+    assert (run_dir / "archive_seal.json").is_file()
+    assert module.validate_scientific_pilot_a_archive(run_dir)["overall"] == "pass"
+
+
+def test_scientific_pilot_a_allows_non_completed_terminal_status_when_no_seed_is_eligible(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    module = importlib.import_module("memcontam.readiness.pilot_a_scientific")
+    rows = _partial_scientific_rows(module.ROW_NAMES)
+    rows["seed_status"].append(
+        {
+            "seed": 1,
+            "eligible": False,
+            "status": "blocked",
+            "reason": "blocked by test",
+            "selected_checkpoint": None,
+            "fallback_checkpoint_used": False,
+            "joint_eligible_indices": [],
+        }
+    )
+    monkeypatch.setattr(module, "_run_seeds", lambda *_args, **_kwargs: rows)
+
+    report = module.run_scientific_pilot_a(
+        SCIENTIFIC_CONFIG,
+        allow_live_calls=True,
+        artifact_root=tmp_path,
+        client_factory=_Client,
+        run_id="pilot-a-empty-eligibility",
+    )
+
+    run = json.loads((tmp_path / "runs" / "pilot-a-empty-eligibility" / "run.json").read_text())
+
+    assert report["overall"] == "pass"
+    assert run["status"] == "blocked"
+    assert run["status_reason"] == "all_joint_checkpoint_blocked"
+    assert module.validate_scientific_pilot_a_archive(tmp_path / "runs" / "pilot-a-empty-eligibility")["overall"] == "pass"
 
 
 def test_blocked_handoff_records_real_hashes_without_faking_plumbing(tmp_path: Path) -> None:

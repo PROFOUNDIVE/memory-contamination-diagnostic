@@ -18,6 +18,7 @@ STREAMS = (
     "intervention_events.jsonl",
     "checkpoint_events.jsonl",
     "eligibility_events.jsonl",
+    "seed_status.jsonl",
     "audit/audit_labels.jsonl",
 )
 SIDECARS = (
@@ -29,6 +30,7 @@ SIDECARS = (
 _SECRET_PATTERN = re.compile(
     r"(?i)(api[_-]?key|authorization|bearer\s|sk-[a-z0-9]{8,}|password|secret)"
 )
+_SCIENTIFIC_MANIFEST_STATUSES = frozenset({"completed", "blocked", "invalidated", "interrupted"})
 
 
 class ScientificArchiveError(ValueError):
@@ -46,8 +48,9 @@ def write_scientific_archive(run_dir: Path, artifacts: dict[str, Any]) -> None:
         _write_jsonl(run_dir / filename, artifacts[filename])
     for filename in SIDECARS:
         _write_json(run_dir / filename, artifacts[filename])
+    run_status = artifacts["run.json"].get("status") if isinstance(artifacts["run.json"], dict) else None
     manifest = {
-        "status": "completed",
+        "status": run_status if run_status in _SCIENTIFIC_MANIFEST_STATUSES else "completed",
         "artifacts": {
             filename: {
                 "count": _count(run_dir / filename),
@@ -68,7 +71,7 @@ def validate_scientific_archive(run_dir: Path) -> dict[str, Any]:
     if any(not (run_dir / filename).is_file() for filename in required):
         return _failure(run_dir, "REQUIRED_ARTIFACT_MISSING")
     manifest = _read_json(run_dir / "public_artifact_manifest.json")
-    if not isinstance(manifest, dict) or manifest.get("status") != "completed":
+    if not isinstance(manifest, dict) or manifest.get("status") not in _SCIENTIFIC_MANIFEST_STATUSES:
         return _failure(run_dir, "ARCHIVE_MANIFEST_INVALID")
     records = manifest.get("artifacts")
     if not isinstance(records, dict) or set(records) != {*SIDECARS, *STREAMS}:
@@ -94,6 +97,7 @@ def validate_scientific_archive(run_dir: Path) -> dict[str, Any]:
     ledger = payload["decision_ledger.json"]
     trials = payload["trials.jsonl"]
     calls = payload["calls.jsonl"]
+    seed_status = payload["seed_status.jsonl"]
     if not all(
         isinstance(value, expected)
         for value, expected in (
@@ -102,6 +106,7 @@ def validate_scientific_archive(run_dir: Path) -> dict[str, Any]:
             (ledger, dict),
             (trials, list),
             (calls, list),
+            (seed_status, list),
         )
     ):
         return _failure(run_dir, "ARCHIVE_JSON_INVALID")
@@ -112,6 +117,8 @@ def validate_scientific_archive(run_dir: Path) -> dict[str, Any]:
         or provider.get("provider") != "openai_responses"
     ):
         return _failure(run_dir, "SCIENTIFIC_SCOPE_INVALID")
+    if run.get("status") != "completed" and not isinstance(run.get("status_reason"), str):
+        return _failure(run_dir, "TERMINAL_STATUS_REASON_MISSING")
     trial_ids = {row.get("trial_id") for row in trials if isinstance(row, dict)}
     if None in trial_ids or len(trial_ids) != len(trials):
         return _failure(run_dir, "TRIAL_REFERENCE_INVALID")
@@ -133,6 +140,26 @@ def validate_scientific_archive(run_dir: Path) -> dict[str, Any]:
         or abs(cost_total - float(ledger.get("cost_total", -1.0))) > 1e-12
     ):
         return _failure(run_dir, "OPERATIONS_RECONCILIATION_FAILED")
+    prefix_trials = sum(
+        isinstance(row, dict) and row.get("trial_kind") == "branch_free_prefix" for row in trials
+    )
+    if (
+        ledger.get("prefix") != {"completed_trials": prefix_trials}
+        or ledger.get("eligibility") != payload["eligibility_events.jsonl"]
+        or ledger.get("joint") != seed_status
+        or ledger.get("failure") != payload["failures.jsonl"]
+        or not isinstance(ledger.get("provenance"), dict)
+        or ledger["provenance"].get("run_id") != run.get("run_id")
+        or ledger["provenance"].get("parent_run_id") != run.get("parent_run_id")
+        or ledger["provenance"].get("implementation_commit") != run.get("implementation_commit")
+        or ledger.get("eligible_seeds")
+        != [row.get("seed") for row in seed_status if isinstance(row, dict) and row.get("eligible")]
+        or any(
+            not isinstance(row, dict) or row.get("fallback_checkpoint_used") is not False
+            for row in seed_status
+        )
+    ):
+        return _failure(run_dir, "DECISION_LEDGER_RECONCILIATION_FAILED")
     engineering_failures = [
         row
         for row in payload["failures.jsonl"]

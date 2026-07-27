@@ -14,6 +14,7 @@ import yaml  # type: ignore[import-untyped]
 from memcontam.baselines.reflexion_phase12 import ReflexionStateV3
 from memcontam.clients.base import LLMClient
 from memcontam.clients.config import ProviderConfig
+from memcontam.clients.cost_guard import CostLimitExceeded
 from memcontam.clients.factory import build_llm_client
 from memcontam.contamination.phase12.registry import load_candidate_registry
 from memcontam.experiment.phase12.contracts import BaselineConditionSpec, MemoryArmExecutionKey
@@ -21,7 +22,9 @@ from memcontam.experiment.phase12.game24_runner import Game24RuntimeContext, Run
 from memcontam.experiment.phase12.live_branch import build_live_three_arm_branches
 from memcontam.experiment.phase12.live_prefix import run_live_clean_prefix
 from memcontam.experiment.phase12.live_suffix import run_live_matched_suffix
-from memcontam.memory.cards_v3 import canonical_content_hash
+from memcontam.experiment.phase12.runtime_registry import RuntimeTrialResult
+from memcontam.memory.admission import AdmissionContext
+from memcontam.memory.cards_v3 import MemoryCardEnvelopeV3, canonical_content_hash
 from memcontam.memory.checkpoint_v3 import NATIVE_ENTRY_V1, NativeEntry
 from memcontam.readiness.pilot_a_scientific_archive import (
     validate_scientific_archive,
@@ -32,6 +35,7 @@ from memcontam.readiness.pilot_a_scientific_records import (
     artifacts,
     record_prefix,
     record_suffix,
+    record_terminal_failure,
 )
 from memcontam.tasks.game24 import build_instance
 
@@ -58,12 +62,6 @@ def run_scientific_pilot_a(
     provider = ProviderConfig.from_run_config(config)
     if provider.provider != "openai_responses" or not provider.live_calls_enabled:
         raise ScientificPilotAError("LIVE_CALL_CONFIG_REQUIRED")
-    client = cast(
-        LLMClient,
-        client_factory()
-        if client_factory is not None
-        else build_llm_client(provider, stage="pilot", execution_class="live", allow_live_calls=True),
-    )
     identity = run_id or f"pilot-a-game24-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
     _validate_run_id(identity)
     if parent_run_id is not None:
@@ -73,17 +71,54 @@ def run_scientific_pilot_a(
     if run_dir.exists():
         raise ScientificPilotAError("RUN_ID_ALREADY_EXISTS")
     run_dir.mkdir(parents=True)
-    rows = _run_seeds(config, identity, client, provider, context_factory)
-    if not any(status["eligible"] for status in rows["seed_status"]):
-        raise ScientificPilotAError("JOINT_CHECKPOINT_ELIGIBILITY_EMPTY")
-    archive_artifacts = artifacts(
-        config_path, config, identity, provider, rows, parent_run_id=parent_run_id
-    )
-    write_scientific_archive(run_dir, archive_artifacts)
+    rows: dict[str, list[dict[str, Any]]] = {name: [] for name in ROW_NAMES}
+
+    def seal(status: str, reason: str | None) -> None:
+        write_scientific_archive(
+            run_dir,
+            artifacts(
+                config_path,
+                config,
+                identity,
+                provider,
+                rows,
+                parent_run_id=parent_run_id,
+                run_status=status,
+                status_reason=reason,
+            ),
+        )
+
+    seal("interrupted", "not_started")
+    try:
+        client = cast(
+            LLMClient,
+            client_factory()
+            if client_factory is not None
+            else build_llm_client(
+                provider, stage="pilot", execution_class="live", allow_live_calls=True
+            ),
+        )
+        rows = _run_seeds(config, identity, client, provider, context_factory, rows=rows)
+        if rows["seed_status"] and not any(item.get("eligible") for item in rows["seed_status"]) and not any(
+            "status" in item for item in rows["seed_status"]
+        ):
+            raise ScientificPilotAError("JOINT_CHECKPOINT_ELIGIBILITY_EMPTY")
+    except BaseException as error:
+        terminal_status, status_reason = _failure_terminal_status(error)
+        record_terminal_failure(rows, error, terminal_status, status_reason)
+        seal(terminal_status, status_reason)
+        raise
+
+    final_status, final_status_reason = _terminal_status(rows["seed_status"])
+    seal(final_status, final_status_reason)
     report = validate_scientific_archive(run_dir)
     if report["overall"] != "pass":
         raise ScientificPilotAError(str(report["reason_code"]))
     return report
+
+
+def validate_scientific_pilot_a_archive(run_dir: Path) -> dict[str, Any]:
+    return validate_scientific_archive(run_dir)
 
 
 def _run_seeds(
@@ -92,8 +127,9 @@ def _run_seeds(
     client: LLMClient,
     provider: ProviderConfig,
     context_factory: Callable[[LLMClient, str, str], Game24RuntimeContext] | None,
+    *,
+    rows: dict[str, list[dict[str, Any]]],
 ) -> dict[str, list[dict[str, Any]]]:
-    rows: dict[str, list[dict[str, Any]]] = {name: [] for name in ROW_NAMES}
     instances = _instances(config)
     registry = load_candidate_registry(Path(config["candidate_registry"]["path"]))
     for seed_spec in config["trajectory_seeds"]:
@@ -117,7 +153,6 @@ def _run_seeds(
         )
         record_prefix(rows, seed, contexts, prefix, provider)
         if prefix.selection.blocked:
-            rows["seed_status"].append({"seed": seed, "eligible": False})
             continue
         selected_index = cast(int, prefix.selection.selected_trial_index)
         frozen_suffix_order = tuple(seed_spec["ordered_suffix_task_ids"])
@@ -132,7 +167,9 @@ def _run_seeds(
                 prefix=checkpoint,
                 context=selected_context,
                 candidate_registry=registry,
-                filter_policy=_admission_context(baseline, checkpoint.state.entries),
+                filter_policy=_admission_context(
+                    baseline, prefix.trial_results_by_baseline[baseline][:selected_index]
+                ),
             )
             for baseline, checkpoint in prefix.selection.selected_checkpoints.items()
         }
@@ -143,14 +180,31 @@ def _run_seeds(
         )
         suffix = run_live_matched_suffix(branches_by_baseline=branches, contexts=suffix_contexts)
         record_suffix(rows, seed, suffix.memory_runs, suffix.nomem.trials, branches, provider)
-        rows["seed_status"].append(
-            {
-                "seed": seed,
-                "eligible": True,
-                "selected_checkpoint": prefix.selection.selected_trial_index,
-            }
-        )
     return rows
+
+
+def _terminal_status(seed_status: list[dict[str, Any]]) -> tuple[str, str | None]:
+    if not seed_status:
+        return "interrupted", "no_seed_rows"
+
+    if any(item.get("eligible") for item in seed_status):
+        return "completed", None
+
+    blocked = [item.get("status") for item in seed_status if item.get("status") == "blocked"]
+    if blocked and len(blocked) == len(seed_status):
+        return "blocked", "all_joint_checkpoint_blocked"
+
+    return "invalidated", "joint_checkpoint_eligibility_empty"
+
+
+def _failure_terminal_status(error: BaseException) -> tuple[str, str]:
+    if isinstance(error, CostLimitExceeded):
+        return "blocked", "cost_limit_exceeded"
+    if isinstance(error, KeyboardInterrupt):
+        return "interrupted", "interrupted"
+    if isinstance(error, ScientificPilotAError):
+        return "invalidated", error.code.lower()
+    return "interrupted", "provider_failure"
 
 
 def _conditions() -> dict[str, BaselineConditionSpec]:
@@ -205,12 +259,25 @@ def _default_context(client: LLMClient, run_id: str, model: str) -> Game24Runtim
     return _live_context(client, run_id, model)
 
 
-def _admission_context(baseline: str, entries: tuple[str | Any, ...]):
-    from memcontam.experiment.phase12.cli import _admission_context as build
-
-    entry_ids = tuple(entry if isinstance(entry, str) else entry.entry_id for entry in entries)
-    context = build(baseline, entry_ids)
-    return replace(context, active_envelopes=context.evidence_envelopes)
+def _admission_context(
+    baseline: str, prefix_results: tuple[RuntimeTrialResult, ...]
+) -> AdmissionContext:
+    envelopes = tuple(
+        envelope for result in prefix_results for envelope in result.write_envelopes
+    )
+    if any(not isinstance(envelope, MemoryCardEnvelopeV3) for envelope in envelopes):
+        raise ScientificPilotAError("INVALID_PREFIX_WRITE_EVIDENCE")
+    evidence = tuple(envelope for envelope in envelopes if isinstance(envelope, MemoryCardEnvelopeV3))
+    if any(envelope.baseline != baseline for envelope in evidence):
+        raise ScientificPilotAError("PREFIX_WRITE_BASELINE_MISMATCH")
+    return AdmissionContext(
+        writer_event_ids=frozenset(envelope.writer_event_id for envelope in evidence),
+        trial_record_ids=frozenset(
+            trial_id for envelope in evidence for trial_id in envelope.trial_support_ids
+        ),
+        evidence_envelopes=evidence,
+        active_envelopes=evidence,
+    )
 
 
 def _load_config(path: Path) -> dict[str, Any]:
