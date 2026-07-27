@@ -61,17 +61,41 @@ def _rewrite_archive_manifest(run_dir: Path) -> None:
 
 
 def _passing_evidence(root: Path) -> None:
-    for name in ("t5-f1c.json", "t5-micro-retrieval.json", "t6-invariants.json", "t6-archive.json"):
-        _write_evidence(root, name, {"overall": "pass"})
+    artifacts = {
+        "filter-v4-mft.json": {
+            "cases": [{"passed": True}],
+            "policy_version": "operational-evidence-filter-v4",
+            "scientific_result": False,
+        },
+        "phase12-filter-v4-f1c.json": {"overall": "pass"},
+        "phase12-filter-v4-archive.json": {"overall": "pass"},
+        "phase12-filter-v4-invariants.json": {"overall": "pass"},
+    }
+    evidence: dict[str, dict[str, str]] = {}
+    for name, payload in artifacts.items():
+        _write_evidence(root, name, payload)
+        path = root / name
+        evidence[name] = {
+            "path": str(path),
+            "sha256": __import__("hashlib").sha256(path.read_bytes()).hexdigest(),
+            "status": "pass",
+        }
     _write_evidence(
         root,
-        "t7-plumbing.json",
+        "pilot_a_readiness_manifest_phase12_filter_v4.json",
         {
-            "arm": "Clean",
-            "baselines": ["nomem", "fh_bounded", "rag_frozen", "bot_style", "reflexion_style"],
-            "instance_count": 1,
-            "overall": "pass",
-            "scientific_result": False,
+            "config_hashes": {
+                "scientific_pilot_a": __import__("hashlib").sha256(
+                    SCIENTIFIC_CONFIG.read_bytes()
+                ).hexdigest()
+            },
+            "evidence": evidence,
+            "filter_policy": {
+                "claim_status": "operational_secondary",
+                "interpretation": "contract_invalid_direct_write_containment",
+                "version": "operational-evidence-filter-v4",
+            },
+            "implementation_commit": _module()._implementation_commit(),
         },
     )
 
@@ -622,22 +646,22 @@ def test_admission_only_requires_all_t5_t6_t7_evidence_and_never_starts_a_run(tm
     evidence_root = tmp_path / "evidence"
     _passing_evidence(evidence_root)
 
-    admitted = module.evaluate_pilot_a_admission(CONFIG, evidence_root=evidence_root)
+    admitted = module.evaluate_pilot_a_admission(SCIENTIFIC_CONFIG, evidence_root=evidence_root)
 
-    assert admitted == {
-        "admitted": True,
-        "reason_code": None,
-        "scientific_result": False,
-    }
-    (evidence_root / "t7-plumbing.json").unlink()
+    assert admitted["admitted"] is True
+    assert admitted["reason_code"] is None
+    assert admitted["filter_policy_version"] == "operational-evidence-filter-v4"
+    assert admitted["filter_interpretation"] == "contract_invalid_direct_write_containment"
+    assert admitted["implementation_commit"] == module._implementation_commit()
+    assert admitted["config_sha256"] == __import__("hashlib").sha256(
+        SCIENTIFIC_CONFIG.read_bytes()
+    ).hexdigest()
+    (evidence_root / "phase12-filter-v4-f1c.json").unlink()
 
-    blocked = module.evaluate_pilot_a_admission(CONFIG, evidence_root=evidence_root)
+    blocked = module.evaluate_pilot_a_admission(SCIENTIFIC_CONFIG, evidence_root=evidence_root)
 
-    assert blocked == {
-        "admitted": False,
-        "reason_code": "T7_PLUMBING_EVIDENCE_REQUIRED",
-        "scientific_result": False,
-    }
+    assert blocked["admitted"] is False
+    assert blocked["reason_code"] == "FILTER_V4_EVIDENCE_HASH_MISMATCH"
 
 
 def test_pilot_a_cli_admission_only_reads_evidence_without_starting_a_run(
@@ -648,7 +672,14 @@ def test_pilot_a_cli_admission_only_reads_evidence_without_starting_a_run(
     _passing_evidence(evidence_root)
     monkeypatch.setattr(module, "DEFAULT_EVIDENCE_ROOT", evidence_root)
 
-    _run_cli(monkeypatch, "phase12", "pilot-a", "--config", str(CONFIG), "--admission-only")
+    _run_cli(
+        monkeypatch,
+        "phase12",
+        "pilot-a",
+        "--config",
+        str(SCIENTIFIC_CONFIG),
+        "--admission-only",
+    )
 
     assert json.loads(capsys.readouterr().out)["admitted"] is True
 
@@ -663,9 +694,10 @@ def test_pilot_a_cli_dispatches_the_scientific_runner_after_admission(
     monkeypatch.setattr(
         module,
         "run_scientific_pilot_a",
-        lambda _config, *, allow_live_calls, parent_run_id: {
+        lambda _config, *, allow_live_calls, parent_run_id, root_attempt_run_id: {
             "overall": "pass",
             "parent_run_id": parent_run_id,
+            "root_attempt_run_id": root_attempt_run_id,
             "scientific_result": allow_live_calls,
         },
     )
@@ -679,11 +711,14 @@ def test_pilot_a_cli_dispatches_the_scientific_runner_after_admission(
         "--allow-live-calls",
         "--parent-run-id",
         "pilot-a-attempt-1",
+        "--root-attempt-run-id",
+        "pilot-a-root-attempt",
     )
 
     assert json.loads(capsys.readouterr().out) == {
         "overall": "pass",
         "parent_run_id": "pilot-a-attempt-1",
+        "root_attempt_run_id": "pilot-a-root-attempt",
         "scientific_result": True,
     }
 
@@ -702,6 +737,7 @@ def test_mocked_scientific_pilot_a_executes_two_seed_live_archive(tmp_path: Path
         context_factory=_runtime_context,
         run_id="pilot-a-scientific",
         parent_run_id="pilot-a-attempt-1",
+        root_attempt_run_id="pilot-a-root-attempt",
     )
 
     run_dir = tmp_path / "runs" / "pilot-a-scientific"
@@ -721,6 +757,9 @@ def test_mocked_scientific_pilot_a_executes_two_seed_live_archive(tmp_path: Path
     }
     assert all(call["latency_ms"] == 0 for call in calls)
     assert run["parent_run_id"] == "pilot-a-attempt-1"
+    assert run["root_attempt_run_id"] == "pilot-a-root-attempt"
+    assert run["requested_scientific_result"] is True
+    assert run["result_eligible"] is True
     assert module.validate_scientific_pilot_a_archive(run_dir)["overall"] == "pass"
     ledger = json.loads((run_dir / "decision_ledger.json").read_text(encoding="utf-8"))
     assert ledger["prefix"]["completed_trials"] == sum(
@@ -848,7 +887,9 @@ def test_scientific_pilot_a_seals_partial_archive_before_propagating_terminal_st
     failures = [json.loads(line) for line in (run_dir / "failures.jsonl").read_text().splitlines()]
     assert run["status"] == status
     assert run["status_reason"] == reason
-    assert run["scientific_result"] is True
+    assert run["requested_scientific_result"] is True
+    assert run["scientific_result"] is False
+    assert run["result_eligible"] is False
     assert ledger["live_provider_calls"] == 1
     assert ledger["cost_total"] == 0.01
     assert ledger["retry_total"] == 1
@@ -893,6 +934,9 @@ def test_scientific_pilot_a_allows_non_completed_terminal_status_when_no_seed_is
     assert report["overall"] == "pass"
     assert run["status"] == "blocked"
     assert run["status_reason"] == "all_joint_checkpoint_blocked"
+    assert run["requested_scientific_result"] is True
+    assert run["scientific_result"] is False
+    assert run["result_eligible"] is False
     assert module.validate_scientific_pilot_a_archive(tmp_path / "runs" / "pilot-a-empty-eligibility")["overall"] == "pass"
 
 

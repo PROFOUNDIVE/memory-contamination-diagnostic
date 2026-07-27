@@ -166,6 +166,7 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
     pilot_a.add_argument("--admission-only", action="store_true")
     pilot_a.add_argument("--allow-live-calls", action="store_true")
     pilot_a.add_argument("--parent-run-id")
+    pilot_a.add_argument("--root-attempt-run-id")
 
 
 def run(args: argparse.Namespace) -> None:
@@ -267,6 +268,7 @@ def run(args: argparse.Namespace) -> None:
                             args.config,
                             allow_live_calls=True,
                             parent_run_id=args.parent_run_id,
+                            root_attempt_run_id=args.root_attempt_run_id,
                         ),
                         sort_keys=True,
                     )
