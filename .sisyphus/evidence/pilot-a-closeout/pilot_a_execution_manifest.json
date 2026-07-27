@@ -1,0 +1,56 @@
+{
+  "attempts": [
+    {
+      "archive_manifest_sha256": "2544ca61346a7bda5e9b34c2dd6625774d7ef75b0969547123820480302b353b",
+      "archive_validation": "pass",
+      "cost_total_usd": 0.12432749999999997,
+      "eligible_seeds": [0, 1],
+      "engineering_failure": "REFLEXION_PROMPT_CONTRACT_MISMATCH_AND_LATENCY_OMISSION",
+      "implementation_commit": "3e1f11350c257607ba22e288a62af53dde8275c7",
+      "live_provider_calls": 112,
+      "model_behavior_failures": {
+        "bot_invalid_solve_result": 2,
+        "bot_invalid_thought_distillation": 2
+      },
+      "parent_run_id": null,
+      "reflexion_contract_failures": 16,
+      "retry_total": 0,
+      "run_dir": "runs/runs/pilot-a-game24-20260727T061248Z",
+      "run_id": "pilot-a-game24-20260727T061248Z",
+      "scientific_result": true,
+      "status": "invalidated_engineering_attempt"
+    },
+    {
+      "archive_validation": "blocked_no_partial_archive",
+      "cost_total_usd": null,
+      "eligible_seeds": [],
+      "engineering_failure": "PARTIAL_ARCHIVE_NOT_PRESERVED",
+      "implementation_commit": "5ea9a78949f54c20a63e420fc4fd593a7ea02f58",
+      "live_provider_calls": null,
+      "parent_run_id": "pilot-a-game24-20260727T061248Z",
+      "reason_code": "JOINT_CHECKPOINT_ELIGIBILITY_EMPTY",
+      "run_dir": "runs/runs/pilot-a-game24-20260727T062808Z",
+      "run_id": "pilot-a-game24-20260727T062808Z",
+      "scientific_result": false,
+      "status": "blocked"
+    }
+  ],
+  "final_status": "PILOT_A_BLOCKED_BY_IMPLEMENTATION",
+  "first_attempt_post_validation": {
+    "candidate_final_context_count": 6,
+    "candidate_retrieval_count": 2,
+    "completed_suffix_cells": 26,
+    "contam_filter_source_pairs_matching": 8,
+    "filter_candidate_final_context_count": 0,
+    "filter_candidate_retrieval_count": 0,
+    "filter_forbidden_field_mentions": 0,
+    "quarantine_count": 8,
+    "verifier_agreements": 46,
+    "verifier_non_null_results_recomputed": 46
+  },
+  "known_scientific_cost_floor_usd": 0.12432749999999997,
+  "no_further_provider_calls": true,
+  "readiness_commit": "5ea9a78949f54c20a63e420fc4fd593a7ea02f58",
+  "readiness_manifest": ".sisyphus/evidence/pilot-a-closeout/pilot_a_readiness_manifest.json",
+  "scientific_result": false
+}
