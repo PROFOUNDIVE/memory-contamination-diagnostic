@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import importlib.util
+import hashlib
 import json
 import os
 import shutil
@@ -18,6 +19,23 @@ from memcontam.experiment.phase12 import cli as phase12_cli
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "configs" / "phase12" / "pilot_a_game24_minimal.yaml"
+
+
+def _set_manifest_status(run_dir: Path, status: str, *, preserve_seal: bool = True) -> None:
+    manifest_path = run_dir / "public_artifact_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["status"] = status
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+
+    if not preserve_seal:
+        return
+    seal_path = run_dir / "archive_seal.json"
+    if not seal_path.is_file():
+        return
+    seal_payload = {
+        "public_artifact_manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    }
+    seal_path.write_text(json.dumps(seal_payload, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
 
 
 def _module() -> Any:
@@ -57,6 +75,41 @@ def test_archive_validation_fails_closed_for_a_missing_required_stream(tmp_path:
 
     assert report["overall"] == "fail"
     assert report["reason_code"] == "REQUIRED_ARTIFACT_MISSING"
+
+
+@pytest.mark.parametrize("status", ["blocked", "invalidated", "interrupted"])
+def test_replay_archive_validation_reconstructs_non_completed_terminal_status(tmp_path: Path, status: str) -> None:
+    module = _module()
+    run_dir = module.run_replay(CONFIG, "pilot-a", artifact_root=tmp_path)
+    _set_manifest_status(run_dir, status)
+
+    report = module.validate_archive(run_dir)
+
+    assert report["overall"] == "pass"
+
+
+@pytest.mark.parametrize("status", ["blocked", "invalidated", "interrupted"])
+def test_validate_archive_cli_reconstruction_accepts_non_completed_terminal_status(tmp_path: Path, status: str) -> None:
+    run_dir = _module().run_replay(CONFIG, "pilot-a", artifact_root=tmp_path)
+    mutated = tmp_path / "mutated"
+    shutil.copytree(run_dir, mutated)
+    (mutated / "archive_seal.json").unlink()
+    _set_manifest_status(mutated, status, preserve_seal=False)
+
+    output = tmp_path / f"archive-{status}.json"
+    args = argparse.Namespace(
+        replay=None,
+        run_dir=mutated,
+        output=output,
+        mode=None,
+        fixture_root=ROOT / "tests" / "fixtures" / "phase12",
+    )
+    report = phase12_cli._validate_archive(args)
+
+    assert report["archive_valid"] is True
+    assert output.read_text(encoding="utf-8") == json.dumps(
+        report, sort_keys=True, separators=(",", ":")
+    ) + "\n"
 
 
 def test_replay_and_inspector_cli_surfaces_write_canonical_reports(tmp_path: Path) -> None:

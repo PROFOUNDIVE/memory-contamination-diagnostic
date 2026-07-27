@@ -760,7 +760,9 @@ def _validate_archive(args: argparse.Namespace) -> dict[str, Any]:
     if not manifest_path.exists():
         raise SystemExit(f"phase12 archive manifest not found: {manifest_path}")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    if manifest.get("status") != "completed":
+    from memcontam.readiness.pilot_a_scientific_archive import _SCIENTIFIC_MANIFEST_STATUSES
+
+    if manifest.get("status") not in _SCIENTIFIC_MANIFEST_STATUSES:
         raise SystemExit("phase12 archive is not completed")
     for filename, artifact in manifest.get("artifacts", {}).items():
         path = args.run_dir / filename
@@ -772,7 +774,10 @@ def _validate_archive(args: argparse.Namespace) -> dict[str, Any]:
         json.loads((args.run_dir / "run.json").read_text(encoding="utf-8"))["run_metadata"]
     )
     for filename in _PUBLIC_STREAMS:
-        for row in _jsonl(args.run_dir / filename):
+        path = args.run_dir / filename
+        if not path.exists():
+            continue
+        for row in _jsonl(path):
             if filename != "calls.jsonl" and filename != "memory_events.jsonl":
                 parse_log_record_v3({key: value for key, value in row.items() if key != "trial_id"})
     report = {"archive_valid": True, "run_dir": str(args.run_dir)}

@@ -52,6 +52,7 @@ REQUIRED_ARTIFACTS = (
 _SEALED_ARTIFACT = "archive_seal.json"
 _OPTIONAL_EMPTY_STREAMS = ("failures.jsonl",)
 _SECRET_PATTERN = re.compile(r"(?i)(api[_-]?key|authorization|bearer\s|sk-[a-z0-9]{8,}|password|secret)")
+_SCIENTIFIC_MANIFEST_STATUSES = frozenset({"completed", "blocked", "invalidated", "interrupted"})
 
 
 class PilotAInvariantError(ValueError):
@@ -421,7 +422,7 @@ def _load_run(run_dir: Path) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]
     if any(not (run_dir / filename).is_file() for filename in required):
         raise PilotAInvariantError("REQUIRED_ARTIFACT_MISSING")
     manifest = _json(run_dir / "public_artifact_manifest.json")
-    if manifest.get("status") != "completed" or not isinstance(manifest.get("artifacts"), dict):
+    if manifest.get("status") not in _SCIENTIFIC_MANIFEST_STATUSES or not isinstance(manifest.get("artifacts"), dict):
         raise PilotAInvariantError("ARCHIVE_MANIFEST_INVALID")
     expected_files = {str(filename) for filename in REQUIRED_ARTIFACTS} - {
         "public_artifact_manifest.json"

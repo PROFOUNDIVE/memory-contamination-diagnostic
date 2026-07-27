@@ -39,6 +39,7 @@ PLUMBING_MAX_CALLS = 10
 PILOT_A_INSTANCE_COUNT = 8
 MAX_INPUT_TOKENS_PER_CALL = 4_096
 _SECRET_PATTERN = re.compile(r"(?i)(api[_-]?key|authorization|bearer\s|sk-[a-z0-9]{8,}|password|secret)")
+_PLUMBING_MANIFEST_STATUSES = frozenset({"completed", "blocked", "invalidated", "interrupted"})
 
 
 class PilotALaunchError(ValueError):
@@ -142,7 +143,7 @@ def validate_plumbing_archive(run_dir: Path) -> dict[str, object]:
     if any(not (run_dir / name).is_file() for name in required):
         return _failed_archive(run_dir, "REQUIRED_ARTIFACT_MISSING")
     manifest = _read_json(run_dir / "public_artifact_manifest.json")
-    if not isinstance(manifest, dict) or manifest.get("status") != "completed":
+    if not isinstance(manifest, dict) or manifest.get("status") not in _PLUMBING_MANIFEST_STATUSES:
         return _failed_archive(run_dir, "ARCHIVE_MANIFEST_INVALID")
     artifacts = manifest.get("artifacts")
     if not isinstance(artifacts, dict):
