@@ -15,6 +15,8 @@ from memcontam.clients.config import ProviderConfig
 from memcontam.clients.cost_guard import CostGuard, CostLimitExceeded
 from memcontam.clients.factory import build_llm_client
 from memcontam.clients.base import LLMClient
+from memcontam.baselines.bot_solve import BOT_SOLVE_PROMPT_VERSION
+from memcontam.baselines.common import FINAL_ANSWER_PARSER_VERSION, FINAL_ANSWER_PROMPT_VERSION
 from memcontam.experiment.phase12.game24_runner import Game24RuntimeContext, RuntimeIdentities, run_clean_game24_trial
 from memcontam.memory.embeddings import BgeM3EmbeddingProvider
 from memcontam.memory.checkpoint_v3 import NativeEntry
@@ -338,6 +340,43 @@ def evaluate_pilot_a_admission(
     return {"admitted": True, "reason_code": None, "scientific_result": False}
 
 
+def run_scientific_pilot_a(
+    config_path: Path,
+    *,
+    allow_live_calls: bool,
+    artifact_root: Path | None = None,
+    evidence_root: Path | None = None,
+    client_factory: Callable[[], object] | None = None,
+    context_factory: Callable[[LLMClient, str, str], Game24RuntimeContext] | None = None,
+    run_id: str | None = None,
+) -> dict[str, object]:
+    admission = evaluate_pilot_a_admission(config_path, evidence_root=evidence_root)
+    if admission["admitted"] is not True:
+        raise PilotALaunchError(str(admission["reason_code"]))
+    from memcontam.readiness.pilot_a_scientific import (
+        ScientificPilotAError,
+        run_scientific_pilot_a as execute,
+    )
+
+    try:
+        return execute(
+            config_path,
+            allow_live_calls=allow_live_calls,
+            artifact_root=artifact_root,
+            client_factory=client_factory,
+            context_factory=context_factory,
+            run_id=run_id,
+        )
+    except ScientificPilotAError as error:
+        raise PilotALaunchError(error.code) from error
+
+
+def validate_scientific_pilot_a_archive(run_dir: Path) -> dict[str, object]:
+    from memcontam.readiness.pilot_a_scientific_archive import validate_scientific_archive
+
+    return validate_scientific_archive(run_dir)
+
+
 def write_handoff(
     config_path: Path,
     *,
@@ -376,11 +415,15 @@ def write_handoff(
 
 def _load_config(path: Path) -> dict[str, Any]:
     try:
-        load_preflight_config(path)
         payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+        if isinstance(payload, dict) and payload.get("config_kind") == "phase12_pilot_a_preflight_v1":
+            load_preflight_config(path)
     except (OSError, PreflightError, yaml.YAMLError) as error:
         raise PilotALaunchError("INVALID_PILOT_A_CONFIG") from error
-    if not isinstance(payload, dict):
+    if not isinstance(payload, dict) or payload.get("config_kind") not in {
+        "phase12_pilot_a_preflight_v1",
+        "phase12_pilot_a_scientific_v1",
+    }:
         raise PilotALaunchError("INVALID_PILOT_A_CONFIG")
     return payload
 
@@ -540,6 +583,7 @@ def _write_plumbing_archive(
         calls_for_trial = []
         trial_id = f"{run_dir.name}:{baseline}"
         call_id_map: dict[str, str] = {}
+        response_hashes: dict[str, str] = {}
         for index, call in enumerate(outcome.method_calls, start=1):
             source_ids = [
                 span.entry_id
@@ -548,13 +592,18 @@ def _write_plumbing_archive(
             ]
             call_id = f"{baseline}:{index}"
             call_id_map[str(call.call_id)] = call_id
+            response_hash = hashlib.sha256(call.raw_response.encode("utf-8")).hexdigest()
+            response_hashes[call_id] = response_hash
             calls.append(
                 {
                     "baseline": baseline,
                     "call_id": call_id,
                     "cost_usd": _call_cost(call.token_usage, provider),
                     "latency_ms": call.latency_ms,
+                    "messages": call.messages,
                     "retry_count": call.retry_count,
+                    "response_text": call.raw_response,
+                    "response_text_sha256": response_hash,
                     "source_span_ids": source_ids,
                     "stage": call.stage,
                     "token_usage": dict(call.token_usage),
@@ -562,9 +611,10 @@ def _write_plumbing_archive(
                 }
             )
             calls_for_trial.append(call_id)
+        answer_call_id = call_id_map.get(str(outcome.answer_call_id))
         trials.append(
             {
-                "answer_call_id": call_id_map.get(str(outcome.answer_call_id)),
+                "answer_call_id": answer_call_id,
                 "arm": "Clean",
                 "baseline": baseline,
                 "calls": calls_for_trial,
@@ -579,10 +629,31 @@ def _write_plumbing_archive(
         if result.context_event is not None:
             contexts.append(_plumbing_event(result.context_event, trial_id, "context"))
         if outcome.status != "succeeded":
+            parser_contracts = {
+                "nomem": FINAL_ANSWER_PARSER_VERSION,
+                "fh_bounded": FINAL_ANSWER_PARSER_VERSION,
+                "rag_frozen": FINAL_ANSWER_PARSER_VERSION,
+                "bot_style": "bot_solve_json_v1",
+                "reflexion_style": FINAL_ANSWER_PARSER_VERSION,
+            }
+            prompt_contracts = {
+                "nomem": FINAL_ANSWER_PROMPT_VERSION,
+                "fh_bounded": FINAL_ANSWER_PROMPT_VERSION,
+                "rag_frozen": FINAL_ANSWER_PROMPT_VERSION,
+                "bot_style": BOT_SOLVE_PROMPT_VERSION,
+                "reflexion_style": FINAL_ANSWER_PROMPT_VERSION,
+            }
             failures.append(
                 {
+                    "answer_call_id": answer_call_id,
                     "baseline": baseline,
-                        "failure_class": outcome.failure_disposition,
+                    "call_ids": calls_for_trial,
+                    "error_type": outcome.error_type,
+                    "failure_class": outcome.failure_disposition,
+                    "parser_contract": parser_contracts[baseline],
+                    "prompt_contract": prompt_contracts[baseline],
+                    "raw_response_hash": response_hashes.get(answer_call_id or ""),
+                    "scientific_ineligibility_reason": outcome.scientific_ineligibility_reason,
                     "trial_id": trial_id,
                 }
             )

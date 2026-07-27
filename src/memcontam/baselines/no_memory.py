@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from memcontam.baselines.common import parse_final_answer
+from memcontam.baselines.common import FINAL_ANSWER_INSTRUCTION, parse_final_answer
 from memcontam.baselines.contracts import (
     BaselineExecutionOutcome,
     ErrorType,
@@ -24,7 +24,7 @@ class NoMemoryPolicy:
         return [
             {
                 "role": "system",
-                "content": "Solve the task. Use no persistent memory. Return only the final answer in the required task format.",
+                "content": f"Solve the task. Use no persistent memory. {FINAL_ANSWER_INSTRUCTION}",
             },
             {
                 "role": "user",

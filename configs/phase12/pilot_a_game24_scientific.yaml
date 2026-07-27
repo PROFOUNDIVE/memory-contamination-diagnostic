@@ -1,0 +1,71 @@
+config_kind: phase12_pilot_a_scientific_v1
+config_version: 1
+implementation_commit_binding: runtime_head
+base_audit_commit: 0f769bb84dbbbeb552d3ee01c56c4a2ca5d9c453
+authoritative_phase12_design:
+  path: Phase 12 — THEORETICAL ARTIFACT.md
+  sha256: 56c42b1af761c2f3838638316823d0ce394c6c543f17aff97f4657721c964983
+evidence_layer: calibration
+run_family: pilot_a
+scientific_result: true
+task_family: game24
+tool_mode: text_only
+trajectory_seeds:
+  - seed: 0
+    ordered_prefix_task_ids: [game24_pilot_001, game24_pilot_002, game24_pilot_003, game24_pilot_004, game24_pilot_005]
+    ordered_suffix_task_ids: [game24_pilot_001, game24_pilot_002, game24_pilot_003, game24_pilot_004, game24_pilot_005]
+  - seed: 1
+    ordered_prefix_task_ids: [game24_pilot_002, game24_pilot_004, game24_pilot_001, game24_pilot_005, game24_pilot_003]
+    ordered_suffix_task_ids: [game24_pilot_002, game24_pilot_004, game24_pilot_001, game24_pilot_005, game24_pilot_003]
+instance_registry:
+  path: data/tasks/game24_pilot.jsonl
+  sha256: 7a7a39f8697ccd7199e063679de90a373535f912a04ca6c15d1e919f0749e8b5
+  evidence_layer: calibration
+  reserved_main_ids: []
+suffix_horizon: 1
+baselines: [nomem, fh_bounded, rag_frozen, bot_style, reflexion_style]
+nomem_execution_rule: singleton_per_seed
+arms: [Clean, Contam, Filter]
+candidate_triplet_id: game24-fraction-intermediate-v1
+candidate_registry:
+  path: data/phase12/registries/candidate_registry_v1.json
+  sha256: 7dc76a6816a1d3d641a38db71c9152eccf9fe290b4dfdc9d4fd19f62a73ceef8
+root_count: {Clean: 0, Contam: 1, Filter: 1}
+checkpoint_rule: common_lower_median_jointly_eligible_v1
+fh_context_budget: {id: fh-bounded-10000-v1, context_window_tokens: 10000}
+rag:
+  corpus_id: game24-pilot-a-clean-v1
+  index_version: index-v3
+  top_k: 3
+bot: {threshold: 0.7, active_capacity: 3}
+reflexion: {active_capacity: 3, verifier_boundary: post_actor_verification_v1}
+prompt_versions:
+  final_answer: terminal_final_line_prompt_v2
+  bot_solve: bot_solve_json_v2
+parser_versions:
+  final_answer: terminal_final_line_v1
+  bot_solve: bot_solve_json_v1
+provider:
+  provider: openai
+  endpoint: responses
+  model_family: gpt-4o
+  model_id: gpt-4o-2024-11-20
+  service_tier: default
+  store: false
+decoding: {temperature: 0.0, top_p: 1.0, max_output_tokens: 2048, requested_seed: 0}
+embedding:
+  model_id: BAAI/bge-m3
+  revision: 5617a9f61b028005a4858fdac845db406aefb181
+  local_files_only: true
+filter_policy_version: operational-evidence-filter-v3
+logging_contract: {schema_version: logging_v3, contract_level: phase12}
+retry: {retries_after_initial_attempt: 3, backoff_seconds: [1, 2, 4]}
+cost:
+  currency: USD
+  warning: 3.0
+  hard_ceiling: 5.0
+  input_per_1m_tokens: 2.5
+  cached_input_per_1m_tokens: 1.25
+  output_per_1m_tokens: 10.0
+live_calls: {enabled: true}
+output: {artifact_root_env: MEMCONTAM_ARTIFACT_ROOT}

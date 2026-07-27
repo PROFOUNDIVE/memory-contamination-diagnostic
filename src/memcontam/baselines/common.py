@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 
+FINAL_ANSWER_INSTRUCTION = "Return exactly one non-empty terminal line: final: <answer>."
+FINAL_ANSWER_PROMPT_VERSION = "terminal_final_line_prompt_v2"
+FINAL_ANSWER_PARSER_VERSION = "terminal_final_line_v1"
+
+
 def parse_final_answer(response: str) -> str:
     """Return the answer from one non-empty terminal ``final:`` line."""
     if not isinstance(response, str):

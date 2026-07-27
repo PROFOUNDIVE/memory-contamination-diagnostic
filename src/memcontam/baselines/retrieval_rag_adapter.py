@@ -5,7 +5,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Callable
 
-from memcontam.baselines.common import parse_final_answer
+from memcontam.baselines.common import FINAL_ANSWER_INSTRUCTION, parse_final_answer
 from memcontam.baselines.contracts import (
     BaselineExecutionOutcome,
     CorpusIdentity,
@@ -296,7 +296,9 @@ def _messages(
         if index:
             parts.append("\n\n")
         parts.append(PromptSourcePart(document.text, entries_by_id[records[index].document_id]))
-    parts.extend(["\n\nCurrent task:\n", canonical_task_json(task)])
+    parts.extend(
+        ["\n\nCurrent task:\n", canonical_task_json(task), f"\n\n{FINAL_ANSWER_INSTRUCTION}"]
+    )
     content, spans = build_prompt_with_sources(parts, message_index=1)
     return [
         {"role": "system", "content": NEUTRAL_SYSTEM_INSTRUCTION},

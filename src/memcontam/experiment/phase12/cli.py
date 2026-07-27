@@ -242,7 +242,11 @@ def run(args: argparse.Namespace) -> None:
             raise SystemExit(error.code) from error
         print(json.dumps(result, sort_keys=True))
     elif args.phase12_command == "pilot-a":
-        from memcontam.readiness.pilot_a_launch import PilotALaunchError, evaluate_pilot_a_admission
+        from memcontam.readiness.pilot_a_launch import (
+            PilotALaunchError,
+            evaluate_pilot_a_admission,
+            run_scientific_pilot_a,
+        )
 
         try:
             result = evaluate_pilot_a_admission(args.config)
@@ -255,7 +259,18 @@ def run(args: argparse.Namespace) -> None:
         elif not result["admitted"]:
             raise SystemExit(str(result["reason_code"]))
         else:
-            raise SystemExit("SCIENTIFIC_PILOT_A_LAUNCH_NOT_IMPLEMENTED")
+            try:
+                print(
+                    json.dumps(
+                        run_scientific_pilot_a(
+                            args.config,
+                            allow_live_calls=True,
+                        ),
+                        sort_keys=True,
+                    )
+                )
+            except PilotALaunchError as error:
+                raise SystemExit(error.code) from error
     else:
         raise SystemExit(f"unsupported phase12 command: {args.phase12_command}")
 

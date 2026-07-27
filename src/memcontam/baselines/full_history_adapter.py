@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Callable
 from uuid import uuid4
 
-from memcontam.baselines.common import parse_final_answer
+from memcontam.baselines.common import FINAL_ANSWER_INSTRUCTION, parse_final_answer
 from memcontam.baselines.contracts import (
     BaselineExecutionOutcome,
     ErrorType,
@@ -161,7 +161,7 @@ def _messages(
         parts.append(PromptSourcePart(record.content, record))
     if decision.records:
         parts.append("\n\n")
-    parts.append(f"TASK:\n{canonical_task_json(task)}")
+    parts.append(f"TASK:\n{canonical_task_json(task)}\n\n{FINAL_ANSWER_INSTRUCTION}")
     content, spans = build_prompt_with_sources(parts, message_index=0, entries=decision.records)
     return [{"role": "user", "content": content}], spans, decision.records, decision.telemetry()
 

@@ -15,8 +15,13 @@ from memcontam.baselines.retrieval_rag_phase12 import RagFrozenStateV3
 from memcontam.clients.base import LLMResponse
 from memcontam.clients.base import LLMClient
 from memcontam.clients.cost_guard import CostGuard
-from memcontam.experiment.phase12.game24_runner import Game24RuntimeContext, RuntimeIdentities
-from memcontam.memory.checkpoint_v3 import NativeEntry
+from memcontam.experiment.phase12.game24_runner import (
+    Game24RuntimeContext,
+    RuntimeIdentities,
+    run_clean_game24_trial,
+)
+from memcontam.memory.checkpoint_v3 import NATIVE_ENTRY_V1, NativeEntry
+from memcontam.memory.cards_v3 import canonical_content_hash
 from memcontam.memory.stores import MemoryEntry
 from memcontam.rag.branch_index import build_branch_indices
 from memcontam.rag.phase12_corpus import CleanCorpus, build_branch_corpora
@@ -26,6 +31,7 @@ from memcontam.verifiers.game24 import verify_expression
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "configs" / "phase12" / "pilot_a_game24_minimal.yaml"
+SCIENTIFIC_CONFIG = ROOT / "configs" / "phase12" / "pilot_a_game24_scientific.yaml"
 CHECKLIST = ROOT / "docs" / "phase12-pilot-a-operator-checklist.md"
 LEGACY_PLUMBING_ARCHIVE = ROOT / "runs" / "runs" / "phase12-pilot-a-plumbing-r2"
 
@@ -101,6 +107,14 @@ class _Client:
                 }
             ),
             "reflexion_generate": answer,
+            "reflexion_reflect": json.dumps(
+                {
+                    "mode": "corrective",
+                    "failure_class": "incorrect_answer",
+                    "reflection_text": "Check the arithmetic against the current four numbers.",
+                    "explicitly_used_memory_ids": [],
+                }
+            ),
         }
         return LLMResponse(content=responses[config["method_stage"]], raw={}, token_usage={}, latency_ms=0)
 
@@ -133,6 +147,40 @@ class _MalformedBoTSolveClient(_Client):
     def chat(self, messages, model, config) -> LLMResponse:  # noqa: ANN001
         if config["method_stage"] == "bot_instantiate_solve":
             return LLMResponse(content="not json", raw={}, token_usage={}, latency_ms=0)
+        return super().chat(messages, model, config)
+
+
+class _ContractSensitiveClient(_Client):
+    def chat(self, messages, model, config) -> LLMResponse:  # noqa: ANN001
+        stage = config["method_stage"]
+        if stage in {"no_memory_generate", "full_history_generate", "rag_generate"}:
+            prompt = "\n".join(message["content"] for message in messages)
+            content = "final: 6 / (1 - 3 / 4)" if "final: <answer>" in prompt else "6 / (1 - 3 / 4)"
+            return LLMResponse(content=content, raw={}, token_usage={}, latency_ms=0)
+        if stage == "bot_instantiate_solve":
+            prompt = "\n".join(message["content"] for message in messages)
+            selected_structure = (
+                "retrieved-template"
+                if "Set selected_structure to retrieved-template" in prompt
+                else "procedure-based"
+            )
+            final_answer = (
+                "final: 6 / (1 - 3 / 4)"
+                if 'final_answer must be "final: <answer>"' in prompt
+                else "6 / (1 - 3 / 4)"
+            )
+            return LLMResponse(
+                content=json.dumps(
+                    {
+                        "selected_structure": selected_structure,
+                        "solution_trace": "Use rational intermediate values.",
+                        "final_answer": final_answer,
+                    }
+                ),
+                raw={},
+                token_usage={},
+                latency_ms=0,
+            )
         return super().chat(messages, model, config)
 
 
@@ -187,7 +235,21 @@ def _runtime_context(client: LLMClient, run_id: str, model: str) -> Game24Runtim
             "bot_style": BoTStateV3(
                 entries=bot_entries, clean_competitor_ids=("bot-a", "bot-b"), active_capacity=3
             ),
-            "reflexion_style": ReflexionStateV3(reflections=[], active_capacity=3),
+            "reflexion_style": ReflexionStateV3(
+                reflections=[
+                    NativeEntry(
+                        entry_id="reflexion-clean-a",
+                        content="Check the final arithmetic and use all four numbers once.",
+                        semantic_kind="verbal_reflection",
+                        schema_version=NATIVE_ENTRY_V1,
+                        native_component="reflections",
+                        content_hash=canonical_content_hash(
+                            "Check the final arithmetic and use all four numbers once."
+                        ),
+                    )
+                ],
+                active_capacity=3,
+            ),
         },
     )
 
@@ -315,6 +377,52 @@ def test_mocked_clean_plumbing_accepts_a_prefix_of_bot_calls_after_parse_failure
     )
 
     assert report["overall"] == "pass"
+
+
+def test_plumbing_archive_retains_failed_answer_prompt_and_raw_response(tmp_path: Path) -> None:
+    module = _module()
+    module.run_plumbing(
+        CONFIG,
+        arm="Clean",
+        instances=1,
+        allow_live_calls=True,
+        scientific_result=False,
+        run_id="plumbing-failure-provenance",
+        artifact_root=tmp_path,
+        evidence_root=tmp_path / "evidence",
+        client_factory=_MalformedBoTSolveClient,
+        context_factory=_runtime_context,
+    )
+    run_dir = tmp_path / "runs" / "plumbing-failure-provenance"
+    calls = [json.loads(line) for line in (run_dir / "calls.jsonl").read_text().splitlines()]
+    failures = [
+        json.loads(line) for line in (run_dir / "failures.jsonl").read_text().splitlines()
+    ]
+    answer_call = next(row for row in calls if row["call_id"] == "bot_style:2")
+    failure = next(row for row in failures if row["baseline"] == "bot_style")
+
+    assert answer_call["messages"]
+    assert answer_call["response_text"] == "not json"
+    assert answer_call["response_text_sha256"] == __import__("hashlib").sha256(b"not json").hexdigest()
+    assert failure["call_ids"] == ["bot_style:1", "bot_style:2"]
+    assert failure["answer_call_id"] == "bot_style:2"
+    assert failure["raw_response_hash"] == answer_call["response_text_sha256"]
+    assert failure["error_type"] == "BaselineOutputError"
+    assert failure["parser_contract"] == "bot_solve_json_v1"
+
+
+def test_live_answer_prompts_state_the_contract_consumed_by_their_parsers() -> None:
+    context = _runtime_context(_ContractSensitiveClient(), "prompt-contract", "gpt-test")
+
+    outcomes = run_clean_game24_trial(context)
+
+    assert {baseline: result.outcome.status for baseline, result in outcomes.items()} == {
+        "nomem": "succeeded",
+        "fh_bounded": "succeeded",
+        "rag_frozen": "succeeded",
+        "bot_style": "succeeded",
+        "reflexion_style": "succeeded",
+    }
 
 
 @pytest.mark.parametrize(
@@ -506,6 +614,68 @@ def test_pilot_a_cli_admission_only_reads_evidence_without_starting_a_run(
     _run_cli(monkeypatch, "phase12", "pilot-a", "--config", str(CONFIG), "--admission-only")
 
     assert json.loads(capsys.readouterr().out)["admitted"] is True
+
+
+def test_pilot_a_cli_dispatches_the_scientific_runner_after_admission(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    module = _module()
+    evidence_root = tmp_path / "evidence"
+    _passing_evidence(evidence_root)
+    monkeypatch.setattr(module, "DEFAULT_EVIDENCE_ROOT", evidence_root)
+    monkeypatch.setattr(
+        module,
+        "run_scientific_pilot_a",
+        lambda _config, *, allow_live_calls: {
+            "overall": "pass",
+            "scientific_result": allow_live_calls,
+        },
+    )
+
+    _run_cli(
+        monkeypatch,
+        "phase12",
+        "pilot-a",
+        "--config",
+        str(SCIENTIFIC_CONFIG),
+        "--allow-live-calls",
+    )
+
+    assert json.loads(capsys.readouterr().out) == {
+        "overall": "pass",
+        "scientific_result": True,
+    }
+
+
+def test_mocked_scientific_pilot_a_executes_two_seed_live_archive(tmp_path: Path) -> None:
+    module = _module()
+    evidence_root = tmp_path / "evidence"
+    _passing_evidence(evidence_root)
+
+    report = module.run_scientific_pilot_a(
+        SCIENTIFIC_CONFIG,
+        allow_live_calls=True,
+        artifact_root=tmp_path,
+        evidence_root=evidence_root,
+        client_factory=_Client,
+        context_factory=_runtime_context,
+        run_id="pilot-a-scientific",
+    )
+
+    run_dir = tmp_path / "runs" / "pilot-a-scientific"
+    trials = [json.loads(line) for line in (run_dir / "trials.jsonl").read_text().splitlines()]
+    assert report["overall"] == "pass"
+    assert report["scientific_result"] is True
+    assert report["trajectory_seeds"] == [0, 1]
+    assert report["eligible_seeds"] == [0]
+    assert report["live_provider_calls"] > 0
+    assert {row["baseline"] for row in trials} == set(module.PLUMBING_BASELINES)
+    assert {row["arm"] for row in trials if row["trial_kind"] == "memory_branch"} == {
+        "clean",
+        "contam",
+        "filter",
+    }
+    assert module.validate_scientific_pilot_a_archive(run_dir)["overall"] == "pass"
 
 
 def test_blocked_handoff_records_real_hashes_without_faking_plumbing(tmp_path: Path) -> None:

@@ -196,6 +196,8 @@ def _record_root_visibility(
     root_id = state.injected_root_id
     if root_id is None:
         return
+    if state.filter_state is not None:
+        return
     root_visible = root_id in context.post_record_ids
     if not state.injected_root_was_visible:
         if not root_visible:

@@ -17,6 +17,9 @@ from memcontam.tasks.base import TaskInstance
 from memcontam.tasks.dispatch import canonical_task_json
 
 
+BOT_SOLVE_PROMPT_VERSION = "bot_solve_json_v2"
+
+
 class BoTSolveResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -41,14 +44,14 @@ def render_bot_solve_prompt(
     )
     result_contract = (
         "Return only strict unfenced JSON with exactly these non-empty string fields: "
-        "selected_structure, solution_trace, final_answer."
+        'selected_structure, solution_trace, final_answer. final_answer must be "final: <answer>".'
         if tool_mode == "text_only"
         else (
             "Use the Python sandbox only when execution would validate the solution. Return exactly one "
             'JSON action: {"action":"execute_python","code":"..."} or '
             '{"action":"final","answer":"<strict BoT solve JSON>"}. '
             "The final action answer must be strict unfenced JSON with exactly these non-empty string fields: "
-            "selected_structure, solution_trace, final_answer."
+            'selected_structure, solution_trace, final_answer. final_answer must be "final: <answer>".'
         )
     )
     suffix = f"\n\nTask input:\n{canonical_task_json(task)}\n\n" + result_contract
