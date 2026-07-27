@@ -357,9 +357,11 @@ def _reflection_messages(
         {
             "role": "system",
             "content": (
-                "Diagnose the failed actor attempt. Return only JSON matching "
-                "ReflectionGenerationResult. Set failure_class to incorrect_answer and cite only "
-                "reflection IDs shown."
+                "Diagnose the failed actor attempt. Return only strict unfenced JSON with exactly "
+                "these fields: mode, failure_class, reflection_text, "
+                "explicitly_used_memory_ids. Set mode to corrective and failure_class to "
+                "incorrect_answer. reflection_text must give a reusable correction. "
+                "explicitly_used_memory_ids must list only reflection IDs shown."
             ),
         },
         {

@@ -42,6 +42,7 @@ reflexion: {active_capacity: 3, verifier_boundary: post_actor_verification_v1}
 prompt_versions:
   final_answer: terminal_final_line_prompt_v2
   bot_solve: bot_solve_json_v2
+  reflexion_reflect: reflexion_reflect_json_v2
 parser_versions:
   final_answer: terminal_final_line_v1
   bot_solve: bot_solve_json_v1

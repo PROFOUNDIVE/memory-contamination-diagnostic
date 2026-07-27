@@ -11,6 +11,7 @@ from memcontam.baselines.reflexion_adapter import ReflexionAdapter, ReflexionSta
 from memcontam.baselines.execution import assert_prompt_bytes
 from memcontam.baselines.reflexion_style import ReflexionStylePolicy
 from memcontam.clients.replay import ReplayClient
+from memcontam.clients.base import LLMResponse
 from memcontam.logging.provenance import compute_exposure_from_spans, normalize_memory_event
 from memcontam.logging.schema import MemoryEvent, MemoryItemLog, VerifierResult
 from memcontam.memory.stores import MemoryEntry, MemoryState
@@ -82,6 +83,56 @@ def _state() -> ReflexionState:
     state = getattr(import_module("memcontam.baselines.reflexion_style"), "ReflexionState", None)
     assert state is not None
     return state()
+
+
+class _SchemaSensitiveReflexionClient:
+    def __init__(self) -> None:
+        self._generation_calls = 0
+
+    def chat(self, messages, model, config) -> LLMResponse:  # noqa: ANN001
+        del model
+        if config["method_stage"] == "reflexion_generate":
+            self._generation_calls += 1
+            answer = "wrong" if self._generation_calls == 1 else "4"
+            return LLMResponse(
+                content=f"final: {answer}", raw={}, token_usage={}, latency_ms=7
+            )
+        prompt = "\n".join(message["content"] for message in messages)
+        required_fields = {
+            "mode",
+            "failure_class",
+            "reflection_text",
+            "explicitly_used_memory_ids",
+        }
+        content = (
+            _reflection("Retry the arithmetic.")
+            if required_fields <= set(prompt.replace('"', "").replace(",", "").split())
+            else json.dumps(
+                {
+                    "failure_class": "incorrect_answer",
+                    "cited_reflection_ids": [],
+                }
+            )
+        )
+        return LLMResponse(content=content, raw={}, token_usage={}, latency_ms=7)
+
+
+def test_reflexion_prompt_exposes_the_schema_consumed_by_the_parser() -> None:
+    outcome = _adapter().execute(
+        _task(),
+        _state(),
+        client=_SchemaSensitiveReflexionClient(),
+        model="replay",
+        config=_config(max_attempts=2),
+        verifier=lambda answer, _task: answer == "4",
+    )
+
+    assert outcome.status == "succeeded"
+    assert [call.stage for call in outcome.method_calls] == [
+        "reflexion_generate",
+        "reflexion_reflect",
+        "reflexion_generate",
+    ]
 
 
 def test_adapter_stores_terminal_reflection_after_two_authenticated_incorrect_attempts() -> None:
