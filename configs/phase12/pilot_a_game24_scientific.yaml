@@ -58,7 +58,9 @@ embedding:
   model_id: BAAI/bge-m3
   revision: 5617a9f61b028005a4858fdac845db406aefb181
   local_files_only: true
-filter_policy_version: operational-evidence-filter-v3
+filter_policy_version: operational-evidence-filter-v4
+filter_interpretation: contract_invalid_direct_write_containment
+filter_claim_status: operational_secondary
 logging_contract: {schema_version: logging_v3, contract_level: phase12}
 retry: {retries_after_initial_attempt: 3, backoff_seconds: [1, 2, 4]}
 cost:

@@ -33,7 +33,10 @@ from memcontam.tasks.game24 import build_instance
 from memcontam.verifiers.game24 import verify_expression
 
 
-DEFAULT_EVIDENCE_ROOT = Path(".sisyphus/evidence/pilot-a-unblock")
+DEFAULT_EVIDENCE_ROOT = Path(".sisyphus/evidence/pilot-a-closeout")
+FILTER_POLICY_VERSION = "operational-evidence-filter-v4"
+FILTER_INTERPRETATION = "contract_invalid_direct_write_containment"
+FILTER_CLAIM_STATUS = "operational_secondary"
 PLUMBING_BASELINES = ("nomem", "fh_bounded", "rag_frozen", "bot_style", "reflexion_style")
 PLUMBING_MAX_CALLS = 10
 PILOT_A_INSTANCE_COUNT = 8
@@ -325,20 +328,78 @@ def _operations_reconcile(ledger: dict[str, object], calls: list[object]) -> boo
 def evaluate_pilot_a_admission(
     config_path: Path, *, evidence_root: Path | None = None
 ) -> dict[str, object]:
-    _load_config(config_path)
+    config = _load_config(config_path)
+    if config.get("config_kind") != "phase12_pilot_a_scientific_v1":
+        return _blocked_admission("SCIENTIFIC_CONFIG_REQUIRED")
     root = evidence_root or DEFAULT_EVIDENCE_ROOT
-    for filename, code in (
-        ("t5-f1c.json", "T5_F1C_EVIDENCE_REQUIRED"),
-        ("t5-micro-retrieval.json", "T5_RETRIEVAL_EVIDENCE_REQUIRED"),
-        ("t6-invariants.json", "T6_INVARIANT_EVIDENCE_REQUIRED"),
-        ("t6-archive.json", "T6_ARCHIVE_EVIDENCE_REQUIRED"),
+    manifest = _read_json(root / "pilot_a_readiness_manifest_phase12_filter_v4.json")
+    if not isinstance(manifest, dict):
+        return _blocked_admission("FILTER_V4_READINESS_MANIFEST_REQUIRED")
+    config_hash = _sha256(config_path)
+    if manifest.get("implementation_commit") != _implementation_commit():
+        return _blocked_admission("FILTER_V4_IMPLEMENTATION_COMMIT_MISMATCH")
+    config_hashes = manifest.get("config_hashes")
+    if not isinstance(config_hashes, dict) or config_hashes.get("scientific_pilot_a") != config_hash:
+        return _blocked_admission("FILTER_V4_CONFIG_HASH_MISMATCH")
+    if manifest.get("filter_policy") != {
+        "claim_status": FILTER_CLAIM_STATUS,
+        "interpretation": FILTER_INTERPRETATION,
+        "version": FILTER_POLICY_VERSION,
+    }:
+        return _blocked_admission("FILTER_V4_POLICY_BINDING_MISMATCH")
+    evidence = manifest.get("evidence")
+    if not isinstance(evidence, dict):
+        return _blocked_admission("FILTER_V4_EVIDENCE_REQUIRED")
+    for filename in (
+        "filter-v4-mft.json",
+        "phase12-filter-v4-f1c.json",
+        "phase12-filter-v4-archive.json",
+        "phase12-filter-v4-invariants.json",
     ):
-        if not _passing_json(root / filename):
-            return _blocked_admission(code)
-    plumbing = root / "t7-plumbing.json"
-    if not _passing_json(plumbing) or not _valid_plumbing_report(_read_json(plumbing)):
-        return _blocked_admission("T7_PLUMBING_EVIDENCE_REQUIRED")
-    return {"admitted": True, "reason_code": None, "scientific_result": False}
+        path = root / filename
+        reference = next(
+            (
+                item
+                for item in evidence.values()
+                if isinstance(item, dict) and Path(str(item.get("path", ""))).name == filename
+            ),
+            None,
+        )
+        if (
+            not path.is_file()
+            or not isinstance(reference, dict)
+            or reference.get("status") != "pass"
+            or reference.get("sha256") != _sha256(path)
+        ):
+            return _blocked_admission("FILTER_V4_EVIDENCE_HASH_MISMATCH")
+    mft = _read_json(root / "filter-v4-mft.json")
+    reports = (
+        _read_json(root / "phase12-filter-v4-f1c.json"),
+        _read_json(root / "phase12-filter-v4-archive.json"),
+        _read_json(root / "phase12-filter-v4-invariants.json"),
+    )
+    if (
+        not isinstance(mft, dict)
+        or mft.get("policy_version") != FILTER_POLICY_VERSION
+        or mft.get("scientific_result") is not False
+        or not isinstance(mft.get("cases"), list)
+        or not mft["cases"]
+        or any(not isinstance(case, dict) or case.get("passed") is not True for case in mft["cases"])
+    ):
+        return _blocked_admission("FILTER_V4_MFT_NOT_PASS")
+    if not all(
+        isinstance(report, dict) and report.get("overall") == "pass" for report in reports
+    ):
+        return _blocked_admission("FILTER_V4_READINESS_NOT_PASS")
+    return {
+        "admitted": True,
+        "config_sha256": config_hash,
+        "filter_interpretation": FILTER_INTERPRETATION,
+        "filter_policy_version": FILTER_POLICY_VERSION,
+        "implementation_commit": _implementation_commit(),
+        "reason_code": None,
+        "scientific_result": False,
+    }
 
 
 def run_scientific_pilot_a(
@@ -351,6 +412,7 @@ def run_scientific_pilot_a(
     context_factory: Callable[[LLMClient, str, str], Game24RuntimeContext] | None = None,
     run_id: str | None = None,
     parent_run_id: str | None = None,
+    root_attempt_run_id: str | None = None,
 ) -> dict[str, object]:
     admission = evaluate_pilot_a_admission(config_path, evidence_root=evidence_root)
     if admission["admitted"] is not True:
@@ -369,6 +431,7 @@ def run_scientific_pilot_a(
             context_factory=context_factory,
             run_id=run_id,
             parent_run_id=parent_run_id,
+            root_attempt_run_id=root_attempt_run_id,
         )
     except ScientificPilotAError as error:
         raise PilotALaunchError(error.code) from error
@@ -500,7 +563,10 @@ def _implementation_commit() -> str:
 def _human_launch_command(config_path: Path) -> str:
     return (
         "python -m memcontam.cli phase12 pilot-a "
-        f"--config {config_path} --allow-live-calls"
+        f"--config {config_path} "
+        "--parent-run-id pilot-a-game24-20260727T062808Z "
+        "--root-attempt-run-id pilot-a-game24-20260727T061248Z "
+        "--allow-live-calls"
     )
 
 

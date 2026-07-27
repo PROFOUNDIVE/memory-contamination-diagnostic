@@ -5,11 +5,15 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import yaml
+
+from memcontam.clients.config import ProviderConfig
 from memcontam.memory.cards_v3 import MEMORY_CARD_V3, MemoryCardEnvelopeV3, canonical_content_hash
 from memcontam.readiness.pilot_a_scientific_records import ROW_NAMES, record_suffix
 
 
 ROOT = Path(__file__).resolve().parents[1]
+SCIENTIFIC_CONFIG = ROOT / "configs" / "phase12" / "pilot_a_game24_scientific.yaml"
 
 
 def _envelope(entry_id: str, content: str) -> MemoryCardEnvelopeV3:
@@ -46,6 +50,56 @@ def test_scientific_filter_context_uses_recorded_prefix_write_evidence() -> None
     assert context.active_envelopes == (recorded,)
     assert context.writer_event_ids == {recorded.writer_event_id}
     assert context.trial_record_ids == set(recorded.trial_support_ids)
+
+
+def test_scientific_config_binds_filter_v4_claim_boundary() -> None:
+    config = yaml.safe_load(SCIENTIFIC_CONFIG.read_text(encoding="utf-8"))
+
+    assert config["filter_policy_version"] == "operational-evidence-filter-v4"
+    assert config["filter_interpretation"] == "contract_invalid_direct_write_containment"
+    assert config["filter_claim_status"] == "operational_secondary"
+
+
+def test_scientific_prefix_has_no_silent_reflexion_bootstrap_and_persists_each_seed(
+    monkeypatch,
+) -> None:  # noqa: ANN001
+    scientific = importlib.import_module("memcontam.readiness.pilot_a_scientific")
+    launch_tests = importlib.import_module("tests.test_phase12_pilot_a_launch")
+    config = yaml.safe_load(SCIENTIFIC_CONFIG.read_text(encoding="utf-8"))
+    base = launch_tests._runtime_context(launch_tests._Client(), "run", "model")
+    base.initial_states["reflexion_style"].reflections.clear()
+    task_ids = {
+        task_id
+        for seed in config["trajectory_seeds"]
+        for task_id in seed["ordered_prefix_task_ids"]
+    }
+    instances = {
+        task_id: base.task.model_copy(update={"sample_id": task_id}) for task_id in task_ids
+    }
+    persisted: list[bool] = []
+
+    monkeypatch.setattr(scientific, "_instances", lambda _config: instances)
+    monkeypatch.setattr(scientific, "load_candidate_registry", lambda _path: SimpleNamespace())
+    monkeypatch.setattr(scientific, "record_prefix", lambda *_args: None)
+
+    def blocked_prefix(*, contexts, **_kwargs):  # noqa: ANN001
+        assert all(
+            not context.initial_states["reflexion_style"].reflections for context in contexts
+        )
+        return SimpleNamespace(selection=SimpleNamespace(blocked=True))
+
+    monkeypatch.setattr(scientific, "run_live_clean_prefix", blocked_prefix)
+    scientific._run_seeds(
+        config,
+        "run",
+        launch_tests._Client(),
+        ProviderConfig.from_run_config(config),
+        lambda *_args: base,
+        rows={name: [] for name in scientific.ROW_NAMES},
+        seal_progress=lambda: persisted.append(True),
+    )
+
+    assert persisted == [True, True]
 
 
 def test_suffix_log_records_the_actual_filter_partition_decision(
