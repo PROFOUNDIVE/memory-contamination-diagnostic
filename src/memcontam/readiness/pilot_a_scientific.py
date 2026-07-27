@@ -11,7 +11,6 @@ from typing import Any, Callable, Literal, cast
 
 import yaml  # type: ignore[import-untyped]
 
-from memcontam.baselines.reflexion_phase12 import ReflexionStateV3
 from memcontam.clients.base import LLMClient
 from memcontam.clients.config import ProviderConfig
 from memcontam.clients.cost_guard import CostLimitExceeded
@@ -24,8 +23,7 @@ from memcontam.experiment.phase12.live_prefix import run_live_clean_prefix
 from memcontam.experiment.phase12.live_suffix import run_live_matched_suffix
 from memcontam.experiment.phase12.runtime_registry import RuntimeTrialResult
 from memcontam.memory.admission import AdmissionContext
-from memcontam.memory.cards_v3 import MemoryCardEnvelopeV3, canonical_content_hash
-from memcontam.memory.checkpoint_v3 import NATIVE_ENTRY_V1, NativeEntry
+from memcontam.memory.cards_v3 import MemoryCardEnvelopeV3
 from memcontam.readiness.pilot_a_scientific_archive import (
     validate_scientific_archive,
     write_scientific_archive,
@@ -55,6 +53,7 @@ def run_scientific_pilot_a(
     context_factory: Callable[[LLMClient, str, str], Game24RuntimeContext] | None = None,
     run_id: str | None = None,
     parent_run_id: str | None = None,
+    root_attempt_run_id: str | None = None,
 ) -> dict[str, Any]:
     if not allow_live_calls:
         raise ScientificPilotAError("LIVE_CALL_AUTHORIZATION_REQUIRED")
@@ -66,6 +65,10 @@ def run_scientific_pilot_a(
     _validate_run_id(identity)
     if parent_run_id is not None:
         _validate_run_id(parent_run_id)
+    if root_attempt_run_id is not None:
+        _validate_run_id(root_attempt_run_id)
+    if identity in {parent_run_id, root_attempt_run_id}:
+        raise ScientificPilotAError("ATTEMPT_LINEAGE_INVALID")
     root = artifact_root or _artifact_root()
     run_dir = root / "runs" / identity
     if run_dir.exists():
@@ -83,6 +86,7 @@ def run_scientific_pilot_a(
                 provider,
                 rows,
                 parent_run_id=parent_run_id,
+                root_attempt_run_id=root_attempt_run_id,
                 run_status=status,
                 status_reason=reason,
             ),
@@ -98,7 +102,15 @@ def run_scientific_pilot_a(
                 provider, stage="pilot", execution_class="live", allow_live_calls=True
             ),
         )
-        rows = _run_seeds(config, identity, client, provider, context_factory, rows=rows)
+        rows = _run_seeds(
+            config,
+            identity,
+            client,
+            provider,
+            context_factory,
+            rows=rows,
+            seal_progress=lambda: seal("interrupted", "seed_progress_persisted"),
+        )
         if rows["seed_status"] and not any(item.get("eligible") for item in rows["seed_status"]) and not any(
             "status" in item for item in rows["seed_status"]
         ):
@@ -129,13 +141,14 @@ def _run_seeds(
     context_factory: Callable[[LLMClient, str, str], Game24RuntimeContext] | None,
     *,
     rows: dict[str, list[dict[str, Any]]],
+    seal_progress: Callable[[], None] | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     instances = _instances(config)
     registry = load_candidate_registry(Path(config["candidate_registry"]["path"]))
     for seed_spec in config["trajectory_seeds"]:
         seed = int(seed_spec["seed"])
         factory = context_factory or _default_context
-        base = _mature_context(factory(client, run_id, config["provider"]["model_id"]))
+        base = factory(client, run_id, config["provider"]["model_id"])
         contexts = tuple(
             replace(
                 base,
@@ -153,6 +166,8 @@ def _run_seeds(
         )
         record_prefix(rows, seed, contexts, prefix, provider)
         if prefix.selection.blocked:
+            if seal_progress is not None:
+                seal_progress()
             continue
         selected_index = cast(int, prefix.selection.selected_trial_index)
         frozen_suffix_order = tuple(seed_spec["ordered_suffix_task_ids"])
@@ -180,6 +195,8 @@ def _run_seeds(
         )
         suffix = run_live_matched_suffix(branches_by_baseline=branches, contexts=suffix_contexts)
         record_suffix(rows, seed, suffix.memory_runs, suffix.nomem.trials, branches, provider)
+        if seal_progress is not None:
+            seal_progress()
     return rows
 
 
@@ -233,26 +250,6 @@ def _instances(config: dict[str, Any]) -> dict[str, Any]:
     return instances
 
 
-def _mature_context(context: Game24RuntimeContext) -> Game24RuntimeContext:
-    states = dict(context.initial_states)
-    reflexion = states.get("reflexion_style")
-    if isinstance(reflexion, ReflexionStateV3) and not reflexion.reflections:
-        states["reflexion_style"] = ReflexionStateV3(
-            reflections=[
-                NativeEntry(
-                    entry_id="pilot-a-clean-reflection-v1",
-                    semantic_kind="verbal_reflection",
-                    schema_version=NATIVE_ENTRY_V1,
-                    native_component="reflections",
-                    content="Verify arithmetic before finalizing.",
-                    content_hash=canonical_content_hash("Verify arithmetic before finalizing."),
-                )
-            ],
-            active_capacity=reflexion.active_capacity,
-        )
-    return replace(context, initial_states=states)
-
-
 def _default_context(client: LLMClient, run_id: str, model: str) -> Game24RuntimeContext:
     from memcontam.readiness.pilot_a_launch import _live_context
 
@@ -288,6 +285,12 @@ def _load_config(path: Path) -> dict[str, Any]:
         raise ScientificPilotAError("INVALID_SCIENTIFIC_PILOT_A_CONFIG")
     if [item.get("seed") for item in payload.get("trajectory_seeds", [])] != [0, 1]:
         raise ScientificPilotAError("TWO_CALIBRATION_SEEDS_REQUIRED")
+    if (
+        payload.get("filter_policy_version") != "operational-evidence-filter-v4"
+        or payload.get("filter_interpretation") != "contract_invalid_direct_write_containment"
+        or payload.get("filter_claim_status") != "operational_secondary"
+    ):
+        raise ScientificPilotAError("FILTER_V4_CONFIG_REQUIRED")
     return payload
 
 

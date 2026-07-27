@@ -129,21 +129,25 @@ def record_suffix(rows, seed, memory_runs, nomem_trials, branches, provider) -> 
         _record_suffix_trial(rows, seed, trial, provider)
 
 
-def artifacts(config_path, config, run_id, provider, rows, parent_run_id=None, run_status="completed", status_reason=None):  # noqa: ANN001
+def artifacts(config_path, config, run_id, provider, rows, parent_run_id=None, root_attempt_run_id=None, run_status="completed", status_reason=None):  # noqa: ANN001
     seeds = [int(item["seed"]) for item in config["trajectory_seeds"]]
     eligible = [item["seed"] for item in rows["seed_status"] if item["eligible"]]
     cost_total = sum(call["cost_usd"] for call in rows["calls"])
     retry_total = sum(call["retry_count"] for call in rows["calls"])
+    result_eligible = run_status == "completed"
     return {
         "run.json": {
             "evidence_layer": "calibration",
             "implementation_commit": _git_head(),
             "parent_run_id": parent_run_id,
+            "root_attempt_run_id": root_attempt_run_id,
+            "requested_scientific_result": True,
+            "result_eligible": result_eligible,
             "run_family": "pilot_a",
             "run_id": run_id,
             "status": run_status,
             **({"status_reason": status_reason} if status_reason is not None else {}),
-            "scientific_result": True,
+            "scientific_result": result_eligible,
         },
         "resolved_config.json": {
             "config": config,
@@ -161,7 +165,9 @@ def artifacts(config_path, config, run_id, provider, rows, parent_run_id=None, r
             "live_provider_calls": len(rows["calls"]),
             "nomem": {"aliases": 3, "underlying_executions_per_seed": 1},
             "retry_total": retry_total,
-            "scientific_result": True,
+            "requested_scientific_result": True,
+            "result_eligible": result_eligible,
+            "scientific_result": result_eligible,
             "trajectory_seeds": seeds,
             "prefix": {
                 "completed_trials": sum(
@@ -174,6 +180,7 @@ def artifacts(config_path, config, run_id, provider, rows, parent_run_id=None, r
             "provenance": {
                 "implementation_commit": _git_head(),
                 "parent_run_id": parent_run_id,
+                "root_attempt_run_id": root_attempt_run_id,
                 "run_id": run_id,
             },
         },
