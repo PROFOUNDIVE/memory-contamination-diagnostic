@@ -122,7 +122,9 @@ def build_branch_corpora(
         "correct": _branch(
             clean, "correct", (*clean_documents, correct), (*clean_documents, correct)
         ),
-        "filter": _branch(clean, "filter", (*clean_documents, false), clean_documents),
+        "filter": _branch(
+            clean, "filter", (*clean_documents, false), (*clean_documents, false)
+        ),
         "irrelevant": _branch(
             clean, "irrelevant", (*clean_documents, irrelevant), (*clean_documents, irrelevant)
         ),

@@ -47,10 +47,11 @@ def test_builds_five_branch_indices_and_certifies_inv03_equivalence() -> None:
     assert {branch: index.artifact_hash for branch, index in indices.branches.items()} == fixture[
         "expected_branch_index_sha256"
     ]
-    assert indices.branches["clean"].artifact_hash == indices.branches["filter"].artifact_hash
+    assert indices.branches["contam"].artifact_hash == indices.branches["filter"].artifact_hash
     assert tuple(document.document_id for document in indices.branches["filter"].documents) == (
         "doc-clean-a",
         "doc-clean-b",
+        "doc-false",
     )
     retrieved = indices.branches["contam"].retrieve(fixture["query"], k=3)
     assert retrieved[0].document_id == "doc-false"
