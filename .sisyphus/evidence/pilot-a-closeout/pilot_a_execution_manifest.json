@@ -33,9 +33,36 @@
       "run_id": "pilot-a-game24-20260727T062808Z",
       "scientific_result": false,
       "status": "blocked"
+    },
+    {
+      "archive_manifest_sha256": "c2e9538a7453684668bf8197d6ec290d2129ea1cfe96ec83441e807e8522002d",
+      "archive_validation": "pass",
+      "completed_suffix_cells": 26,
+      "cost_total_usd": 0.19195500000000004,
+      "eligible_seeds": [0, 1],
+      "engineering_failures": [],
+      "implementation_commit": "f10e85f2580a03f5bf205b155bf6e4dbf962d841",
+      "latency_ms": {
+        "max": 9853,
+        "mean": 1848.0349650349651,
+        "min": 605,
+        "total": 264269
+      },
+      "live_provider_calls": 143,
+      "model_behavior_failures": {},
+      "parent_run_id": "pilot-a-game24-20260727T062808Z",
+      "requested_scientific_result": true,
+      "result_eligible": true,
+      "retry_total": 0,
+      "root_attempt_run_id": "pilot-a-game24-20260727T061248Z",
+      "run_dir": "runs/runs/pilot-a-game24-20260727T195633Z",
+      "run_id": "pilot-a-game24-20260727T195633Z",
+      "scientific_result": true,
+      "selected_checkpoints": {"0": 2, "1": 1},
+      "status": "completed"
     }
   ],
-  "final_status": "PILOT_A_BLOCKED_BY_IMPLEMENTATION",
+  "final_status": "PILOT_A_INFRASTRUCTURE_AND_FILTER_CONTRACT_PASS",
   "first_attempt_post_validation": {
     "candidate_final_context_count": 6,
     "candidate_retrieval_count": 2,
@@ -50,7 +77,8 @@
   },
   "known_scientific_cost_floor_usd": 0.12432749999999997,
   "no_further_provider_calls": true,
-  "readiness_commit": "5ea9a78949f54c20a63e420fc4fd593a7ea02f58",
-  "readiness_manifest": ".sisyphus/evidence/pilot-a-closeout/pilot_a_readiness_manifest.json",
-  "scientific_result": false
+  "post_run_validation_commit": "07eea4d",
+  "readiness_commit": "f10e85f2580a03f5bf205b155bf6e4dbf962d841",
+  "readiness_manifest": ".sisyphus/evidence/pilot-a-closeout/pilot_a_readiness_manifest_phase12_filter_v4.json",
+  "scientific_result": true
 }
