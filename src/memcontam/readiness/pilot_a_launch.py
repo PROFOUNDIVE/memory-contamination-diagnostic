@@ -336,7 +336,15 @@ def evaluate_pilot_a_admission(
     if not isinstance(manifest, dict):
         return _blocked_admission("FILTER_V4_READINESS_MANIFEST_REQUIRED")
     config_hash = _sha256(config_path)
-    if manifest.get("implementation_commit") != _implementation_commit():
+    tested_commit = manifest.get("tested_implementation_commit")
+    evidence_commit = manifest.get("evidence_commit")
+    if (
+        not isinstance(tested_commit, str)
+        or manifest.get("implementation_commit") != tested_commit
+        or not isinstance(evidence_commit, str)
+        or _commit_parent(evidence_commit) != tested_commit
+        or not _is_ancestor(evidence_commit, _implementation_commit())
+    ):
         return _blocked_admission("FILTER_V4_IMPLEMENTATION_COMMIT_MISMATCH")
     config_hashes = manifest.get("config_hashes")
     if not isinstance(config_hashes, dict) or config_hashes.get("scientific_pilot_a") != config_hash:
@@ -558,6 +566,29 @@ def _implementation_commit() -> str:
         ).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
         return "unknown"
+
+
+def _commit_parent(commit: str) -> str | None:
+    try:
+        return subprocess.run(
+            ["git", "rev-parse", f"{commit}^"], check=True, capture_output=True, text=True
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+
+def _is_ancestor(ancestor: str, descendant: str) -> bool:
+    try:
+        return (
+            subprocess.run(
+                ["git", "merge-base", "--is-ancestor", ancestor, descendant],
+                check=False,
+                capture_output=True,
+            ).returncode
+            == 0
+        )
+    except OSError:
+        return False
 
 
 def _human_launch_command(config_path: Path) -> str:

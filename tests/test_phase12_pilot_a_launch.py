@@ -61,6 +61,10 @@ def _rewrite_archive_manifest(run_dir: Path) -> None:
 
 
 def _passing_evidence(root: Path) -> None:
+    module = _module()
+    evidence_commit = module._implementation_commit()
+    tested_commit = module._commit_parent(evidence_commit)
+    assert tested_commit is not None
     artifacts = {
         "filter-v4-mft.json": {
             "cases": [{"passed": True}],
@@ -95,7 +99,9 @@ def _passing_evidence(root: Path) -> None:
                 "interpretation": "contract_invalid_direct_write_containment",
                 "version": "operational-evidence-filter-v4",
             },
-            "implementation_commit": _module()._implementation_commit(),
+            "evidence_commit": evidence_commit,
+            "implementation_commit": tested_commit,
+            "tested_implementation_commit": tested_commit,
         },
     )
 
