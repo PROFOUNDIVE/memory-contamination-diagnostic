@@ -349,6 +349,7 @@ def run_scientific_pilot_a(
     client_factory: Callable[[], object] | None = None,
     context_factory: Callable[[LLMClient, str, str], Game24RuntimeContext] | None = None,
     run_id: str | None = None,
+    parent_run_id: str | None = None,
 ) -> dict[str, object]:
     admission = evaluate_pilot_a_admission(config_path, evidence_root=evidence_root)
     if admission["admitted"] is not True:
@@ -366,6 +367,7 @@ def run_scientific_pilot_a(
             client_factory=client_factory,
             context_factory=context_factory,
             run_id=run_id,
+            parent_run_id=parent_run_id,
         )
     except ScientificPilotAError as error:
         raise PilotALaunchError(error.code) from error

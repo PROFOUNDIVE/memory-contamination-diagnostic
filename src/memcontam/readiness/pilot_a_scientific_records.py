@@ -98,7 +98,7 @@ def record_suffix(rows, seed, memory_runs, nomem_trials, branches, provider) -> 
         _record_suffix_trial(rows, seed, trial, provider)
 
 
-def artifacts(config_path, config, run_id, provider, rows):  # noqa: ANN001
+def artifacts(config_path, config, run_id, provider, rows, parent_run_id=None):  # noqa: ANN001
     seeds = [int(item["seed"]) for item in config["trajectory_seeds"]]
     eligible = [item["seed"] for item in rows["seed_status"] if item["eligible"]]
     cost_total = sum(call["cost_usd"] for call in rows["calls"])
@@ -107,6 +107,7 @@ def artifacts(config_path, config, run_id, provider, rows):  # noqa: ANN001
         "run.json": {
             "evidence_layer": "calibration",
             "implementation_commit": _git_head(),
+            "parent_run_id": parent_run_id,
             "run_family": "pilot_a",
             "run_id": run_id,
             "scientific_result": True,
@@ -169,6 +170,7 @@ def _record_trial(rows, seed, baseline, arm, kind, task_id, outcome, provider) -
                 "baseline": baseline,
                 "call_id": call_id,
                 "cost_usd": _call_cost(call.token_usage, provider),
+                "latency_ms": call.latency_ms,
                 "messages": call.messages,
                 "response_text": call.raw_response,
                 "retry_count": call.retry_count,

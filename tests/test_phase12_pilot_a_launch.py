@@ -626,8 +626,9 @@ def test_pilot_a_cli_dispatches_the_scientific_runner_after_admission(
     monkeypatch.setattr(
         module,
         "run_scientific_pilot_a",
-        lambda _config, *, allow_live_calls: {
+        lambda _config, *, allow_live_calls, parent_run_id: {
             "overall": "pass",
+            "parent_run_id": parent_run_id,
             "scientific_result": allow_live_calls,
         },
     )
@@ -639,10 +640,13 @@ def test_pilot_a_cli_dispatches_the_scientific_runner_after_admission(
         "--config",
         str(SCIENTIFIC_CONFIG),
         "--allow-live-calls",
+        "--parent-run-id",
+        "pilot-a-attempt-1",
     )
 
     assert json.loads(capsys.readouterr().out) == {
         "overall": "pass",
+        "parent_run_id": "pilot-a-attempt-1",
         "scientific_result": True,
     }
 
@@ -660,10 +664,13 @@ def test_mocked_scientific_pilot_a_executes_two_seed_live_archive(tmp_path: Path
         client_factory=_Client,
         context_factory=_runtime_context,
         run_id="pilot-a-scientific",
+        parent_run_id="pilot-a-attempt-1",
     )
 
     run_dir = tmp_path / "runs" / "pilot-a-scientific"
     trials = [json.loads(line) for line in (run_dir / "trials.jsonl").read_text().splitlines()]
+    calls = [json.loads(line) for line in (run_dir / "calls.jsonl").read_text().splitlines()]
+    run = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
     assert report["overall"] == "pass"
     assert report["scientific_result"] is True
     assert report["trajectory_seeds"] == [0, 1]
@@ -675,6 +682,8 @@ def test_mocked_scientific_pilot_a_executes_two_seed_live_archive(tmp_path: Path
         "contam",
         "filter",
     }
+    assert all(call["latency_ms"] == 0 for call in calls)
+    assert run["parent_run_id"] == "pilot-a-attempt-1"
     assert module.validate_scientific_pilot_a_archive(run_dir)["overall"] == "pass"
 
 
@@ -682,7 +691,7 @@ def test_scientific_pilot_a_stops_when_joint_checkpoint_eligibility_is_empty(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     module = importlib.import_module("memcontam.readiness.pilot_a_scientific")
-    rows = {name: [] for name in module.ROW_NAMES}
+    rows: dict[str, list[dict[str, object]]] = {name: [] for name in module.ROW_NAMES}
     rows["seed_status"] = [
         {"seed": 0, "eligible": False},
         {"seed": 1, "eligible": False},

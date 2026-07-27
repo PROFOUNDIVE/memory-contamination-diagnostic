@@ -50,6 +50,7 @@ def run_scientific_pilot_a(
     client_factory: Callable[[], object] | None = None,
     context_factory: Callable[[LLMClient, str, str], Game24RuntimeContext] | None = None,
     run_id: str | None = None,
+    parent_run_id: str | None = None,
 ) -> dict[str, Any]:
     if not allow_live_calls:
         raise ScientificPilotAError("LIVE_CALL_AUTHORIZATION_REQUIRED")
@@ -65,6 +66,8 @@ def run_scientific_pilot_a(
     )
     identity = run_id or f"pilot-a-game24-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
     _validate_run_id(identity)
+    if parent_run_id is not None:
+        _validate_run_id(parent_run_id)
     root = artifact_root or _artifact_root()
     run_dir = root / "runs" / identity
     if run_dir.exists():
@@ -73,7 +76,9 @@ def run_scientific_pilot_a(
     rows = _run_seeds(config, identity, client, provider, context_factory)
     if not any(status["eligible"] for status in rows["seed_status"]):
         raise ScientificPilotAError("JOINT_CHECKPOINT_ELIGIBILITY_EMPTY")
-    archive_artifacts = artifacts(config_path, config, identity, provider, rows)
+    archive_artifacts = artifacts(
+        config_path, config, identity, provider, rows, parent_run_id=parent_run_id
+    )
     write_scientific_archive(run_dir, archive_artifacts)
     report = validate_scientific_archive(run_dir)
     if report["overall"] != "pass":
