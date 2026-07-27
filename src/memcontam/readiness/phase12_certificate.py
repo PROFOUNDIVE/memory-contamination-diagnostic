@@ -18,9 +18,9 @@ from memcontam.readiness.phase12_replay import P12IReplayResult, P12ISubgateEvid
 EXPECTED_REPOSITORY_COMMIT = "830b89c8c169ffa9cdea472887fdae134dbae7cf"
 EXPECTED_F1C_CONTRACT_REFS = {
     "cache_setup_doc_blob_sha": "d2d1e7b2d2405e77c1708ae2a6af808a0316d825",
-    "live_embedding_test_blob_sha": "366601812c64046a34531c0966dcc9467041e3d5",
-    "provider_config_blob_sha": "966a00c797cdfaf22ec4695e3d68090e3c47fce4",
-    "verifier_blob_sha": "6c651b5924e68daffe6d72145ef8d8765b761483",
+    "live_embedding_test_blob_sha": "08853dd610d4c547c5950fbd0d6dc88e34c3e2cf",
+    "provider_config_blob_sha": "c0a5693bd4fdc94d11584862503718eae5d98693",
+    "verifier_blob_sha": "3c3eb4741b6cbe021aa00f1d0895ec452bd3ec4f",
 }
 _F1C_SOURCE_PATHS = {
     "cache_setup_doc_blob_sha": "docs/bge-m3-cache-setup.md",
