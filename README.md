@@ -8,13 +8,13 @@ All claims concern **faithful adapted baselines**, not a complete reproduction o
 
 [`docs/baseline-fidelity-v2.md`](docs/baseline-fidelity-v2.md) is the sole authority for Baseline-Fidelity-V2; [`docs/baseline-fidelity-v2-evidence.md`](docs/baseline-fidelity-v2-evidence.md) records provenance, resource usage, and artifact hashes. Older V1 and G0 reports are historical and cannot support a V2 fidelity claim.
 
-F1A and F1B pass as offline, non-scientific QA gates. F1C uses pinned BGE-M3 cache-only semantics with mocked OpenAI-compatible answer dispatch. This checkout lacks the required revision, so the verifier reports `missing_cached_bge_m3` and overall V2 certification remains blocked. Replay evidence is not benchmark, manuscript-quality, causal, or production contamination evidence. `v0.8` is a repository research-artifact tag for the completed V2 source-contract remediation. It is not an overall V2 certification because F1C remains blocked.
+F1A and F1B pass as offline, non-scientific QA gates. The current closeout reissue also passes F1C with pinned BGE-M3 cache-only semantics and mocked answer dispatch, so Baseline-Fidelity-V2 passes for the compatible current contract tuple. Replay and F1C evidence remain QA evidence, not benchmark, manuscript-quality, causal, or production contamination evidence. Historical `v0.8` evidence remains historical and is not retroactively changed; the current-head readiness manifest carries the active hashes.
 
 ## Phase-12 Repository Contract Status
 
 Phase-12 support is a repository contract, not a scientific result. It adds `logging_v3`, five Methods-facing arms (`Clean`, `Correct`, `Irrelevant`, `Contam`, `Filter`), branch-free clean prefixes, matched suffixes, P12I build-layer replay checks, canonical configs, manifests, archive validation, and separate exploratory Python-sandbox governance.
 
-The committed workflow remains offline and non-scientific until the exact F1C cache gate and required external governance artifacts are available. P12I may pass as build-layer readiness while scientific admission remains false. Text-only evidence and exploratory code evidence are not pooled.
+The historical Phase-12 contract workflow remains non-scientific. A separate current-head Pilot-A readiness manifest records the exact cache-only F1C, micro-retrieval, live-plumbing, invariant, archive, and admission results. Text-only evidence and exploratory code evidence are not pooled.
 
 - [`docs/phase12-implementation-contract.md`](docs/phase12-implementation-contract.md)
 - [`docs/logging-v3-phase12.md`](docs/logging-v3-phase12.md)
@@ -22,7 +22,7 @@ The committed workflow remains offline and non-scientific until the exact F1C ca
 
 ## v0.9 Phase-12 Repository Contract Refactor
 
-Phase-12 plan execution completed as repository-contract work; this refactor removed bootstrap scaffolding and deduplicated tests/docs. `v0.9` is a repository research-artifact tag, not scientific, benchmark, or manuscript-quality evidence. F1C remains `BLOCKED` (`missing_cached_bge_m3`). P12I may pass, but scientific admission remains false. Text/code evidence are not pooled.
+Phase-12 plan execution completed as repository-contract work; this refactor removed bootstrap scaffolding and deduplicated tests/docs. `v0.9` remains a historical repository research-artifact tag, not scientific, benchmark, or manuscript-quality evidence. Its blocked F1C statement is historical; current status is versioned separately in the closeout readiness manifest. Text/code evidence are not pooled.
 
 ## Historical Release Roadmap
 

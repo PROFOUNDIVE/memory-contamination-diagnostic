@@ -56,23 +56,23 @@ or source-contract evidence. F1A evidence cannot be represented as F1B or F1C ev
 
 ## Fidelity Gate Status
 
-Overall V2 certification: **BLOCKED**.
+Overall V2 certification for the current compatible closeout tuple: **PASS**.
 
 F1A structural integration replay: **PASS**.
 F1B source-contract replay: **PASS**.
-F1C pinned real-retriever and mocked-live boundary: **BLOCKED**.
+F1C pinned real-retriever and mocked-live boundary: **PASS**.
 
 | Layer | Status | What the layer establishes |
 |---|---|---|
 | F1A structural integration replay | **PASS** | Runner shape, native adapter routing, stage topology, outcomes, strict joins, state isolation, and audit artifacts with an explicit test-double embedding provider. |
 | F1B source-contract replay | **PASS** | Native stage outputs, byte-locked prompts, model-visible information, failure triples, source spans, state deltas, call counts, RAG top-three retrieval, and optional DC-RS behavior. |
-| F1C pinned real-retriever and mocked-live boundary | **BLOCKED** | The gate exists and enforces cache-only BGE-M3, fake-provider rejection, denied sockets, and mocked OpenAI-compatible answer dispatch. This checkout lacks the pinned model cache, so it reports `missing_cached_bge_m3`. |
+| F1C pinned real-retriever and mocked-live boundary | **PASS** | The current-head reissue loaded the exact pinned BGE-M3 revision cache-only on CPU, retrieved three RAG records, retained a nonempty BoT buffer, and completed mocked answer dispatch. |
 
 The F1C gate requires `BAAI/bge-m3` revision
 `5617a9f61b028005a4858fdac845db406aefb181`, loaded with cache-only semantics.
 It must not download weights or substitute fake embeddings. The mocked-live client tests
-answer dispatch and provider metadata without a paid model call. A V2 fidelity pass can
-be claimed only after the same F1C verifier returns `overall=pass` with the pinned cache.
+answer dispatch and provider metadata without a paid model call. The current closeout
+manifest records the passing verifier output and runtime identity.
 
 ## Prompt and Provider Versions
 

@@ -19,15 +19,21 @@ authority.
 | F1B inspector result | 18 trials, 32 calls, 5 failures, 10 memory events, `overall=pass` |
 | F1C verifier result in this checkout | `overall=blocked`, `blocker=missing_cached_bge_m3`, exit 1 |
 
+The table above preserves the historical `v0.8` provenance. The current-head closeout
+reissue is recorded in `.sisyphus/evidence/pilot-a-closeout/pilot_a_readiness_manifest.json`.
+For that compatible tuple, F1A, F1B, and exact cache-only F1C all pass; F1C records
+`BAAI/bge-m3@5617a9f61b028005a4858fdac845db406aefb181`, CPU execution, and
+`local_files_only=true`.
+
 F1A and F1B use committed replay inputs and explicit non-scientific test-double
 embeddings. F1C uses pinned BGE-M3 cache-only semantics and mocked-live answer dispatch.
 Sockets are denied during its verification. No API call, model download, generated
 `runs/` directory, or embedding cache belongs in a commit.
 
-The generated F1B artifact manifest is
+The historical generated F1B artifact manifest is
 `.sisyphus/evidence/baseline-fidelity-v2/evidence_manifest.json`. It hashes the config,
 native replay fixture, prompt fixtures, inspector report, and strict run artifacts. It
-doesn't turn the blocked F1C layer into a pass.
+doesn't determine current status; the versioned closeout manifest does.
 
 ## Resource Usage
 
@@ -45,8 +51,8 @@ than estimates.
 | `dynamic_cheatsheet_rs_optional` | 6 | 0 | 0 | 0 | 0 | 3 | 2 |
 
 These are method-native unequal call counts. They aren't compute-matched performance
-comparisons. No F1C resource row is reported because the missing cache stops the gate
-before a verified run exists.
+comparisons. Historical resource rows remain unchanged. Current F1C runtime metadata is
+retained in the closeout readiness manifest rather than backfilled into this table.
 
 ## Artifact Hash Manifest
 
@@ -76,10 +82,10 @@ F1A structural replay and F1B source-contract replay are reproducible QA gates i
 checkout. F1B's independent inspector passed and its generated artifact hashes match the
 files produced by the canonical run.
 
-The evidence package isn't a complete V2 certification seal while F1C is blocked. The
-only accepted next step is to provision the exact pinned BGE-M3 revision in the local
-cache and rerun the existing verifier. Changing the model, revision, provider mode, or
-network policy would create different evidence, not complete this gate.
+The historical package remains an incomplete V2 seal because its F1C was blocked. The
+separate current-head closeout package passes all three layers with the exact pinned
+cache and compatible prompt, retry, embedding, and execution contracts. Changing the
+model, revision, provider mode, or network policy would create different evidence.
 
 The `v0.8` tag records the completed source-contract remediation state. It does not
-convert the blocked F1C layer into a pass.
+convert its historical blocked F1C layer into a pass.
