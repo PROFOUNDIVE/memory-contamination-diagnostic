@@ -146,7 +146,11 @@ def build_matched_branches(
     contam = append_native_entry(prefix, false_entry)
     correct = append_native_entry(prefix, correct_entry)
     irrelevant = append_native_entry(prefix, irrelevant_entry)
-    filtered = partition_native_checkpoint(contam, _filter_context(filter_policy, false_entry))
+    filtered = partition_native_checkpoint(
+        contam,
+        _filter_context(filter_policy, false_entry),
+        trusted_entry_ids=frozenset(_entry_ids(prefix)),
+    )
     source_id = prefix.identity.checkpoint_id
 
     return BranchSet(

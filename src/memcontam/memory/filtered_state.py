@@ -77,7 +77,10 @@ class FilterTransition:
 
 
 def partition_native_checkpoint(
-    checkpoint: Phase12Checkpoint, context: AdmissionContext
+    checkpoint: Phase12Checkpoint,
+    context: AdmissionContext,
+    *,
+    trusted_entry_ids: frozenset[str] = frozenset(),
 ) -> FilteredCheckpoint:
     try:
         state = deserialize_checkpoint(checkpoint)
@@ -95,7 +98,11 @@ def partition_native_checkpoint(
         entry_id = _entry_id(entry)
         envelope = envelopes_by_id.get(entry_id)
         if envelope is None:
-            decision = AdmissionDecision(entry_id, False, "MISSING_SUPPORT_EVIDENCE")
+            decision = AdmissionDecision(
+                entry_id,
+                entry_id in trusted_entry_ids,
+                "TRUSTED_PREFIX" if entry_id in trusted_entry_ids else "MISSING_SUPPORT_EVIDENCE",
+            )
         else:
             decision = evaluate_admission(
                 envelope,
@@ -106,10 +113,11 @@ def partition_native_checkpoint(
                 ),
             )
         if decision.admitted:
-            if envelope is None:
+            if envelope is None and entry_id not in trusted_entry_ids:
                 raise AdmissionError("MISSING_SUPPORT_EVIDENCE")
             active_entries.append(entry)
-            active_envelopes.append(envelope)
+            if envelope is not None:
+                active_envelopes.append(envelope)
             decisions.append(PartitionDecision(entry_id, "active", None))
         else:
             quarantine_entries.append(entry)

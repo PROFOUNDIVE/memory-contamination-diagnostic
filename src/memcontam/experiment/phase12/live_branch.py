@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal, Mapping, cast
 
 from memcontam.baselines.bot_phase12 import BoTStateV3
@@ -23,6 +23,7 @@ from memcontam.rag.phase12_corpus import CleanCorpus, build_branch_corpora
 
 Arm = Literal["clean", "contam", "filter"]
 _ARMS: tuple[Arm, ...] = ("clean", "contam", "filter")
+_INTERVENED_ARMS: tuple[Arm, ...] = ("contam", "filter")
 
 
 class LiveBranchError(ValueError):
@@ -166,7 +167,7 @@ def build_live_three_arm_branches(
             triplet.triplet_id,
             render_id,
         )
-        for arm in ("contam", "filter")
+        for arm in _INTERVENED_ARMS
     )
     return LiveThreeArmBranches(baseline, context.model, dict(context.decoding), arms, events)
 
@@ -198,7 +199,7 @@ def _branch_states(
     filter_policy: AdmissionContext,
 ) -> tuple[object, object, object]:
     if isinstance(clean_state, RagFrozenStateV3):
-        return _rag_branch_states(clean_state, context, triplet)
+        return _rag_branch_states(clean_state, context, triplet, filtered)
     if isinstance(clean_state, NativeState):
         return (
             clean_state,
@@ -252,7 +253,10 @@ def _attach_filter_state(
 
 
 def _rag_branch_states(
-    clean_state: RagFrozenStateV3, context: Game24RuntimeContext, triplet: CandidateTriplet
+    clean_state: RagFrozenStateV3,
+    context: Game24RuntimeContext,
+    triplet: CandidateTriplet,
+    filtered: FilteredCheckpoint,
 ) -> tuple[RagFrozenStateV3, RagFrozenStateV3, RagFrozenStateV3]:
     if (
         clean_state.branch != "clean"
@@ -266,6 +270,24 @@ def _rag_branch_states(
         raise LiveBranchError("RAG_CLEAN_STATE_REQUIRED")
     corpora = build_branch_corpora(
         CleanCorpus(corpus_id=corpus_id, documents=clean_state.corpus.documents), triplet
+    )
+    filter_corpus = corpora.branches["filter"]
+    active_entry_ids = {
+        decision.entry_id for decision in filtered.decisions if decision.state == "active"
+    }
+    corpora = replace(
+        corpora,
+        branches={
+            **corpora.branches,
+            "filter": replace(
+                filter_corpus,
+                active_document_ids=tuple(
+                    document.document_id
+                    for document in filter_corpus.documents
+                    if document.document_id in active_entry_ids
+                ),
+            ),
+        },
     )
     indices = build_branch_indices(
         corpora, cast(EmbeddingProvider, context.embedding_provider), filter_policy=None
