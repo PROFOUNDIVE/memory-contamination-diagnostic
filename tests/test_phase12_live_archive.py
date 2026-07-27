@@ -204,3 +204,45 @@ def test_scientific_terminal_archive_is_reconstructable_but_not_result_eligible(
     assert run["requested_scientific_result"] is True
     assert run["scientific_result"] is False
     assert run["result_eligible"] is False
+
+
+def test_pilot_a_inspector_accepts_completed_scientific_archive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scientific = importlib.import_module("memcontam.readiness.pilot_a_scientific")
+    launch_tests = importlib.import_module("tests.test_phase12_pilot_a_launch")
+    rows = launch_tests._partial_scientific_rows(scientific.ROW_NAMES)
+    rows["seed_status"][0].update(status="selected", eligible=True)
+    monkeypatch.setattr(scientific, "_run_seeds", lambda *_args, **_kwargs: rows)
+    scientific.run_scientific_pilot_a(
+        SCIENTIFIC_CONFIG,
+        allow_live_calls=True,
+        artifact_root=tmp_path,
+        client_factory=launch_tests._Client,
+        run_id="completed-scientific-attempt",
+        parent_run_id="parent-attempt",
+        root_attempt_run_id="root-attempt",
+    )
+    run_dir = tmp_path / "runs" / "completed-scientific-attempt"
+    output = tmp_path / "scientific-invariants.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/inspect_phase12_pilot_a.py",
+            "--run-dir",
+            str(run_dir),
+            "--output",
+            str(output),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["overall"] == "pass"
+    assert report["scientific_result"] is True
+    assert report["result_eligible"] is True
