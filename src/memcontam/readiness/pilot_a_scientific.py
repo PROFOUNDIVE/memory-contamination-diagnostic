@@ -71,6 +71,8 @@ def run_scientific_pilot_a(
         raise ScientificPilotAError("RUN_ID_ALREADY_EXISTS")
     run_dir.mkdir(parents=True)
     rows = _run_seeds(config, identity, client, provider, context_factory)
+    if not any(status["eligible"] for status in rows["seed_status"]):
+        raise ScientificPilotAError("JOINT_CHECKPOINT_ELIGIBILITY_EMPTY")
     archive_artifacts = artifacts(config_path, config, identity, provider, rows)
     write_scientific_archive(run_dir, archive_artifacts)
     report = validate_scientific_archive(run_dir)

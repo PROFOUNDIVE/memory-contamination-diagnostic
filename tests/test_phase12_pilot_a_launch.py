@@ -678,6 +678,29 @@ def test_mocked_scientific_pilot_a_executes_two_seed_live_archive(tmp_path: Path
     assert module.validate_scientific_pilot_a_archive(run_dir)["overall"] == "pass"
 
 
+def test_scientific_pilot_a_stops_when_joint_checkpoint_eligibility_is_empty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    module = importlib.import_module("memcontam.readiness.pilot_a_scientific")
+    rows = {name: [] for name in module.ROW_NAMES}
+    rows["seed_status"] = [
+        {"seed": 0, "eligible": False},
+        {"seed": 1, "eligible": False},
+    ]
+    monkeypatch.setattr(module, "_run_seeds", lambda *_args, **_kwargs: rows)
+
+    with pytest.raises(module.ScientificPilotAError, match="JOINT_CHECKPOINT_ELIGIBILITY_EMPTY"):
+        module.run_scientific_pilot_a(
+            SCIENTIFIC_CONFIG,
+            allow_live_calls=True,
+            artifact_root=tmp_path,
+            client_factory=_Client,
+            run_id="pilot-a-empty-eligibility",
+        )
+
+    assert not (tmp_path / "runs" / "pilot-a-empty-eligibility" / "run.json").exists()
+
+
 def test_blocked_handoff_records_real_hashes_without_faking_plumbing(tmp_path: Path) -> None:
     module = _module()
     evidence_root = tmp_path / "evidence"
