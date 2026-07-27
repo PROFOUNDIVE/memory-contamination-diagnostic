@@ -26,3 +26,19 @@ python scripts/build_phase12_filter_mft.py --output /tmp/phase12-filter-v4-mft.j
 The JSON report has `schema_version: "phase12_filter_mft_v4"`, `evidence_layer: "build_calibration_only"`, `scientific_result: false`, and `policy_version`. Each `cases` row contains `baseline`, `route_valid`, `content_class`, `audit_label`, `treatment_arm`, `expected_state`, `observed_state`, and `reason`.
 
 The complete matrix covers FH, RAG, BoT, and Reflexion across valid/invalid routes and correct/false content classes. Valid routes are active for both content classes; invalid routes are quarantined for both content classes.
+
+## Pilot-A compatibility decisions
+
+- The scientific config binds `filter_interpretation: contract_invalid_direct_write_containment`
+  and `filter_claim_status: operational_secondary`.
+- Reflexion starts without fixed helper memory. Clean Reflexion memory can arise only through
+  the native failure-gated prefix route; no trusted-entry bypass or calibration initialization
+  is used.
+- Blocked, invalidated, and interrupted attempts remain reconstructable archives but carry
+  `scientific_result: false` and `result_eligible: false`.
+
+Before Pilot-B/Main freeze, minimally revise Theory Section 3.1's generic filter wording;
+Baseline/Filter Sections 9, 10, 11, and 13; Contamination Protocol aliases `FILTER-9` through
+`FILTER-13` and filter-recovery reporting; and Experiment Design Sections 3 and the Pilot-A,
+Pilot-B, and Main-A Filter comparison text. Those revisions must distinguish direct-write
+operational containment from ordinary-route semantic false memory without pooling them.

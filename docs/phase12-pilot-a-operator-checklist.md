@@ -10,12 +10,13 @@ python -m memcontam.cli phase12 cost-preview \
   --config configs/phase12/pilot_a_game24_minimal.yaml
 
 python -m memcontam.cli phase12 pilot-a \
-  --config configs/phase12/pilot_a_game24_minimal.yaml \
+  --config configs/phase12/pilot_a_game24_scientific.yaml \
   --admission-only
 ```
 
-The preview rejects a projected maximum above USD 5. Admission-only reads the passing
-T5 F1C/micro-retrieval, T6 invariant/archive, and T7 plumbing reports. It starts no run.
+The preview rejects a projected maximum above USD 5. Admission-only verifies the Filter-v4
+readiness manifest, evidence hashes, final implementation commit, scientific config hash,
+MFT, F1C, archive, and invariant results. It starts no run.
 
 ## Human-Authorized Plumbing
 
@@ -55,7 +56,8 @@ semantic false memory in Pilot-B before Main freeze.
 
 ## Handoff Gate
 
-Inspect `.sisyphus/evidence/pilot-a-unblock/t7-handoff.json`. It records the current
-implementation commit, config/F1C/invariant hashes, estimated Pilot-A maximum cost,
-and the exact human launch command. Its status is ready only when every T5/T6/T7 report
-passes; a missing live plumbing archive remains blocked rather than being synthesized.
+Inspect `.sisyphus/evidence/pilot-a-closeout/pilot_a_readiness_manifest_phase12_filter_v4.json`.
+The linked scientific command uses `configs/phase12/pilot_a_game24_scientific.yaml`, parent
+`pilot-a-game24-20260727T062808Z`, and root attempt
+`pilot-a-game24-20260727T061248Z`. A missing or stale Filter-v4 artifact remains blocked rather
+than being synthesized.
