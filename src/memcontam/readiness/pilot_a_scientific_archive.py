@@ -110,8 +110,14 @@ def validate_scientific_archive(run_dir: Path) -> dict[str, Any]:
         )
     ):
         return _failure(run_dir, "ARCHIVE_JSON_INVALID")
+    completed = run.get("status") == "completed"
     if (
-        run.get("scientific_result") is not True
+        run.get("requested_scientific_result") is not True
+        or run.get("scientific_result") is not completed
+        or run.get("result_eligible") is not completed
+        or ledger.get("requested_scientific_result") is not True
+        or ledger.get("scientific_result") is not completed
+        or ledger.get("result_eligible") is not completed
         or run.get("evidence_layer") != "calibration"
         or run.get("run_family") != "pilot_a"
         or provider.get("provider") != "openai_responses"
@@ -151,6 +157,8 @@ def validate_scientific_archive(run_dir: Path) -> dict[str, Any]:
         or not isinstance(ledger.get("provenance"), dict)
         or ledger["provenance"].get("run_id") != run.get("run_id")
         or ledger["provenance"].get("parent_run_id") != run.get("parent_run_id")
+        or ledger["provenance"].get("root_attempt_run_id")
+        != run.get("root_attempt_run_id")
         or ledger["provenance"].get("implementation_commit") != run.get("implementation_commit")
         or ledger.get("eligible_seeds")
         != [row.get("seed") for row in seed_status if isinstance(row, dict) and row.get("eligible")]
@@ -177,7 +185,8 @@ def validate_scientific_archive(run_dir: Path) -> dict[str, Any]:
         "reason_code": None,
         "retry_total": retry_total,
         "run_dir": str(run_dir),
-        "scientific_result": True,
+        "result_eligible": completed,
+        "scientific_result": completed,
         "trajectory_seeds": ledger["trajectory_seeds"],
         "unresolved_references": 0,
     }
@@ -189,7 +198,8 @@ def _failure(run_dir: Path, code: str, mismatches: int = 0) -> dict[str, Any]:
         "overall": "fail",
         "reason_code": code,
         "run_dir": str(run_dir),
-        "scientific_result": True,
+        "result_eligible": False,
+        "scientific_result": False,
         "unresolved_references": 1,
     }
 

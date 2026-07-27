@@ -19,6 +19,7 @@ from memcontam.experiment.phase12 import cli as phase12_cli
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "configs" / "phase12" / "pilot_a_game24_minimal.yaml"
+SCIENTIFIC_CONFIG = ROOT / "configs" / "phase12" / "pilot_a_game24_scientific.yaml"
 
 
 def _set_manifest_status(run_dir: Path, status: str, *, preserve_seal: bool = True) -> None:
@@ -176,3 +177,30 @@ def test_replay_and_inspector_cli_surfaces_write_canonical_reports(tmp_path: Pat
     assert archive.returncode == 0, archive.stderr
     assert json.loads(invariant_output.read_text(encoding="utf-8"))["overall"] == "pass"
     assert json.loads(archive_output.read_text(encoding="utf-8"))["overall"] == "pass"
+
+
+def test_scientific_terminal_archive_is_reconstructable_but_not_result_eligible(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scientific = importlib.import_module("memcontam.readiness.pilot_a_scientific")
+    launch_tests = importlib.import_module("tests.test_phase12_pilot_a_launch")
+    rows = launch_tests._partial_scientific_rows(scientific.ROW_NAMES)
+    monkeypatch.setattr(scientific, "_run_seeds", lambda *_args, **_kwargs: rows)
+
+    report = scientific.run_scientific_pilot_a(
+        SCIENTIFIC_CONFIG,
+        allow_live_calls=True,
+        artifact_root=tmp_path,
+        client_factory=launch_tests._Client,
+        run_id="blocked-attempt",
+        parent_run_id="parent-attempt",
+        root_attempt_run_id="root-attempt",
+    )
+
+    run = json.loads((tmp_path / "runs" / "blocked-attempt" / "run.json").read_text())
+    assert report["overall"] == "pass"
+    assert report["scientific_result"] is False
+    assert report["result_eligible"] is False
+    assert run["requested_scientific_result"] is True
+    assert run["scientific_result"] is False
+    assert run["result_eligible"] is False
