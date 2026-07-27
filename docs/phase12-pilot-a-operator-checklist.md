@@ -45,6 +45,14 @@ python -m memcontam.cli phase12 validate-archive \
 The archive report must remain below USD 5, preserve any model parse failures, and keep
 `scientific_result=false`.
 
+## Filter Claim Boundary
+
+Pilot-A's `Filter` arm is `operational-evidence-filter-v4`: contract-invalid direct-write
+containment. Its quarantine result is not semantic identification of false content, and a
+Filter–Contam accuracy difference is not general mitigation evidence. Pilot-A checks branch,
+admission, active-only visibility, logging, and archive mechanics. Evaluate ordinary-route
+semantic false memory in Pilot-B before Main freeze.
+
 ## Handoff Gate
 
 Inspect `.sisyphus/evidence/pilot-a-unblock/t7-handoff.json`. It records the current
