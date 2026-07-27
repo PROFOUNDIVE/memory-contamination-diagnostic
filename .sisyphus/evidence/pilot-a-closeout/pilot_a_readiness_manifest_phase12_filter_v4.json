@@ -1,1 +1,69 @@
-{"archive_validator_version":"phase12-terminal-archive-v2","config_hashes":{"scientific_pilot_a":"7c79109bf7d37fcf7eda6d0f0f37fc6e6a21170fc87b01d71ef76e84e85760a6"},"evidence":{"admission_log":{"command":"python -m pytest tests/test_phase12_filter_v4.py -q","status":"pass"},"archive_reconstruction":{"path":".sisyphus/evidence/pilot-a-closeout/phase12-filter-v4-archive.json","sha256":"06a9bbc870c52ffa51d78b0adb0f46e1d1e2b11be98b2500abbe2ed811944685","status":"pass"},"eligibility_ledger":{"command":"python -m pytest tests/test_phase12_pilot_a_launch.py tests/test_phase12_live_archive.py -q","status":"pass"},"f1a":{"path":"runs/bfv2-structural-final-5ea9a78","status":"historical_pass"},"f1b":{"path":"runs/bfv2-source-final-5ea9a78","status":"historical_pass"},"f1c":{"path":".sisyphus/evidence/pilot-a-closeout/phase12-filter-v4-f1c.json","sha256":"f63718204c8c67afb4b5f5a9e39e025cd0a442280629aef5f8a89b7ac61639e1","status":"pass"},"fairness_mft":{"path":".sisyphus/evidence/pilot-a-closeout/filter-v4-mft.json","sha256":"0e140492e82730c42fb415553adefff901e4282709f9c33df2630d3d386772be","status":"pass"},"invariants":{"path":".sisyphus/evidence/pilot-a-closeout/phase12-filter-v4-invariants.json","sha256":"5a154160d1028538d923eae650476670ac33a5e6cf867b23ae40c8aef6a2e8d5","status":"pass"},"micro_retrieval":{"path":".sisyphus/evidence/pilot-a-closeout/phase12-filter-v4-micro-retrieval.json","sha256":"f4d0c32b4fe945818530156ca3f9d9118b20c52b06b8113c0fe219c277f67466","status":"pass"},"partial_archive":{"command":"python -m pytest tests/test_phase12_pilot_a_launch.py tests/test_phase12_live_archive.py -q","status":"pass"}},"exact_authorized_rerun_command":"python -m memcontam.cli phase12 pilot-a --config configs/phase12/pilot_a_game24_minimal.yaml --parent-run-id pilot-a-game24-20260727T062808Z --allow-live-calls","filter_policy":{"interpretation":"contract-invalid direct-write containment","memo_sha256":"decd9fa5de7388c333953ee3b3cf0f91a13687545c7b46ed32875e09aa0b79c5","version":"operational-evidence-filter-v4"},"implementation_commit":"9e024b87dd3b17fac5d5e1c61f878e5ed51d7010","linked_attempt":{"parent_run_id":"pilot-a-game24-20260727T062808Z","root_attempt_run_id":"pilot-a-game24-20260727T061248Z"},"paid_rerun_authorized":false,"parser_versions":{"bot_solve":"bot_solve_json_v1","final_answer":"terminal_final_line_v1"},"prompt_versions":{"bot_solve":"bot_solve_json_v2","final_answer":"terminal_final_line_prompt_v2","reflexion_reflect":"reflexion_reflect_json_v2"},"scientific_admission_status":"admission_only_pass","scientific_result":false,"status":"READY_FOR_AUTHORIZED_LINKED_PILOT_A_RERUN","working_tree_status":"implementation clean; unrelated untracked $tmp_dir/ retained"}
+{
+  "archive_validator_version": "phase12-terminal-archive-v3",
+  "config_hashes": {
+    "scientific_pilot_a": "9aa573733f6a757298094c4818842d91fa5e9c77c36024f4bf99d3e967b19f2d"
+  },
+  "evidence": {
+    "archive_reconstruction": {
+      "path": ".sisyphus/evidence/pilot-a-closeout/phase12-filter-v4-archive.json",
+      "sha256": "0d0868e66a16a990a994f3f72c18a4aa4ce60c3e831179d9a32c4dd4ad4fd6d2",
+      "status": "pass"
+    },
+    "f1a_f1b_regressions": {
+      "command": "python -m pytest tests/test_baseline_fidelity_replay.py tests/test_baseline_source_contract_replay.py -q",
+      "status": "pass"
+    },
+    "f1c": {
+      "path": ".sisyphus/evidence/pilot-a-closeout/phase12-filter-v4-f1c.json",
+      "sha256": "f63718204c8c67afb4b5f5a9e39e025cd0a442280629aef5f8a89b7ac61639e1",
+      "status": "pass"
+    },
+    "fairness_mft": {
+      "path": ".sisyphus/evidence/pilot-a-closeout/filter-v4-mft.json",
+      "sha256": "0e140492e82730c42fb415553adefff901e4282709f9c33df2630d3d386772be",
+      "status": "pass"
+    },
+    "focused_suite": {
+      "command": "python -m pytest tests/test_phase12_pilot_a_launch.py tests/test_phase12_live_archive.py tests/test_phase12_filter_v4.py tests/test_phase12_reflexion.py tests/test_reflexion_faithful.py tests/test_reflexion_reflection_events.py tests/test_phase12_config_contract.py tests/test_phase12_claim_scope.py tests/test_baseline_fidelity_replay.py tests/test_baseline_source_contract_replay.py -q",
+      "passed": 112,
+      "status": "pass"
+    },
+    "invariants": {
+      "path": ".sisyphus/evidence/pilot-a-closeout/phase12-filter-v4-invariants.json",
+      "sha256": "b3ced9e046e8a01f625850396f7accd31f595607b51c8e3ca1b87d60a5de99a5",
+      "status": "pass"
+    },
+    "micro_retrieval": {
+      "path": ".sisyphus/evidence/pilot-a-closeout/phase12-filter-v4-micro-retrieval.json",
+      "sha256": "f4d0c32b4fe945818530156ca3f9d9118b20c52b06b8113c0fe219c277f67466",
+      "status": "pass"
+    },
+    "static_checks": {
+      "mypy_changed_modules": "pass",
+      "ruff": "pass"
+    }
+  },
+  "evidence_commit": "328e5db3916a62e440a032954378c55f147584bc",
+  "exact_authorized_rerun_command": "python -m memcontam.cli phase12 pilot-a --config configs/phase12/pilot_a_game24_scientific.yaml --parent-run-id pilot-a-game24-20260727T062808Z --root-attempt-run-id pilot-a-game24-20260727T061248Z --allow-live-calls",
+  "filter_policy": {
+    "claim_status": "operational_secondary",
+    "interpretation": "contract_invalid_direct_write_containment",
+    "version": "operational-evidence-filter-v4"
+  },
+  "implementation_commit": "48d77717050574f70b35d10b567dfceb4d1d5c09",
+  "linked_attempt": {
+    "parent_run_id": "pilot-a-game24-20260727T062808Z",
+    "root_attempt_run_id": "pilot-a-game24-20260727T061248Z"
+  },
+  "memo": {
+    "path": "docs/phase12-filter-v4-decision-memo.md",
+    "sha256": "fbb2c35918d596db7ec80a7accb94d6144b3de32b4d08252c7339f3d571c6132"
+  },
+  "paid_rerun_authorized": true,
+  "reflexion_initial_memory_policy": "native_failure_gated_prefix_only",
+  "scientific_admission_status": "pending_final_manifest_commit",
+  "scientific_result": false,
+  "status": "READY_FOR_AUTHORIZED_LINKED_PILOT_A_RERUN",
+  "tested_implementation_commit": "48d77717050574f70b35d10b567dfceb4d1d5c09",
+  "working_tree_status": "tested source clean before direct-child evidence commit; final manifest commit pending"
+}
