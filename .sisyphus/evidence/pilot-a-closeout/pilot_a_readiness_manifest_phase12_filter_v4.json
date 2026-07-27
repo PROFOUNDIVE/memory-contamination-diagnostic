@@ -61,9 +61,9 @@
   },
   "paid_rerun_authorized": true,
   "reflexion_initial_memory_policy": "native_failure_gated_prefix_only",
-  "scientific_admission_status": "pending_final_manifest_commit",
+  "scientific_admission_status": "admission_only_pass",
   "scientific_result": false,
   "status": "READY_FOR_AUTHORIZED_LINKED_PILOT_A_RERUN",
   "tested_implementation_commit": "48d77717050574f70b35d10b567dfceb4d1d5c09",
-  "working_tree_status": "tested source clean before direct-child evidence commit; final manifest commit pending"
+  "working_tree_status": "tested source clean before direct-child evidence commit; evidence and readiness commits contain no source changes"
 }
