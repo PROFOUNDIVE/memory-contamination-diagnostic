@@ -1,193 +1,67 @@
 from __future__ import annotations
 
-import json
-from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from hashlib import sha256
-from typing import Final, Literal, TypeAlias, assert_never
+from typing import Literal, assert_never
 
 from pydantic import TypeAdapter
 
-from memcontam.clients.base import LLMClient
-from memcontam.experiment.phase12.filter_challenge.adapters.bot_style import BoTStyleChallengeAdapter
-from memcontam.experiment.phase12.filter_challenge.adapters.full_history import (
-    FullHistoryProvisionalAdapter,
-)
-from memcontam.experiment.phase12.filter_challenge.adapters.rag_frozen import (
-    RagFrozenProvisionalAdapter,
-)
-from memcontam.experiment.phase12.filter_challenge.adapters.reflexion_style import (
-    ReflexionProvisionalAdapter,
-)
-from memcontam.experiment.phase12.filter_challenge import (
+from memcontam.experiment.phase12.filter_challenge.contracts import (
     AnswerCallRelation,
-    CandidateExposureRecord,
     ChallengeCandidate,
     ChallengeRoutingDecision,
     PairedExecutionIdentity,
 )
-
-
-NativeAdapter: TypeAlias = (
-    FullHistoryProvisionalAdapter
-    | RagFrozenProvisionalAdapter
-    | BoTStyleChallengeAdapter
-    | ReflexionProvisionalAdapter
+from memcontam.experiment.phase12.filter_challenge.executor_source import source_snapshot
+from memcontam.experiment.phase12.filter_challenge.executor_types import (
+    BoTExecutionRequest,
+    ControlCacheKey,
+    ControlResultCache,
+    FullHistoryExecutionRequest,
+    IsolatedPairRequest,
+    PairArmResult,
+    PairAuditEvidence,
+    PairExecutionSinks,
+    PairExecutorError,
+    PairingIdentity,
+    PairIsolation,
+    RagFrozenExecutionRequest,
+    ReflexionExecutionRequest,
+    SharedAssessmentKey,
+    SourceSnapshot,
+    execution_clients,
 )
-_PAIRED_IDENTITY: Final[TypeAdapter[PairedExecutionIdentity]] = TypeAdapter(PairedExecutionIdentity)
+from memcontam.experiment.phase12.filter_challenge.native_execution import execute_native_pair
 
-
-class PairExecutorError(ValueError):
-    pass
-
-
-@dataclass(frozen=True, slots=True)
-class SourceSnapshot:
-    checkpoint_id: str
-    canonical_bytes: bytes
-    canonical_sha256: str
-    noncandidate_entry_ids: tuple[str, ...]
-    noncandidate_memory_hash: str
-
-    def __post_init__(self) -> None:
-        if sha256(self.canonical_bytes).hexdigest() != self.canonical_sha256:
-            raise PairExecutorError("SOURCE_HASH_MISMATCH")
-        memory_hash = sha256("\0".join(self.noncandidate_entry_ids).encode()).hexdigest()
-        if memory_hash != self.noncandidate_memory_hash:
-            raise PairExecutorError("NONCANDIDATE_MEMORY_HASH_MISMATCH")
-
-
-@dataclass(frozen=True, slots=True)
-class PairingIdentity:
-    source_checkpoint_id: str
-    source_checkpoint_hash: str
-    baseline_family: Literal["full_history", "rag_frozen", "bot_style", "reflexion_style"]
-    rag_mode: Literal["frozen", "not_applicable"]
-    candidate_native_kind: str
-    probe_id: str
-    prompt_payload_hash: str
-    replicate_seed_contract: Literal["deterministic", "seed_coupled", "counterbalanced"]
-    model_snapshot: str
-    decoding_contract_hash: str
-    fidelity_label: str
-    tool_mode: str
-    tool_permissions_hash: str
-    raw_parser_version: str
-    canonicalizer_version: str
-    verifier_version: str
-    base_prompt_hash: str
-    formatter_version: str
-    context_budget_capacity_hash: str
-    retriever_index_capacity_hash: str
-    noncandidate_memory_hash: str
-    resource_retry_limit_hash: str
-
-
-@dataclass(frozen=True, slots=True)
-class ControlCacheKey:
-    source_checkpoint_hash: str
-    baseline_family: str
-    rag_mode: str
-    probe_id: str
-    replicate_seed_contract: str
-    model_snapshot: str
-    decoding_contract_hash: str
-    tool_mode: str
-    tool_permissions_hash: str
-    raw_parser_version: str
-    canonicalizer_version: str
-    verifier_version: str
-    base_prompt_hash: str
-    formatter_version: str
-    context_budget_capacity_hash: str
-    retriever_index_capacity_hash: str
-
-
-@dataclass(frozen=True, slots=True)
-class SharedAssessmentKey:
-    candidate_entry_id: str
-    candidate_content_hash: str
-    candidate_native_kind: str
-    candidate_version: str
-    source_checkpoint_id: str
-    source_checkpoint_hash: str
-    probe_configuration_hash: str
-    pairing_identity: PairingIdentity
-    control_cache_key: ControlCacheKey
-
-
-@dataclass(frozen=True, slots=True)
-class ScriptedSession:
-    session_id: str
-
-
-@dataclass(frozen=True, slots=True)
-class PairArmResult:
-    answer_relation: AnswerCallRelation
-    candidate_exposure: CandidateExposureRecord
-    updater_enabled: bool
-    memory_write_event_id: str | None
-    displaced_noncandidate_entry_ids: tuple[str, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class IsolatedPairArm:
-    identity: PairingIdentity
-    client: LLMClient
-    session: ScriptedSession
-    transcript: list[str]
-    run: Callable[[NativeAdapter], PairArmResult]
-
-
-class ControlResultCache:
-    def __init__(self) -> None:
-        self._entries: dict[ControlCacheKey, PairArmResult] = {}
-
-    def get(self, key: ControlCacheKey) -> PairArmResult | None:
-        return self._entries.get(key)
-
-    def put(self, key: ControlCacheKey, result: PairArmResult) -> None:
-        self._entries[key] = result
-
-
-@dataclass(frozen=True, slots=True)
-class IsolatedPairRequest:
-    assessment_id: str
-    candidate: ChallengeCandidate
-    candidate_version: str
-    source: SourceSnapshot
-    source_snapshot: Callable[[], SourceSnapshot]
-    control: IsolatedPairArm
-    challenge: IsolatedPairArm
-    probe_configuration_hash: str
-    ordinary_trial_ids: tuple[str, ...]
-    control_cache: ControlResultCache | None
-
-
-@dataclass(frozen=True, slots=True)
-class PairAuditEvidence:
-    assessment_id: str
-    adapter_name: str
-    paired_execution_identity: PairedExecutionIdentity
-    control_cache_key: ControlCacheKey
-    shared_assessment_key: SharedAssessmentKey
-    control_from_cache: bool
-    control_answer_call_id: str
-    challenge_answer_call_id: str
-    control_displaced_noncandidate_entry_ids: tuple[str, ...]
-    challenge_displaced_noncandidate_entry_ids: tuple[str, ...]
-
-    def to_json(self) -> str:
-        payload = asdict(self)
-        payload["paired_execution_identity"] = self.paired_execution_identity.model_dump(
-            mode="json"
-        )
-        return json.dumps(payload, separators=(",", ":"), sort_keys=True)
+_PAIRED_IDENTITY: TypeAdapter[PairedExecutionIdentity] = TypeAdapter(PairedExecutionIdentity)
+__all__ = (
+    "ActivationContext",
+    "ActivationDecision",
+    "BoTExecutionRequest",
+    "ControlResultCache",
+    "FullHistoryExecutionRequest",
+    "IsolatedPairRequest",
+    "PairAuditEvidence",
+    "PairExecutionSinks",
+    "PairExecutorError",
+    "PairingIdentity",
+    "PairIsolation",
+    "RagFrozenExecutionRequest",
+    "ReflexionExecutionRequest",
+    "RoutingConsumption",
+    "activation_decision",
+    "build_control_cache_key",
+    "build_shared_assessment_key",
+    "consume_routing",
+    "evaluability_rate",
+    "execute_isolated_pair",
+)
 
 
 @dataclass(frozen=True, slots=True)
 class ActivationContext:
     policy_activation_checkpoint_id: str
+    evolved_branch_checkpoint_id: str | None
     grandfathered_entry_ids: tuple[str, ...]
     controlled_root_entry_id: str
     arm: Literal["contam", "filter"]
@@ -203,6 +77,7 @@ class ActivationDecision:
 class RoutingConsumption:
     effect: Literal["shadow", "apply"]
     route_target: Literal["active", "quarantine"] | None
+    shared_assessment_key: SharedAssessmentKey
 
 
 def build_control_cache_key(identity: PairingIdentity) -> ControlCacheKey:
@@ -211,9 +86,11 @@ def build_control_cache_key(identity: PairingIdentity) -> ControlCacheKey:
         baseline_family=identity.baseline_family,
         rag_mode=identity.rag_mode,
         probe_id=identity.probe_id,
+        prompt_payload_hash=identity.prompt_payload_hash,
         replicate_seed_contract=identity.replicate_seed_contract,
         model_snapshot=identity.model_snapshot,
         decoding_contract_hash=identity.decoding_contract_hash,
+        fidelity_label=identity.fidelity_label,
         tool_mode=identity.tool_mode,
         tool_permissions_hash=identity.tool_permissions_hash,
         raw_parser_version=identity.raw_parser_version,
@@ -223,6 +100,8 @@ def build_control_cache_key(identity: PairingIdentity) -> ControlCacheKey:
         formatter_version=identity.formatter_version,
         context_budget_capacity_hash=identity.context_budget_capacity_hash,
         retriever_index_capacity_hash=identity.retriever_index_capacity_hash,
+        noncandidate_memory_hash=identity.noncandidate_memory_hash,
+        resource_retry_limit_hash=identity.resource_retry_limit_hash,
     )
 
 
@@ -247,56 +126,49 @@ def build_shared_assessment_key(
 
 def execute_isolated_pair(request: IsolatedPairRequest) -> PairAuditEvidence:
     _validate_isolation(request)
-    source_before = request.source_snapshot()
+    source_before = source_snapshot(request.execution)
     _validate_source(request, source_before)
-    adapter = select_adapter(request.candidate)
-    key = build_control_cache_key(request.control.identity)
-    control = request.control_cache.get(key) if _cache_allowed(request.control.identity) and request.control_cache else None
-    control_from_cache = control is not None
-    if control is None:
-        control = request.control.run(adapter)
-        if request.control_cache is not None and _cache_allowed(request.control.identity):
-            request.control_cache.put(key, control)
-    challenge = request.challenge.run(adapter)
-    _validate_arm_result(control, request.candidate)
-    _validate_arm_result(challenge, request.candidate)
-    if request.source_snapshot() != source_before:
+    cache_key = build_control_cache_key(request.identity)
+    cache_allowed = _cache_allowed(request.identity)
+    if not cache_allowed and request.control_cache is not None:
+        cached = None
+    else:
+        cached = request.control_cache.get(cache_key) if request.control_cache is not None else None
+    native = execute_native_pair(request.execution, request.candidate, cached, request.execution_order)
+    _validate_arm_result(native.control, request.candidate, challenge=False)
+    _validate_arm_result(native.challenge, request.candidate, challenge=True)
+    if source_snapshot(request.execution) != source_before:
         raise PairExecutorError("SOURCE_DRIFT")
-    _validate_relations(control.answer_relation, challenge.answer_relation)
+    _validate_relations(native.control.answer_relation, native.challenge.answer_relation)
+    if cache_allowed and cached is None and request.control_cache is not None:
+        request.control_cache.put(cache_key, native.cache_value)
     paired_identity = _PAIRED_IDENTITY.validate_python(
         {"paired_execution_identity_status": "matched", "pair_id": request.assessment_id}
     )
-    return PairAuditEvidence(
-        assessment_id=request.assessment_id,
-        adapter_name=type(adapter).__name__,
-        paired_execution_identity=paired_identity,
-        control_cache_key=key,
-        shared_assessment_key=build_shared_assessment_key(
-            request.control.identity,
-            request.candidate,
-            request.candidate_version,
-            request.probe_configuration_hash,
-        ),
-        control_from_cache=control_from_cache,
-        control_answer_call_id=control.answer_relation.answer_call_id,
-        challenge_answer_call_id=challenge.answer_relation.answer_call_id,
-        control_displaced_noncandidate_entry_ids=control.displaced_noncandidate_entry_ids,
-        challenge_displaced_noncandidate_entry_ids=challenge.displaced_noncandidate_entry_ids,
+    shared_key = build_shared_assessment_key(
+        request.identity,
+        request.candidate,
+        request.candidate_version,
+        request.probe_configuration_hash,
     )
-
-
-def select_adapter(candidate: ChallengeCandidate) -> NativeAdapter:
-    match (candidate.baseline_family, candidate.rag_mode, candidate.candidate_native_kind):
-        case ("full_history", "not_applicable", "full_history_transcript"):
-            return FullHistoryProvisionalAdapter()
-        case ("rag_frozen", "frozen", "rag_document"):
-            return RagFrozenProvisionalAdapter()
-        case ("bot_style", "not_applicable", "thought_template"):
-            return BoTStyleChallengeAdapter()
-        case ("reflexion_style", "not_applicable", "verbal_reflection"):
-            return ReflexionProvisionalAdapter()
-        case _:
-            raise PairExecutorError("PROBE_MAPPING_UNSUPPORTED")
+    evidence = PairAuditEvidence(
+        assessment_id=request.assessment_id,
+        adapter_name=native.adapter_name,
+        paired_execution_identity=paired_identity,
+        control_cache_key=cache_key,
+        shared_assessment_key=shared_key,
+        control_from_cache=cached is not None,
+        control_answer_call_id=native.control.answer_relation.answer_call_id,
+        challenge_answer_call_id=native.challenge.answer_relation.answer_call_id,
+        control_displaced_noncandidate_entry_ids=(
+            native.control.displaced_noncandidate_entry_ids
+        ),
+        challenge_displaced_noncandidate_entry_ids=(
+            native.challenge.displaced_noncandidate_entry_ids
+        ),
+    )
+    request.sinks.assessments.append_assessment(evidence)
+    return evidence
 
 
 def activation_decision(
@@ -304,8 +176,14 @@ def activation_decision(
 ) -> ActivationDecision:
     if candidate.candidate_entry_id in context.grandfathered_entry_ids:
         return ActivationDecision("grandfathered", None)
-    if candidate.source_checkpoint_id != context.policy_activation_checkpoint_id:
-        raise PairExecutorError("ACTIVATION_CHECKPOINT_MISMATCH")
+    if later_native_write:
+        checkpoint_id = context.evolved_branch_checkpoint_id
+        if checkpoint_id is None or checkpoint_id == context.policy_activation_checkpoint_id:
+            raise PairExecutorError("EVOLVED_BRANCH_CHECKPOINT_REQUIRED")
+    else:
+        checkpoint_id = context.policy_activation_checkpoint_id
+    if candidate.source_checkpoint_id != checkpoint_id:
+        raise PairExecutorError("CANDIDATE_CHECKPOINT_MISMATCH")
     match candidate.routability.routability:
         case "unsupported":
             return ActivationDecision("not_evaluable", "PROBE_MAPPING_UNSUPPORTED")
@@ -322,13 +200,15 @@ def activation_decision(
 
 
 def consume_routing(
-    arm: Literal["contam", "filter"], routing: ChallengeRoutingDecision
+    arm: Literal["contam", "filter"],
+    routing: ChallengeRoutingDecision,
+    shared_assessment_key: SharedAssessmentKey,
 ) -> RoutingConsumption:
     match arm:
         case "contam":
-            return RoutingConsumption("shadow", None)
+            return RoutingConsumption("shadow", None, shared_assessment_key)
         case "filter":
-            return RoutingConsumption("apply", routing.route_target)
+            return RoutingConsumption("apply", routing.route_target, shared_assessment_key)
         case unreachable:
             assert_never(unreachable)
 
@@ -340,40 +220,45 @@ def evaluability_rate(evaluable_count: int, attempted_count: int) -> float | Non
 
 
 def _validate_isolation(request: IsolatedPairRequest) -> None:
-    if request.assessment_id in request.ordinary_trial_ids:
-        raise PairExecutorError("ASSESSMENT_IN_ORDINARY_TRIALS")
-    if request.control.identity != request.challenge.identity:
-        raise PairExecutorError("PAIRED_EXECUTION_IDENTITY_MISMATCH")
-    if request.control.client is request.challenge.client:
-        raise PairExecutorError("SHARED_CLIENT")
-    if request.control.session is request.challenge.session:
-        raise PairExecutorError("SHARED_SESSION")
-    if request.control.transcript is request.challenge.transcript:
+    isolation = request.isolation
+    if isolation.control_session_id == isolation.challenge_session_id:
+        raise PairExecutorError("DUPLICATE_SESSION_ID")
+    if isolation.control_transcript == isolation.challenge_transcript:
         raise PairExecutorError("SHARED_TRANSCRIPT")
+    control_client, challenge_client = execution_clients(request.execution)
+    if control_client is challenge_client:
+        raise PairExecutorError("SHARED_CLIENT")
+    if request.execution.family != request.identity.baseline_family:
+        raise PairExecutorError("PAIRED_EXECUTION_IDENTITY_MISMATCH")
+    if request.execution_order == "challenge_first" and _cache_allowed(request.identity):
+        raise PairExecutorError("COUNTERBALANCED_ORDER_REQUIRED")
 
 
 def _validate_source(request: IsolatedPairRequest, source: SourceSnapshot) -> None:
-    identity = request.control.identity
-    if source != request.source:
-        raise PairExecutorError("SOURCE_DRIFT")
+    identity = request.identity
+    candidate = request.candidate
     if (
-        request.candidate.source_checkpoint_id != source.checkpoint_id
-        or request.candidate.source_active_state_hash != source.canonical_sha256
+        candidate.source_checkpoint_id != source.checkpoint_id
+        or candidate.source_active_state_hash != source.canonical_sha256
         or identity.source_checkpoint_id != source.checkpoint_id
         or identity.source_checkpoint_hash != source.canonical_sha256
         or identity.noncandidate_memory_hash != source.noncandidate_memory_hash
-        or identity.baseline_family != request.candidate.baseline_family
-        or identity.rag_mode != request.candidate.rag_mode
-        or identity.candidate_native_kind != request.candidate.candidate_native_kind
+        or identity.baseline_family != candidate.baseline_family
+        or identity.rag_mode != candidate.rag_mode
+        or identity.candidate_native_kind != candidate.candidate_native_kind
     ):
         raise PairExecutorError("CHECKPOINT_IDENTITY_MISMATCH")
 
 
-def _validate_arm_result(result: PairArmResult, candidate: ChallengeCandidate) -> None:
+def _validate_arm_result(
+    result: PairArmResult, candidate: ChallengeCandidate, *, challenge: bool
+) -> None:
     if result.updater_enabled or result.memory_write_event_id is not None:
         raise PairExecutorError("UPDATER_NOT_DISABLED")
     if result.candidate_exposure.candidate_entry_id != candidate.candidate_entry_id:
         raise PairExecutorError("CANDIDATE_EXPOSURE_BINDING_MISMATCH")
+    if not challenge and result.candidate_exposure.candidate_final_context_inclusion:
+        raise PairExecutorError("CONTROL_CANDIDATE_EXPOSURE")
 
 
 def _validate_relations(control: AnswerCallRelation, challenge: AnswerCallRelation) -> None:

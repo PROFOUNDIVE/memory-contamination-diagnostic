@@ -52,7 +52,7 @@ class ReflexionProvisionalAdapter:
     ) -> ReflexionProvisionalResult:
         frozen_checkpoint = _require_reflexion_checkpoint(checkpoint)
         _validate_candidate(frozen_checkpoint, candidate)
-        source_state = _source_state(frozen_checkpoint.source_checkpoint)
+        source_state = reflexion_source_state(frozen_checkpoint.source_checkpoint)
         native_candidate = _native_candidate(candidate)
         reflections = [*source_state.reflections, native_candidate]
         displaced_reflection_ids: list[str] = []
@@ -103,7 +103,7 @@ def _validate_candidate(
         raise ReflexionChallengeError("REFLEXION_ROUTABILITY_MISMATCH")
 
 
-def _source_state(checkpoint: Phase12Checkpoint) -> ReflexionStateV3:
+def reflexion_source_state(checkpoint: Phase12Checkpoint) -> ReflexionStateV3:
     state = deserialize_checkpoint(checkpoint)
     if state.baseline != "reflexion_style":
         raise ReflexionChallengeError("REFLEXION_CHECKPOINT_STATE_INVALID")

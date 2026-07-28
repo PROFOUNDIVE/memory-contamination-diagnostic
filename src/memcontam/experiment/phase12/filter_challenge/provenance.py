@@ -147,6 +147,12 @@ class AnswerCallProvenanceObserver:
             raise AnswerCallFinalizationError(control_answer_call_id)
         return self.finalize(control_answer_call_id), self.finalize(challenge_answer_call_id)
 
+    def finalized_relation(self, answer_call_id: str) -> AnswerCallRelation:
+        try:
+            return self._finalized[answer_call_id]
+        except KeyError as error:
+            raise AnswerCallFinalizationError(answer_call_id) from error
+
     def _bind_response(self, call_id: str, response: LLMResponse) -> None:
         bindings = self._response_bindings.setdefault(id(response), {})
         bindings[call_id] = bindings.get(call_id, 0) + 1

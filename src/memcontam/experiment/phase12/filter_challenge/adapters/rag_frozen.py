@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from typing import Literal, assert_never
 
 from memcontam.baselines.retrieval_rag_phase12 import (
     BaselineStepResultV3,
@@ -9,8 +10,12 @@ from memcontam.baselines.retrieval_rag_phase12 import (
     RagFrozenTrialContextV3,
 )
 from memcontam.experiment.phase12.filter_challenge.contracts import (
+    AnswerCallRelation,
     CandidateExposureRecord,
     ChallengeCandidate,
+)
+from memcontam.experiment.phase12.filter_challenge.provenance import (
+    AnswerCallProvenanceObserver,
 )
 from memcontam.rag.branch_index import BranchIndex
 from memcontam.rag.phase12_corpus import BranchCorpus, Document
@@ -27,6 +32,14 @@ class RagFrozenPairRequest:
     challenge_trial: RagFrozenTrialContextV3
     source_state: RagFrozenStateV3
     candidate: ChallengeCandidate
+    cached_control: RagFrozenCachedControl | None = None
+    execution_order: Literal["control_first", "challenge_first"] = "control_first"
+
+
+@dataclass(frozen=True, slots=True)
+class RagFrozenCachedControl:
+    result: BaselineStepResultV3
+    answer_relation: AnswerCallRelation
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +51,8 @@ class RagFrozenPairResult:
     candidate_exposure: CandidateExposureRecord
     provisional_index_artifact_hash: str
     source_index_artifact_hash_after: str
+    control_answer_relation: AnswerCallRelation
+    challenge_answer_relation: AnswerCallRelation
 
 
 class RagFrozenProvisionalAdapter:
@@ -45,11 +60,33 @@ class RagFrozenProvisionalAdapter:
         _validate_request(request)
         source_index = request.source_state.index
         assert source_index is not None
-        control = RagFrozenPhase12Adapter().execute(request.control_trial, request.source_state)
         challenge_state = _provisional_state(request.source_state, request.candidate)
         provisional_index = challenge_state.index
         assert provisional_index is not None
-        challenge = RagFrozenPhase12Adapter().execute(request.challenge_trial, challenge_state)
+        control_trial, control_observer = _with_observer(request.control_trial)
+        challenge_trial, challenge_observer = _with_observer(request.challenge_trial)
+        if request.cached_control is not None:
+            control = request.cached_control.result
+            control_relation = request.cached_control.answer_relation
+            challenge = RagFrozenPhase12Adapter().execute(challenge_trial, challenge_state)
+        else:
+            match request.execution_order:
+                case "control_first":
+                    control = RagFrozenPhase12Adapter().execute(control_trial, request.source_state)
+                    challenge = RagFrozenPhase12Adapter().execute(challenge_trial, challenge_state)
+                case "challenge_first":
+                    challenge = RagFrozenPhase12Adapter().execute(challenge_trial, challenge_state)
+                    control = RagFrozenPhase12Adapter().execute(control_trial, request.source_state)
+                case unreachable:
+                    assert_never(unreachable)
+            control_call_id = control.outcome.answer_call_id
+            if control_call_id is None:
+                raise RagFrozenChallengeError("MISSING_ANSWER_CALL")
+            control_relation = control_observer.finalized_relation(control_call_id)
+        challenge_call_id = challenge.outcome.answer_call_id
+        if challenge_call_id is None:
+            raise RagFrozenChallengeError("MISSING_ANSWER_CALL")
+        challenge_relation = challenge_observer.finalized_relation(challenge_call_id)
         control_final_source_ids = _answer_source_ids(control)
         challenge_final_source_ids = _answer_source_ids(challenge)
         return RagFrozenPairResult(
@@ -66,7 +103,16 @@ class RagFrozenProvisionalAdapter:
             ),
             provisional_index_artifact_hash=provisional_index.artifact_hash,
             source_index_artifact_hash_after=source_index.artifact_hash,
+            control_answer_relation=control_relation,
+            challenge_answer_relation=challenge_relation,
         )
+
+
+def _with_observer(
+    trial: RagFrozenTrialContextV3,
+) -> tuple[RagFrozenTrialContextV3, AnswerCallProvenanceObserver]:
+    observer = trial.provenance_observer or AnswerCallProvenanceObserver()
+    return replace(trial, provenance_observer=observer), observer
 
 
 def _validate_request(request: RagFrozenPairRequest) -> None:
