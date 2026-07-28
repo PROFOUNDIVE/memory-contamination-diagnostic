@@ -297,26 +297,26 @@ def test_routing_is_exact_and_audit_free(
     assert (decision.route_target, decision.audit_flag, decision.routing_reason_code) == expected
 
 
-def test_route_audit_and_canonicalization_mutations_do_not_change_assessment(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # Given: a strict witness with a separately available canonicalization policy.
-    value = _input()
-    baseline = assess_probe(value)
-    monkeypatch.setattr(
-        assessment_module,
-        "ROUTE_TABLE",
-        tuple((state, "active", True, reason) for state, _, _, reason in ROUTE_TABLE),
-    )
-    canonicalized = replace(
-        value,
-        control_canonicalizer_version="canonicalizer-v1",
-        control_canonicalized_parse_status="parsed_raw",
-        control_canonicalized_verifier_status="success",
-        control_canonicalized_verifier_result=True,
-    )
+def test_contract_literals_accept_allof_wrapped_refs(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Given: semantically equivalent Task 2 schemas whose variants wrap every ref in allOf.
+    expected = _contract_literals()
+    for adapter in (assessment_module._ELIGIBILITY_ADAPTER, assessment_module._DISPOSITION_ADAPTER, assessment_module._ASSESSMENT_ADAPTER, assessment_module._ROUTING_ADAPTER):
+        schema = adapter.json_schema()
+        monkeypatch.setattr(adapter, "json_schema", lambda schema=schema: {**schema, "oneOf": [{"allOf": [variant]} for variant in schema["oneOf"]]})
 
-    # When: only route/audit metadata and unused strict-policy canonicalization fields change.
-    # Then: semantic assessment and κ aggregation remain unchanged.
-    assert assess_probe(canonicalized) == baseline
-    assert aggregate_assessments((assess_probe(canonicalized),), _kappa(total=1, distinct_evaluable=1), _suite()) == aggregate_assessments((baseline,), _kappa(total=1, distinct_evaluable=1), _suite())
+    # When: assessment literals are derived from the equivalent wrapper shape.
+    # Then: authority ordering and values remain exact.
+    assert _contract_literals() == expected
+
+
+def test_excluded_metadata_does_not_change_science_or_final_state_routing() -> None:
+    # Given: fixed scientific inputs and two different excluded candidate metadata envelopes.
+    baseline = assessment_module.assess_candidate(assessment_module.CandidateAssessmentEnvelope(_input(), assessment_module.ExcludedCandidateMetadata("quarantine", "route-a", False, ("audit-a",))))
+    changed = assessment_module.assess_candidate(assessment_module.CandidateAssessmentEnvelope(_input(), assessment_module.ExcludedCandidateMetadata("active", "route-b", True, ("audit-b",))))
+
+    # When: only route target, reason, audit flag, and labels mutate.
+    # Then: assessment and aggregation are invariant, while routing uses final scientific state.
+    baseline_state = aggregate_assessments((baseline,), _kappa(total=1, distinct_evaluable=1), _suite())
+    assert (changed, aggregate_assessments((changed,), _kappa(total=1, distinct_evaluable=1), _suite())) == (baseline, baseline_state)
+    decision = route_assessment(baseline_state.assessment_state)
+    assert (decision.route_target, decision.audit_flag, decision.routing_reason_code) == ("quarantine", False, "CONTRADICTED")

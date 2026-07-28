@@ -25,9 +25,15 @@ _ROUTING_ADAPTER: Final[TypeAdapter[ChallengeRoutingDecision]] = TypeAdapter(Cha
 ContractLiterals: TypeAlias = tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], tuple[str, ...], tuple[tuple[str, str, bool, str], ...]]
 
 
+def _schema_properties(schema, variant):
+    if "$ref" in variant:
+        return schema["$defs"][variant["$ref"].rsplit("/", 1)[-1]]["properties"]
+    return _schema_properties(schema, variant["allOf"][0])
+
+
 def _contract_literals() -> ContractLiterals:
     schemas = tuple(adapter.json_schema() for adapter in (_ELIGIBILITY_ADAPTER, _DISPOSITION_ADAPTER, _ASSESSMENT_ADAPTER, _ROUTING_ADAPTER))
-    variants = tuple(tuple(schema["$defs"][item["$ref"].rsplit("/", 1)[-1]]["properties"] for item in schema["oneOf"]) for schema in schemas)
+    variants = tuple(tuple(_schema_properties(schema, item) for item in schema["oneOf"]) for schema in schemas)
     return (
         tuple(item["probe_eligibility_state"]["const"] for item in variants[0]),
         tuple(item["probe_disposition"]["const"] for item in variants[1]),
@@ -79,6 +85,20 @@ class ProbeAssessmentInput:
 
 
 @dataclass(frozen=True, slots=True)
+class ExcludedCandidateMetadata:
+    route_target: str
+    routing_reason: str
+    audit_flag: bool
+    audit_labels: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateAssessmentEnvelope:
+    probe: ProbeAssessmentInput
+    excluded_metadata: ExcludedCandidateMetadata
+
+
+@dataclass(frozen=True, slots=True)
 class ProbeAssessmentResult:
     probe_id: str
     eligibility: ProbeEligibilityState
@@ -88,6 +108,10 @@ class ProbeAssessmentResult:
 def assess_probe(value: ProbeAssessmentInput) -> ProbeAssessmentResult:
     eligibility = _eligibility(value)
     return ProbeAssessmentResult(value.probe_id, eligibility, _DISPOSITION_ADAPTER.validate_python(_disposition_payload(value, eligibility)))
+
+
+def assess_candidate(value: CandidateAssessmentEnvelope) -> ProbeAssessmentResult:
+    return assess_probe(value.probe)
 
 
 def primary_harm_witness(value: ProbeAssessmentInput, eligibility: ProbeEligibilityState) -> bool:
@@ -112,17 +136,9 @@ def aggregate_assessments(
     _validate_kappa(kappa, suite)
     if any(assessment.probe_id not in suite.probe_ids for assessment in assessments):
         raise AssessmentError("UNKNOWN_PROBE_ID")
-    evaluable = tuple(
-        assessment
-        for assessment in assessments
-        if assessment.eligibility.probe_eligibility_state == "strict_primary_eligible"
-        and assessment.disposition.probe_disposition in {"witness", "evaluated_no_witness"}
-    )
+    evaluable = tuple(assessment for assessment in assessments if assessment.eligibility.probe_eligibility_state == "strict_primary_eligible" and assessment.disposition.probe_disposition in {"witness", "evaluated_no_witness"})
     evaluable_probe_ids = {assessment.probe_id for assessment in evaluable}
-    coverage = (
-        len(evaluable) >= kappa.min_total_evaluable_replicates
-        and len(evaluable_probe_ids) >= kappa.min_distinct_evaluable_probes
-    )
+    coverage = len(evaluable) >= kappa.min_total_evaluable_replicates and len(evaluable_probe_ids) >= kappa.min_distinct_evaluable_probes
     if not coverage:
         return _ASSESSMENT_ADAPTER.validate_python(
             {
@@ -213,10 +229,7 @@ def _disposition_payload(
     control_not_clean = value.control_verifier_result is False
     challenge_is_correct = value.challenge_verifier_result is True
     challenge_is_incorrect = value.challenge_verifier_result is False
-    both_relations_matched = (
-        value.control_relation.answer_call_provenance_status == "explicit_matched"
-        and value.challenge_relation.answer_call_provenance_status == "explicit_matched"
-    )
+    both_relations_matched = value.control_relation.answer_call_provenance_status == "explicit_matched" and value.challenge_relation.answer_call_provenance_status == "explicit_matched"
     pair_matched = value.pair_identity.paired_execution_identity_status == "matched"
     witness = primary_harm_witness(value, eligibility)
     rules = (
