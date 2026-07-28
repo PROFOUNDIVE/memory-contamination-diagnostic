@@ -97,7 +97,9 @@ def _provisional_state(
     source_corpus = source_state.corpus
     source_index = source_state.index
     assert source_corpus is not None and source_index is not None
-    candidate_document = Document(candidate.candidate_entry_id, candidate.candidate_native_content)
+    candidate_document = Document.from_mapping(
+        {"id": candidate.candidate_entry_id, "text": candidate.candidate_native_content}
+    )
     identity = canonical_json_hash(candidate_document.payload())
     corpus = BranchCorpus(
         branch=source_corpus.branch,
