@@ -80,22 +80,24 @@ class FullHistoryAdapter:
 
         response = recorded_response.response
 
-        entry = _append_response(
-            task,
-            state,
-            response.content,
-            config,
-            model,
-            trial_id,
-            [record.entry_id for record in selected_records],
-        )
-        memory_write_event = {
-            "type": "full_history_append",
-            "status": "accepted",
-            "new_entry_id": entry.entry_id,
-            "source_trial_id": trial_id,
-            "source_entry_ids": list(entry.metadata["source_entry_ids"]),
-        }
+        memory_write_event = None
+        if state.update_enabled:
+            entry = _append_response(
+                task,
+                state,
+                response.content,
+                config,
+                model,
+                trial_id,
+                [record.entry_id for record in selected_records],
+            )
+            memory_write_event = {
+                "type": "full_history_append",
+                "status": "accepted",
+                "new_entry_id": entry.entry_id,
+                "source_trial_id": trial_id,
+                "source_entry_ids": list(entry.metadata["source_entry_ids"]),
+            }
         answer_call_id = recorded_response.call_id
         try:
             parsed_answer = parse_final_answer(response.content)

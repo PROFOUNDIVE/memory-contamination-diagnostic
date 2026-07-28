@@ -19,6 +19,7 @@ class FullHistoryPayload:
 @dataclass
 class FullHistoryState:
     records: list[MemoryEntry] = field(default_factory=list)
+    update_enabled: bool = True
 
 
 def render_full_history(entry_id: str, payload: FullHistoryPayload) -> str:
@@ -45,8 +46,9 @@ class FullHistoryPolicy:
         model: str,
         config: dict[str, Any] | None = None,
         verifier: Callable[[str, TaskInstance], VerifierResult] | None = None,
+        update_enabled: bool = True,
     ) -> dict[str, Any]:
-        state = FullHistoryState(records=memory.entries)
+        state = FullHistoryState(records=memory.entries, update_enabled=update_enabled)
         captured_verifier_result: VerifierResult | None = None
 
         def capture_verifier(answer: str, seen_task: TaskInstance) -> VerifierResult | bool:
@@ -68,7 +70,8 @@ class FullHistoryPolicy:
                 verifier=capture_verifier,
             )
         )
-        memory.entries = state.records
+        if update_enabled:
+            memory.entries = state.records
         verifier_result = captured_verifier_result or outcome.verifier_result
         if isinstance(verifier_result, bool):
             verifier_result = VerifierResult(
