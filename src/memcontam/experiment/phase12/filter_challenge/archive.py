@@ -115,18 +115,25 @@ def _validate_archive(root: Path, authority: ArchiveRegistryAuthority) -> None:
 def _validate_ranges(root: Path, assessments: tuple[AssessmentRecord, ...]) -> None:
     lines = _jsonl_boundaries(root / "calls.jsonl")
     for assessment in assessments:
-        declared = {
+        declared = (
             assessment.control_answer_call_id,
             assessment.challenge_answer_call_id,
             *assessment.baseline_native_aux_call_ids_control,
             *assessment.baseline_native_aux_call_ids_challenge,
-        }
+        )
+        ranged: list[str] = []
         for raw_range in assessment.raw_record_ranges:
             if raw_range.path != "calls.jsonl":
                 raise FilterChallengeArchiveError("RAW_RECORD_PATH_INVALID")
             row = lines.get((raw_range.start, raw_range.end))
-            if row is None or row.get("call_id") not in declared:
+            if row is None:
                 raise FilterChallengeArchiveError("RAW_RECORD_RANGE_INVALID")
+            call_id = row.get("call_id")
+            if not isinstance(call_id, str):
+                raise FilterChallengeArchiveError("RAW_RECORD_RANGE_INVALID")
+            ranged.append(call_id)
+        if len(set(ranged)) != len(ranged) or set(ranged) != set(declared) or len(ranged) != len(declared):
+            raise FilterChallengeArchiveError("RAW_RECORD_RANGE_INVALID")
 
 
 def _validate_aggregate_rollups(archive: FilterChallengeArchive) -> None:

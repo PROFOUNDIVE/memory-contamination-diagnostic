@@ -77,6 +77,15 @@ def _authority(module):
     search = SearchConfig.model_validate(
         yaml.safe_load((FIXTURE_ROOT / "FilterChallengeSearchConfig.yaml").read_text(encoding="utf-8"))
     )
+    kappa = search.kappa_candidates[0].model_copy(
+        update={
+            "min_total_evaluable_replicates": 1,
+            "min_distinct_evaluable_probes": 1,
+            "min_witness_replicates_per_probe": 1,
+            "min_distinct_witness_probes": 1,
+        }
+    )
+    search = search.model_copy(update={"kappa_candidates": (kappa,)})
     inventory = ProbeInventoryRegistry.model_validate_json(
         (FIXTURE_ROOT / "probe_inventory_manifest.json").read_text(encoding="utf-8")
     )
@@ -164,7 +173,7 @@ def _archive(authority) -> FilterChallengeArchive:
         n_candidate_exposed=1, n_strictly_evaluable=1, n_witness=1, n_no_witness=0,
         n_not_evaluable=0, n_distinct_evaluable_probes=1, n_distinct_witness_probes=1,
         witness_probe_ids=(inventory.probe_ids[0],), not_evaluable_reason_counts={},
-        aggregation_parameter_tuple=("kappa-1", "coverage-1"), assessment_state="contradicted",
+        aggregation_parameter_tuple=(search.kappa_candidates[0].kappa_id, search.coverage_contract_candidates[0].coverage_contract_id), assessment_state="contradicted",
         final_routing_decision="quarantine", final_reason_code="CONTRADICTED", total_answer_calls=2,
         total_baseline_native_aux_calls=0, total_calls=2, total_retries=0, total_tokens=10,
         total_cost=0.3, total_latency_ms=10,
@@ -299,6 +308,49 @@ def test_validator_rejects_resealed_registry_authority_forgery(tmp_path: Path) -
 
     assert module.validate_archive(root, authority).reason_code == "REGISTRY_AUTHORITY_MISMATCH"
 
+
+def test_validator_rejects_missing_ranges_and_duplicate_aggregates(tmp_path: Path) -> None:
+    module = _module()
+    authority = _authority(module)
+    root = tmp_path / "ranges"
+    module.write_archive(root, _archive(authority), authority)
+    assessment = json.loads((root / "assessments.jsonl").read_text(encoding="utf-8"))
+    assessment["raw_record_ranges"] = assessment["raw_record_ranges"][:1]
+    (root / "assessments.jsonl").write_text(_canonical(assessment), encoding="utf-8")
+    _reseal(root)
+    assert module.validate_archive(root, authority).reason_code == "RAW_RECORD_RANGE_INVALID"
+
+    root = tmp_path / "duplicate"
+    module.write_archive(root, _archive(authority), authority)
+    aggregate = (root / "candidate_aggregates.jsonl").read_text(encoding="utf-8")
+    (root / "candidate_aggregates.jsonl").write_text(aggregate * 2, encoding="utf-8")
+    _reseal(root)
+    assert module.validate_archive(root, authority).reason_code == "AGGREGATE_IDENTITY_INVALID"
+
+
+def test_validator_binds_suite_and_aggregation_parameters_to_authority(tmp_path: Path) -> None:
+    module = _module()
+    authority = _authority(module)
+    root = tmp_path / "archive"
+    module.write_archive(root, _archive(authority), authority)
+
+    suite = authority.search_config.suite_candidates[0].model_copy(
+        update={"probe_ids": (authority.inventory.probe_ids[1],)}
+    )
+    wrong_suite = module.ArchiveRegistryAuthority(
+        authority.search_config.model_copy(
+            update={"suite_candidates": (suite, authority.search_config.suite_candidates[1])}
+        ),
+        authority.inventory,
+        authority.suite,
+    )
+    assert module.validate_archive(root, wrong_suite).reason_code == "REGISTRY_AUTHORITY_MISMATCH"
+
+    aggregate = json.loads((root / "candidate_aggregates.jsonl").read_text(encoding="utf-8"))
+    aggregate["aggregation_parameter_tuple"][0] = "forged-kappa"
+    (root / "candidate_aggregates.jsonl").write_text(_canonical(aggregate), encoding="utf-8")
+    _reseal(root)
+    assert module.validate_archive(root, authority).reason_code == "REGISTRY_AUTHORITY_MISMATCH"
 
 def test_validator_rejects_resealed_unknown_registry_probe(tmp_path: Path) -> None:
     module = _module()

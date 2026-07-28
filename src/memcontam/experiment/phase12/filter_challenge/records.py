@@ -364,7 +364,10 @@ def _validate_archive_relations(archive: FilterChallengeArchive) -> None:
     if not assessment_ids or len(assessment_ids) != len(archive.assessments):
         raise FilterChallengeArchiveError("ASSESSMENT_ID_INVALID")
     aggregate_ids = {record.candidate_entry_id for record in archive.candidate_aggregates}
-    if aggregate_ids != {record.candidate_entry_id for record in archive.assessments}:
+    if (
+        aggregate_ids != {record.candidate_entry_id for record in archive.assessments}
+        or len(aggregate_ids) != len(archive.candidate_aggregates)
+    ):
         raise FilterChallengeArchiveError("AGGREGATE_IDENTITY_INVALID")
     calls = {call.call_id: call for call in archive.calls}
     if len(calls) != len(archive.calls) or {call.filter_assessment_id for call in archive.calls} != assessment_ids:
@@ -392,10 +395,10 @@ def _validate_archive_relations(archive: FilterChallengeArchive) -> None:
             or assessment.input_tokens != sum(call.input_tokens for call in scoped)
             or assessment.output_tokens != sum(call.output_tokens for call in scoped)
             or abs(assessment.monetary_cost - sum(call.monetary_cost for call in scoped)) > 1e-12
-            or assessment.control_latency_ms != control.latency_ms
-            or assessment.challenge_latency_ms != challenge.latency_ms
-            or assessment.retry_count_control != control.retry_count
-            or assessment.retry_count_challenge != challenge.retry_count
+            or assessment.control_latency_ms != sum(call.latency_ms for call in scoped if call.side == "control")
+            or assessment.challenge_latency_ms != sum(call.latency_ms for call in scoped if call.side == "challenge")
+            or assessment.retry_count_control != sum(call.retry_count for call in scoped if call.side == "control")
+            or assessment.retry_count_challenge != sum(call.retry_count for call in scoped if call.side == "challenge")
         ):
             raise FilterChallengeArchiveError("CALL_RELATION_INVALID")
     audit_ids = {join.candidate_entry_id for join in archive.audit_labels}
