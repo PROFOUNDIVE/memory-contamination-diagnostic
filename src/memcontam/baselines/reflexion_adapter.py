@@ -102,6 +102,7 @@ class ReflexionAdapter:
     ) -> BaselineExecutionOutcome:
         config = dict(config or {})
         provenance_observer = config.get("_logging_answer_call_provenance_observer")
+        update_enabled = config.get("update_enabled", True)
         max_attempts = config.get("max_attempts", 2)
         if type(max_attempts) is not int or max_attempts not in {1, 2}:
             raise ValueError("reflexion max_attempts must be 1 or 2")
@@ -209,6 +210,19 @@ class ReflexionAdapter:
                     final_response=response.content,
                     parsed_answer=parsed_answer,
                     verifier_result=True,
+                    answer_call_id=answer_call_id,
+                )
+
+            if not update_enabled:
+                return _succeeded_outcome(
+                    recorder,
+                    memory_before,
+                    state,
+                    attempts,
+                    reflection_events,
+                    final_response=response.content,
+                    parsed_answer=parsed_answer,
+                    verifier_result=False,
                     answer_call_id=answer_call_id,
                 )
 
