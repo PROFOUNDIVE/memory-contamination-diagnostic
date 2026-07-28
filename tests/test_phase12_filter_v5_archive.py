@@ -7,9 +7,11 @@ import json
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 from memcontam.experiment.phase12.filter_challenge.audit import ChallengeAuditLabels, PostRouteAuditJoin
+from memcontam.experiment.phase12.filter_challenge.contracts import ChallengeRoutingDecision
+from memcontam.experiment.phase12.filter_challenge.records import FilterChallengeArchive
 
 
 ASSESSMENT_FIELDS = (
@@ -68,7 +70,7 @@ def _canonical(value: dict[str, object]) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True) + "\n"
 
 
-def _archive() -> object:
+def _archive() -> FilterChallengeArchive:
     module = _records()
     calls = (
         module.ChallengeCallRecord(
@@ -82,7 +84,8 @@ def _archive() -> object:
             retry_count=0,
         ),
     )
-    call_bytes = "".join(_canonical(call.model_dump(mode="json")) for call in calls).encode()
+    call_lines = tuple(_canonical(call.model_dump(mode="json")).encode() for call in calls)
+    call_bytes = b"".join(call_lines)
     assessment = module.AssessmentRecord(
         filter_assessment_id="assessment-1", filter_policy_version="verifier-paired-challenge-v1",
         policy_family="verifier_backed_paired_challenge", decision_rule_id="rule-1",
@@ -119,7 +122,10 @@ def _archive() -> object:
         baseline_native_aux_call_ids_challenge=(), input_tokens=7, output_tokens=3, monetary_cost=0.3,
         control_latency_ms=4, challenge_latency_ms=5, canonicalization_latency_ms=1,
         total_latency_ms=10, cache_key_control="cache-key-1", archive_path="assessments.jsonl",
-        raw_record_ranges=(module.RawRecordRange(path="calls.jsonl", start=0, end=len(call_bytes)),),
+        raw_record_ranges=(
+            module.RawRecordRange(path="calls.jsonl", start=0, end=len(call_lines[0])),
+            module.RawRecordRange(path="calls.jsonl", start=len(call_lines[0]), end=len(call_bytes)),
+        ),
     )
     aggregate = module.CandidateAggregateRecord(
         candidate_entry_id="candidate-1", filter_policy_version="verifier-paired-challenge-v1",
@@ -137,10 +143,12 @@ def _archive() -> object:
     )
     audit = PostRouteAuditJoin(
         candidate_entry_id="candidate-1",
-        routing_decision={
-            "assessment_state": "contradicted", "route_target": "quarantine", "audit_flag": False,
-            "routing_reason_code": "CONTRADICTED",
-        },
+        routing_decision=TypeAdapter(ChallengeRoutingDecision).validate_python(
+            {
+                "assessment_state": "contradicted", "route_target": "quarantine", "audit_flag": False,
+                "routing_reason_code": "CONTRADICTED",
+            }
+        ),
         audit_labels=ChallengeAuditLabels(
             candidate_role="false", correctness_label="incorrect", irrelevance_label="not_irrelevant",
             B_star_membership=False, is_injected=True, origin_class="protocol_injected",
@@ -162,8 +170,19 @@ def _reseal(root: Path) -> None:
         record["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
     manifest_path = root / "public_artifact_manifest.json"
     manifest_path.write_text(_canonical(manifest), encoding="utf-8")
+    audit_path = root / "audit" / "audit_labels.jsonl"
     (root / "archive_seal.json").write_text(
-        _canonical({"public_artifact_manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest()}),
+        _canonical(
+            {
+                "public_artifact_manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+                "audit_artifacts": {
+                    "audit/audit_labels.jsonl": {
+                        "count": len(audit_path.read_text(encoding="utf-8").splitlines()),
+                        "sha256": hashlib.sha256(audit_path.read_bytes()).hexdigest(),
+                    }
+                },
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -183,6 +202,16 @@ def test_records_pin_literal_closed_field_tuples_and_reject_audit_extras() -> No
     assert archive.candidate_aggregates[0].schema_version == "filter_challenge_candidate_aggregate_v1"
     with pytest.raises(ValidationError):
         module.AssessmentRecord.model_validate({**archive.assessments[0].model_dump(), "candidate_role": "false"})
+
+
+def test_record_hash_uses_task_three_utf8_projection() -> None:
+    module = _records()
+    record = _archive().assessments[0].model_copy(update={"cache_key_control": "unicode-한글"})
+    expected = hashlib.sha256(
+        json.dumps(record.model_dump(mode="json"), ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+    assert module.canonical_record_hash(record) == expected
 
 
 @pytest.mark.parametrize(
@@ -245,6 +274,75 @@ def test_validator_rejects_tamper_range_and_call_provenance_breaks(tmp_path: Pat
     )
     _reseal(root)
     assert module.validate_archive(root).reason_code == "CALL_RELATION_INVALID"
+
+
+def test_validator_rejects_forged_ranges_provenance_calls_aggregates_and_audit(tmp_path: Path) -> None:
+    module = _module()
+    root = tmp_path / "forged-range"
+    module.write_archive(root, _archive())
+    assessment = json.loads((root / "assessments.jsonl").read_text(encoding="utf-8"))
+    assessment["raw_record_ranges"][0].update(start=1, end=2)
+    (root / "assessments.jsonl").write_text(_canonical(assessment), encoding="utf-8")
+    _reseal(root)
+    assert module.validate_archive(root).reason_code == "RAW_RECORD_RANGE_INVALID"
+
+    root = tmp_path / "missing-provenance"
+    module.write_archive(root, _archive())
+    assessment = json.loads((root / "assessments.jsonl").read_text(encoding="utf-8"))
+    assessment["control_answer_call_provenance_status"] = "missing"
+    assessment["control_parsed_response_source_call_id"] = None
+    (root / "assessments.jsonl").write_text(_canonical(assessment), encoding="utf-8")
+    _reseal(root)
+    assert module.validate_archive(root).reason_code == "PROVENANCE_DISPOSITION_INVALID"
+
+    root = tmp_path / "aux-answer"
+    module.write_archive(root, _archive())
+    calls = (root / "calls.jsonl").read_text(encoding="utf-8").splitlines()
+    control = json.loads(calls[0])
+    control["call_kind"] = "baseline_native_aux"
+    (root / "calls.jsonl").write_text(_canonical(control) + calls[1] + "\n", encoding="utf-8")
+    _reseal(root)
+    assert module.validate_archive(root).reason_code == "CALL_RELATION_INVALID"
+
+    root = tmp_path / "aggregate-route"
+    module.write_archive(root, _archive())
+    aggregate = json.loads((root / "candidate_aggregates.jsonl").read_text(encoding="utf-8"))
+    aggregate.update(
+        assessment_state="not_contradicted",
+        final_routing_decision="active",
+        final_reason_code="NOT_CONTRADICTED",
+    )
+    (root / "candidate_aggregates.jsonl").write_text(_canonical(aggregate), encoding="utf-8")
+    audit = json.loads((root / "audit" / "audit_labels.jsonl").read_text(encoding="utf-8"))
+    audit["routing_decision"].update(
+        assessment_state="not_contradicted",
+        route_target="active",
+        audit_flag=False,
+        routing_reason_code="NOT_CONTRADICTED",
+    )
+    (root / "audit" / "audit_labels.jsonl").write_text(_canonical(audit), encoding="utf-8")
+    _reseal(root)
+    assert module.validate_archive(root).reason_code == "AGGREGATE_STATE_INVALID"
+
+    root = tmp_path / "audit-tamper"
+    module.write_archive(root, _archive())
+    audit = json.loads((root / "audit" / "audit_labels.jsonl").read_text(encoding="utf-8"))
+    audit["audit_labels"]["candidate_role"] = "forged"
+    (root / "audit" / "audit_labels.jsonl").write_text(_canonical(audit), encoding="utf-8")
+    assert module.validate_archive(root).reason_code == "AUDIT_HASH_MISMATCH"
+
+
+def test_writer_cleans_staging_after_runtime_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _module()
+
+    def crash(*_args: object) -> None:
+        raise RuntimeError("injected write failure")
+
+    monkeypatch.setattr(module, "_write_jsonl", crash)
+
+    with pytest.raises(RuntimeError, match="injected write failure"):
+        module.write_archive(tmp_path / "archive", _archive())
+    assert not tuple(tmp_path.glob(".archive.tmp-*"))
 
 
 def test_aggregate_rejects_zero_denominator_and_mismatched_relations() -> None:

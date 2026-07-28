@@ -40,17 +40,14 @@ def write_archive(root: Path, archive: FilterChallengeArchive) -> None:
         _write_jsonl(staging / "assessments.jsonl", archive.assessments)
         _write_jsonl(staging / "candidate_aggregates.jsonl", archive.candidate_aggregates)
         _write_manifest(staging)
-        _write_json(
-            staging / "archive_seal.json",
-            {"public_artifact_manifest_sha256": _sha256(staging / "public_artifact_manifest.json")},
-        )
+        _write_json(staging / "archive_seal.json", _seal_payload(staging))
         report = validate_archive(staging)
         if not report.archive_valid:
             raise FilterChallengeArchiveError(report.reason_code or "ARCHIVE_VALIDATION_FAILED")
         staging.rename(root)
-    except (FilterChallengeArchiveError, OSError, TypeError, ValueError):
-        shutil.rmtree(staging, ignore_errors=True)
-        raise
+    finally:
+        if staging.exists():
+            shutil.rmtree(staging)
 
 
 def validate_archive(root: Path) -> ArchiveValidationReport:
@@ -78,10 +75,13 @@ def _validate_archive(root: Path) -> None:
         ) != _count(root / filename):
             raise FilterChallengeArchiveError("ARCHIVE_HASH_MISMATCH")
     seal = _read_json(root / "archive_seal.json")
-    if not isinstance(seal, dict) or seal.get("public_artifact_manifest_sha256") != _sha256(
-        root / "public_artifact_manifest.json"
-    ):
+    expected_seal = _seal_payload(root)
+    if not isinstance(seal, dict) or seal.get("public_artifact_manifest_sha256") != expected_seal[
+        "public_artifact_manifest_sha256"
+    ]:
         raise FilterChallengeArchiveError("ARCHIVE_SEAL_MISMATCH")
+    if seal.get("audit_artifacts") != expected_seal["audit_artifacts"]:
+        raise FilterChallengeArchiveError("AUDIT_HASH_MISMATCH")
     run = _read_json(root / "run.json")
     assessments = _read_jsonl(root / "assessments.jsonl")
     aggregates = _read_jsonl(root / "candidate_aggregates.jsonl")
@@ -106,13 +106,19 @@ def _validate_archive(root: Path) -> None:
 
 
 def _validate_ranges(root: Path, assessments: tuple[AssessmentRecord, ...]) -> None:
+    lines = _jsonl_boundaries(root / "calls.jsonl")
     for assessment in assessments:
+        declared = {
+            assessment.control_answer_call_id,
+            assessment.challenge_answer_call_id,
+            *assessment.baseline_native_aux_call_ids_control,
+            *assessment.baseline_native_aux_call_ids_challenge,
+        }
         for raw_range in assessment.raw_record_ranges:
             if raw_range.path != "calls.jsonl":
                 raise FilterChallengeArchiveError("RAW_RECORD_PATH_INVALID")
-            path = root / raw_range.path
-            size = path.stat().st_size
-            if raw_range.end > size:
+            row = lines.get((raw_range.start, raw_range.end))
+            if row is None or row.get("call_id") not in declared:
                 raise FilterChallengeArchiveError("RAW_RECORD_RANGE_INVALID")
 
 
@@ -166,6 +172,14 @@ def _validate_aggregate_rollups(archive: FilterChallengeArchive) -> None:
             aggregate.total_cost - sum(row.monetary_cost for row in rows)
         ) > 1e-12:
             raise FilterChallengeArchiveError("AGGREGATE_RECONCILIATION_FAILED")
+        if witnesses:
+            expected_state = ("contradicted", "quarantine", "CONTRADICTED")
+        elif not evaluable:
+            expected_state = ("not_evaluable", "active", "FAIL_OPEN_NOT_EVALUABLE")
+        else:
+            expected_state = ("not_contradicted", "active", "NOT_CONTRADICTED")
+        if (aggregate.assessment_state, aggregate.final_routing_decision, aggregate.final_reason_code) != expected_state:
+            raise FilterChallengeArchiveError("AGGREGATE_STATE_INVALID")
 
 
 def _write_manifest(root: Path) -> None:
@@ -179,6 +193,30 @@ def _write_manifest(root: Path) -> None:
             },
         },
     )
+
+
+def _seal_payload(root: Path) -> dict[str, object]:
+    audit = root / "audit" / "audit_labels.jsonl"
+    return {
+        "public_artifact_manifest_sha256": _sha256(root / "public_artifact_manifest.json"),
+        "audit_artifacts": {"audit/audit_labels.jsonl": {"count": _count(audit), "sha256": _sha256(audit)}},
+    }
+
+
+def _jsonl_boundaries(path: Path) -> dict[tuple[int, int], dict[str, object]]:
+    offset = 0
+    rows: dict[tuple[int, int], dict[str, object]] = {}
+    for line in path.read_bytes().splitlines(keepends=True):
+        end = offset + len(line)
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise FilterChallengeArchiveError("ARCHIVE_JSON_INVALID") from error
+        if not isinstance(row, dict):
+            raise FilterChallengeArchiveError("ARCHIVE_JSON_INVALID")
+        rows[(offset, end)] = row
+        offset = end
+    return rows
 
 
 def _read_json(path: Path):

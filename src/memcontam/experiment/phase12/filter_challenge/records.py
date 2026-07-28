@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import PurePosixPath, PureWindowsPath
 from typing import Annotated, Final, Literal, Self
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, field_validator, model_validator
 
-from memcontam.experiment.phase12.contracts import canonical_json_hash
 from memcontam.experiment.phase12.filter_challenge.audit import PostRouteAuditJoin
 from memcontam.experiment.phase12.filter_challenge.registry_common import parse_tuple
 
@@ -221,6 +222,11 @@ class AssessmentRecord(_StrictRecord):
             self.challenge_parsed_response_source_call_id != self.challenge_answer_call_id
         ):
             raise FilterChallengeArchiveError("ANSWER_CALL_RELATION_INVALID")
+        if (
+            self.control_answer_call_provenance_status != "explicit_matched"
+            or self.challenge_answer_call_provenance_status != "explicit_matched"
+        ) and self.probe_disposition != "not_evaluable":
+            raise FilterChallengeArchiveError("PROVENANCE_DISPOSITION_INVALID")
         if self.candidate_final_context_inclusion != (
             self.candidate_entry_id in self.candidate_final_context_source_ids
         ):
@@ -349,7 +355,8 @@ class FilterChallengeArchive(_StrictRecord):
 
 
 def canonical_record_hash(record: BaseModel) -> str:
-    return canonical_json_hash(record.model_dump(mode="json"))
+    payload = json.dumps(record.model_dump(mode="json"), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _validate_archive_relations(archive: FilterChallengeArchive) -> None:
@@ -370,15 +377,41 @@ def _validate_archive_relations(archive: FilterChallengeArchive) -> None:
             *assessment.baseline_native_aux_call_ids_challenge,
         }
         actual = {call.call_id for call in archive.calls if call.filter_assessment_id == assessment.filter_assessment_id}
-        if actual != expected or calls[assessment.control_answer_call_id].side != "control" or calls[
-            assessment.challenge_answer_call_id
-        ].side != "challenge":
+        if actual != expected:
+            raise FilterChallengeArchiveError("CALL_RELATION_INVALID")
+        control = calls[assessment.control_answer_call_id]
+        challenge = calls[assessment.challenge_answer_call_id]
+        aux_control = {calls[call_id] for call_id in assessment.baseline_native_aux_call_ids_control}
+        aux_challenge = {calls[call_id] for call_id in assessment.baseline_native_aux_call_ids_challenge}
+        scoped = tuple(call for call in archive.calls if call.filter_assessment_id == assessment.filter_assessment_id)
+        if (
+            (control.call_kind, control.side) != ("answer", "control")
+            or (challenge.call_kind, challenge.side) != ("answer", "challenge")
+            or any((call.call_kind, call.side) != ("baseline_native_aux", "control") for call in aux_control)
+            or any((call.call_kind, call.side) != ("baseline_native_aux", "challenge") for call in aux_challenge)
+            or assessment.input_tokens != sum(call.input_tokens for call in scoped)
+            or assessment.output_tokens != sum(call.output_tokens for call in scoped)
+            or abs(assessment.monetary_cost - sum(call.monetary_cost for call in scoped)) > 1e-12
+            or assessment.control_latency_ms != control.latency_ms
+            or assessment.challenge_latency_ms != challenge.latency_ms
+            or assessment.retry_count_control != control.retry_count
+            or assessment.retry_count_challenge != challenge.retry_count
+        ):
             raise FilterChallengeArchiveError("CALL_RELATION_INVALID")
     audit_ids = {join.candidate_entry_id for join in archive.audit_labels}
     if audit_ids != aggregate_ids or len(audit_ids) != len(archive.audit_labels):
         raise FilterChallengeArchiveError("AUDIT_JOIN_INVALID")
-    routes = {aggregate.candidate_entry_id: aggregate.final_routing_decision for aggregate in archive.candidate_aggregates}
-    if any(join.routing_decision.route_target != routes[join.candidate_entry_id] for join in archive.audit_labels):
+    routes = {
+        aggregate.candidate_entry_id: {
+            "schema_version": "filter_challenge_domain_v1",
+            "assessment_state": aggregate.assessment_state,
+            "route_target": aggregate.final_routing_decision,
+            "audit_flag": aggregate.assessment_state == "not_evaluable",
+            "routing_reason_code": aggregate.final_reason_code,
+        }
+        for aggregate in archive.candidate_aggregates
+    }
+    if any(join.routing_decision.model_dump(mode="json") != routes[join.candidate_entry_id] for join in archive.audit_labels):
         raise FilterChallengeArchiveError("AUDIT_JOIN_INVALID")
 
 
