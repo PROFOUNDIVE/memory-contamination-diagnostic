@@ -6,7 +6,7 @@ from dataclasses import fields
 from pathlib import Path
 
 import pytest
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 from memcontam.experiment.phase12.filter_challenge.mft_state import (
     MFT_STATE_IDS,
