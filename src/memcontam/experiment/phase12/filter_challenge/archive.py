@@ -108,8 +108,8 @@ def _validate_archive(root: Path, authority: ArchiveRegistryAuthority) -> None:
     except ValidationError as error:
         raise FilterChallengeArchiveError(_validation_code(error)) from error
     _validate_ranges(root, archive.assessments)
-    _validate_aggregate_rollups(archive)
     validate_archive_authority(archive, authority)
+    _validate_aggregate_rollups(archive, authority)
 
 
 def _validate_ranges(root: Path, assessments: tuple[AssessmentRecord, ...]) -> None:
@@ -136,7 +136,7 @@ def _validate_ranges(root: Path, assessments: tuple[AssessmentRecord, ...]) -> N
             raise FilterChallengeArchiveError("RAW_RECORD_RANGE_INVALID")
 
 
-def _validate_aggregate_rollups(archive: FilterChallengeArchive) -> None:
+def _validate_aggregate_rollups(archive: FilterChallengeArchive, authority: ArchiveRegistryAuthority) -> None:
     for aggregate in archive.candidate_aggregates:
         rows = tuple(row for row in archive.assessments if row.candidate_entry_id == aggregate.candidate_entry_id)
         if any(
@@ -186,14 +186,6 @@ def _validate_aggregate_rollups(archive: FilterChallengeArchive) -> None:
             aggregate.total_cost - sum(row.monetary_cost for row in rows)
         ) > 1e-12:
             raise FilterChallengeArchiveError("AGGREGATE_RECONCILIATION_FAILED")
-        if witnesses:
-            expected_state = ("contradicted", "quarantine", "CONTRADICTED")
-        elif not evaluable:
-            expected_state = ("not_evaluable", "active", "FAIL_OPEN_NOT_EVALUABLE")
-        else:
-            expected_state = ("not_contradicted", "active", "NOT_CONTRADICTED")
-        if (aggregate.assessment_state, aggregate.final_routing_decision, aggregate.final_reason_code) != expected_state:
-            raise FilterChallengeArchiveError("AGGREGATE_STATE_INVALID")
 
 
 def _write_manifest(root: Path) -> None:

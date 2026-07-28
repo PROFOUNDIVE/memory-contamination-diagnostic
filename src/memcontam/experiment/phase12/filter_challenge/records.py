@@ -244,6 +244,11 @@ class AssessmentRecord(_StrictRecord):
             raise FilterChallengeArchiveError("ROUTING_RECONCILIATION_FAILED")
         if (self.assessment_state == "not_evaluable") != (self.probe_disposition == "not_evaluable"):
             raise FilterChallengeArchiveError("ASSESSMENT_DISPOSITION_MISMATCH")
+        if (self.probe_disposition, self.assessment_state) not in {
+            ("witness", "contradicted"), ("evaluated_no_witness", "not_contradicted"),
+            ("not_evaluable", "not_evaluable"),
+        }:
+            raise FilterChallengeArchiveError("ASSESSMENT_DISPOSITION_MISMATCH")
         return self
 
 

@@ -77,15 +77,23 @@ def _authority(module):
     search = SearchConfig.model_validate(
         yaml.safe_load((FIXTURE_ROOT / "FilterChallengeSearchConfig.yaml").read_text(encoding="utf-8"))
     )
-    kappa = search.kappa_candidates[0].model_copy(
-        update={
+    payload = search.model_dump(mode="json")
+    payload["kappa_candidates"] = [
+        payload["kappa_candidates"][0]
+        | {
             "min_total_evaluable_replicates": 1,
             "min_distinct_evaluable_probes": 1,
             "min_witness_replicates_per_probe": 1,
             "min_distinct_witness_probes": 1,
         }
-    )
-    search = search.model_copy(update={"kappa_candidates": (kappa,)})
+    ]
+    hash_payload = payload.copy()
+    del hash_payload["search_config_hash"]
+    payload["search_config_hash"] = hashlib.sha256(
+        json.dumps(hash_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    search = SearchConfig.model_validate(payload)
+    assert search.search_config_hash == search.stable_hash()
     inventory = ProbeInventoryRegistry.model_validate_json(
         (FIXTURE_ROOT / "probe_inventory_manifest.json").read_text(encoding="utf-8")
     )
