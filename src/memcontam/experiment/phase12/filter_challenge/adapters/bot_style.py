@@ -12,9 +12,11 @@ from memcontam.memory.cards_v3 import canonical_content_hash
 from memcontam.memory.checkpoint_v3 import (
     NATIVE_ENTRY_V1,
     NativeEntry,
+    NativeState,
     Phase12Checkpoint,
     append_native_entry,
     deserialize_checkpoint,
+    serialize_checkpoint,
 )
 from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
@@ -53,6 +55,14 @@ class BoTStyleChallengeAdapter:
     def execute(
         self, execution: BoTChallengeExecution, candidate: ChallengeCandidate
     ) -> BoTChallengeResult:
+        if candidate.baseline_family != "bot_style":
+            raise BoTChallengeAdapterError("BOT_CANDIDATE_BASELINE_INVALID")
+        if candidate.rag_mode != "not_applicable":
+            raise BoTChallengeAdapterError("BOT_CANDIDATE_RAG_MODE_INVALID")
+        if candidate.source_checkpoint_id != execution.checkpoint.identity.checkpoint_id:
+            raise BoTChallengeAdapterError("BOT_CANDIDATE_CHECKPOINT_MISMATCH")
+        if candidate.source_active_state_hash != execution.checkpoint.canonical_sha256:
+            raise BoTChallengeAdapterError("BOT_CANDIDATE_STATE_HASH_MISMATCH")
         if candidate.candidate_native_kind != "thought_template":
             raise BoTChallengeAdapterError("BOT_CANDIDATE_KIND_INVALID")
         provisional_checkpoint, displaced_template_ids = _provisional_checkpoint(
@@ -85,7 +95,23 @@ def _provisional_checkpoint(
         content=candidate.candidate_native_content,
         content_hash=canonical_content_hash(candidate.candidate_native_content),
     )
-    return append_native_entry(checkpoint, candidate_entry), ()
+    appended = append_native_entry(checkpoint, candidate_entry)
+    appended_state = deserialize_checkpoint(appended)
+    appended_entries = _native_entries(appended)
+    return (
+        serialize_checkpoint(
+            NativeState(
+                baseline=appended_state.baseline,
+                entries=appended_entries,
+                native_state={
+                    **appended_state.native_state,
+                    "templates": [entry.entry_id for entry in appended_entries],
+                },
+                schema_version=appended_state.schema_version,
+            )
+        ),
+        (),
+    )
 
 
 def _native_entries(checkpoint: Phase12Checkpoint) -> tuple[NativeEntry, ...]:

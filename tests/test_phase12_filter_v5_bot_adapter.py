@@ -3,19 +3,17 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from memcontam.baselines.bot_runtime import BotRuntime
 from memcontam.clients.base import LLMResponse
 from memcontam.experiment.phase12.filter_challenge.adapters.bot_style import (
+    BoTChallengeAdapterError,
     BoTChallengeExecution,
     BoTStyleChallengeAdapter,
 )
-from memcontam.experiment.phase12.filter_challenge.contracts import (
-    AnswerCallRelation,
-    ChallengeCandidate,
-)
-from memcontam.experiment.phase12.filter_challenge.provenance import (
-    AnswerCallProvenanceObserver,
-)
+from memcontam.experiment.phase12.filter_challenge.contracts import AnswerCallRelation, ChallengeCandidate
+from memcontam.experiment.phase12.filter_challenge.provenance import AnswerCallProvenanceObserver
 from memcontam.memory.bot_buffer import BotBufferIdentity
 from memcontam.memory.cards_v3 import canonical_content_hash
 from memcontam.memory.checkpoint_v3 import (
@@ -23,6 +21,7 @@ from memcontam.memory.checkpoint_v3 import (
     NativeEntry,
     NativeState,
     Phase12Checkpoint,
+    deserialize_checkpoint,
     serialize_checkpoint,
 )
 from memcontam.memory.stores import MemoryEntry
@@ -30,28 +29,9 @@ from memcontam.tasks.base import TaskInstance
 from memcontam.tools import SubprocessTestDouble, load_tool_runtime_contract
 
 
-_PROBLEM = json.dumps(
-    {
-        "key_information": "numbers = [1, 3, 4, 6], target = 24",
-        "restrictions": "Use every number exactly once.",
-        "distilled_task": "Construct an expression equal to 24.",
-    }
-)
-_RETRIEVED_SOLUTION = json.dumps(
-    {
-        "selected_structure": "retrieved-template",
-        "solution_trace": "Use the selected template.",
-        "final_answer": "final: 24",
-    }
-)
-_THOUGHT = json.dumps(
-    {
-        "description": "Build useful values.",
-        "template": "Build values before combining them.",
-        "category": "procedure-based",
-        "explicitly_used_memory_ids": [],
-    }
-)
+_PROBLEM = json.dumps({"key_information": "numbers = [1, 3, 4, 6], target = 24", "restrictions": "Use every number exactly once.", "distilled_task": "Construct an expression equal to 24."})
+_RETRIEVED_SOLUTION = json.dumps({"selected_structure": "retrieved-template", "solution_trace": "Use the selected template.", "final_answer": "final: 24"})
+_THOUGHT = json.dumps({"description": "Build useful values.", "template": "Build values before combining them.", "category": "procedure-based", "explicitly_used_memory_ids": []})
 
 
 class _TieEmbeddingProvider:
@@ -71,6 +51,16 @@ class _AdmittingEmbeddingProvider:
     def encode_document(self, text: str) -> list[float]:
         del text
         return [1.0, 0.0]
+
+
+class _CandidateLosesEmbeddingProvider:
+    def encode_query(self, text: str) -> list[float]:
+        del text
+        return [1.0, 0.0]
+
+    def encode_document(self, text: str) -> list[float]:
+        score = 0.8 if text.startswith("Apply") else 0.9
+        return [score, (1 - score**2) ** 0.5]
 
 
 class _ScriptedClient:
@@ -114,37 +104,15 @@ def _identity() -> BotBufferIdentity:
 
 def _template(entry_id: str) -> NativeEntry:
     content = f"Use template {entry_id}."
-    return NativeEntry(
-        entry_id=entry_id,
-        semantic_kind="thought_template",
-        schema_version=NATIVE_ENTRY_V1,
-        native_component="buffer",
-        content=content,
-        content_hash=canonical_content_hash(content),
-    )
+    return NativeEntry(entry_id, "thought_template", NATIVE_ENTRY_V1, "buffer", content, canonical_content_hash(content))
 
 
 def _checkpoint(*, capacity: int, entries: tuple[NativeEntry, ...]) -> Phase12Checkpoint:
-    return serialize_checkpoint(
-        NativeState(
-            "bot_style",
-            entries,
-            {"active_capacity": capacity, "clean_competitor_ids": [], "templates": [entry.entry_id for entry in entries]},
-        )
-    )
+    return serialize_checkpoint(NativeState("bot_style", entries, {"active_capacity": capacity, "clean_competitor_ids": [], "templates": [entry.entry_id for entry in entries]}))
 
 
 def _candidate(checkpoint: Phase12Checkpoint) -> ChallengeCandidate:
-    return ChallengeCandidate(
-        candidate_entry_id="candidate-template",
-        candidate_native_content="Apply the candidate template.",
-        candidate_native_kind="thought_template",
-        baseline_family="bot_style",
-        rag_mode="not_applicable",
-        source_checkpoint_id=checkpoint.identity.checkpoint_id,
-        source_active_state_hash=checkpoint.canonical_sha256,
-        routability={"routability": "challenge_routable_v1", "challenge_suite_key": "synthetic"},
-    )
+    return ChallengeCandidate(candidate_entry_id="candidate-template", candidate_native_content="Apply the candidate template.", candidate_native_kind="thought_template", baseline_family="bot_style", rag_mode="not_applicable", source_checkpoint_id=checkpoint.identity.checkpoint_id, source_active_state_hash=checkpoint.canonical_sha256, routability={"routability": "challenge_routable_v1", "challenge_suite_key": "synthetic"})
 
 
 def _execution(
@@ -153,9 +121,10 @@ def _execution(
     observer: _Observer,
     *,
     tool_mode: str = "text_only",
+    embedding_provider: _TieEmbeddingProvider | _CandidateLosesEmbeddingProvider | None = None,
 ) -> BoTChallengeExecution:
     config: dict[str, object] = {
-        "embedding_provider": _TieEmbeddingProvider(),
+        "embedding_provider": _TieEmbeddingProvider() if embedding_provider is None else embedding_provider,
         "tool_mode": tool_mode,
         "_logging_answer_call_provenance_observer": observer,
     }
@@ -301,3 +270,51 @@ def test_bot_challenge_keeps_final_tool_response_as_the_provenance_answer() -> N
     ]
     assert result.outcome.memory_write_event is None
     assert client.provider_calls_issued == 0
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "code"),
+    [
+        ("baseline_family", "rag_frozen", "BOT_CANDIDATE_BASELINE_INVALID"),
+        ("rag_mode", "frozen", "BOT_CANDIDATE_RAG_MODE_INVALID"),
+        ("source_checkpoint_id", "other-checkpoint", "BOT_CANDIDATE_CHECKPOINT_MISMATCH"),
+        ("source_active_state_hash", "other-hash", "BOT_CANDIDATE_STATE_HASH_MISMATCH"),
+    ],
+)
+def test_bot_challenge_rejects_candidate_not_bound_to_execution_checkpoint(
+    field: str, value: str, code: str
+) -> None:
+    # Given: a candidate with one source-binding field different from its execution checkpoint.
+    checkpoint = _checkpoint(capacity=1, entries=())
+    candidate = _candidate(checkpoint).model_copy(update={field: value})
+    client = _ScriptedClient({"bot_problem_distill": [_PROBLEM], "bot_instantiate_solve": [_RETRIEVED_SOLUTION]})
+
+    # When: the challenge adapter receives the mismatched candidate.
+    with pytest.raises(BoTChallengeAdapterError, match=code):
+        BoTStyleChallengeAdapter().execute(_execution(checkpoint, client, _Observer()), candidate)
+
+    # Then: no native answer call reaches the fake client.
+    assert client.stages == []
+
+
+def test_admitted_but_nonselected_candidate_is_not_exposed_and_keeps_native_state_consistent() -> None:
+    # Given: a non-full buffer where the candidate is admitted but ranks below an existing template.
+    checkpoint = _checkpoint(capacity=3, entries=(_template("template-a"), _template("template-z")))
+    client = _ScriptedClient({"bot_problem_distill": [_PROBLEM], "bot_instantiate_solve": [_RETRIEVED_SOLUTION]})
+
+    # When: native retrieval selects the higher-scoring existing template.
+    result = BoTStyleChallengeAdapter().execute(
+        _execution(checkpoint, client, _Observer(), embedding_provider=_CandidateLosesEmbeddingProvider()),
+        _candidate(checkpoint),
+    )
+
+    # Then: the candidate remains an admitted nonselected template, not an exposure, and metadata matches entries.
+    state = deserialize_checkpoint(result.provisional_checkpoint)
+    assert result.selected_template_id == "template-a"
+    assert result.nonselected_template_ids == ("template-z", "candidate-template")
+    assert not result.candidate_final_context_inclusion
+    assert result.final_context_source_ids == ("template-a",)
+    assert tuple(
+        entry.entry_id for entry in state.entries if isinstance(entry, NativeEntry)
+    ) == result.provisional_template_ids
+    assert state.native_state["templates"] == list(result.provisional_template_ids)
