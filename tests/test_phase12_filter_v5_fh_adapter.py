@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
+import pytest
+
 from memcontam.baselines.full_history import FullHistoryPayload, FullHistoryPolicy, render_full_history
 from memcontam.baselines.full_history import FullHistoryState
 from memcontam.baselines.full_history_adapter import FullHistoryAdapter
 from memcontam.baselines.prompt_budget import count_prompt_tokens
 from memcontam.clients.base import LLMResponse
+from memcontam.experiment.phase12.filter_challenge.adapters import full_history as fh_adapter
 from memcontam.experiment.phase12.filter_challenge.adapters.full_history import (
+    FullHistoryChallengeError,
     FullHistoryPairRequest,
     FullHistoryProvisionalAdapter,
 )
@@ -21,10 +27,12 @@ class _ScriptedClient:
     def __init__(self) -> None:
         self.fake_answer_calls = 0
         self.provider_calls_issued = 0
+        self.answer_prompts: list[str] = []
 
     def chat(self, messages: list[dict[str, str]], model: str, config: dict) -> LLMResponse:
-        del messages, model, config
+        del model, config
         self.fake_answer_calls += 1
+        self.answer_prompts.append(messages[0]["content"])
         return LLMResponse(content="final: 24", raw={}, token_usage={}, latency_ms=0)
 
 
@@ -79,17 +87,19 @@ def _entry(entry_id: str, response: str) -> NativeEntry:
     )
 
 
-def _candidate(entry_id: str = "candidate") -> ChallengeCandidate:
-    entry = _entry(entry_id, "candidate response")
-    return ChallengeCandidate(
-        candidate_entry_id=entry.entry_id,
-        candidate_native_content=entry.content,
-        candidate_native_kind=entry.semantic_kind,
-        baseline_family="full_history",
-        rag_mode="not_applicable",
-        source_checkpoint_id="checkpoint-source",
-        source_active_state_hash="source-hash",
-        routability={"routability": "challenge_routable_v1", "challenge_suite_key": "suite-1"},
+def _candidate(entry_id: str = "candidate", response: str = "candidate response") -> ChallengeCandidate:
+    entry = _entry(entry_id, response)
+    return ChallengeCandidate.model_validate(
+        {
+            "candidate_entry_id": entry.entry_id,
+            "candidate_native_content": entry.content,
+            "candidate_native_kind": entry.semantic_kind,
+            "baseline_family": "full_history",
+            "rag_mode": "not_applicable",
+            "source_checkpoint_id": "checkpoint-source",
+            "source_active_state_hash": "source-hash",
+            "routability": {"routability": "challenge_routable_v1", "challenge_suite_key": "suite-1"},
+        }
     )
 
 
@@ -111,11 +121,13 @@ def _context_config(history_budget: int) -> dict[str, object]:
     }
 
 
-def _request(checkpoint, context_config: dict[str, object]) -> FullHistoryPairRequest:
+def _request(
+    checkpoint, context_config: dict[str, object], candidate: ChallengeCandidate | None = None
+) -> FullHistoryPairRequest:
     return FullHistoryPairRequest(
         task=_task(),
         checkpoint=checkpoint,
-        candidate=_candidate(),
+        candidate=candidate or _candidate(),
         control_client=_ScriptedClient(),
         challenge_client=_ScriptedClient(),
         model="replay",
@@ -123,10 +135,20 @@ def _request(checkpoint, context_config: dict[str, object]) -> FullHistoryPairRe
     )
 
 
+def _assert_candidate_is_only_in_its_native_record(
+    client: _ScriptedClient, candidate: ChallengeCandidate, marker: str
+) -> None:
+    assert len(client.answer_prompts) == 1
+    prompt = client.answer_prompts[0]
+    assert prompt.count(candidate.candidate_native_content) == 1
+    assert prompt.count(marker) == 1
+
+
 def test_provisional_full_history_appends_candidate_through_native_records_when_all_fit() -> None:
     # Given: a frozen full-history checkpoint and enough budget for the provisional record.
     checkpoint = _checkpoint((_entry("history-1", "first"), _entry("history-2", "second")))
-    request = _request(checkpoint, _context_config(history_budget=10_000))
+    candidate = _candidate(response="candidate full-fit native marker")
+    request = _request(checkpoint, _context_config(history_budget=10_000), candidate)
 
     # When: the read-only control and challenge executions run through the adapter.
     result = FullHistoryProvisionalAdapter().execute(request)
@@ -151,22 +173,38 @@ def test_provisional_full_history_appends_candidate_through_native_records_when_
     ]
     assert checkpoint.canonical_sha256 == result.source_checkpoint_sha256_after
     assert [entry.entry_id for entry in checkpoint.state.entries] == ["history-1", "history-2"]
+    assert isinstance(request.control_client, _ScriptedClient)
+    assert isinstance(request.challenge_client, _ScriptedClient)
     assert request.control_client.fake_answer_calls == request.challenge_client.fake_answer_calls == 1
     assert request.control_client.provider_calls_issued == request.challenge_client.provider_calls_issued == 0
+    assert result.control_outcome.method_calls[0].call_id == result.control_outcome.answer_call_id
+    assert result.challenge_outcome.method_calls[0].call_id == result.challenge_outcome.answer_call_id
+    assert candidate.candidate_native_content not in request.control_client.answer_prompts[0]
+    _assert_candidate_is_only_in_its_native_record(
+        request.challenge_client, candidate, "candidate full-fit native marker"
+    )
 
 
 def test_provisional_full_history_logs_fifo_displacement_after_candidate_insertion() -> None:
     # Given: a frozen history whose bounded context can retain only the newest source and candidate.
     oldest = _entry("history-oldest", "oldest")
     newest = _entry("history-newest", "newest")
-    candidate = _entry("candidate", "candidate response")
+    candidate = _candidate(response="candidate bounded native marker")
     budget = count_prompt_tokens(
-        [{"role": "user", "content": f"{newest.content}\n\n{candidate.content}\n\nTASK:\n{canonical_task_json(_task())}"}],
+        [
+            {
+                "role": "user",
+                "content": (
+                    f"{newest.content}\n\n{candidate.candidate_native_content}\n\n"
+                    f"TASK:\n{canonical_task_json(_task())}"
+                ),
+            }
+        ],
         "cl100k_base",
     ) - count_prompt_tokens(
         [{"role": "user", "content": f"TASK:\n{canonical_task_json(_task())}"}], "cl100k_base"
     )
-    request = _request(_checkpoint((oldest, newest)), _context_config(budget))
+    request = _request(_checkpoint((oldest, newest)), _context_config(budget), candidate)
 
     # When: the challenge appends the candidate at the native chronological position.
     result = FullHistoryProvisionalAdapter().execute(request)
@@ -182,6 +220,12 @@ def test_provisional_full_history_logs_fifo_displacement_after_candidate_inserti
         "history-newest",
         "candidate",
     ]
+    assert isinstance(request.challenge_client, _ScriptedClient)
+    assert newest.content in request.challenge_client.answer_prompts[0]
+    assert oldest.content not in request.challenge_client.answer_prompts[0]
+    _assert_candidate_is_only_in_its_native_record(
+        request.challenge_client, candidate, "candidate bounded native marker"
+    )
 
 
 def test_provisional_full_history_marks_candidate_unexposed_when_budget_removes_every_record() -> None:
@@ -197,3 +241,54 @@ def test_provisional_full_history_marks_candidate_unexposed_when_budget_removes_
     assert not result.candidate_exposure.candidate_final_context_inclusion
     assert result.candidate_exposure.candidate_final_context_source_ids == ()
     assert result.challenge_outcome.method_calls[0].source_spans == []
+
+
+def test_provisional_full_history_rejects_a_missing_answer_call_binding(monkeypatch) -> None:
+    # Given: a native execution whose recorded calls omit the declared answer call.
+    native_execute = fh_adapter._execute_read_only
+
+    def omit_answer_call(request, client, records):
+        return replace(native_execute(request, client, records), method_calls=())
+
+    monkeypatch.setattr(fh_adapter, "_execute_read_only", omit_answer_call)
+    request = _request(_checkpoint((_entry("history-1", "first"),)), _context_config(10_000))
+
+    # When: the challenge attempts to derive final source IDs.
+    # Then: it fails closed instead of using separately rendered context IDs.
+    with pytest.raises(FullHistoryChallengeError, match="ANSWER_CALL_BINDING"):
+        FullHistoryProvisionalAdapter().execute(request)
+
+
+def test_provisional_full_history_rejects_duplicate_answer_call_bindings(monkeypatch) -> None:
+    # Given: a native execution with two records carrying the answer call ID.
+    native_execute = fh_adapter._execute_read_only
+
+    def duplicate_answer_call(request, client, records):
+        outcome = native_execute(request, client, records)
+        return replace(outcome, method_calls=(outcome.method_calls[0], outcome.method_calls[0]))
+
+    monkeypatch.setattr(fh_adapter, "_execute_read_only", duplicate_answer_call)
+    request = _request(_checkpoint((_entry("history-1", "first"),)), _context_config(10_000))
+
+    # When: the challenge attempts to derive final source IDs.
+    # Then: it rejects ambiguous answer-call provenance.
+    with pytest.raises(FullHistoryChallengeError, match="ANSWER_CALL_BINDING"):
+        FullHistoryProvisionalAdapter().execute(request)
+
+
+def test_provisional_full_history_rejects_answer_source_span_mismatch(monkeypatch) -> None:
+    # Given: a native execution whose answer call has no spans for its retained source record.
+    native_execute = fh_adapter._execute_read_only
+
+    def erase_answer_source_spans(request, client, records):
+        outcome = native_execute(request, client, records)
+        answer_call = outcome.method_calls[0].model_copy(update={"source_spans": []})
+        return replace(outcome, method_calls=(answer_call,))
+
+    monkeypatch.setattr(fh_adapter, "_execute_read_only", erase_answer_source_spans)
+    request = _request(_checkpoint((_entry("history-1", "first"),)), _context_config(10_000))
+
+    # When: the challenge attempts to derive final source IDs.
+    # Then: it rejects source spans that disagree with native bounded rendering.
+    with pytest.raises(FullHistoryChallengeError, match="ANSWER_SOURCE_SPAN_MISMATCH"):
+        FullHistoryProvisionalAdapter().execute(request)

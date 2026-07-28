@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from importlib import import_module
 from typing import Any, Callable
 
+from memcontam.baselines.contracts import BaselineExecutionOutcome
 from memcontam.clients.base import LLMClient
 from memcontam.logging.schema import VerifierResult
 from memcontam.memory.stores import MemoryEntry, MemoryState
@@ -19,7 +20,6 @@ class FullHistoryPayload:
 @dataclass
 class FullHistoryState:
     records: list[MemoryEntry] = field(default_factory=list)
-    update_enabled: bool = True
 
 
 def render_full_history(entry_id: str, payload: FullHistoryPayload) -> str:
@@ -48,7 +48,6 @@ class FullHistoryPolicy:
         verifier: Callable[[str, TaskInstance], VerifierResult] | None = None,
         update_enabled: bool = True,
     ) -> dict[str, Any]:
-        state = FullHistoryState(records=memory.entries, update_enabled=update_enabled)
         captured_verifier_result: VerifierResult | None = None
 
         def capture_verifier(answer: str, seen_task: TaskInstance) -> VerifierResult | bool:
@@ -58,20 +57,15 @@ class FullHistoryPolicy:
             captured_verifier_result = verifier(answer, seen_task)
             return captured_verifier_result
 
-        outcome = (
-            import_module("memcontam.baselines.full_history_adapter")
-            .FullHistoryAdapter()
-            .execute(
-                task,
-                state,
-                client=client,
-                model=model,
-                config=config,
-                verifier=capture_verifier,
-            )
+        outcome = self.execute(
+            task,
+            memory,
+            client=client,
+            model=model,
+            config=config,
+            verifier=capture_verifier,
+            update_enabled=update_enabled,
         )
-        if update_enabled:
-            memory.entries = state.records
         verifier_result = captured_verifier_result or outcome.verifier_result
         if isinstance(verifier_result, bool):
             verifier_result = VerifierResult(
@@ -94,6 +88,28 @@ class FullHistoryPolicy:
             "retrieved_scores": [],
             "answer_call_id": outcome.answer_call_id,
         }
+
+    def execute(
+        self,
+        task: TaskInstance,
+        memory: MemoryState,
+        *,
+        client: LLMClient,
+        model: str,
+        config: dict[str, Any] | None = None,
+        verifier: Callable[[str, TaskInstance], VerifierResult | bool] | None = None,
+        update_enabled: bool = True,
+    ) -> BaselineExecutionOutcome:
+        state = FullHistoryState(records=list(memory.entries))
+        outcome = (
+            import_module("memcontam.baselines.full_history_adapter")
+            .FullHistoryAdapter()
+            .execute(task, state, client=client, model=model, config=config, verifier=verifier)
+        )
+        if update_enabled:
+            memory.entries = state.records
+            return outcome
+        return replace(outcome, memory_after=outcome.memory_before, memory_write_event=None)
 
 
 def __getattr__(name: str) -> Any:

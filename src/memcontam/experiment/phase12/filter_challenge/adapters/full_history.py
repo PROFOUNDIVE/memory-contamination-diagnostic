@@ -4,11 +4,11 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from memcontam.baselines.contracts import BaselineExecutionOutcome
-from memcontam.baselines.full_history import FullHistoryState
-from memcontam.baselines.full_history_adapter import FullHistoryAdapter
+from memcontam.baselines.full_history import FullHistoryPolicy
 from memcontam.baselines.full_history_context import render_context_bounded_history
 from memcontam.clients.base import LLMClient
 from memcontam.experiment.phase12.filter_challenge.contracts import (
+    AnswerCallRelation,
     CandidateExposureRecord,
     ChallengeCandidate,
 )
@@ -25,12 +25,23 @@ from memcontam.memory.checkpoint_v3 import (
     deserialize_checkpoint,
     serialize_checkpoint,
 )
-from memcontam.memory.stores import MemoryEntry
+from memcontam.memory.stores import MemoryEntry, MemoryState
 from memcontam.tasks.base import TaskInstance
 
 
 class FullHistoryChallengeError(ValueError):
     pass
+
+
+class _RelationObserver(AnswerCallProvenanceObserver):
+    def __init__(self) -> None:
+        super().__init__()
+        self.relations: dict[str, AnswerCallRelation] = {}
+
+    def finalize(self, answer_call_id: str) -> AnswerCallRelation:
+        relation = super().finalize(answer_call_id)
+        self.relations[answer_call_id] = relation
+        return relation
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,26 +76,29 @@ class FullHistoryProvisionalAdapter:
         control_records = _records(source_state)
         challenge_state = deserialize_checkpoint(provisional_checkpoint)
         challenge_records = _records(challenge_state)
+        control_outcome = _execute_read_only(request, request.control_client, control_records)
+        challenge_outcome = _execute_read_only(request, request.challenge_client, challenge_records)
         control_context = render_context_bounded_history(
             request.task, control_records, request.context_config
         )
         challenge_context = render_context_bounded_history(
             request.task, challenge_records, request.context_config
         )
-        control_outcome = _execute_read_only(request, request.control_client, control_records)
-        challenge_outcome = _execute_read_only(request, request.challenge_client, challenge_records)
-        candidate_source_ids = tuple(challenge_context.post_record_ids)
+        control_source_ids = _answer_source_ids(control_outcome, tuple(control_context.post_record_ids))
+        challenge_source_ids = _answer_source_ids(
+            challenge_outcome, tuple(challenge_context.post_record_ids)
+        )
         candidate_exposure = CandidateExposureRecord(
             candidate_entry_id=request.candidate.candidate_entry_id,
-            candidate_final_context_inclusion=request.candidate.candidate_entry_id in candidate_source_ids,
-            candidate_final_context_source_ids=candidate_source_ids,
+            candidate_final_context_inclusion=request.candidate.candidate_entry_id in challenge_source_ids,
+            candidate_final_context_source_ids=challenge_source_ids,
         )
         source_checkpoint_after = serialize_checkpoint(deserialize_checkpoint(request.checkpoint))
         return FullHistoryPairResult(
             control_outcome=control_outcome,
             challenge_outcome=challenge_outcome,
-            control_final_source_ids=tuple(control_context.post_record_ids),
-            challenge_final_source_ids=candidate_source_ids,
+            control_final_source_ids=control_source_ids,
+            challenge_final_source_ids=challenge_source_ids,
             challenge_removed_entry_ids=tuple(challenge_context.removed_record_ids),
             candidate_exposure=candidate_exposure,
             source_checkpoint_sha256_after=source_checkpoint_after.canonical_sha256,
@@ -94,10 +108,10 @@ class FullHistoryProvisionalAdapter:
 def _execute_read_only(
     request: FullHistoryPairRequest, client: LLMClient, records: list[MemoryEntry]
 ) -> BaselineExecutionOutcome:
-    observer = AnswerCallProvenanceObserver()
-    return FullHistoryAdapter().execute(
+    observer = _RelationObserver()
+    outcome = FullHistoryPolicy().execute(
         request.task,
-        FullHistoryState(records=list(records), update_enabled=False),
+        MemoryState(entries=list(records)),
         client=client,
         model=request.model,
         config={
@@ -105,7 +119,32 @@ def _execute_read_only(
             "_logging_answer_call_provenance_observer": observer,
         },
         verifier=request.verifier,
+        update_enabled=False,
     )
+    answer_call_id = outcome.answer_call_id
+    if (
+        answer_call_id is None
+        or len(observer.relations) != 1
+        or answer_call_id not in observer.relations
+        or observer.relations[answer_call_id].answer_call_provenance_status != "explicit_matched"
+    ):
+        raise FullHistoryChallengeError("ANSWER_CALL_RELATION_MISMATCH")
+    return outcome
+
+
+def _answer_source_ids(
+    outcome: BaselineExecutionOutcome, expected_source_ids: tuple[str, ...]
+) -> tuple[str, ...]:
+    answer_call_id = outcome.answer_call_id
+    if answer_call_id is None:
+        raise FullHistoryChallengeError("ANSWER_CALL_BINDING")
+    answer_calls = [call for call in outcome.method_calls if call.call_id == answer_call_id]
+    if len(answer_calls) != 1:
+        raise FullHistoryChallengeError("ANSWER_CALL_BINDING")
+    source_ids = tuple(span.entry_id for span in answer_calls[0].source_spans)
+    if source_ids != expected_source_ids:
+        raise FullHistoryChallengeError("ANSWER_SOURCE_SPAN_MISMATCH")
+    return source_ids
 
 
 def _require_full_history_state(state: NativeState) -> None:
