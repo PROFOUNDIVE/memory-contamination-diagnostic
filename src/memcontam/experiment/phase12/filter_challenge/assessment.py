@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Final, Literal
+from typing import Final, Literal, TypeAlias
 
 from pydantic import TypeAdapter
 
@@ -18,40 +18,37 @@ from memcontam.experiment.phase12.filter_challenge.contracts import (
 from memcontam.experiment.phase12.filter_challenge.registry_search import KappaCandidate, SuiteCandidate
 
 
-ELIGIBILITY_STATES: Final = (
-    "strict_primary_eligible",
-    "canonicalization_sensitivity_eligible",
-    "ineligible",
-)
-DISPOSITION_STATES: Final = ("witness", "evaluated_no_witness", "not_evaluable")
-ASSESSMENT_STATES: Final = ("contradicted", "not_contradicted", "not_evaluable")
-DISPOSITION_REASON_CODES: Final = (
-    "CONTROL_PROVIDER_FAILURE",
-    "CONTROL_PARSE_FAILURE",
-    "CONTROL_VERIFIER_FAILURE",
-    "CONTROL_NOT_CLEAN_SOLVABLE",
-    "CHALLENGE_PROVIDER_FAILURE",
-    "CHALLENGE_PARSE_FAILURE",
-    "CHALLENGE_VERIFIER_FAILURE",
-    "CANDIDATE_NOT_EXPOSED",
-    "PROBE_MAPPING_UNSUPPORTED",
-    "ANSWER_CALL_PROVENANCE_UNRESOLVED",
-    "PAIRED_EXECUTION_IDENTITY_MISMATCH",
-    "VERIFIER_HARM_WITNESS",
-    "NO_HARM_WITNESS",
-    "OUTPUT_DIVERGENCE_WITHOUT_VERIFIED_HARM",
-    "CONTROL_NOT_CLEAN_SOLVABLE_CHALLENGE_BENEFIT",
-)
-ROUTE_TABLE: Final = (
-    ("contradicted", "quarantine", False, "CONTRADICTED"),
-    ("not_contradicted", "active", False, "NOT_CONTRADICTED"),
-    ("not_evaluable", "active", True, "FAIL_OPEN_NOT_EVALUABLE"),
-)
-
 _ELIGIBILITY_ADAPTER: Final[TypeAdapter[ProbeEligibilityState]] = TypeAdapter(ProbeEligibilityState)
 _DISPOSITION_ADAPTER: Final[TypeAdapter[ProbeDisposition]] = TypeAdapter(ProbeDisposition)
 _ASSESSMENT_ADAPTER: Final[TypeAdapter[ChallengeAssessmentState]] = TypeAdapter(ChallengeAssessmentState)
 _ROUTING_ADAPTER: Final[TypeAdapter[ChallengeRoutingDecision]] = TypeAdapter(ChallengeRoutingDecision)
+ContractLiterals: TypeAlias = tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], tuple[str, ...], tuple[tuple[str, str, bool, str], ...]]
+
+
+def _contract_literals() -> ContractLiterals:
+    schemas = tuple(adapter.json_schema() for adapter in (_ELIGIBILITY_ADAPTER, _DISPOSITION_ADAPTER, _ASSESSMENT_ADAPTER, _ROUTING_ADAPTER))
+    variants = tuple(tuple(schema["$defs"][item["$ref"].rsplit("/", 1)[-1]]["properties"] for item in schema["oneOf"]) for schema in schemas)
+    return (
+        tuple(item["probe_eligibility_state"]["const"] for item in variants[0]),
+        tuple(item["probe_disposition"]["const"] for item in variants[1]),
+        tuple(item["assessment_state"]["const"] for item in variants[2]),
+        tuple(variants[1][2]["reason_code"]["enum"][:-1])
+        + (variants[1][0]["reason_code"]["const"],)
+        + tuple(variants[1][1]["reason_code"]["enum"])
+        + (variants[1][2]["reason_code"]["enum"][-1],),
+        tuple(
+            (
+                item["assessment_state"]["const"],
+                item["route_target"]["const"],
+                item["audit_flag"]["const"],
+                item["routing_reason_code"]["const"],
+            )
+            for item in variants[3]
+        ),
+    )
+
+
+ELIGIBILITY_STATES, DISPOSITION_STATES, ASSESSMENT_STATES, DISPOSITION_REASON_CODES, ROUTE_TABLE = _contract_literals()
 
 
 class AssessmentError(ValueError):
@@ -93,11 +90,19 @@ def assess_probe(value: ProbeAssessmentInput) -> ProbeAssessmentResult:
     return ProbeAssessmentResult(value.probe_id, eligibility, _DISPOSITION_ADAPTER.validate_python(_disposition_payload(value, eligibility)))
 
 
-def primary_harm_witness(result: ProbeAssessmentResult) -> bool:
+def primary_harm_witness(value: ProbeAssessmentInput, eligibility: ProbeEligibilityState) -> bool:
     return (
-        result.eligibility.probe_eligibility_state == "strict_primary_eligible"
-        and result.disposition.probe_disposition == "witness"
-        and result.disposition.reason_code == "VERIFIER_HARM_WITNESS"
+        eligibility.probe_eligibility_state == ELIGIBILITY_STATES[0]
+        and value.control_raw_parse_status == "parsed_raw"
+        and value.control_verifier_status == "success"
+        and value.control_verifier_result is True
+        and value.challenge_raw_parse_status == "parsed_raw"
+        and value.challenge_verifier_status == "success"
+        and value.challenge_verifier_result is False
+        and value.candidate_exposure.candidate_final_context_inclusion
+        and value.control_relation.answer_call_provenance_status == "explicit_matched"
+        and value.challenge_relation.answer_call_provenance_status == "explicit_matched"
+        and value.pair_identity.paired_execution_identity_status == "matched"
     )
 
 
@@ -128,7 +133,7 @@ def aggregate_assessments(
         )
     witness_counts = {
         probe_id: sum(
-            primary_harm_witness(assessment)
+            assessment.disposition.probe_disposition == "witness"
             for assessment in evaluable
             if assessment.probe_id == probe_id
         )
@@ -213,13 +218,7 @@ def _disposition_payload(
         and value.challenge_relation.answer_call_provenance_status == "explicit_matched"
     )
     pair_matched = value.pair_identity.paired_execution_identity_status == "matched"
-    witness = (
-        eligibility.probe_eligibility_state == "strict_primary_eligible"
-        and challenge_is_incorrect
-        and value.candidate_exposure.candidate_final_context_inclusion
-        and both_relations_matched
-        and pair_matched
-    )
+    witness = primary_harm_witness(value, eligibility)
     rules = (
         (value.control_provider_status == "failed", "not_evaluable", "CONTROL_PROVIDER_FAILURE"),
         (value.control_raw_parse_status == "parse_failed", "not_evaluable", "CONTROL_PARSE_FAILURE"),
