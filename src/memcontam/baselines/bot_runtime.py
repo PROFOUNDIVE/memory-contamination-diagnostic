@@ -249,6 +249,47 @@ class BotRuntime:
         visible_entry_ids = [entry.entry_id for entry in visible_memory]
         call_config["visible_memory_ids"] = visible_entry_ids
         text_call_config["visible_memory_ids"] = visible_entry_ids
+        if not call_config.get("update_enabled", True):
+            try:
+                verifier_result = _verify(verifier, parsed_answer)
+            except Exception:
+                finalize_answer_call(
+                    provenance_observer,
+                    recorded_solve,
+                    tuple(visible_entry_ids),
+                    parsed_answer,
+                    None,
+                )
+                return _failure_outcome(
+                    recorder,
+                    memory_before,
+                    metadata,
+                    "verifier_contract_failed",
+                    answer_call_id,
+                    final_response=solve_result.final_answer,
+                    parsed_answer=parsed_answer,
+                    retrieval_decision=retrieval_decision,
+                )
+            finalize_answer_call(
+                provenance_observer,
+                recorded_solve,
+                tuple(visible_entry_ids),
+                parsed_answer,
+                verifier_result,
+            )
+            return BaselineExecutionOutcome(
+                status="succeeded",
+                final_response=solve_result.final_answer,
+                parsed_answer=parsed_answer,
+                verifier_result=verifier_result,
+                answer_call_id=answer_call_id,
+                method_calls=tuple(recorder.get_records()),
+                memory_before=memory_before,
+                memory_after=memory_before,
+                retrieved_memory=_retrieved_memory(retrieval_decision),
+                retrieved_scores=_retrieved_scores(retrieval_decision),
+                metadata=metadata,
+            )
         try:
             payload = distill_thought_template(
                 canonical_task=canonical_task_json(task),
