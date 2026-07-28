@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 
 import pytest
-import yaml
+import yaml  # type: ignore[import-untyped]
 from pydantic import TypeAdapter, ValidationError
 
 from memcontam.experiment.phase12.filter_challenge.audit import ChallengeAuditLabels, PostRouteAuditJoin
