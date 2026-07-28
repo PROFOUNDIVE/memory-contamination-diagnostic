@@ -118,13 +118,6 @@ class PairIsolation:
 
 
 @dataclass(frozen=True, slots=True)
-class RuntimeIdentityProjection:
-    baseline_family: BaselineFamily
-    control_model_snapshot: str
-    challenge_model_snapshot: str
-
-
-@dataclass(frozen=True, slots=True)
 class FullHistoryExecutionRequest:
     family: Literal["full_history"]
     native_request: FullHistoryPairRequest
@@ -284,21 +277,5 @@ def execution_clients(execution: NativeExecutionRequest) -> tuple[LLMClient, LLM
             return control.client, challenge.client
         case ReflexionExecutionRequest(control_trial=control, challenge_trial=challenge):
             return control.client, challenge.client
-        case unreachable:
-            assert_never(unreachable)
-
-
-def runtime_identity_projection(execution: NativeExecutionRequest) -> RuntimeIdentityProjection:
-    match execution:
-        case FullHistoryExecutionRequest(native_request=request):
-            return RuntimeIdentityProjection("full_history", request.model, request.model)
-        case RagFrozenExecutionRequest(native_request=request):
-            return RuntimeIdentityProjection(
-                "rag_frozen", request.control_trial.model, request.challenge_trial.model
-            )
-        case BoTExecutionRequest(control=control, challenge=challenge):
-            return RuntimeIdentityProjection("bot_style", control.model, challenge.model)
-        case ReflexionExecutionRequest(control_trial=control, challenge_trial=challenge):
-            return RuntimeIdentityProjection("reflexion_style", control.model, challenge.model)
         case unreachable:
             assert_never(unreachable)

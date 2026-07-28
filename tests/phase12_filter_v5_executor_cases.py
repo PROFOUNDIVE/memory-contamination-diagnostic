@@ -122,7 +122,15 @@ def rag_case() -> ExecutorCase:
         }
     )
     control_trial = RagFrozenTrialContextV3(
-        task(), control, "replay", "pair", "rag-control", "rag", "clean", "frozen"
+        task(),
+        control,
+        "replay",
+        "pair",
+        "rag-control",
+        "rag",
+        "clean",
+        "frozen",
+        included_document_ids=("source-a", "source-b", "source-c"),
     )
     challenge_trial = RagFrozenTrialContextV3(
         task(),

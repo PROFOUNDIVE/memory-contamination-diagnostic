@@ -14,6 +14,9 @@ from memcontam.experiment.phase12.filter_challenge.executor import (
     PairIsolation,
 )
 from memcontam.experiment.phase12.filter_challenge.executor_source import source_snapshot
+from memcontam.experiment.phase12.filter_challenge.executor_identity import (
+    runtime_identity_projections,
+)
 from memcontam.experiment.phase12.filter_challenge.executor_types import (
     ExecutionOrder,
     NativeExecutionRequest,
@@ -158,6 +161,8 @@ def pair_request(
     cache: ControlResultCache | None = None,
 ) -> tuple[IsolatedPairRequest, SinkSpy]:
     source = source_snapshot(execution)
+    control_identity, challenge_identity = runtime_identity_projections(execution)
+    assert control_identity == challenge_identity
     identity = PairingIdentity(
         source_checkpoint_id=source.checkpoint_id,
         source_checkpoint_hash=source.canonical_sha256,
@@ -165,24 +170,26 @@ def pair_request(
         rag_mode=challenge_candidate.rag_mode,
         candidate_native_kind=challenge_candidate.candidate_native_kind,
         probe_id="probe-1",
-        prompt_payload_hash="prompt-payload",
+        prompt_payload_hash=control_identity.prompt_payload_hash,
         replicate_seed_contract=contract,
         replicate_id=replicate_id,
         paired_seed_replay_id=f"seed-replay-{replicate_id}",
-        model_snapshot="replay",
-        decoding_contract_hash="decoding",
+        model_snapshot=control_identity.model_snapshot,
+        decoding_contract_hash=control_identity.decoding_contract_hash,
         fidelity_label="fidelity-1",
-        tool_mode="text_only",
-        tool_permissions_hash="permissions",
+        tool_mode=control_identity.tool_mode or "text_only",
+        tool_permissions_hash=control_identity.tool_permissions_hash or "permissions",
         raw_parser_version="parser-1",
         canonicalizer_version="canonicalizer-1",
-        verifier_version="verifier-1",
+        verifier_version=control_identity.verifier_version,
         base_prompt_hash="base-prompt",
         formatter_version="formatter-1",
-        context_budget_capacity_hash="context-capacity",
-        retriever_index_capacity_hash="retriever-capacity",
+        context_budget_capacity_hash=control_identity.context_budget_capacity_hash,
+        retriever_index_capacity_hash=(
+            control_identity.retriever_index_capacity_hash or "retriever-capacity"
+        ),
         noncandidate_memory_hash=source.noncandidate_memory_hash,
-        resource_retry_limit_hash="retry-resources",
+        resource_retry_limit_hash=control_identity.resource_retry_limit_hash or "retry-resources",
     )
     sink = SinkSpy()
     return (
@@ -195,8 +202,8 @@ def pair_request(
             PairIsolation(
                 "control-session",
                 "challenge-session",
-                ("control transcript",),
-                ("challenge transcript",),
+                (),
+                (),
             ),
             order,
             "probe-config",

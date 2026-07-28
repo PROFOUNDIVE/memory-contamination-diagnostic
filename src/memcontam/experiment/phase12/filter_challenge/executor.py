@@ -10,6 +10,9 @@ from memcontam.experiment.phase12.filter_challenge.contracts import (
     ChallengeCandidate,
     PairedExecutionIdentity,
 )
+from memcontam.experiment.phase12.filter_challenge.executor_identity import (
+    runtime_identity_projections,
+)
 from memcontam.experiment.phase12.filter_challenge.executor_policy import (
     ActivationContext,
     ActivationDecision,
@@ -36,7 +39,6 @@ from memcontam.experiment.phase12.filter_challenge.executor_types import (
     SharedAssessmentKey,
     SourceSnapshot,
     execution_clients,
-    runtime_identity_projection,
 )
 from memcontam.experiment.phase12.filter_challenge.native_execution import execute_native_pair
 
@@ -169,17 +171,16 @@ def _validate_isolation(request: IsolatedPairRequest) -> None:
     isolation = request.isolation
     if isolation.control_session_id == isolation.challenge_session_id:
         raise PairExecutorError("DUPLICATE_SESSION_ID")
-    if isolation.control_transcript and isolation.control_transcript == isolation.challenge_transcript:
-        raise PairExecutorError("SHARED_TRANSCRIPT")
+    if isolation.control_transcript or isolation.challenge_transcript:
+        raise PairExecutorError("NONEMPTY_TRANSCRIPT")
     control_client, challenge_client = execution_clients(request.execution)
     if control_client is challenge_client:
         raise PairExecutorError("SHARED_CLIENT")
-    runtime_identity = runtime_identity_projection(request.execution)
+    control_identity, challenge_identity = runtime_identity_projections(request.execution)
     if (
         request.execution.family != request.identity.baseline_family
-        or runtime_identity.baseline_family != request.identity.baseline_family
-        or runtime_identity.control_model_snapshot != runtime_identity.challenge_model_snapshot
-        or runtime_identity.control_model_snapshot != request.identity.model_snapshot
+        or control_identity != challenge_identity
+        or not control_identity.matches(request.identity)
     ):
         raise PairExecutorError("PAIRED_EXECUTION_IDENTITY_MISMATCH")
     match request.identity.replicate_seed_contract:

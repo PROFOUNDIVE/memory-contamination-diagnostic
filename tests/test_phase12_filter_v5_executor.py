@@ -191,13 +191,13 @@ def test_executor_rejects_duplicate_sessions_equal_transcripts_and_shared_client
                 ),
             )
         )
-    with pytest.raises(PairExecutorError, match="SHARED_TRANSCRIPT"):
+    with pytest.raises(PairExecutorError, match="NONEMPTY_TRANSCRIPT"):
         execute_isolated_pair(
             replace(
                 case.request,
                 isolation=replace(
                     case.request.isolation,
-                    control_transcript=case.request.isolation.challenge_transcript,
+                    control_transcript=("transcript",),
                 ),
             )
         )
