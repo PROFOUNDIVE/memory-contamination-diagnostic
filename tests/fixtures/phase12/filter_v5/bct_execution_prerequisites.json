@@ -1,0 +1,12 @@
+{
+  "schema_version": "filter_challenge_bct_execution_prerequisites_v1",
+  "prerequisites_id": "synthetic-build-bct-prerequisites-v1",
+  "evidence_layer": "build",
+  "scientific_result": false,
+  "fixture_only": true,
+  "search_config_frozen": false,
+  "inventory_frozen": false,
+  "canonical_patch_status": "pending_before_provider_backed_pilot_b",
+  "provider_config_enabled": false,
+  "runtime_authorization_present": false
+}

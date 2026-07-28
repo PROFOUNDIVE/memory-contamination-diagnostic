@@ -1,0 +1,13 @@
+{
+  "schema_version": "filter_challenge_domain_v1",
+  "operational_probe_suite_id": "synthetic-build-operational-suite-manifest-v1",
+  "operational_probe_suite_manifest_hash": "1ead2d88d9c3e244d9b2d8e11ddfbe3aa2afc5f2e2f6f909a863fda617782e3b",
+  "evidence_layer": "build",
+  "scientific_result": false,
+  "fixture_only": true,
+  "suite_frozen": false,
+  "suite_ids": [
+    "synthetic-build-suite-balanced-v1",
+    "synthetic-build-suite-expanded-v1"
+  ]
+}

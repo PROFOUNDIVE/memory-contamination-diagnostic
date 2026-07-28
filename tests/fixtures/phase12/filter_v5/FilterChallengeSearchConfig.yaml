@@ -1,0 +1,108 @@
+registry_id: synthetic-build-filter-challenge-search-v1
+evidence_layer: build
+scientific_result: false
+fixture_only: true
+calibration_probe_inventory_id: synthetic-build-probe-inventory-v1
+calibration_probe_inventory_manifest_hash: 18a185daeca58bbe00101a7039198eb672fb5297a2f57e7b48b539399441d448
+operational_probe_suite_manifest_id: synthetic-build-operational-suite-manifest-v1
+operational_probe_suite_manifest_hash: 1ead2d88d9c3e244d9b2d8e11ddfbe3aa2afc5f2e2f6f909a863fda617782e3b
+calibration_probe_ids:
+  - synthetic-build-game24-probe-1
+  - synthetic-build-equation-probe-1
+  - synthetic-build-words-probe-1
+required_strata:
+  - {task_family: game24, baseline: full_history}
+  - {task_family: game24, baseline: rag_frozen}
+  - {task_family: game24, baseline: bot_style}
+  - {task_family: game24, baseline: reflexion_style}
+  - {task_family: math_equation_balancer, baseline: full_history}
+  - {task_family: math_equation_balancer, baseline: rag_frozen}
+  - {task_family: math_equation_balancer, baseline: bot_style}
+  - {task_family: math_equation_balancer, baseline: reflexion_style}
+  - {task_family: word_sorting, baseline: full_history}
+  - {task_family: word_sorting, baseline: rag_frozen}
+  - {task_family: word_sorting, baseline: bot_style}
+  - {task_family: word_sorting, baseline: reflexion_style}
+suite_candidates:
+  - operational_probe_suite_id: synthetic-build-suite-balanced-v1
+    probe_ids: [synthetic-build-game24-probe-1, synthetic-build-equation-probe-1, synthetic-build-words-probe-1]
+    replicates_per_probe: 2
+  - operational_probe_suite_id: synthetic-build-suite-expanded-v1
+    probe_ids: [synthetic-build-game24-probe-1, synthetic-build-equation-probe-1, synthetic-build-words-probe-1]
+    replicates_per_probe: 3
+kappa_candidates:
+  - kappa_id: synthetic-build-kappa-κ-balanced-v1
+    min_total_evaluable_replicates: 4
+    min_distinct_evaluable_probes: 2
+    min_witness_replicates_per_probe: 1
+    min_distinct_witness_probes: 1
+  - kappa_id: synthetic-build-kappa-κ-expanded-v1
+    min_total_evaluable_replicates: 6
+    min_distinct_evaluable_probes: 3
+    min_witness_replicates_per_probe: 2
+    min_distinct_witness_probes: 2
+coverage_contract_candidates:
+  - coverage_contract_id: synthetic-build-coverage-v1
+    strata:
+      - {task_family: game24, baseline: full_history}
+      - {task_family: game24, baseline: rag_frozen}
+      - {task_family: game24, baseline: bot_style}
+      - {task_family: game24, baseline: reflexion_style}
+      - {task_family: math_equation_balancer, baseline: full_history}
+      - {task_family: math_equation_balancer, baseline: rag_frozen}
+      - {task_family: math_equation_balancer, baseline: bot_style}
+      - {task_family: math_equation_balancer, baseline: reflexion_style}
+      - {task_family: word_sorting, baseline: full_history}
+      - {task_family: word_sorting, baseline: rag_frozen}
+      - {task_family: word_sorting, baseline: bot_style}
+      - {task_family: word_sorting, baseline: reflexion_style}
+    strict_clean_solvable_probe_count: 1
+    candidate_final_context_inclusion_rate: 0.5
+    paired_evaluability_rate: 0.5
+    correct_control_false_quarantine_rate: 0.0
+    irrelevant_control_false_quarantine_rate: 0.0
+    ordinary_route_false_memory_coverage: 0.5
+replicate_retry_candidates:
+  - replicate_retry_id: synthetic-build-retry-minimal-v1
+    control_retry_limit: 0
+    challenge_retry_limit: 0
+  - replicate_retry_id: synthetic-build-retry-bounded-v1
+    control_retry_limit: 1
+    challenge_retry_limit: 1
+canonicalizer_candidates:
+  - canonicalizer_id: synthetic-build-canonicalizer-none-v1
+    canonicalizer_version: null
+  - canonicalizer_id: synthetic-build-canonicalizer-v1
+    canonicalizer_version: phase12-canonicalizer-v1
+tolerance_candidates:
+  - tolerance_id: synthetic-build-tolerance-v1
+    correct_false_quarantine_tolerance: 0.0
+    irrelevant_false_quarantine_tolerance: 0.0
+    repeatability_tolerance: 0.0
+paired_evaluability_candidates:
+  - rate_id: synthetic-build-paired-evaluability-v1
+    minimum_rate: 0.5
+inclusion_rate_candidates:
+  - rate_id: synthetic-build-inclusion-rate-v1
+    minimum_rate: 0.5
+ordinary_route_coverage_candidates:
+  - rate_id: synthetic-build-ordinary-route-coverage-v1
+    minimum_rate: 0.5
+budget_cap_candidates:
+  - budget_cap_id: synthetic-build-budget-unestimated-v1
+    call_cap: 100
+    latency_cap_ms: 1000
+    cost_cap_label: not_estimated
+ci_procedure_candidates:
+  - ci_procedure_id: synthetic-build-ci-paired-bootstrap-v1
+    procedure: paired-bootstrap
+constraint_order:
+  - deterministic_implementation_invariants
+  - scripted_state_machine
+  - required_strata
+  - coverage_contract
+  - repeatability_archive_budget
+deterministic_tie_break_candidates:
+  - tie_break_id: synthetic-build-tie-break-v1
+    order: [lowest_call_cap, lexical_registry_id]
+search_config_hash: 6883cd37e997ae041fe9151bcb228d5530ed4cc7fca95813a06bd94cbe6c7eae

@@ -1,0 +1,15 @@
+{
+  "schema_version": "filter_challenge_domain_v1",
+  "calibration_probe_inventory_id": "synthetic-build-probe-inventory-v1",
+  "calibration_probe_inventory_manifest_hash": "18a185daeca58bbe00101a7039198eb672fb5297a2f57e7b48b539399441d448",
+  "probe_map_version": "phase12-filter-probe-map-v1",
+  "evidence_layer": "build",
+  "scientific_result": false,
+  "fixture_only": true,
+  "probe_ids": [
+    "synthetic-build-game24-probe-1",
+    "synthetic-build-equation-probe-1",
+    "synthetic-build-words-probe-1"
+  ],
+  "inventory_frozen": false
+}
