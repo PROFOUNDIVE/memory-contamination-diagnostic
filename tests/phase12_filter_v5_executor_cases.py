@@ -192,7 +192,12 @@ def bot_case(
         "bot_style", execution(control, "clean"), execution(challenge, "contam")
     )
     request, sink = pair_request(
-        native, challenge_candidate, contract, order=order, cache=cache
+        native,
+        challenge_candidate,
+        contract,
+        order=order,
+        replicate_id=1 if contract == "counterbalanced" and order == "challenge_first" else 0,
+        cache=cache,
     )
     return ExecutorCase(request, sink, control, challenge)
 

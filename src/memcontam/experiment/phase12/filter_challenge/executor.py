@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from hashlib import sha256
 from typing import Literal, assert_never
 
@@ -9,8 +8,15 @@ from pydantic import TypeAdapter
 from memcontam.experiment.phase12.filter_challenge.contracts import (
     AnswerCallRelation,
     ChallengeCandidate,
-    ChallengeRoutingDecision,
     PairedExecutionIdentity,
+)
+from memcontam.experiment.phase12.filter_challenge.executor_policy import (
+    ActivationContext,
+    ActivationDecision,
+    PairedRoutingConsumption,
+    RoutingConsumption,
+    activation_decision,
+    consume_routing,
 )
 from memcontam.experiment.phase12.filter_challenge.executor_source import source_snapshot
 from memcontam.experiment.phase12.filter_challenge.executor_types import (
@@ -30,6 +36,7 @@ from memcontam.experiment.phase12.filter_challenge.executor_types import (
     SharedAssessmentKey,
     SourceSnapshot,
     execution_clients,
+    runtime_identity_projection,
 )
 from memcontam.experiment.phase12.filter_challenge.native_execution import execute_native_pair
 
@@ -49,6 +56,7 @@ __all__ = (
     "RagFrozenExecutionRequest",
     "ReflexionExecutionRequest",
     "RoutingConsumption",
+    "PairedRoutingConsumption",
     "activation_decision",
     "build_control_cache_key",
     "build_shared_assessment_key",
@@ -56,28 +64,6 @@ __all__ = (
     "evaluability_rate",
     "execute_isolated_pair",
 )
-
-
-@dataclass(frozen=True, slots=True)
-class ActivationContext:
-    policy_activation_checkpoint_id: str
-    evolved_branch_checkpoint_id: str | None
-    grandfathered_entry_ids: tuple[str, ...]
-    controlled_root_entry_id: str
-    arm: Literal["contam", "filter"]
-
-
-@dataclass(frozen=True, slots=True)
-class ActivationDecision:
-    status: Literal["grandfathered", "assess", "not_evaluable", "not_assessed"]
-    reason_code: str | None
-
-
-@dataclass(frozen=True, slots=True)
-class RoutingConsumption:
-    effect: Literal["shadow", "apply"]
-    route_target: Literal["active", "quarantine"] | None
-    shared_assessment_key: SharedAssessmentKey
 
 
 def build_control_cache_key(identity: PairingIdentity) -> ControlCacheKey:
@@ -88,6 +74,8 @@ def build_control_cache_key(identity: PairingIdentity) -> ControlCacheKey:
         probe_id=identity.probe_id,
         prompt_payload_hash=identity.prompt_payload_hash,
         replicate_seed_contract=identity.replicate_seed_contract,
+        replicate_id=identity.replicate_id,
+        paired_seed_replay_id=identity.paired_seed_replay_id,
         model_snapshot=identity.model_snapshot,
         decoding_contract_hash=identity.decoding_contract_hash,
         fidelity_label=identity.fidelity_label,
@@ -171,48 +159,6 @@ def execute_isolated_pair(request: IsolatedPairRequest) -> PairAuditEvidence:
     return evidence
 
 
-def activation_decision(
-    context: ActivationContext, candidate: ChallengeCandidate, *, later_native_write: bool
-) -> ActivationDecision:
-    if candidate.candidate_entry_id in context.grandfathered_entry_ids:
-        return ActivationDecision("grandfathered", None)
-    if later_native_write:
-        checkpoint_id = context.evolved_branch_checkpoint_id
-        if checkpoint_id is None or checkpoint_id == context.policy_activation_checkpoint_id:
-            raise PairExecutorError("EVOLVED_BRANCH_CHECKPOINT_REQUIRED")
-    else:
-        checkpoint_id = context.policy_activation_checkpoint_id
-    if candidate.source_checkpoint_id != checkpoint_id:
-        raise PairExecutorError("CANDIDATE_CHECKPOINT_MISMATCH")
-    match candidate.routability.routability:
-        case "unsupported":
-            return ActivationDecision("not_evaluable", "PROBE_MAPPING_UNSUPPORTED")
-        case "challenge_routable_v1":
-            if candidate.candidate_entry_id == context.controlled_root_entry_id:
-                return ActivationDecision("assess", None)
-            if candidate.baseline_family == "rag_frozen" and later_native_write:
-                raise PairExecutorError("RAG_FROZEN_LATER_WRITE")
-            if later_native_write and context.arm == "filter":
-                return ActivationDecision("assess", None)
-            return ActivationDecision("not_assessed", None)
-        case unreachable:
-            assert_never(unreachable)
-
-
-def consume_routing(
-    arm: Literal["contam", "filter"],
-    routing: ChallengeRoutingDecision,
-    shared_assessment_key: SharedAssessmentKey,
-) -> RoutingConsumption:
-    match arm:
-        case "contam":
-            return RoutingConsumption("shadow", None, shared_assessment_key)
-        case "filter":
-            return RoutingConsumption("apply", routing.route_target, shared_assessment_key)
-        case unreachable:
-            assert_never(unreachable)
-
-
 def evaluability_rate(evaluable_count: int, attempted_count: int) -> float | None:
     if attempted_count == 0:
         return None
@@ -223,15 +169,31 @@ def _validate_isolation(request: IsolatedPairRequest) -> None:
     isolation = request.isolation
     if isolation.control_session_id == isolation.challenge_session_id:
         raise PairExecutorError("DUPLICATE_SESSION_ID")
-    if isolation.control_transcript == isolation.challenge_transcript:
+    if isolation.control_transcript and isolation.control_transcript == isolation.challenge_transcript:
         raise PairExecutorError("SHARED_TRANSCRIPT")
     control_client, challenge_client = execution_clients(request.execution)
     if control_client is challenge_client:
         raise PairExecutorError("SHARED_CLIENT")
-    if request.execution.family != request.identity.baseline_family:
+    runtime_identity = runtime_identity_projection(request.execution)
+    if (
+        request.execution.family != request.identity.baseline_family
+        or runtime_identity.baseline_family != request.identity.baseline_family
+        or runtime_identity.control_model_snapshot != runtime_identity.challenge_model_snapshot
+        or runtime_identity.control_model_snapshot != request.identity.model_snapshot
+    ):
         raise PairExecutorError("PAIRED_EXECUTION_IDENTITY_MISMATCH")
-    if request.execution_order == "challenge_first" and _cache_allowed(request.identity):
-        raise PairExecutorError("COUNTERBALANCED_ORDER_REQUIRED")
+    match request.identity.replicate_seed_contract:
+        case "deterministic" | "seed_coupled":
+            if request.execution_order == "challenge_first":
+                raise PairExecutorError("COUNTERBALANCED_ORDER_REQUIRED")
+        case "counterbalanced":
+            scheduled_order: Literal["control_first", "challenge_first"] = (
+                "control_first" if request.identity.replicate_id % 2 == 0 else "challenge_first"
+            )
+            if request.execution_order != scheduled_order:
+                raise PairExecutorError("COUNTERBALANCED_ORDER_REQUIRED")
+        case unreachable:
+            assert_never(unreachable)
 
 
 def _validate_source(request: IsolatedPairRequest, source: SourceSnapshot) -> None:

@@ -135,6 +135,8 @@ def test_exact_control_key_reuses_only_the_native_control(
         identity.probe_id,
         identity.prompt_payload_hash,
         identity.replicate_seed_contract,
+        identity.replicate_id,
+        identity.paired_seed_replay_id,
         identity.model_snapshot,
         identity.decoding_contract_hash,
         identity.fidelity_label,
@@ -275,14 +277,14 @@ def test_contam_shadow_and_filter_apply_reuse_the_exact_shared_assessment_key() 
     )
 
     # When: both arms consume the same assessment.
-    shadow = consume_routing("contam", routing, key)
-    applied = consume_routing("filter", routing, key)
+    evidence = execute_isolated_pair(case.request)
+    consumption = consume_routing(evidence.assessment_id, routing, key, evidence)
 
     # Then: Contam shadows, Filter applies, and neither substitutes a key.
-    assert shadow.effect == "shadow" and shadow.route_target is None
-    assert applied.effect == "apply" and applied.route_target == "quarantine"
-    assert shadow.shared_assessment_key is key
-    assert applied.shared_assessment_key is key
+    assert consumption.contam.effect == "shadow" and consumption.contam.route_target is None
+    assert consumption.filter.effect == "apply" and consumption.filter.route_target == "quarantine"
+    assert consumption.contam.shared_assessment_key is key
+    assert consumption.filter.shared_assessment_key is key
     assert evaluability_rate(0, 0) is None
     assert evaluability_rate(3, 4) == 0.75
     assert build_control_cache_key(case.request.identity) == key.control_cache_key
