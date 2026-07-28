@@ -9,6 +9,10 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from memcontam.experiment.phase12.filter_challenge.archive_authority import (
+    ArchiveRegistryAuthority,
+    validate_archive_authority,
+)
 from memcontam.experiment.phase12.filter_challenge.records import (
     PUBLIC_AUDIT_KEYS,
     AssessmentRecord,
@@ -27,7 +31,9 @@ class ArchiveValidationReport:
     reason_code: str | None = None
 
 
-def write_archive(root: Path, archive: FilterChallengeArchive) -> None:
+def write_archive(
+    root: Path, archive: FilterChallengeArchive, authority: ArchiveRegistryAuthority
+) -> None:
     if root.exists():
         raise FilterChallengeArchiveError("ARCHIVE_ROOT_EXISTS")
     root.parent.mkdir(parents=True, exist_ok=True)
@@ -41,7 +47,7 @@ def write_archive(root: Path, archive: FilterChallengeArchive) -> None:
         _write_jsonl(staging / "candidate_aggregates.jsonl", archive.candidate_aggregates)
         _write_manifest(staging)
         _write_json(staging / "archive_seal.json", _seal_payload(staging))
-        report = validate_archive(staging)
+        report = validate_archive(staging, authority)
         if not report.archive_valid:
             raise FilterChallengeArchiveError(report.reason_code or "ARCHIVE_VALIDATION_FAILED")
         staging.rename(root)
@@ -50,15 +56,15 @@ def write_archive(root: Path, archive: FilterChallengeArchive) -> None:
             shutil.rmtree(staging)
 
 
-def validate_archive(root: Path) -> ArchiveValidationReport:
+def validate_archive(root: Path, authority: ArchiveRegistryAuthority) -> ArchiveValidationReport:
     try:
-        _validate_archive(root)
+        _validate_archive(root, authority)
     except FilterChallengeArchiveError as error:
         return ArchiveValidationReport(False, error.code)
     return ArchiveValidationReport(True)
 
 
-def _validate_archive(root: Path) -> None:
+def _validate_archive(root: Path, authority: ArchiveRegistryAuthority) -> None:
     files = {path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file()}
     if files != set(ALL_STREAMS):
         raise FilterChallengeArchiveError("ARCHIVE_STREAM_SET_INVALID")
@@ -103,6 +109,7 @@ def _validate_archive(root: Path) -> None:
         raise FilterChallengeArchiveError(_validation_code(error)) from error
     _validate_ranges(root, archive.assessments)
     _validate_aggregate_rollups(archive)
+    validate_archive_authority(archive, authority)
 
 
 def _validate_ranges(root: Path, assessments: tuple[AssessmentRecord, ...]) -> None:
@@ -271,4 +278,7 @@ def _validation_code(error: ValidationError) -> str:
     return "ARCHIVE_SCHEMA_INVALID"
 
 
-__all__ = ("ALL_STREAMS", "PUBLIC_STREAMS", "ArchiveValidationReport", "validate_archive", "write_archive")
+__all__ = (
+    "ALL_STREAMS", "PUBLIC_STREAMS", "ArchiveRegistryAuthority", "ArchiveValidationReport",
+    "validate_archive", "write_archive",
+)
