@@ -1,0 +1,159 @@
+{
+  "archive_seal_embedded_public_artifact_manifest_sha256": "c2e9538a7453684668bf8197d6ec290d2129ea1cfe96ec83441e807e8522002d",
+  "archive_seal_file_sha256": "7fae53a7be51c2915a3ae556c90fd14ce244ac46c932a8e080a0db4ed0676885",
+  "authority": [
+    {
+      "path": "/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts/Phase 12 — THEORETICAL ARTIFACT.md",
+      "sha256": "56c42b1af761c2f3838638316823d0ce394c6c543f17aff97f4657721c964983"
+    },
+    {
+      "path": "/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts/Phase 12-Compatible Baseline Memory and Lightweight Filter Design revised-v3.md",
+      "sha256": "8a279c1a644e84adc508c87f12b02009e22555072379252f29af06b8878fcae9"
+    },
+    {
+      "path": "/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts/Phase 12-Compatible Contamination Construction Intervention Timing and Sensitivity Protocol.md",
+      "sha256": "9dcd3855f3f65b8d623b3d3c3600a6a7b0231228c19231359d883e3f40b1959a"
+    },
+    {
+      "path": "/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts/Phase 12-Compatible Pilot Main and Exploratory Experiment Design.md",
+      "sha256": "984fe2881690d93a8ccced87abf03de4bf0012158462cf07ed23505414073eb0"
+    }
+  ],
+  "canonical_evidence": {
+    "archive_seal": {
+      "path": "runs/runs/pilot-a-game24-20260727T195633Z/archive_seal.json",
+      "sha256": "7fae53a7be51c2915a3ae556c90fd14ce244ac46c932a8e080a0db4ed0676885"
+    },
+    "decision_ledger": {
+      "path": "runs/runs/pilot-a-game24-20260727T195633Z/decision_ledger.json",
+      "sha256": "635e96136dc6e6c0fbba4bece709ee3c771329301bed9b3cea43ecd43d2a3bda"
+    },
+    "execution_manifest": {
+      "path": ".sisyphus/evidence/pilot-a-closeout/pilot_a_execution_manifest.json",
+      "sha256": "46e98ec786e12060b8c21aa8f2c153d254ccb1adaccc17f39de7f06a06034dd5"
+    },
+    "invariants": {
+      "path": ".sisyphus/evidence/pilot-a-closeout/pilot-a-game24-20260727T195633Z-invariants.json",
+      "sha256": "d11c19d037a1f13e44c389c6243f10f983ccc7162a1530d5e94319984c790161"
+    },
+    "public_artifact_manifest": {
+      "path": "runs/runs/pilot-a-game24-20260727T195633Z/public_artifact_manifest.json",
+      "sha256": "c2e9538a7453684668bf8197d6ec290d2129ea1cfe96ec83441e807e8522002d"
+    },
+    "resolved_config": {
+      "path": "runs/runs/pilot-a-game24-20260727T195633Z/resolved_config.json",
+      "sha256": "ea7daacc405abad3e75f356910d07116a379825eb72ae86b2d8aeea144b12c69"
+    },
+    "run": {
+      "path": "runs/runs/pilot-a-game24-20260727T195633Z/run.json",
+      "sha256": "c17372e2b133a9412c1d771dc8da1d7d8555d0c05b348a709ba54571ab84594a"
+    }
+  },
+  "completed_result_commit": "9cb1741b2593ccdc3e844cfc9c962692654514be",
+  "completed_suffix_cells": 26,
+  "cost": {
+    "currency": "USD",
+    "total": 0.19195500000000004
+  },
+  "downstream_boundary": "Filter-v5 and Pilot-B work is downstream build/calibration and cannot retroactively alter, reparse, relabel, or pool with this frozen Pilot-A result.",
+  "eligible_seeds": [
+    0,
+    1
+  ],
+  "filter_policy_identity": {
+    "claim_status": "operational_secondary",
+    "interpretation": "contract_invalid_direct_write_containment",
+    "version": "operational-evidence-filter-v4"
+  },
+  "freeze_id": "phase12-pilot-a-game24-evidence-freeze-v1",
+  "freeze_status": "immutable_calibration_evidence",
+  "parent_run_id": "pilot-a-game24-20260727T062808Z",
+  "permitted_claims": [
+    "The registered Game24 Pilot-A infrastructure and operational-evidence-filter-v4 contract passed."
+  ],
+  "post_run_validation_commit": "07eea4d564fce6da06d818286d002a398c177b95",
+  "prohibited_claims": [
+    "contamination effects",
+    "accuracy degradation",
+    "semantic Filter effectiveness",
+    "causal or significance claims",
+    "baseline robustness ordering"
+  ],
+  "public_artifact_manifest_sha256": "c2e9538a7453684668bf8197d6ec290d2129ea1cfe96ec83441e807e8522002d",
+  "registered_scientific_config_sha256": "9aa573733f6a757298094c4818842d91fa5e9c77c36024f4bf99d3e967b19f2d",
+  "resolved_config_sha256": "ea7daacc405abad3e75f356910d07116a379825eb72ae86b2d8aeea144b12c69",
+  "root_attempt_run_id": "pilot-a-game24-20260727T061248Z",
+  "run_id": "pilot-a-game24-20260727T195633Z",
+  "run_implementation_commit": "f10e85f2580a03f5bf205b155bf6e4dbf962d841",
+  "schema_version": 1,
+  "selected_checkpoints": {
+    "0": 2,
+    "1": 1
+  },
+  "trial_call_event_streams": {
+    "admission_events.jsonl": {
+      "count": 8,
+      "sha256": "6eb7a022299545b7af9685d4ff2a7fdb3c63fbbdc56bc748dc0440ab938c2d42"
+    },
+    "audit/audit_labels.jsonl": {
+      "count": 8,
+      "sha256": "b39c43ff1242664398f19a2963e421dd0f147230ece689474022c45d81c91ffc"
+    },
+    "calls.jsonl": {
+      "count": 143,
+      "sha256": "6617c234e717a5ebef5852a895c7738ea039c19d1a6865f66ec4298092b040ed"
+    },
+    "checkpoint_events.jsonl": {
+      "count": 8,
+      "sha256": "e1fcfa16240e8603736916a8a2c2b2a6ca7e32e98b8a65230866bfeb814f26fb"
+    },
+    "context_events.jsonl": {
+      "count": 66,
+      "sha256": "3e0332f95ef665f5f6dedce0776d40c53cce8a2baeaf3c332c5dbb424bd6fd4d"
+    },
+    "decision_ledger.json": {
+      "count": 1,
+      "sha256": "635e96136dc6e6c0fbba4bece709ee3c771329301bed9b3cea43ecd43d2a3bda"
+    },
+    "eligibility_events.jsonl": {
+      "count": 40,
+      "sha256": "3d8cb83bb24afc079e53af5bb8dd19384239dcb1e4edf3a1af50ad8096c5f1e1"
+    },
+    "failures.jsonl": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "intervention_events.jsonl": {
+      "count": 16,
+      "sha256": "2bc72d1ea92575a71986833535ccb5541d95223b39a77ed87954a753ecae8981"
+    },
+    "memory_events.jsonl": {
+      "count": 47,
+      "sha256": "7033db792c2efeaafa099db8c4c0598ce77291d104fbaae2d520ea19fcd90a60"
+    },
+    "provider_profile.json": {
+      "count": 1,
+      "sha256": "27788fdfc9fd86b4d1b4dc8a001ed097c07b2f7fcacb89062bcfe9baf1fd7924"
+    },
+    "resolved_config.json": {
+      "count": 1,
+      "sha256": "ea7daacc405abad3e75f356910d07116a379825eb72ae86b2d8aeea144b12c69"
+    },
+    "retrieval_events.jsonl": {
+      "count": 66,
+      "sha256": "54c902056f5d304a65f97ebaf37660cdfc5e65b4510d716f2022f9c42baca14e"
+    },
+    "run.json": {
+      "count": 1,
+      "sha256": "c17372e2b133a9412c1d771dc8da1d7d8555d0c05b348a709ba54571ab84594a"
+    },
+    "seed_status.jsonl": {
+      "count": 2,
+      "sha256": "47e771825d93850b8bbd167c96020bef7c7175b198fd3a27eda90b033431f018"
+    },
+    "trials.jsonl": {
+      "count": 66,
+      "sha256": "101bbb1e72bc09e09104b9f5ec30a70b59ff6c33edd67feba694bcb3631ec38d"
+    }
+  }
+}
