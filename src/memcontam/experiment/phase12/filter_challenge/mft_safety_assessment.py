@@ -14,11 +14,16 @@ from memcontam.experiment.phase12.filter_challenge.assessment import (
     route_assessment,
 )
 from memcontam.experiment.phase12.filter_challenge.mft_safety_types import (
-    NOT_ESTIMABLE,
     GateEvidence,
     MftIdentity,
     assertion,
     probe_input,
+)
+from memcontam.experiment.phase12.filter_challenge.selection import (
+    FILTER_V5_PILOT_B_NOT_ESTIMABLE,
+    CoverageEstimabilityInput,
+    CoverageEstimabilityDecision,
+    evaluate_coverage_estimability,
 )
 from memcontam.experiment.phase12.filter_challenge.registry_search import (
     KappaCandidate,
@@ -33,21 +38,6 @@ class _CandidateFamily:
     baseline_family: Literal["full_history", "rag_frozen", "bot_style", "reflexion_style"]
     native_kind: str
     suite_key: str
-
-
-@dataclass(frozen=True, slots=True)
-class _CoverageInput:
-    required: tuple[Stratum, ...]
-    strict_observed: tuple[Stratum, ...]
-    sensitivity_observed: tuple[Stratum, ...]
-    weights: tuple[str, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class _CoverageOutcome:
-    reason_code: str
-    retained_required: tuple[Stratum, ...]
-    output_weights: tuple[str, ...]
 
 
 _EXPECTED_FAMILIES = ("full_history", "rag_frozen", "bot_style", "reflexion_style")
@@ -105,9 +95,8 @@ def _projection(spec: _CandidateFamily, metadata: ExcludedCandidateMetadata) -> 
     candidate_id = f"candidate-{spec.baseline_family}"
     control_prompt = _machine_prompt(spec, probe_id, "control")
     challenge_prompt = _machine_prompt(spec, probe_id, "challenge")
-    result = assess_candidate(
-        CandidateAssessmentEnvelope(probe_input(candidate_id, probe_id, spec.suite_key), metadata)
-    )
+    probe = probe_input(candidate_id, probe_id, spec.suite_key)
+    result = assess_candidate(CandidateAssessmentEnvelope(probe, metadata))
     state = aggregate_assessments(
         (result,),
         KappaCandidate(kappa_id="kappa-1", min_total_evaluable_replicates=1,
@@ -120,7 +109,8 @@ def _projection(spec: _CandidateFamily, metadata: ExcludedCandidateMetadata) -> 
     return (
         probe_id, control_prompt, hashlib.sha256(control_prompt.encode()).hexdigest(),
         challenge_prompt, hashlib.sha256(challenge_prompt.encode()).hexdigest(),
-        "true", "false", state.assessment_state, route.route_target,
+        str(probe.candidate_exposure.candidate_final_context_inclusion).lower(),
+        str(probe.challenge_verifier_result).lower(), state.assessment_state, route.route_target,
         str(route.audit_flag).lower(), route.routing_reason_code,
     )
 
@@ -129,6 +119,10 @@ def _invariance(projections: list[list[tuple[str, ...]]], index: int) -> tuple[s
     return tuple(
         str(len({item[index] for item in family}) == 1).lower() for family in projections
     )
+
+
+def _observed_values(projections: list[list[tuple[str, ...]]], index: int) -> tuple[str, ...]:
+    return tuple(family[0][index] for family in projections)
 
 
 def gate_probe_invariance(mutated: bool) -> GateEvidence:
@@ -169,8 +163,11 @@ def gate_probe_invariance(mutated: bool) -> GateEvidence:
          assertion("prompt_hashes", expected,
                    tuple(str(len({(item[2], item[4]) for item in family}) == 1).lower()
                          for family in projections)),
-         assertion("candidate_inclusion", expected, _invariance(projections, 5)),
-         assertion("verifier_results", expected, _invariance(projections, 6)),
+         assertion("candidate_inclusion", expected, _observed_values(projections, 5)),
+         assertion("candidate_inclusion_invariance", expected, _invariance(projections, 5)),
+         assertion("verifier_results", ("false",) * len(families),
+                   _observed_values(projections, 6)),
+         assertion("verifier_result_invariance", expected, _invariance(projections, 6)),
          assertion("assessment_states", expected, _invariance(projections, 7)),
          assertion("routing_decisions", expected, _invariance(projections, 8)),
          assertion("route_audit_flags", expected, _invariance(projections, 9)),
@@ -204,18 +201,6 @@ def gate_eligibility(mutated: bool) -> GateEvidence:
     )
 
 
-def _estimability_reason(required: tuple[Stratum, ...], observed: tuple[Stratum, ...]) -> str:
-    return "ESTIMABLE" if set(required) == set(observed) else NOT_ESTIMABLE
-
-
-def _coverage_outcome(value: _CoverageInput) -> _CoverageOutcome:
-    return _CoverageOutcome(
-        reason_code=_estimability_reason(value.required, value.strict_observed),
-        retained_required=value.required,
-        output_weights=value.weights,
-    )
-
-
 def gate_coverage(mutated: bool) -> GateEvidence:
     required = (
         Stratum(task_family="game24", baseline="full_history"),
@@ -227,26 +212,46 @@ def gate_coverage(mutated: bool) -> GateEvidence:
     missing_baseline = (required[0], required[2], required[3])
     sensitivity_only = (required[-1],)
     weights = ("1", "1", "1", "1")
-    task_outcome = _coverage_outcome(_CoverageInput(required, missing_task, sensitivity_only, weights))
-    baseline_outcome = _coverage_outcome(_CoverageInput(required, missing_baseline, (), weights))
-    sensitivity_outcome = _coverage_outcome(
-        _CoverageInput(required, missing_task, sensitivity_only, weights)
+    task_outcome = evaluate_coverage_estimability(
+        CoverageEstimabilityInput(
+            required_strata=required, strict_primary_strata=missing_task,
+            canonicalization_sensitivity_strata=sensitivity_only, stratum_weights=weights,
+        )
+    )
+    baseline_outcome = evaluate_coverage_estimability(
+        CoverageEstimabilityInput(
+            required_strata=required, strict_primary_strata=missing_baseline,
+            canonicalization_sensitivity_strata=(), stratum_weights=weights,
+        )
+    )
+    sensitivity_outcome = evaluate_coverage_estimability(
+        CoverageEstimabilityInput(
+            required_strata=required, strict_primary_strata=missing_task,
+            canonicalization_sensitivity_strata=sensitivity_only, stratum_weights=weights,
+        )
     )
     if mutated:
-        task_outcome = _CoverageOutcome("ESTIMABLE", missing_task, ("4/3", "4/3", "4/3"))
+        task_outcome = CoverageEstimabilityDecision(
+            estimable=True, reason_code="ESTIMABLE", missing_required_strata=(),
+            retained_required_strata=missing_task,
+            retained_required_baselines=("full_history", "rag_frozen", "bot_style"),
+            sensitivity_substitution_applied=False,
+            output_weights=("4/3", "4/3", "4/3"),
+        )
     results = (task_outcome.reason_code, baseline_outcome.reason_code)
     retained_ids = tuple(
-        f"{item.task_family}:{item.baseline}" for item in task_outcome.retained_required
+        f"{item.task_family}:{item.baseline}" for item in task_outcome.retained_required_strata
     )
-    retained_baselines = tuple(item.baseline for item in task_outcome.retained_required)
+    retained_baselines = task_outcome.retained_required_baselines
     sensitivity_id = f"{sensitivity_only[0].task_family}:{sensitivity_only[0].baseline}"
     return GateEvidence(
         tuple(MftIdentity(field="required_stratum", value=value) for value in _REQUIRED_STRATUM_IDS),
-        (assertion("missing_stratum_results", (NOT_ESTIMABLE, NOT_ESTIMABLE), results),
+        (assertion("missing_stratum_results",
+                   (FILTER_V5_PILOT_B_NOT_ESTIMABLE, FILTER_V5_PILOT_B_NOT_ESTIMABLE), results),
          assertion("retained_required_baselines", _EXPECTED_FAMILIES, retained_baselines),
          assertion("retained_required_strata", _REQUIRED_STRATUM_IDS, retained_ids),
          assertion("sensitivity_only_strata", (sensitivity_id,), (sensitivity_id,)),
-         assertion("sensitivity_substitution", (NOT_ESTIMABLE,),
+         assertion("sensitivity_substitution", (FILTER_V5_PILOT_B_NOT_ESTIMABLE,),
                    (sensitivity_outcome.reason_code,)),
          assertion("weights_after_rejection", weights, task_outcome.output_weights)),
     )

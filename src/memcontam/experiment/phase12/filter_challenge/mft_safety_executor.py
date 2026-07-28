@@ -16,6 +16,7 @@ from memcontam.experiment.phase12.filter_challenge.executor_types import (
     ControlCacheKey,
     PairAuditEvidence,
     PairingIdentity,
+    SharedAssessmentKey,
 )
 from memcontam.experiment.phase12.filter_challenge.mft_safety_types import (
     CONTROL_CACHE_FIELDS,
@@ -27,6 +28,10 @@ from memcontam.experiment.phase12.filter_challenge.mft_safety_types import (
     candidate,
     pairing_identity,
 )
+
+
+def _shared_key_hash(key: SharedAssessmentKey) -> str:
+    return hashlib.sha256(json.dumps(asdict(key), sort_keys=True).encode()).hexdigest()
 
 
 def gate_shadow_share(mutated: bool) -> GateEvidence:
@@ -44,16 +49,25 @@ def gate_shadow_share(mutated: bool) -> GateEvidence:
         control_displaced_noncandidate_entry_ids=(), challenge_displaced_noncandidate_entry_ids=(),
     )
     consumed = consume_routing("assessment-1", route_assessment("contradicted"), key, evidence)
+    if mutated:
+        consumed = replace(
+            consumed,
+            filter=replace(
+                consumed.filter,
+                shared_assessment_key=replace(key, candidate_version="distinct-valid-version"),
+            ),
+        )
     routing = (f"{consumed.contam.effect}:{consumed.contam.route_target or 'none'}",
                f"{consumed.filter.effect}:{consumed.filter.route_target or 'none'}")
-    if mutated:
-        routing = (routing[0], "shadow:none")
-    key_hash = hashlib.sha256(json.dumps(asdict(key), sort_keys=True).encode()).hexdigest()
+    key_hash = _shared_key_hash(key)
+    consumed_key_hashes = (
+        _shared_key_hash(consumed.contam.shared_assessment_key),
+        _shared_key_hash(consumed.filter.shared_assessment_key),
+    )
     return GateEvidence(
         (MftIdentity(field="assessment_id", value=evidence.assessment_id),
          MftIdentity(field="shared_assessment_key_hash", value=key_hash)),
-        (assertion("assessment_identity", ("assessment-1", "assessment-1"),
-                   (evidence.assessment_id, evidence.assessment_id)),
+        (assertion("shared_assessment_keys", (key_hash, key_hash), consumed_key_hashes),
          assertion("routing_consumption", ("shadow:none", "apply:quarantine"), routing)),
     )
 

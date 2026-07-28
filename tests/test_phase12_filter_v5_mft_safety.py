@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
+import memcontam.experiment.phase12.filter_challenge.mft_safety_assessment as safety_assessment
+from memcontam.experiment.phase12.filter_challenge.assessment import ProbeAssessmentInput
+from memcontam.experiment.phase12.filter_challenge.contracts import CandidateExposureRecord
 from memcontam.experiment.phase12.filter_challenge.mft_safety import (
     MFT_SAFETY_FAILURE_REASONS,
     MFT_SAFETY_IDS,
@@ -17,6 +21,7 @@ from memcontam.experiment.phase12.filter_challenge.mft_safety_types import (
     MftAssertion,
     MftSafetyCase,
 )
+from memcontam.experiment.phase12.filter_challenge.mft_safety_executor import gate_shadow_share
 
 
 EXPECTED_IDS = (
@@ -141,6 +146,77 @@ def test_safety_gates_exercise_exact_machine_laws() -> None:
     assert _assertion(coverage, "weights_after_rejection").actual == ("1", "1", "1", "1")
 
 
+def test_shadow_share_observes_each_consumed_key_and_rejects_filter_substitution() -> None:
+    # Given: healthy and distinct-valid-Filter-key executions of the shadow/share gate.
+    healthy = gate_shadow_share(False)
+    attacked = gate_shadow_share(True)
+
+    # When: the independently consumed key hashes are inspected.
+    healthy_keys = next(item for item in healthy.assertions if item.field == "shared_assessment_keys")
+    attacked_keys = next(item for item in attacked.assertions if item.field == "shared_assessment_keys")
+
+    # Then: healthy Contam/Filter keys match and substituting Filter's key fails the gate.
+    assert healthy_keys.actual[0] == healthy_keys.actual[1]
+    assert attacked_keys.actual[0] != attacked_keys.actual[1]
+    assert not attacked_keys.matched
+    assert "assessment_identity" not in {item.field for item in healthy.assertions}
+
+
+def test_probe_invariance_fails_when_actual_candidate_inclusion_is_false(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: production probe inputs whose candidate is absent from final context.
+    original = safety_assessment.probe_input
+
+    def without_inclusion(
+        candidate_id: str, probe_id: str, suite_key: str
+    ) -> ProbeAssessmentInput:
+        value = original(candidate_id, probe_id, suite_key)
+        return replace(
+            value,
+            candidate_exposure=CandidateExposureRecord(
+                candidate_entry_id=candidate_id,
+                candidate_final_context_inclusion=False,
+                candidate_final_context_source_ids=(),
+            ),
+        )
+
+    monkeypatch.setattr(safety_assessment, "probe_input", without_inclusion)
+
+    # When: MFT-12 derives its observations from those production inputs.
+    evidence = safety_assessment.gate_probe_invariance(False)
+
+    # Then: false inclusion is observed and fails the gate.
+    inclusion = next(item for item in evidence.assertions if item.field == "candidate_inclusion")
+    assert inclusion.actual == ("false", "false", "false", "false")
+    assert not inclusion.matched
+
+
+def test_probe_invariance_fails_when_actual_challenge_verifier_is_true(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: production probe inputs whose challenge verifier result is correct.
+    original = safety_assessment.probe_input
+
+    def with_correct_challenge(
+        candidate_id: str, probe_id: str, suite_key: str
+    ) -> ProbeAssessmentInput:
+        return replace(
+            original(candidate_id, probe_id, suite_key),
+            challenge_verifier_result=True,
+        )
+
+    monkeypatch.setattr(safety_assessment, "probe_input", with_correct_challenge)
+
+    # When: MFT-12 derives its observations from those production inputs and results.
+    evidence = safety_assessment.gate_probe_invariance(False)
+
+    # Then: the correct verifier result is observed and fails the false-harm fixture gate.
+    verifier = next(item for item in evidence.assertions if item.field == "verifier_results")
+    assert verifier.actual == ("true", "true", "true", "true")
+    assert not verifier.matched
+
+
 def test_probe_mapping_is_role_route_and_audit_blind_across_families() -> None:
     # Given: four native candidate families and four excluded-label variants per family.
     case = build_mft_safety_report().cases[3]
@@ -159,11 +235,13 @@ def test_probe_mapping_is_role_route_and_audit_blind_across_families() -> None:
     )
     for field in (
         "opaque_suite_keys", "probe_mapping", "control_prompt_payloads",
-        "challenge_prompt_payloads", "prompt_hashes", "candidate_inclusion",
-        "verifier_results", "assessment_states", "routing_decisions", "route_audit_flags",
-        "routing_reason_codes",
+        "challenge_prompt_payloads", "prompt_hashes", "candidate_inclusion_invariance",
+        "verifier_result_invariance", "assessment_states", "routing_decisions",
+        "route_audit_flags", "routing_reason_codes",
     ):
         assert _assertion(case, field).actual == ("true", "true", "true", "true")
+    assert _assertion(case, "candidate_inclusion").actual == ("true",) * 4
+    assert _assertion(case, "verifier_results").actual == ("false",) * 4
     prompt_examples = _assertion(case, "machine_prompt_examples").actual
     assert prompt_examples == (
         '{"arm":"control","baseline_family":"full_history","native_kind":"full_history_transcript","probe_id":"probe-ec8f5922","suite_key":"k9m2x7","task_family":"game24"}',
