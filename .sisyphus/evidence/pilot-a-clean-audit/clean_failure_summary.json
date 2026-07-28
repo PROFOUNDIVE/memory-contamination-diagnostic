@@ -1,0 +1,122 @@
+{
+  "answer_call_reference_mismatch_count": 23,
+  "answer_call_reference_mismatch_trial_ids": [
+    "seed:0:branch_free_prefix:bot_style:clean:game24_pilot_001",
+    "seed:0:branch_free_prefix:bot_style:clean:game24_pilot_002",
+    "seed:0:branch_free_prefix:bot_style:clean:game24_pilot_003",
+    "seed:0:branch_free_prefix:bot_style:clean:game24_pilot_004",
+    "seed:0:branch_free_prefix:bot_style:clean:game24_pilot_005",
+    "seed:0:branch_free_prefix:reflexion_style:clean:game24_pilot_002",
+    "seed:0:branch_free_prefix:reflexion_style:clean:game24_pilot_003",
+    "seed:0:branch_free_prefix:reflexion_style:clean:game24_pilot_004",
+    "seed:0:branch_free_prefix:reflexion_style:clean:game24_pilot_005",
+    "seed:0:memory_branch:bot_style:clean:game24_pilot_003",
+    "seed:0:memory_branch:reflexion_style:clean:game24_pilot_003",
+    "seed:1:branch_free_prefix:bot_style:clean:game24_pilot_002",
+    "seed:1:branch_free_prefix:bot_style:clean:game24_pilot_004",
+    "seed:1:branch_free_prefix:bot_style:clean:game24_pilot_001",
+    "seed:1:branch_free_prefix:bot_style:clean:game24_pilot_005",
+    "seed:1:branch_free_prefix:bot_style:clean:game24_pilot_003",
+    "seed:1:branch_free_prefix:reflexion_style:clean:game24_pilot_002",
+    "seed:1:branch_free_prefix:reflexion_style:clean:game24_pilot_004",
+    "seed:1:branch_free_prefix:reflexion_style:clean:game24_pilot_001",
+    "seed:1:branch_free_prefix:reflexion_style:clean:game24_pilot_005",
+    "seed:1:branch_free_prefix:reflexion_style:clean:game24_pilot_003",
+    "seed:1:memory_branch:bot_style:clean:game24_pilot_004",
+    "seed:1:memory_branch:reflexion_style:clean:game24_pilot_004"
+  ],
+  "audit_id": "phase12-pilot-a-clean-failures-v1",
+  "canonicalization_sensitivity_probe_count": 2,
+  "clean_prefix_accuracy_by_baseline": {
+    "bot_style": {
+      "accuracy": 0.0,
+      "total": 10,
+      "verified_correct": 0
+    },
+    "fh_bounded": {
+      "accuracy": 0.2,
+      "total": 10,
+      "verified_correct": 2
+    },
+    "nomem": {
+      "accuracy": null,
+      "total": 0,
+      "verified_correct": 0
+    },
+    "rag_frozen": {
+      "accuracy": 0.0,
+      "total": 10,
+      "verified_correct": 0
+    },
+    "reflexion_style": {
+      "accuracy": 0.1,
+      "total": 10,
+      "verified_correct": 1
+    }
+  },
+  "clean_suffix_accuracy_by_baseline": {
+    "bot_style": {
+      "accuracy": 0.0,
+      "total": 2,
+      "verified_correct": 0
+    },
+    "fh_bounded": {
+      "accuracy": 0.5,
+      "total": 2,
+      "verified_correct": 1
+    },
+    "nomem": {
+      "accuracy": 0.0,
+      "total": 2,
+      "verified_correct": 0
+    },
+    "rag_frozen": {
+      "accuracy": 0.0,
+      "total": 2,
+      "verified_correct": 0
+    },
+    "reflexion_style": {
+      "accuracy": 0.0,
+      "total": 2,
+      "verified_correct": 0
+    }
+  },
+  "clean_trial_counts": {
+    "all": 50,
+    "nomem_clean_suffix": 2,
+    "prefix": 40,
+    "suffix": 10
+  },
+  "failure_class_counts": {
+    "baseline_stage_malformed": 0,
+    "format_only_invalid": 7,
+    "not_classifiable": 0,
+    "semantic_incorrect": 30,
+    "unsupported_or_no_solution": 9,
+    "verified_correct": 4,
+    "verifier_or_parser_contract_failure": 0
+  },
+  "format_recoverable_suffix_sensitivity_cells": [
+    "seed:1:memory_branch:rag_frozen:clean:game24_pilot_004",
+    "seed:1:memory_branch:reflexion_style:clean:game24_pilot_004"
+  ],
+  "manual_format_witness_count": 7,
+  "non_null_verifier_outcomes_recomputed": 50,
+  "run_id": "pilot-a-game24-20260727T195633Z",
+  "schema_version": 1,
+  "source_references": {
+    "classification": {
+      "path": ".sisyphus/evidence/pilot-a-clean-audit/clean_trial_classification.jsonl",
+      "sha256": "91a33533b5be5217783f427588b29e483fafcbdcb11e9ef31c620f48e730075f"
+    },
+    "inventory": {
+      "path": ".sisyphus/evidence/pilot-a-clean-audit/clean_solvability_inventory.json",
+      "sha256": "4b740984336616c9c46c984b5e1edd6fddbd69e26aea2e4d00dee90659e34d3e"
+    }
+  },
+  "stored_recomputed_verifier_disagreements": [],
+  "strict_clean_solvable_suffix_cells": [
+    "seed:1:memory_branch:fh_bounded:clean:game24_pilot_004"
+  ],
+  "strict_primary_probe_count": 1
+}

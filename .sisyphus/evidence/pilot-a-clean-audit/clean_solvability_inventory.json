@@ -1,0 +1,721 @@
+{
+  "audit_id": "phase12-pilot-a-clean-failures-v1",
+  "canonicalization_sensitivity_candidate_count": 2,
+  "primary_eligibility_rule": "eligible only when the registered unchanged clean suffix control is verifier-accepted under the intended probe execution contract",
+  "run_id": "pilot-a-game24-20260727T195633Z",
+  "schema_version": 1,
+  "source_references": {
+    "classifications": {
+      "path": ".sisyphus/evidence/pilot-a-clean-audit/clean_trial_classification.jsonl",
+      "sha256": "91a33533b5be5217783f427588b29e483fafcbdcb11e9ef31c620f48e730075f"
+    }
+  },
+  "strict_primary_candidate_count": 1,
+  "suffix_probe_controls": [
+    {
+      "baseline": "fh_bounded",
+      "clean_failure_class": "semantic_incorrect",
+      "clean_format_recoverable": false,
+      "clean_verified_correct": false,
+      "eligible_as_filter_probe_control": false,
+      "eligible_under_canonicalization_sensitivity": false,
+      "exclusion_reason": "registered_clean_suffix_not_verifier_accepted",
+      "seed": 0,
+      "source_references": {
+        "calls": [
+          {
+            "line": 43,
+            "path": "runs/runs/pilot-a-game24-20260727T195633Z/calls.jsonl",
+            "sha256": "6617c234e717a5ebef5852a895c7738ea039c19d1a6865f66ec4298092b040ed"
+          }
+        ],
+        "resolved_config": {
+          "path": "runs/runs/pilot-a-game24-20260727T195633Z/resolved_config.json",
+          "sha256": "ea7daacc405abad3e75f356910d07116a379825eb72ae86b2d8aeea144b12c69"
+        },
+        "task": {
+          "line": 3,
+          "path": "data/tasks/game24_pilot.jsonl",
+          "sha256": "7a7a39f8697ccd7199e063679de90a373535f912a04ca6c15d1e919f0749e8b5"
+        },
+        "trial": {
+          "line": 21,
+          "path": "runs/runs/pilot-a-game24-20260727T195633Z/trials.jsonl",
+          "sha256": "101bbb1e72bc09e09104b9f5ec30a70b59ff6c33edd67feba694bcb3631ec38d"
+        }
+      },
+      "task_id": "game24_pilot_003",
+      "trial_id": "seed:0:memory_branch:fh_bounded:clean:game24_pilot_003"
+    },
+    {
+      "baseline": "rag_frozen",
+      "clean_failure_class": "semantic_incorrect",
+      "clean_format_recoverable": false,
+      "clean_verified_correct": false,
+      "eligible_as_filter_probe_control": false,
+      "eligible_under_canonicalization_sensitivity": false,
+      "exclusion_reason": "registered_clean_suffix_not_verifier_accepted",
+      "seed": 0,
+      "source_references": {
+        "calls": [
+          {
+            "line": 46,
+            "path": "runs/runs/pilot-a-game24-20260727T195633Z/calls.jsonl",
+            "sha256": "6617c234e717a5ebef5852a895c7738ea039c19d1a6865f66ec4298092b040ed"
+          }
+        ],
+        "resolved_config": {
+          "path": "runs/runs/pilot-a-game24-20260727T195633Z/resolved_config.json",
+          "sha256": "ea7daacc405abad3e75f356910d07116a379825eb72ae86b2d8aeea144b12c69"
+        },
+        "task": {
+          "line": 3,
+          "path": "data/tasks/game24_pilot.jsonl",
+          "sha256": "7a7a39f8697ccd7199e063679de90a373535f912a04ca6c15d1e919f0749e8b5"
+        },
+        "trial": {
+          "line": 24,
+          "path": "runs/runs/pilot-a-game24-20260727T195633Z/trials.jsonl",
+          "sha256": "101bbb1e72bc09e09104b9f5ec30a70b59ff6c33edd67feba694bcb3631ec38d"
+        }
+      },
+      "task_id": "game24_pilot_003",
+      "trial_id": "seed:0:memory_branch:rag_frozen:clean:game24_pilot_003"
+    },
+    {
+      "baseline": "bot_style",
+      "clean_failure_class": "unsupported_or_no_solution",
+      "clean_format_recoverable": false,
+      "clean_verified_correct": false,
+      "eligible_as_filter_probe_control": false,
+      "eligible_under_canonicalization_sensitivity": false,
+      "exclusion_reason": "registered_clean_suffix_not_verifier_accepted",
+      "seed": 0,
+      "source_references": {
+        "calls": [
+          {
+            "line": 49,
+            "path": "runs/runs/pilot-a-game24-20260727T195633Z/calls.jsonl",
+            "sha256": "6617c234e717a5ebef5852a895c7738ea039c19d1a6865f66ec4298092b040ed"
+          },
+          {
+            "line": 50,
+            "path": "runs/runs/pilot-a-game24-20260727T195633Z/calls.jsonl",
+            "sha256": "6617c234e717a5ebef5852a895c7738ea039c19d1a6865f66ec4298092b040ed"
+          },
+          {
+            "line": 51,
+            "path": "runs/runs/pilot-a-game24-20260727T195633Z/calls.jsonl",
+            "sha256": "6617c234e717a5ebef5852a895c7738ea039c19d1a6865f66ec4298092b040ed"
+          }
+        ],
+        "resolved_config": {
+          "path": "runs/runs/pilot-a-game24-20260727T195633Z/resolved_config.json",
+          "sha256": "ea7daacc405abad3e75f356910d07116a379825eb72ae86b2d8aeea144b12c69"
+        },
+        "task": {
+          "line": 3,
+          "path": "data/tasks/game24_pilot.jsonl",
+          "sha256": "7a7a39f8697ccd7199e063679de90a373535f912a04ca6c15d1e919f0749e8b5"
+        },
+        "trial": {
+          "line": 27,
+          "path": "runs/runs/pilot-a-game24-20260727T195633Z/trials.jsonl",
+          "sha256": "101bbb1e72bc09e09104b9f5ec30a70b59ff6c33edd67feba694bcb3631ec38d"
+        }
+      },
+      "task_id": "game24_pilot_003",
+      "trial_id": "seed:0:memory_branch:bot_style:clean:game24_pilot_003"
+    },
+    {
+      "baseline": "reflexion_style",
+      "clean_failure_class": "semantic_incorrect",
+      "clean_format_recoverable": false,
+      "clean_verified_correct": false,
+      "eligible_as_filter_probe_control": false,
+      "eligible_under_canonicalization_sensitivity": false,
+      "exclusion_reason": "registered_clean_suffix_not_verifier_accepted",
+      "seed": 0,
+      "source_references": {
+        "calls": [
+          {
+            "line": 58,
+            "path": "runs/runs/pilot-a-game24-20260727T195633Z/calls.jsonl",
+            "sha256": "6617c234e717a5ebef5852a895c7738ea039c19d1a6865f66ec4298092b040ed"
+          },
+          {
+            "line": 59,
+            "path": "runs/runs/pilot-a-game24-20260727T195633Z/calls.jsonl",
+            "sha256": "6617c234e717a5ebef5852a895c7738ea039c19d1a6865f66ec4298092b040ed"
+          },
+          {
+            "line": 60,
+            "path": "runs/runs/pilot-a-game24-20260727T195633Z/calls.jsonl",
+            "sha256": "6617c234e717a5ebef5852a895c7738ea039c19d1a6865f66ec4298092b040ed"
+          },
+          {
+            "line": 61,
+            "path": "runs/runs/pilot-a-game24-20260727T195633Z/calls.jsonl",
+            "sha256": "6617c234e717a5ebef5852a895c7738ea039c19d1a6865f66ec4298092b040ed"
+          }
+        ],
+        "resolved_config": {
+          "path": "runs/runs/pilot-a-game24-20260727T195633Z/resolved_config.json",
+          "sha256": "ea7daacc405abad3e75f356910d07116a379825eb72ae86b2d8aeea144b12c69"
+        },
+        "task": {
+          "line": 3,
+          "path": "data/tasks/game24_pilot.jsonl",
+          "sha256": "7a7a39f8697ccd7199e063679de90a373535f912a04ca6c15d1e919f0749e8b5"
+        },
+        "trial": {
+          "line": 30,
+          "path": "runs/runs/pilot-a-game24-20260727T195633Z/trials.jsonl",
+          "sha256": "101bbb1e72bc09e09104b9f5ec30a70b59ff6c33edd67feba694bcb3631ec38d"
+        }
+      },
+      "task_id": "game24_pilot_003",
+      "trial_id": "seed:0:memory_branch:reflexion_style:clean:game24_pilot_003"
+    },
+    {
+      "baseline": "nomem",
+      "clean_failure_class": "semantic_incorrect",
+      "clean_format_recoverable": false,
+      "clean_verified_correct": false,
+      "eligible_as_filter_probe_control": false,
+      "eligible_under_canonicalization_sensitivity": false,
+      "exclusion_reason": "registered_clean_suffix_not_verifier_accepted",
+      "seed": 0,
+      "source_references": {
+        "calls": [
+          {
+            "line": 70,
+            "path": "runs/runs/pilot-a-game24-20260727T195633Z/calls.jsonl",
+            "sha256": "6617c234e717a5ebef5852a895c7738ea039c19d1a6865f66ec4298092b040ed"
+          }
+        ],
+        "resolved_config": {
+          "path": "runs/runs/pilot-a-game24-20260727T195633Z/resolved_config.json",
+          "sha256": "ea7daacc405abad3e75f356910d07116a379825eb72ae86b2d8aeea144b12c69"
+        },
+        "task": {
+          "line": 3,
+          "path": "data/tasks/game24_pilot.jsonl",
+          "sha256": "7a7a39f8697ccd7199e063679de90a373535f912a04ca6c15d1e919f0749e8b5"
+        },
+        "trial": {
+          "line": 33,
+          "path": "runs/runs/pilot-a-game24-20260727T195633Z/trials.jsonl",
+          "sha256": "101bbb1e72bc09e09104b9f5ec30a70b59ff6c33edd67feba694bcb3631ec38d"
+        }
+      },
+      "task_id": "game24_pilot_003",
+      "trial_id": "seed:0:nomem_singleton:nomem:clean:game24_pilot_003"
+    },
+    {
+      "baseline": "fh_bounded",
+      "clean_failure_class": null,
+      "clean_format_recoverable": false,
+      "clean_verified_correct": true,
+      "eligible_as_filter_probe_control": true,
+      "eligible_under_canonicalization_sensitivity": false,
+      "exclusion_reason": null,
+      "seed": 1,
+      "source_references": {
+        "calls": [
+          {
+            "line": 116,
+            "path": "runs/runs/pilot-a-game24-20260727T195633Z/calls.jsonl",
+            "sha256": "6617c234e717a5ebef5852a895c7738ea039c19d1a6865f66ec4298092b040ed"
+          }
+        ],
+        "resolved_config": {
+          "path": "runs/runs/pilot-a-game24-20260727T195633Z/resolved_config.json",
+          "sha256": "ea7daacc405abad3e75f356910d07116a379825eb72ae86b2d8aeea144b12c69"
+        },
+        "task": {
+          "line": 4,
+          "path": "data/tasks/game24_pilot.jsonl",
+          "sha256": "7a7a39f8697ccd7199e063679de90a373535f912a04ca6c15d1e919f0749e8b5"
+        },
+        "trial": {
+          "line": 54,
+          "path": "runs/runs/pilot-a-game24-20260727T195633Z/trials.jsonl",
+          "sha256": "101bbb1e72bc09e09104b9f5ec30a70b59ff6c33edd67feba694bcb3631ec38d"
+        }
+      },
+      "task_id": "game24_pilot_004",
+      "trial_id": "seed:1:memory_branch:fh_bounded:clean:game24_pilot_004"
+    },
+    {
+      "baseline": "rag_frozen",
+      "clean_failure_class": "format_only_invalid",
+      "clean_format_recoverable": true,
+      "clean_verified_correct": false,
+      "eligible_as_filter_probe_control": false,
+      "eligible_under_canonicalization_sensitivity": true,
+      "exclusion_reason": "registered_clean_suffix_not_verifier_accepted",
+      "seed": 1,
+      "source_references": {
+        "calls": [
+          {
+            "line": 119,
+            "path": "runs/runs/pilot-a-game24-20260727T195633Z/calls.jsonl",
+            "sha256": "6617c234e717a5ebef5852a895c7738ea039c19d1a6865f66ec4298092b040ed"
+          }
+        ],
+        "resolved_config": {
+          "path": "runs/runs/pilot-a-game24-20260727T195633Z/resolved_config.json",
+          "sha256": "ea7daacc405abad3e75f356910d07116a379825eb72ae86b2d8aeea144b12c69"
+        },
+        "task": {
+          "line": 4,
+          "path": "data/tasks/game24_pilot.jsonl",
+          "sha256": "7a7a39f8697ccd7199e063679de90a373535f912a04ca6c15d1e919f0749e8b5"
+        },
+        "trial": {
+          "line": 57,
+          "path": "runs/runs/pilot-a-game24-20260727T195633Z/trials.jsonl",
+          "sha256": "101bbb1e72bc09e09104b9f5ec30a70b59ff6c33edd67feba694bcb3631ec38d"
+        }
+      },
+      "task_id": "game24_pilot_004",
+      "trial_id": "seed:1:memory_branch:rag_frozen:clean:game24_pilot_004"
+    },
+    {
+      "baseline": "bot_style",
+      "clean_failure_class": "semantic_incorrect",
+      "clean_format_recoverable": false,
+      "clean_verified_correct": false,
+      "eligible_as_filter_probe_control": false,
+      "eligible_under_canonicalization_sensitivity": false,
+      "exclusion_reason": "registered_clean_suffix_not_verifier_accepted",
+      "seed": 1,
+      "source_references": {
+        "calls": [
+          {
+            "line": 122,
+            "path": "runs/runs/pilot-a-game24-20260727T195633Z/calls.jsonl",
+            "sha256": "6617c234e717a5ebef5852a895c7738ea039c19d1a6865f66ec4298092b040ed"
+          },
+          {
+            "line": 123,
+            "path": "runs/runs/pilot-a-game24-20260727T195633Z/calls.jsonl",
+            "sha256": "6617c234e717a5ebef5852a895c7738ea039c19d1a6865f66ec4298092b040ed"
+          },
+          {
+            "line": 124,
+            "path": "runs/runs/pilot-a-game24-20260727T195633Z/calls.jsonl",
+            "sha256": "6617c234e717a5ebef5852a895c7738ea039c19d1a6865f66ec4298092b040ed"
+          }
+        ],
+        "resolved_config": {
+          "path": "runs/runs/pilot-a-game24-20260727T195633Z/resolved_config.json",
+          "sha256": "ea7daacc405abad3e75f356910d07116a379825eb72ae86b2d8aeea144b12c69"
+        },
+        "task": {
+          "line": 4,
+          "path": "data/tasks/game24_pilot.jsonl",
+          "sha256": "7a7a39f8697ccd7199e063679de90a373535f912a04ca6c15d1e919f0749e8b5"
+        },
+        "trial": {
+          "line": 60,
+          "path": "runs/runs/pilot-a-game24-20260727T195633Z/trials.jsonl",
+          "sha256": "101bbb1e72bc09e09104b9f5ec30a70b59ff6c33edd67feba694bcb3631ec38d"
+        }
+      },
+      "task_id": "game24_pilot_004",
+      "trial_id": "seed:1:memory_branch:bot_style:clean:game24_pilot_004"
+    },
+    {
+      "baseline": "reflexion_style",
+      "clean_failure_class": "format_only_invalid",
+      "clean_format_recoverable": true,
+      "clean_verified_correct": false,
+      "eligible_as_filter_probe_control": false,
+      "eligible_under_canonicalization_sensitivity": true,
+      "exclusion_reason": "registered_clean_suffix_not_verifier_accepted",
+      "seed": 1,
+      "source_references": {
+        "calls": [
+          {
+            "line": 131,
+            "path": "runs/runs/pilot-a-game24-20260727T195633Z/calls.jsonl",
+            "sha256": "6617c234e717a5ebef5852a895c7738ea039c19d1a6865f66ec4298092b040ed"
+          },
+          {
+            "line": 132,
+            "path": "runs/runs/pilot-a-game24-20260727T195633Z/calls.jsonl",
+            "sha256": "6617c234e717a5ebef5852a895c7738ea039c19d1a6865f66ec4298092b040ed"
+          },
+          {
+            "line": 133,
+            "path": "runs/runs/pilot-a-game24-20260727T195633Z/calls.jsonl",
+            "sha256": "6617c234e717a5ebef5852a895c7738ea039c19d1a6865f66ec4298092b040ed"
+          },
+          {
+            "line": 134,
+            "path": "runs/runs/pilot-a-game24-20260727T195633Z/calls.jsonl",
+            "sha256": "6617c234e717a5ebef5852a895c7738ea039c19d1a6865f66ec4298092b040ed"
+          }
+        ],
+        "resolved_config": {
+          "path": "runs/runs/pilot-a-game24-20260727T195633Z/resolved_config.json",
+          "sha256": "ea7daacc405abad3e75f356910d07116a379825eb72ae86b2d8aeea144b12c69"
+        },
+        "task": {
+          "line": 4,
+          "path": "data/tasks/game24_pilot.jsonl",
+          "sha256": "7a7a39f8697ccd7199e063679de90a373535f912a04ca6c15d1e919f0749e8b5"
+        },
+        "trial": {
+          "line": 63,
+          "path": "runs/runs/pilot-a-game24-20260727T195633Z/trials.jsonl",
+          "sha256": "101bbb1e72bc09e09104b9f5ec30a70b59ff6c33edd67feba694bcb3631ec38d"
+        }
+      },
+      "task_id": "game24_pilot_004",
+      "trial_id": "seed:1:memory_branch:reflexion_style:clean:game24_pilot_004"
+    },
+    {
+      "baseline": "nomem",
+      "clean_failure_class": "unsupported_or_no_solution",
+      "clean_format_recoverable": false,
+      "clean_verified_correct": false,
+      "eligible_as_filter_probe_control": false,
+      "eligible_under_canonicalization_sensitivity": false,
+      "exclusion_reason": "registered_clean_suffix_not_verifier_accepted",
+      "seed": 1,
+      "source_references": {
+        "calls": [
+          {
+            "line": 143,
+            "path": "runs/runs/pilot-a-game24-20260727T195633Z/calls.jsonl",
+            "sha256": "6617c234e717a5ebef5852a895c7738ea039c19d1a6865f66ec4298092b040ed"
+          }
+        ],
+        "resolved_config": {
+          "path": "runs/runs/pilot-a-game24-20260727T195633Z/resolved_config.json",
+          "sha256": "ea7daacc405abad3e75f356910d07116a379825eb72ae86b2d8aeea144b12c69"
+        },
+        "task": {
+          "line": 4,
+          "path": "data/tasks/game24_pilot.jsonl",
+          "sha256": "7a7a39f8697ccd7199e063679de90a373535f912a04ca6c15d1e919f0749e8b5"
+        },
+        "trial": {
+          "line": 66,
+          "path": "runs/runs/pilot-a-game24-20260727T195633Z/trials.jsonl",
+          "sha256": "101bbb1e72bc09e09104b9f5ec30a70b59ff6c33edd67feba694bcb3631ec38d"
+        }
+      },
+      "task_id": "game24_pilot_004",
+      "trial_id": "seed:1:nomem_singleton:nomem:clean:game24_pilot_004"
+    }
+  ],
+  "task_baseline_inventory": [
+    {
+      "baseline": "nomem",
+      "clean_format_recoverable": false,
+      "clean_verified_correct": false,
+      "observed_clean_trial_ids": [],
+      "sensitivity_suffix_probe_trial_ids": [],
+      "strict_suffix_probe_trial_ids": [],
+      "task_id": "game24_pilot_001"
+    },
+    {
+      "baseline": "fh_bounded",
+      "clean_format_recoverable": false,
+      "clean_verified_correct": true,
+      "observed_clean_trial_ids": [
+        "seed:0:branch_free_prefix:fh_bounded:clean:game24_pilot_001",
+        "seed:1:branch_free_prefix:fh_bounded:clean:game24_pilot_001"
+      ],
+      "sensitivity_suffix_probe_trial_ids": [],
+      "strict_suffix_probe_trial_ids": [],
+      "task_id": "game24_pilot_001"
+    },
+    {
+      "baseline": "rag_frozen",
+      "clean_format_recoverable": true,
+      "clean_verified_correct": false,
+      "observed_clean_trial_ids": [
+        "seed:0:branch_free_prefix:rag_frozen:clean:game24_pilot_001",
+        "seed:1:branch_free_prefix:rag_frozen:clean:game24_pilot_001"
+      ],
+      "sensitivity_suffix_probe_trial_ids": [],
+      "strict_suffix_probe_trial_ids": [],
+      "task_id": "game24_pilot_001"
+    },
+    {
+      "baseline": "bot_style",
+      "clean_format_recoverable": false,
+      "clean_verified_correct": false,
+      "observed_clean_trial_ids": [
+        "seed:0:branch_free_prefix:bot_style:clean:game24_pilot_001",
+        "seed:1:branch_free_prefix:bot_style:clean:game24_pilot_001"
+      ],
+      "sensitivity_suffix_probe_trial_ids": [],
+      "strict_suffix_probe_trial_ids": [],
+      "task_id": "game24_pilot_001"
+    },
+    {
+      "baseline": "reflexion_style",
+      "clean_format_recoverable": true,
+      "clean_verified_correct": true,
+      "observed_clean_trial_ids": [
+        "seed:0:branch_free_prefix:reflexion_style:clean:game24_pilot_001",
+        "seed:1:branch_free_prefix:reflexion_style:clean:game24_pilot_001"
+      ],
+      "sensitivity_suffix_probe_trial_ids": [],
+      "strict_suffix_probe_trial_ids": [],
+      "task_id": "game24_pilot_001"
+    },
+    {
+      "baseline": "nomem",
+      "clean_format_recoverable": false,
+      "clean_verified_correct": false,
+      "observed_clean_trial_ids": [],
+      "sensitivity_suffix_probe_trial_ids": [],
+      "strict_suffix_probe_trial_ids": [],
+      "task_id": "game24_pilot_002"
+    },
+    {
+      "baseline": "fh_bounded",
+      "clean_format_recoverable": false,
+      "clean_verified_correct": false,
+      "observed_clean_trial_ids": [
+        "seed:0:branch_free_prefix:fh_bounded:clean:game24_pilot_002",
+        "seed:1:branch_free_prefix:fh_bounded:clean:game24_pilot_002"
+      ],
+      "sensitivity_suffix_probe_trial_ids": [],
+      "strict_suffix_probe_trial_ids": [],
+      "task_id": "game24_pilot_002"
+    },
+    {
+      "baseline": "rag_frozen",
+      "clean_format_recoverable": false,
+      "clean_verified_correct": false,
+      "observed_clean_trial_ids": [
+        "seed:0:branch_free_prefix:rag_frozen:clean:game24_pilot_002",
+        "seed:1:branch_free_prefix:rag_frozen:clean:game24_pilot_002"
+      ],
+      "sensitivity_suffix_probe_trial_ids": [],
+      "strict_suffix_probe_trial_ids": [],
+      "task_id": "game24_pilot_002"
+    },
+    {
+      "baseline": "bot_style",
+      "clean_format_recoverable": false,
+      "clean_verified_correct": false,
+      "observed_clean_trial_ids": [
+        "seed:0:branch_free_prefix:bot_style:clean:game24_pilot_002",
+        "seed:1:branch_free_prefix:bot_style:clean:game24_pilot_002"
+      ],
+      "sensitivity_suffix_probe_trial_ids": [],
+      "strict_suffix_probe_trial_ids": [],
+      "task_id": "game24_pilot_002"
+    },
+    {
+      "baseline": "reflexion_style",
+      "clean_format_recoverable": false,
+      "clean_verified_correct": false,
+      "observed_clean_trial_ids": [
+        "seed:0:branch_free_prefix:reflexion_style:clean:game24_pilot_002",
+        "seed:1:branch_free_prefix:reflexion_style:clean:game24_pilot_002"
+      ],
+      "sensitivity_suffix_probe_trial_ids": [],
+      "strict_suffix_probe_trial_ids": [],
+      "task_id": "game24_pilot_002"
+    },
+    {
+      "baseline": "nomem",
+      "clean_format_recoverable": false,
+      "clean_verified_correct": false,
+      "observed_clean_trial_ids": [
+        "seed:0:nomem_singleton:nomem:clean:game24_pilot_003"
+      ],
+      "sensitivity_suffix_probe_trial_ids": [],
+      "strict_suffix_probe_trial_ids": [],
+      "task_id": "game24_pilot_003"
+    },
+    {
+      "baseline": "fh_bounded",
+      "clean_format_recoverable": false,
+      "clean_verified_correct": false,
+      "observed_clean_trial_ids": [
+        "seed:0:branch_free_prefix:fh_bounded:clean:game24_pilot_003",
+        "seed:0:memory_branch:fh_bounded:clean:game24_pilot_003",
+        "seed:1:branch_free_prefix:fh_bounded:clean:game24_pilot_003"
+      ],
+      "sensitivity_suffix_probe_trial_ids": [],
+      "strict_suffix_probe_trial_ids": [],
+      "task_id": "game24_pilot_003"
+    },
+    {
+      "baseline": "rag_frozen",
+      "clean_format_recoverable": false,
+      "clean_verified_correct": false,
+      "observed_clean_trial_ids": [
+        "seed:0:branch_free_prefix:rag_frozen:clean:game24_pilot_003",
+        "seed:0:memory_branch:rag_frozen:clean:game24_pilot_003",
+        "seed:1:branch_free_prefix:rag_frozen:clean:game24_pilot_003"
+      ],
+      "sensitivity_suffix_probe_trial_ids": [],
+      "strict_suffix_probe_trial_ids": [],
+      "task_id": "game24_pilot_003"
+    },
+    {
+      "baseline": "bot_style",
+      "clean_format_recoverable": false,
+      "clean_verified_correct": false,
+      "observed_clean_trial_ids": [
+        "seed:0:branch_free_prefix:bot_style:clean:game24_pilot_003",
+        "seed:0:memory_branch:bot_style:clean:game24_pilot_003",
+        "seed:1:branch_free_prefix:bot_style:clean:game24_pilot_003"
+      ],
+      "sensitivity_suffix_probe_trial_ids": [],
+      "strict_suffix_probe_trial_ids": [],
+      "task_id": "game24_pilot_003"
+    },
+    {
+      "baseline": "reflexion_style",
+      "clean_format_recoverable": false,
+      "clean_verified_correct": false,
+      "observed_clean_trial_ids": [
+        "seed:0:branch_free_prefix:reflexion_style:clean:game24_pilot_003",
+        "seed:0:memory_branch:reflexion_style:clean:game24_pilot_003",
+        "seed:1:branch_free_prefix:reflexion_style:clean:game24_pilot_003"
+      ],
+      "sensitivity_suffix_probe_trial_ids": [],
+      "strict_suffix_probe_trial_ids": [],
+      "task_id": "game24_pilot_003"
+    },
+    {
+      "baseline": "nomem",
+      "clean_format_recoverable": false,
+      "clean_verified_correct": false,
+      "observed_clean_trial_ids": [
+        "seed:1:nomem_singleton:nomem:clean:game24_pilot_004"
+      ],
+      "sensitivity_suffix_probe_trial_ids": [],
+      "strict_suffix_probe_trial_ids": [],
+      "task_id": "game24_pilot_004"
+    },
+    {
+      "baseline": "fh_bounded",
+      "clean_format_recoverable": false,
+      "clean_verified_correct": true,
+      "observed_clean_trial_ids": [
+        "seed:0:branch_free_prefix:fh_bounded:clean:game24_pilot_004",
+        "seed:1:branch_free_prefix:fh_bounded:clean:game24_pilot_004",
+        "seed:1:memory_branch:fh_bounded:clean:game24_pilot_004"
+      ],
+      "sensitivity_suffix_probe_trial_ids": [],
+      "strict_suffix_probe_trial_ids": [
+        "seed:1:memory_branch:fh_bounded:clean:game24_pilot_004"
+      ],
+      "task_id": "game24_pilot_004"
+    },
+    {
+      "baseline": "rag_frozen",
+      "clean_format_recoverable": true,
+      "clean_verified_correct": false,
+      "observed_clean_trial_ids": [
+        "seed:0:branch_free_prefix:rag_frozen:clean:game24_pilot_004",
+        "seed:1:branch_free_prefix:rag_frozen:clean:game24_pilot_004",
+        "seed:1:memory_branch:rag_frozen:clean:game24_pilot_004"
+      ],
+      "sensitivity_suffix_probe_trial_ids": [
+        "seed:1:memory_branch:rag_frozen:clean:game24_pilot_004"
+      ],
+      "strict_suffix_probe_trial_ids": [],
+      "task_id": "game24_pilot_004"
+    },
+    {
+      "baseline": "bot_style",
+      "clean_format_recoverable": false,
+      "clean_verified_correct": false,
+      "observed_clean_trial_ids": [
+        "seed:0:branch_free_prefix:bot_style:clean:game24_pilot_004",
+        "seed:1:branch_free_prefix:bot_style:clean:game24_pilot_004",
+        "seed:1:memory_branch:bot_style:clean:game24_pilot_004"
+      ],
+      "sensitivity_suffix_probe_trial_ids": [],
+      "strict_suffix_probe_trial_ids": [],
+      "task_id": "game24_pilot_004"
+    },
+    {
+      "baseline": "reflexion_style",
+      "clean_format_recoverable": true,
+      "clean_verified_correct": false,
+      "observed_clean_trial_ids": [
+        "seed:0:branch_free_prefix:reflexion_style:clean:game24_pilot_004",
+        "seed:1:branch_free_prefix:reflexion_style:clean:game24_pilot_004",
+        "seed:1:memory_branch:reflexion_style:clean:game24_pilot_004"
+      ],
+      "sensitivity_suffix_probe_trial_ids": [
+        "seed:1:memory_branch:reflexion_style:clean:game24_pilot_004"
+      ],
+      "strict_suffix_probe_trial_ids": [],
+      "task_id": "game24_pilot_004"
+    },
+    {
+      "baseline": "nomem",
+      "clean_format_recoverable": false,
+      "clean_verified_correct": false,
+      "observed_clean_trial_ids": [],
+      "sensitivity_suffix_probe_trial_ids": [],
+      "strict_suffix_probe_trial_ids": [],
+      "task_id": "game24_pilot_005"
+    },
+    {
+      "baseline": "fh_bounded",
+      "clean_format_recoverable": false,
+      "clean_verified_correct": false,
+      "observed_clean_trial_ids": [
+        "seed:0:branch_free_prefix:fh_bounded:clean:game24_pilot_005",
+        "seed:1:branch_free_prefix:fh_bounded:clean:game24_pilot_005"
+      ],
+      "sensitivity_suffix_probe_trial_ids": [],
+      "strict_suffix_probe_trial_ids": [],
+      "task_id": "game24_pilot_005"
+    },
+    {
+      "baseline": "rag_frozen",
+      "clean_format_recoverable": false,
+      "clean_verified_correct": false,
+      "observed_clean_trial_ids": [
+        "seed:0:branch_free_prefix:rag_frozen:clean:game24_pilot_005",
+        "seed:1:branch_free_prefix:rag_frozen:clean:game24_pilot_005"
+      ],
+      "sensitivity_suffix_probe_trial_ids": [],
+      "strict_suffix_probe_trial_ids": [],
+      "task_id": "game24_pilot_005"
+    },
+    {
+      "baseline": "bot_style",
+      "clean_format_recoverable": false,
+      "clean_verified_correct": false,
+      "observed_clean_trial_ids": [
+        "seed:0:branch_free_prefix:bot_style:clean:game24_pilot_005",
+        "seed:1:branch_free_prefix:bot_style:clean:game24_pilot_005"
+      ],
+      "sensitivity_suffix_probe_trial_ids": [],
+      "strict_suffix_probe_trial_ids": [],
+      "task_id": "game24_pilot_005"
+    },
+    {
+      "baseline": "reflexion_style",
+      "clean_format_recoverable": false,
+      "clean_verified_correct": false,
+      "observed_clean_trial_ids": [
+        "seed:0:branch_free_prefix:reflexion_style:clean:game24_pilot_005",
+        "seed:1:branch_free_prefix:reflexion_style:clean:game24_pilot_005"
+      ],
+      "sensitivity_suffix_probe_trial_ids": [],
+      "strict_suffix_probe_trial_ids": [],
+      "task_id": "game24_pilot_005"
+    }
+  ]
+}
