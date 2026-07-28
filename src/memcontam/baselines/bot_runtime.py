@@ -25,9 +25,13 @@ from memcontam.baselines.contracts import (
     ScientificIneligibilityReason,
 )
 from memcontam.clients.base import LLMClient
-from memcontam.clients.recording import MethodCallRecorder
+from memcontam.clients.recording import MethodCallRecorder, RecordedCallFailure, RecordedResponse
 from memcontam.logging.provenance import phase11_lineage_metadata
 from memcontam.logging.schema import VerifierResult
+from memcontam.experiment.phase12.filter_challenge.provenance import (
+    finalize_answer_call,
+    finalize_failed_answer_call,
+)
 from memcontam.memory.bot_buffer import (
     BotBufferIdentity,
     NativeNoveltyDecision,
@@ -78,10 +82,11 @@ class BotRuntime:
         verifier: Verifier | None = None,
     ) -> BaselineExecutionOutcome:
         call_config = {**config, "sample_id": config.get("sample_id", task.sample_id)}
+        provenance_observer = call_config.get("_logging_answer_call_provenance_observer")
         embedding_provider = call_config.get("embedding_provider")
         if embedding_provider is None:
             raise ValueError("BoT runtime requires an explicit embedding_provider")
-        recorder = MethodCallRecorder(client)
+        recorder = MethodCallRecorder(client, trial_context={"trial_id": _trial_id(identity, task)})
         memory_before = tuple(entry.model_dump() for entry in buffer_snapshot)
         tool_mode = _tool_mode(call_config)
         metadata: dict[str, Any] = {
@@ -102,19 +107,41 @@ class BotRuntime:
         metadata["distilled_problem"] = distilled.model_dump()
         retrieval_decision = retrieve_top_template(distilled, buffer_snapshot, embedding_provider)
         metadata["retrieval_decision"] = _retrieval_decision_metadata(retrieval_decision)
+        final_source_ids = (
+            (retrieval_decision.matched_entry.entry_id,)
+            if retrieval_decision.matched_entry is not None
+            else ()
+        )
         if tool_mode == "text_only":
-            raw_solve = self.policy.template_instantiation_solve(
-                task,
-                distilled,
-                recorder,
-                model,
-                text_call_config,
-                retrieval_decision=retrieval_decision,
-            )
-            answer_call_id = recorder.get_records()[-1].call_id
+            recorded_solve: RecordedResponse | None = None
+
+            def capture_recorded_solve(response: RecordedResponse) -> None:
+                nonlocal recorded_solve
+                recorded_solve = response
+
+            try:
+                raw_solve = self.policy.template_instantiation_solve(
+                    task,
+                    distilled,
+                    recorder,
+                    model,
+                    {**text_call_config, "_logging_recorded_response_sink": capture_recorded_solve},
+                    retrieval_decision=retrieval_decision,
+                )
+            except RecordedCallFailure as failure:
+                finalize_failed_answer_call(provenance_observer, failure.failed_call)
+                return _failure_outcome(
+                    recorder,
+                    memory_before,
+                    metadata,
+                    "provider_call_failed",
+                    failure.failed_call.call_id,
+                )
+            if recorded_solve is None:
+                raise ToolProtocolError("MISSING_FINAL_CALL")
         else:
             try:
-                raw_solve, answer_call_id, tool_events, trajectory = _tool_augmented_solve(
+                raw_solve, recorded_solve, tool_events, trajectory = _tool_augmented_solve(
                     identity=identity,
                     task=task,
                     distilled_problem=distilled,
@@ -123,6 +150,16 @@ class BotRuntime:
                     model=model,
                     config=call_config,
                 )
+            except RecordedCallFailure as failure:
+                metadata["tool_error_code"] = "PROVIDER_CALL_FAILED"
+                finalize_failed_answer_call(provenance_observer, failure.failed_call)
+                return _failure_outcome(
+                    recorder,
+                    memory_before,
+                    metadata,
+                    "provider_call_failed",
+                    failure.failed_call.call_id,
+                )
             except (
                 ToolExecutionError,
                 ToolInfrastructureError,
@@ -130,18 +167,55 @@ class BotRuntime:
                 ToolProtocolError,
             ) as error:
                 metadata["tool_error_code"] = error.code
+                failed_call = error.failed_call if isinstance(error, ToolProtocolError) else None
+                if failed_call is not None:
+                    finalize_failed_answer_call(provenance_observer, failed_call)
+                    return _failure_outcome(
+                        recorder,
+                        memory_before,
+                        metadata,
+                        "provider_call_failed",
+                        failed_call.call_id,
+                    )
+                recorded_response = (
+                    error.recorded_response if isinstance(error, ToolProtocolError) else None
+                )
+                if recorded_response is not None:
+                    finalize_answer_call(
+                        provenance_observer,
+                        recorded_response,
+                        final_source_ids,
+                        None,
+                        None,
+                    )
+                    return _failure_outcome(
+                        recorder,
+                        memory_before,
+                        metadata,
+                        "bot_invalid_solve_result",
+                        recorded_response.call_id,
+                        final_response=recorded_response.response.content,
+                    )
                 return _failure_outcome(
                     recorder,
                     memory_before,
                     metadata,
                     "bot_invalid_solve_result",
-                    recorder.get_records()[-1].call_id if recorder.get_records() else None,
+                    None,
                 )
             metadata["tool_events"] = tool_events
             metadata["executed_trajectory"] = trajectory
+        answer_call_id = recorded_solve.call_id
         try:
             solve_result = parse_bot_solve_result(raw_solve, retrieval_decision)
         except ValueError:
+            finalize_answer_call(
+                provenance_observer,
+                recorded_solve,
+                final_source_ids,
+                None,
+                None,
+            )
             return _failure_outcome(
                 recorder,
                 memory_before,
@@ -155,6 +229,13 @@ class BotRuntime:
         try:
             parsed_answer = parse_final_answer(solve_result.final_answer)
         except ValueError:
+            finalize_answer_call(
+                provenance_observer,
+                recorded_solve,
+                final_source_ids,
+                None,
+                None,
+            )
             return _failure_outcome(
                 recorder,
                 memory_before,
@@ -185,6 +266,13 @@ class BotRuntime:
             )
         except BoTToolContractError as error:
             metadata["tool_contract_error"] = error.code
+            finalize_answer_call(
+                provenance_observer,
+                recorded_solve,
+                tuple(visible_entry_ids),
+                parsed_answer,
+                None,
+            )
             return invalid_distillation_failure_outcome(
                 recorder=recorder,
                 memory_before=memory_before,
@@ -195,6 +283,13 @@ class BotRuntime:
                 retrieval_decision=retrieval_decision,
             )
         except ValueError:
+            finalize_answer_call(
+                provenance_observer,
+                recorded_solve,
+                tuple(visible_entry_ids),
+                parsed_answer,
+                None,
+            )
             return invalid_distillation_failure_outcome(
                 recorder=recorder,
                 memory_before=memory_before,
@@ -223,6 +318,13 @@ class BotRuntime:
             verifier_result = _verify(verifier, parsed_answer)
         except Exception:
             materialized = materialize_frozen_transition(frozen_transition, source_outcome=None)
+            finalize_answer_call(
+                provenance_observer,
+                recorded_solve,
+                tuple(visible_entry_ids),
+                parsed_answer,
+                None,
+            )
             return _failure_outcome(
                 recorder,
                 memory_before,
@@ -238,6 +340,13 @@ class BotRuntime:
 
         materialized = materialize_frozen_transition(
             frozen_transition, source_outcome=verifier_result
+        )
+        finalize_answer_call(
+            provenance_observer,
+            recorded_solve,
+            tuple(visible_entry_ids),
+            parsed_answer,
+            verifier_result,
         )
         return BaselineExecutionOutcome(
             status="succeeded",
@@ -357,6 +466,7 @@ def _failure_outcome(
         "bot_invalid_problem_distillation",
         "bot_invalid_solve_result",
         "bot_invalid_thought_distillation",
+        "provider_call_failed",
         "verifier_contract_failed",
     ],
     answer_call_id: str | None,
@@ -377,6 +487,7 @@ def _failure_outcome(
             "BaselineOutputError",
             "invalid_thought_distillation",
         ),
+        "provider_call_failed": ("ProviderCallFailure", "provider_call_failed"),
         "verifier_contract_failed": (
             "VerifierContractError",
             "verifier_contract_failed",
@@ -444,7 +555,7 @@ def _tool_augmented_solve(
     recorder: MethodCallRecorder,
     model: str,
     config: dict[str, Any],
-) -> tuple[str, str, tuple[Any, ...], list[dict[str, Any]]]:
+) -> tuple[str, RecordedResponse, tuple[Any, ...], list[dict[str, Any]]]:
     executor = config.get("tool_executor")
     policy = config.get("tool_runtime_contract")
     if executor is None or policy is None:
@@ -461,29 +572,29 @@ def _tool_augmented_solve(
         "_bot_retrieval_decision": retrieval_decision.decision,
         "source_spans": source_spans,
     }
-    response = recorder.chat(messages, model, solve_config)
-    initial_record = recorder.get_records()[-1]
-    if initial_record.call_id is None:
-        raise ToolProtocolError("MISSING_INITIAL_CALL")
+    recorded_response = recorder.chat_with_call_id(messages, model, solve_config)
     tool_result = run_tool_loop(
         LlmCall(
-            call_id=initial_record.call_id,
-            content=response.content,
+            call_id=recorded_response.call_id,
+            content=recorded_response.response.content,
             messages=messages,
             model=model,
             config=solve_config,
             run_id=identity.run_id,
             trial_id=_trial_id(identity, task),
             max_rounds=int(config.get("max_tool_rounds", 3)),
+            recorded_response=recorded_response,
         ),
         recorder,
         executor,
         policy,
         writer=config.get("_tool_event_writer"),
     )
+    if tool_result.recorded_response is None:
+        raise ToolProtocolError("MISSING_FINAL_CALL")
     return (
         tool_result.answer,
-        tool_result.answer_call_id,
+        tool_result.recorded_response,
         tool_result.tool_events,
         _executed_trajectory(recorder, tool_result.tool_events),
     )

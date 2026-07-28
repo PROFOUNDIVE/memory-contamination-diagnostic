@@ -8,10 +8,15 @@ from memcontam.baselines.common import parse_final_answer
 from memcontam.baselines.contracts import BaselineExecutionOutcome
 from memcontam.baselines import retrieval_rag_adapter as legacy_rag
 from memcontam.clients.base import LLMClient
-from memcontam.clients.recording import MethodCallRecorder
+from memcontam.clients.recording import MethodCallRecorder, RecordedCallFailure
 from memcontam.logging.schema import RetrievalRecord
 from memcontam.logging.schema_v3 import ContextEvent, RetrievalEvent
 from memcontam.memory.stores import MemoryEntry, MemoryState
+from memcontam.experiment.phase12.filter_challenge.provenance import (
+    AnswerCallProvenanceObserver,
+    finalize_answer_call,
+    finalize_failed_answer_call,
+)
 from memcontam.rag.branch_index import BranchIndex
 from memcontam.rag.phase12_corpus import BranchCorpus, Document
 from memcontam.tasks.base import TaskInstance
@@ -50,6 +55,7 @@ class RagFrozenTrialContextV3:
     included_document_ids: tuple[str, ...] | None = None
     claimed_exposure_document_ids: tuple[str, ...] | None = None
     verifier: Any = None
+    provenance_observer: AnswerCallProvenanceObserver | None = None
 
     def __post_init__(self) -> None:
         if not all((self.run_id, self.trial_id, self.condition_id)):
@@ -207,10 +213,11 @@ def _run_answer(
 ) -> BaselineExecutionOutcome:
     memory = MemoryState(entries=[_memory_entry(record) for record in records])
     memory_before = tuple(entry.model_dump() for entry in memory.entries)
-    recorder = MethodCallRecorder(trial.client)
+    recorder = MethodCallRecorder(trial.client, trial_context={"trial_id": trial.trial_id})
+    provenance_observer = trial.provenance_observer
     messages, source_spans = legacy_rag._messages(trial.task, records, memory.entries)
     try:
-        response = recorder.chat(
+        recorded_response = recorder.chat_with_call_id(
             messages,
             model=trial.model,
             config={
@@ -219,7 +226,8 @@ def _run_answer(
                 "source_spans": source_spans,
             },
         )
-    except Exception:
+    except RecordedCallFailure as failure:
+        finalize_failed_answer_call(provenance_observer, failure.failed_call)
         return legacy_rag._failed_outcome(
             recorder,
             memory_before,
@@ -227,28 +235,27 @@ def _run_answer(
             "ProviderCallFailure",
             "provider_call_failed",
             "provider_call_failed",
+            answer_call_id=failure.failed_call.call_id,
             records=records,
         )
-    if response is None:
-        return legacy_rag._failed_outcome(
-            recorder,
-            memory_before,
-            memory,
-            "ProviderCallFailure",
-            "provider_call_failed",
-            "provider_call_failed",
-            records=records,
-        )
+    response = recorded_response.response
 
     method_calls = recorder.get_records()
     if method_calls:
         method_calls[-1].retrieved_records = records
-    answer_call_id = legacy_rag._answer_call_id(recorder)
+    answer_call_id = recorded_response.call_id
     try:
         parsed_answer = parse_final_answer(response.content)
     except ValueError:
         parsed_answer = ""
     if not parsed_answer:
+        finalize_answer_call(
+            provenance_observer,
+            recorded_response,
+            tuple(record.document_id for record in records),
+            None,
+            None,
+        )
         return legacy_rag._failed_outcome(
             recorder,
             memory_before,
@@ -263,6 +270,13 @@ def _run_answer(
     try:
         verifier_result = legacy_rag._verify(trial.verifier, parsed_answer, trial.task)
     except Exception:
+        finalize_answer_call(
+            provenance_observer,
+            recorded_response,
+            tuple(record.document_id for record in records),
+            parsed_answer,
+            None,
+        )
         return legacy_rag._failed_outcome(
             recorder,
             memory_before,
@@ -275,6 +289,13 @@ def _run_answer(
             answer_call_id=answer_call_id,
             records=records,
         )
+    finalize_answer_call(
+        provenance_observer,
+        recorded_response,
+        tuple(record.document_id for record in records),
+        parsed_answer,
+        verifier_result,
+    )
     return BaselineExecutionOutcome(
         status="succeeded",
         final_response=response.content,

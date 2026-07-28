@@ -17,7 +17,7 @@ from memcontam.baselines.full_history import (
 )
 from memcontam.baselines.full_history_context import render_context_bounded_history
 from memcontam.clients.base import LLMClient
-from memcontam.clients.recording import MethodCallRecorder
+from memcontam.clients.recording import MethodCallRecorder, RecordedCallFailure
 from memcontam.logging.provenance import (
     PromptSourcePart,
     build_prompt_with_sources,
@@ -25,6 +25,10 @@ from memcontam.logging.provenance import (
 )
 from memcontam.logging.schema import VerifierResult
 from memcontam.memory.stores import MemoryEntry
+from memcontam.experiment.phase12.filter_challenge.provenance import (
+    finalize_answer_call,
+    finalize_failed_answer_call,
+)
 from memcontam.tasks.base import TaskInstance
 from memcontam.tasks.dispatch import canonical_task_json
 
@@ -41,6 +45,7 @@ class FullHistoryAdapter:
         verifier: Callable[[str, TaskInstance], VerifierResult | bool] | None = None,
     ) -> BaselineExecutionOutcome:
         config = dict(config or {})
+        provenance_observer = config.get("_logging_answer_call_provenance_observer")
         memory_before = tuple(record.model_dump() for record in state.records)
         messages, source_spans, selected_records, telemetry = _messages(task, state, config)
         trial_id = _trial_id(task, config, model)
@@ -50,7 +55,7 @@ class FullHistoryAdapter:
             trial_context={**config.get("_logging_trial_context", {}), "trial_id": trial_id},
         )
         try:
-            response = recorder.chat(
+            recorded_response = recorder.chat_with_call_id(
                 messages,
                 model=model,
                 config={
@@ -60,29 +65,20 @@ class FullHistoryAdapter:
                     "source_spans": source_spans,
                 },
             )
-        except Exception:
+        except RecordedCallFailure as failure:
+            finalize_failed_answer_call(provenance_observer, failure.failed_call)
             return _failed_outcome(
                 recorder,
                 memory_before,
                 state,
-                answer_call_id=_answer_call_id(recorder),
+                answer_call_id=failure.failed_call.call_id,
                 error_type="ProviderCallFailure",
                 failure_disposition="provider_call_failed",
                 scientific_ineligibility_reason="provider_call_failed",
                 metadata={"full_history_context": telemetry},
             )
 
-        if response is None:
-            return _failed_outcome(
-                recorder,
-                memory_before,
-                state,
-                answer_call_id=_answer_call_id(recorder),
-                error_type="ProviderCallFailure",
-                failure_disposition="provider_call_failed",
-                scientific_ineligibility_reason="provider_call_failed",
-                metadata={"full_history_context": telemetry},
-            )
+        response = recorded_response.response
 
         entry = _append_response(
             task,
@@ -100,12 +96,19 @@ class FullHistoryAdapter:
             "source_trial_id": trial_id,
             "source_entry_ids": list(entry.metadata["source_entry_ids"]),
         }
-        answer_call_id = _answer_call_id(recorder)
+        answer_call_id = recorded_response.call_id
         try:
             parsed_answer = parse_final_answer(response.content)
         except (TypeError, ValueError):
             parsed_answer = ""
         if not parsed_answer:
+            finalize_answer_call(
+                provenance_observer,
+                recorded_response,
+                tuple(record.entry_id for record in selected_records),
+                None,
+                None,
+            )
             return _failed_outcome(
                 recorder,
                 memory_before,
@@ -122,6 +125,13 @@ class FullHistoryAdapter:
         try:
             verifier_result = _verify(verifier, parsed_answer, task)
         except Exception:
+            finalize_answer_call(
+                provenance_observer,
+                recorded_response,
+                tuple(record.entry_id for record in selected_records),
+                parsed_answer,
+                None,
+            )
             return _failed_outcome(
                 recorder,
                 memory_before,
@@ -136,6 +146,13 @@ class FullHistoryAdapter:
                 metadata={"full_history_context": telemetry},
             )
 
+        finalize_answer_call(
+            provenance_observer,
+            recorded_response,
+            tuple(record.entry_id for record in selected_records),
+            parsed_answer,
+            verifier_result,
+        )
         return BaselineExecutionOutcome(
             status="succeeded",
             final_response=response.content,
@@ -264,8 +281,3 @@ def _trial_id(task: TaskInstance, config: dict[str, Any], model: str) -> str:
             str(config.get("model", model)),
         ]
     )
-
-
-def _answer_call_id(recorder: MethodCallRecorder) -> str | None:
-    records = recorder.get_records()
-    return records[0].call_id if records else None

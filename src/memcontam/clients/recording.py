@@ -1,11 +1,30 @@
 from __future__ import annotations
 
 import inspect
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable
 
 from memcontam.clients.base import LLMClient, LLMResponse
 from memcontam.logging.schema import CallEvent, MethodCall, PromptSourceSpan
+
+
+@dataclass(frozen=True, slots=True)
+class RecordedResponse:
+    call_id: str
+    response: LLMResponse
+
+
+@dataclass(frozen=True, slots=True)
+class FailedRecordedCall:
+    call_id: str
+
+
+class RecordedCallFailure(RuntimeError):
+    def __init__(self, failed_call: FailedRecordedCall, provider_error: Exception) -> None:
+        self.failed_call = failed_call
+        self.provider_error = provider_error
+        super().__init__(str(provider_error))
 
 
 class MethodCallRecorder:
@@ -22,6 +41,16 @@ class MethodCallRecorder:
         self._call_indices: dict[str, int] = {}
 
     def chat(self, messages: list[dict[str, str]], model: str, config: dict) -> LLMResponse:
+        return self._chat(messages, model, config, entrypoint="chat").response
+
+    def chat_with_call_id(
+        self, messages: list[dict[str, str]], model: str, config: dict
+    ) -> RecordedResponse:
+        return self._chat(messages, model, config, entrypoint="chat_with_call_id")
+
+    def _chat(
+        self, messages: list[dict[str, str]], model: str, config: dict, *, entrypoint: str
+    ) -> RecordedResponse:
         stage = config.get("method_stage", "unknown")
         trial_id = self._trial_context.get("trial_id", "unknown")
         call_index = self._next_call_index(trial_id)
@@ -61,6 +90,7 @@ class MethodCallRecorder:
             )
         except Exception as exc:
             failure = self._capture_failure()
+            failure["function"] = entrypoint
             call_event = call_event.model_copy(
                 update={
                     "response_text": None,
@@ -77,6 +107,8 @@ class MethodCallRecorder:
             self._records.append(method_call)
             if self._event_callback is not None:
                 self._event_callback(call_event)
+            if entrypoint == "chat_with_call_id":
+                raise RecordedCallFailure(FailedRecordedCall(call_id), exc) from exc
             raise
 
         call_event = call_event.model_copy(
@@ -90,7 +122,7 @@ class MethodCallRecorder:
         self._records.append(method_call)
         if self._event_callback is not None:
             self._event_callback(call_event)
-        return response
+        return RecordedResponse(call_id=call_id, response=response)
 
     def get_records(self) -> list[MethodCall]:
         return list(self._records)

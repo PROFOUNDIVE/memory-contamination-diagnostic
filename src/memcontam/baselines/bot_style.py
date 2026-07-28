@@ -10,6 +10,7 @@ from memcontam.baselines.bot_read import (
     retrieve_top_template,
 )
 from memcontam.baselines.bot_solve import parse_bot_solve_result, render_bot_solve_prompt
+from memcontam.clients.recording import RecordedResponse
 from memcontam.memory.embeddings import EmbeddingProvider
 from memcontam.memory.stores import MemoryState
 from memcontam.tasks.base import TaskInstance
@@ -66,13 +67,30 @@ class BotStylePolicy:
         config: dict[str, Any],
         retrieval_decision: BoTRetrievalDecision,
     ) -> str:
+        recorded_response = self.template_instantiation_solve_with_call_id(
+            task, distilled, client, model, config, retrieval_decision=retrieval_decision
+        )
+        response_sink = config.get("_logging_recorded_response_sink")
+        if callable(response_sink):
+            response_sink(recorded_response)
+        return recorded_response.response.content
+
+    def template_instantiation_solve_with_call_id(
+        self,
+        task: TaskInstance,
+        distilled: DistilledProblem,
+        client: Any,
+        model: str,
+        config: dict[str, Any],
+        retrieval_decision: BoTRetrievalDecision,
+    ) -> RecordedResponse:
         content, source_spans = render_bot_solve_prompt(task, distilled, retrieval_decision)
         call_config = dict(config)
         call_config.setdefault("sample_id", task.sample_id)
         call_config["method_stage"] = "bot_instantiate_solve"
         call_config["_bot_retrieval_decision"] = retrieval_decision.decision
         call_config["source_spans"] = source_spans
-        response = client.chat(
+        return client.chat_with_call_id(
             [
                 {"role": "system", "content": _INSTANTIATION_INSTRUCTIONS},
                 {"role": "user", "content": content},
@@ -80,4 +98,3 @@ class BotStylePolicy:
             model,
             call_config,
         )
-        return response.content

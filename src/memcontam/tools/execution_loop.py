@@ -4,22 +4,35 @@ from dataclasses import dataclass
 import hashlib
 import json
 import time
-from typing import Any, Mapping, cast
+from typing import Any, Mapping, Protocol
 
-from memcontam.clients.base import LLMClient
+from memcontam.clients.recording import FailedRecordedCall, RecordedCallFailure, RecordedResponse
 from memcontam.logging.schema_v3 import ToolEvent
 from memcontam.tools.base import ToolExecutionError, ToolExecutor, ToolRequest, ToolRuntimeContract
 from memcontam.tools.python_sandbox import PythonSandbox
 
 
 class ToolProtocolError(RuntimeError):
-    def __init__(self, code: str) -> None:
+    def __init__(
+        self,
+        code: str,
+        recorded_response: RecordedResponse | None = None,
+        failed_call: FailedRecordedCall | None = None,
+    ) -> None:
         self.code = code
+        self.recorded_response = recorded_response
+        self.failed_call = failed_call
         super().__init__(code)
 
 
 class ToolTimeoutError(ToolExecutionError):
     pass
+
+
+class RecordedCallClient(Protocol):
+    def chat_with_call_id(
+        self, messages: list[dict[str, str]], model: str, config: dict
+    ) -> RecordedResponse: ...
 
 
 @dataclass(frozen=True)
@@ -32,10 +45,13 @@ class LlmCall:
     run_id: str
     trial_id: str
     max_rounds: int = 3
+    recorded_response: RecordedResponse | None = None
 
     def __post_init__(self) -> None:
         if not all((self.call_id, self.run_id, self.trial_id)) or self.max_rounds < 1:
             raise ToolProtocolError("INVALID_TOOL_LOOP_CALL")
+        if self.recorded_response is not None and self.recorded_response.call_id != self.call_id:
+            raise ToolProtocolError("RECORDED_CALL_ID_MISMATCH")
 
 
 @dataclass(frozen=True)
@@ -43,11 +59,12 @@ class ToolAugmentedResult:
     answer: str
     answer_call_id: str
     tool_events: tuple[ToolEvent, ...]
+    recorded_response: RecordedResponse | None
 
 
 def run_tool_loop(
     initial_call: LlmCall,
-    client: LLMClient,
+    client: RecordedCallClient,
     executor: ToolExecutor,
     policy: ToolRuntimeContract,
     *,
@@ -59,11 +76,16 @@ def run_tool_loop(
     events: list[ToolEvent] = []
 
     for round_index in range(1, initial_call.max_rounds + 2):
-        action = _parse_action(current_call.content)
+        try:
+            action = _parse_action(current_call.content)
+        except ToolProtocolError as error:
+            raise ToolProtocolError(error.code, current_call.recorded_response) from error
         if action["action"] == "final":
-            return ToolAugmentedResult(action["answer"], current_call.call_id, tuple(events))
+            return ToolAugmentedResult(
+                action["answer"], current_call.call_id, tuple(events), current_call.recorded_response
+            )
         if round_index > initial_call.max_rounds:
-            raise ToolProtocolError("MAX_TOOL_ROUNDS_EXCEEDED")
+            raise ToolProtocolError("MAX_TOOL_ROUNDS_EXCEEDED", current_call.recorded_response)
 
         request = ToolRequest(action["code"], timeout_seconds=action.get("timeout_seconds"))
         started_at = time.monotonic_ns()
@@ -96,7 +118,7 @@ def run_tool_loop(
         events.append(_write_event(writer, event))
         current_call = continuation
 
-    raise ToolProtocolError("MAX_TOOL_ROUNDS_EXCEEDED")
+    raise ToolProtocolError("MAX_TOOL_ROUNDS_EXCEEDED", current_call.recorded_response)
 
 
 def _parse_action(content: str) -> dict[str, Any]:
@@ -126,12 +148,7 @@ def _parse_action(content: str) -> dict[str, Any]:
     return action
 
 
-def _continuation_call(client: LLMClient, parent: LlmCall, result: Any) -> LlmCall:
-    records = getattr(client, "get_records", None)
-    if not callable(records):
-        raise ToolProtocolError("MISSING_CONTINUATION")
-    before_records = cast(list[Any], records())
-    before = len(before_records)
+def _continuation_call(client: RecordedCallClient, parent: LlmCall, result: Any) -> LlmCall:
     messages = [
         *parent.messages,
         {"role": "assistant", "content": parent.content},
@@ -145,24 +162,21 @@ def _continuation_call(client: LLMClient, parent: LlmCall, result: Any) -> LlmCa
         },
     ]
     try:
-        response = client.chat(messages, parent.model, dict(parent.config))
+        recorded_response = client.chat_with_call_id(messages, parent.model, dict(parent.config))
+    except RecordedCallFailure as error:
+        raise ToolProtocolError("MISSING_CONTINUATION", failed_call=error.failed_call) from error
     except Exception as error:
         raise ToolProtocolError("MISSING_CONTINUATION") from error
-    updated_records = cast(list[Any], records())
-    if len(updated_records) <= before:
-        raise ToolProtocolError("MISSING_CONTINUATION")
-    continuation_call_id = updated_records[-1].call_id
-    if not isinstance(continuation_call_id, str):
-        raise ToolProtocolError("MISSING_CONTINUATION")
     return LlmCall(
-        call_id=continuation_call_id,
-        content=response.content,
+        call_id=recorded_response.call_id,
+        content=recorded_response.response.content,
         messages=messages,
         model=parent.model,
         config=parent.config,
         run_id=parent.run_id,
         trial_id=parent.trial_id,
         max_rounds=parent.max_rounds,
+        recorded_response=recorded_response,
     )
 
 

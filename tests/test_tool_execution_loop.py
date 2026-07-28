@@ -36,18 +36,17 @@ class _FakeClient:
 
 def _initial_call(recorder: MethodCallRecorder, *, max_rounds: int = 2) -> LlmCall:
     messages = [{"role": "user", "content": "Solve with JSON actions only."}]
-    response = recorder.chat(messages, "gpt-replay", {"method_stage": "tool_generate"})
-    record = recorder.get_records()[-1]
-    assert record.call_id is not None
+    recorded = recorder.chat_with_call_id(messages, "gpt-replay", {"method_stage": "tool_generate"})
     return LlmCall(
-        call_id=record.call_id,
-        content=response.content,
+        call_id=recorded.call_id,
+        content=recorded.response.content,
         messages=messages,
         model="gpt-replay",
         config={"method_stage": "tool_generate"},
         run_id="run-1",
         trial_id="trial-1",
         max_rounds=max_rounds,
+        recorded_response=recorded,
     )
 
 
@@ -70,6 +69,9 @@ def test_links_one_execution_to_one_continuation_and_final_answer() -> None:
 
     assert result.answer == "final: 43"
     assert result.answer_call_id == "trial-1:call:2"
+    assert result.recorded_response is not None
+    assert result.recorded_response.call_id == result.answer_call_id
+    assert result.recorded_response.response.content == json.dumps({"action": "final", "answer": "final: 43"})
     assert [record.call_id for record in recorder.get_records()] == [
         "trial-1:call:1",
         "trial-1:call:2",
@@ -137,6 +139,29 @@ def test_rejects_invalid_action_missing_continuation_timeout_and_malformed_final
         run_tool_loop(_initial_call(recorder), recorder, SubprocessTestDouble(), _policy())
 
 
+@pytest.mark.parametrize(
+    ("content", "code"),
+    [
+        ("not json", "MALFORMED_ACTION"),
+        (json.dumps({"action": "execute_shell", "command": "true"}), "UNKNOWN_ACTION"),
+        (json.dumps({"action": "final", "answer": ""}), "MALFORMED_FINAL"),
+    ],
+)
+def test_preserves_current_response_for_generic_tool_protocol_errors(
+    content: str, code: str
+) -> None:
+    # Given: a recorded initial answer with an invalid tool protocol action.
+    recorder = MethodCallRecorder(_FakeClient([content]), trial_context={"trial_id": "trial-1"})
+    initial = _initial_call(recorder)
+
+    # When: the tool loop rejects the action.
+    with pytest.raises(ToolProtocolError, match=code) as raised:
+        run_tool_loop(initial, recorder, SubprocessTestDouble(), _policy())
+
+    # Then: the error retains the exact recorded answer rather than record-list recovery.
+    assert raised.value.recorded_response == initial.recorded_response
+
+
 def test_enforces_maximum_rounds_without_judging_successful_output() -> None:
     client = _FakeClient(
         [
@@ -146,10 +171,18 @@ def test_enforces_maximum_rounds_without_judging_successful_output() -> None:
     )
     recorder = MethodCallRecorder(client, trial_context={"trial_id": "trial-1"})
 
-    with pytest.raises(ToolProtocolError, match="MAX_TOOL_ROUNDS_EXCEEDED"):
+    # Given: the first action and its continuation are both recorded.
+    initial = _initial_call(recorder, max_rounds=1)
+
+    # When: the continuation requests another execution beyond the round limit.
+    with pytest.raises(ToolProtocolError, match="MAX_TOOL_ROUNDS_EXCEEDED") as raised:
         run_tool_loop(
-            _initial_call(recorder, max_rounds=1), recorder, SubprocessTestDouble(), _policy()
+            initial, recorder, SubprocessTestDouble(), _policy()
         )
+
+    # Then: the rejected continuation, not the initial request, remains the answer response.
+    assert raised.value.recorded_response is not None
+    assert raised.value.recorded_response.call_id == "trial-1:call:2"
 
 
 def test_preserves_syntactically_successful_wrong_execution_for_the_final_call() -> None:

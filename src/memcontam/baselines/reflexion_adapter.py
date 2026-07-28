@@ -18,7 +18,7 @@ from memcontam.baselines.contracts import (
     ScientificIneligibilityReason,
 )
 from memcontam.clients.base import LLMClient
-from memcontam.clients.recording import MethodCallRecorder
+from memcontam.clients.recording import MethodCallRecorder, RecordedCallFailure
 from memcontam.logging.provenance import (
     PromptSourcePart,
     build_prompt_with_sources,
@@ -29,6 +29,10 @@ from memcontam.logging.provenance import (
 )
 from memcontam.logging.schema import ContaminationClass, VerifierResult
 from memcontam.memory.stores import MemoryEntry
+from memcontam.experiment.phase12.filter_challenge.provenance import (
+    finalize_answer_call,
+    finalize_failed_answer_call,
+)
 from memcontam.tasks.base import TaskInstance
 from memcontam.tasks.dispatch import canonical_task_json
 
@@ -97,6 +101,7 @@ class ReflexionAdapter:
         verifier: Callable[[str, TaskInstance], VerifierResult | bool] | None = None,
     ) -> BaselineExecutionOutcome:
         config = dict(config or {})
+        provenance_observer = config.get("_logging_answer_call_provenance_observer")
         max_attempts = config.get("max_attempts", 2)
         if type(max_attempts) is not int or max_attempts not in {1, 2}:
             raise ValueError("reflexion max_attempts must be 1 or 2")
@@ -114,7 +119,7 @@ class ReflexionAdapter:
             visible_entries = visible_reflections(state)
             messages, source_spans = _generation_messages(task, visible_entries)
             try:
-                response = recorder.chat(
+                recorded_response = recorder.chat_with_call_id(
                     messages,
                     model=model,
                     config={
@@ -124,7 +129,8 @@ class ReflexionAdapter:
                         "source_spans": source_spans,
                     },
                 )
-            except Exception:
+            except RecordedCallFailure as failure:
+                finalize_failed_answer_call(provenance_observer, failure.failed_call)
                 return _failed_outcome(
                     recorder,
                     memory_before,
@@ -132,14 +138,20 @@ class ReflexionAdapter:
                     attempts,
                     reflection_events,
                     "provider_call_failed",
-                    answer_call_id=_answer_call_id(recorder),
+                    answer_call_id=failure.failed_call.call_id,
                 )
 
-            answer_call_id = recorder.get_records()[-1].call_id
-            if answer_call_id is None:
-                raise AssertionError("recorded generation call must have an ID")
+            response = recorded_response.response
+            answer_call_id = recorded_response.call_id
             parsed_answer = _parse_generation(response.content)
             if parsed_answer is None:
+                finalize_answer_call(
+                    provenance_observer,
+                    recorded_response,
+                    tuple(entry.entry_id for entry in visible_entries),
+                    None,
+                    None,
+                )
                 return _failed_outcome(
                     recorder,
                     memory_before,
@@ -153,6 +165,13 @@ class ReflexionAdapter:
             try:
                 verifier_result = _verify(verifier, parsed_answer, task)
             except Exception:
+                finalize_answer_call(
+                    provenance_observer,
+                    recorded_response,
+                    tuple(entry.entry_id for entry in visible_entries),
+                    parsed_answer,
+                    None,
+                )
                 return _failed_outcome(
                     recorder,
                     memory_before,
@@ -172,6 +191,13 @@ class ReflexionAdapter:
                 attempt_index=attempt_index,
                 answer_call_id=answer_call_id,
                 verifier_result=verifier_result,
+            )
+            finalize_answer_call(
+                provenance_observer,
+                recorded_response,
+                tuple(entry.entry_id for entry in visible_entries),
+                parsed_answer,
+                verifier_result,
             )
             if verifier_result:
                 return _succeeded_outcome(
