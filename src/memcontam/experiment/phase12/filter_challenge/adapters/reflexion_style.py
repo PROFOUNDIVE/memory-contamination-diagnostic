@@ -8,45 +8,134 @@ from memcontam.baselines.reflexion_phase12 import (
     ReflexionStateV3,
     ReflexionTrialContextV3,
 )
-from memcontam.memory.checkpoint_v3 import NativeEntry
+from memcontam.experiment.phase12.filter_challenge.adapters.base import FrozenCheckpoint
+from memcontam.experiment.phase12.filter_challenge.contracts import (
+    CandidateExposureRecord,
+    ChallengeCandidate,
+)
+from memcontam.memory.cards_v3 import canonical_content_hash
+from memcontam.memory.checkpoint_v3 import (
+    NATIVE_ENTRY_V1,
+    NativeEntry,
+    Phase12Checkpoint,
+    deserialize_checkpoint,
+)
 from memcontam.memory.stores import MemoryEntry
 
 
+class ReflexionChallengeError(ValueError):
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(code)
+
+
 @dataclass(frozen=True, slots=True)
-class ReflexionProvisionalResult:
+class ReflexionFrozenCheckpoint:
+    source_checkpoint: Phase12Checkpoint
+    trial: ReflexionTrialContextV3
+
+    def snapshot_id(self) -> str:
+        return self.source_checkpoint.identity.checkpoint_id
+
+
+class ReflexionProvisionalResult(CandidateExposureRecord):
     outcome: BaselineExecutionOutcome
     final_context_source_ids: tuple[str, ...]
-    candidate_final_context_inclusion: bool
     displaced_reflection_ids: tuple[str, ...]
 
 
 class ReflexionProvisionalAdapter:
     def execute(
         self,
-        trial: ReflexionTrialContextV3,
-        source_state: ReflexionStateV3,
-        candidate: NativeEntry,
+        checkpoint: FrozenCheckpoint,
+        candidate: ChallengeCandidate,
     ) -> ReflexionProvisionalResult:
-        reflections = [*source_state.reflections, candidate]
-        displaced_reflections: list[MemoryEntry | NativeEntry] = []
+        frozen_checkpoint = _require_reflexion_checkpoint(checkpoint)
+        _validate_candidate(frozen_checkpoint, candidate)
+        source_state = _source_state(frozen_checkpoint.source_checkpoint)
+        native_candidate = _native_candidate(candidate)
+        reflections = [*source_state.reflections, native_candidate]
+        displaced_reflection_ids: list[str] = []
         if source_state.active_capacity is not None:
             while len(reflections) > source_state.active_capacity:
-                displaced_reflections.append(reflections.pop(0))
+                displaced_reflection_ids.append(reflections.pop(0).entry_id)
         provisional_state = ReflexionStateV3(
             reflections=reflections,
             active_capacity=source_state.active_capacity,
         )
         result = ReflexionPhase12Adapter().execute(
-            replace(trial, config={**trial.config, "update_enabled": False}),
+            replace(frozen_checkpoint.trial, config={**frozen_checkpoint.trial.config, "update_enabled": False}),
             provisional_state,
         )
-        answer_call = next(
-            call for call in result.outcome.method_calls if call.call_id == result.outcome.answer_call_id
-        )
-        final_context_source_ids = tuple(span.entry_id for span in answer_call.source_spans)
+        final_context_source_ids = _answer_source_ids(result.outcome)
         return ReflexionProvisionalResult(
+            candidate_entry_id=candidate.candidate_entry_id,
+            candidate_final_context_inclusion=candidate.candidate_entry_id in final_context_source_ids,
+            candidate_final_context_source_ids=final_context_source_ids,
             outcome=result.outcome,
             final_context_source_ids=final_context_source_ids,
-            candidate_final_context_inclusion=candidate.entry_id in final_context_source_ids,
-            displaced_reflection_ids=tuple(entry.entry_id for entry in displaced_reflections),
+            displaced_reflection_ids=tuple(displaced_reflection_ids),
         )
+
+
+def _require_reflexion_checkpoint(checkpoint: FrozenCheckpoint) -> ReflexionFrozenCheckpoint:
+    if not isinstance(checkpoint, ReflexionFrozenCheckpoint):
+        raise ReflexionChallengeError("REFLEXION_CHECKPOINT_INVALID")
+    return checkpoint
+
+
+def _validate_candidate(
+    checkpoint: ReflexionFrozenCheckpoint, candidate: ChallengeCandidate
+) -> None:
+    if candidate.baseline_family != "reflexion_style":
+        raise ReflexionChallengeError("REFLEXION_BASELINE_MISMATCH")
+    if candidate.rag_mode != "not_applicable":
+        raise ReflexionChallengeError("REFLEXION_RAG_MODE_MISMATCH")
+    if candidate.candidate_native_kind != "verbal_reflection":
+        raise ReflexionChallengeError("REFLEXION_NATIVE_KIND_MISMATCH")
+    if candidate.source_checkpoint_id != checkpoint.snapshot_id():
+        raise ReflexionChallengeError("REFLEXION_CHECKPOINT_ID_MISMATCH")
+    if candidate.source_active_state_hash != checkpoint.source_checkpoint.canonical_sha256:
+        raise ReflexionChallengeError("REFLEXION_CHECKPOINT_HASH_MISMATCH")
+    if checkpoint.source_checkpoint.identity.baseline != "reflexion_style":
+        raise ReflexionChallengeError("REFLEXION_CHECKPOINT_BASELINE_MISMATCH")
+    if candidate.routability.routability != "challenge_routable_v1":
+        raise ReflexionChallengeError("REFLEXION_ROUTABILITY_MISMATCH")
+
+
+def _source_state(checkpoint: Phase12Checkpoint) -> ReflexionStateV3:
+    state = deserialize_checkpoint(checkpoint)
+    if state.baseline != "reflexion_style":
+        raise ReflexionChallengeError("REFLEXION_CHECKPOINT_STATE_INVALID")
+    reflections: list[MemoryEntry | NativeEntry] = []
+    for entry in state.entries:
+        if not isinstance(entry, NativeEntry):
+            raise ReflexionChallengeError("REFLEXION_CHECKPOINT_STATE_INVALID")
+        reflections.append(entry)
+    capacity = state.native_state.get("active_capacity")
+    if capacity is not None and (type(capacity) is not int or capacity < 1):
+        raise ReflexionChallengeError("REFLEXION_CHECKPOINT_CAPACITY_INVALID")
+    return ReflexionStateV3(
+        reflections=reflections,
+        active_capacity=capacity,
+    )
+
+
+def _native_candidate(candidate: ChallengeCandidate) -> NativeEntry:
+    return NativeEntry(
+        entry_id=candidate.candidate_entry_id,
+        semantic_kind=candidate.candidate_native_kind,
+        schema_version=NATIVE_ENTRY_V1,
+        native_component="reflections",
+        content=candidate.candidate_native_content,
+        content_hash=canonical_content_hash(candidate.candidate_native_content),
+    )
+
+
+def _answer_source_ids(outcome: BaselineExecutionOutcome) -> tuple[str, ...]:
+    if outcome.answer_call_id is None:
+        return ()
+    answer_calls = [call for call in outcome.method_calls if call.call_id == outcome.answer_call_id]
+    if len(answer_calls) != 1:
+        raise ReflexionChallengeError("REFLEXION_ANSWER_CALL_MISMATCH")
+    return tuple(span.entry_id for span in answer_calls[0].source_spans)

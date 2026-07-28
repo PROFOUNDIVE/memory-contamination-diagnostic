@@ -1,15 +1,27 @@
 from __future__ import annotations
 
-import hashlib
 import json
 from importlib import import_module
 
+import pytest
+
 from memcontam.baselines.reflexion_adapter import ReflexionAdapter, ReflexionState
-from memcontam.baselines.reflexion_phase12 import ReflexionStateV3, ReflexionTrialContextV3
+from memcontam.baselines.reflexion_phase12 import ReflexionTrialContextV3
 from memcontam.clients.replay import ReplayClient
+from memcontam.experiment.phase12.filter_challenge.adapters.base import ChallengeAdapter
+from memcontam.experiment.phase12.filter_challenge.adapters.reflexion_style import (
+    ReflexionProvisionalAdapter,
+)
+from memcontam.experiment.phase12.filter_challenge.contracts import ChallengeCandidate
 from memcontam.experiment.phase12.filter_challenge.provenance import AnswerCallProvenanceObserver
 from memcontam.memory.cards_v3 import canonical_content_hash
-from memcontam.memory.checkpoint_v3 import NATIVE_ENTRY_V1, NativeEntry, NativeState, serialize_checkpoint
+from memcontam.memory.checkpoint_v3 import (
+    NATIVE_ENTRY_V1,
+    NativeEntry,
+    NativeState,
+    Phase12Checkpoint,
+    serialize_checkpoint,
+)
 from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
 
@@ -41,20 +53,34 @@ def _native_reflection(entry_id: str) -> NativeEntry:
     )
 
 
-def _state_hash(state: ReflexionStateV3) -> str:
-    checkpoint = serialize_checkpoint(
+def _checkpoint(entries: tuple[NativeEntry, ...], active_capacity: int) -> Phase12Checkpoint:
+    return serialize_checkpoint(
         NativeState(
             "reflexion_style",
-            tuple(state.reflections),
+            entries,
             {
-                "active_capacity": state.active_capacity,
-                "first_injected_eviction_trial_id": state.first_injected_eviction_trial_id,
-                "injected_root_id": state.injected_root_id,
-                "reflections": [entry.entry_id for entry in state.reflections],
+                "active_capacity": active_capacity,
+                "first_injected_eviction_trial_id": None,
+                "injected_root_id": None,
+                "reflections": [entry.entry_id for entry in entries],
             },
         )
     )
-    return hashlib.sha256(checkpoint.canonical_bytes).hexdigest()
+
+
+def _candidate(checkpoint: Phase12Checkpoint) -> ChallengeCandidate:
+    return ChallengeCandidate.model_validate(
+        {
+            "candidate_entry_id": "candidate",
+            "candidate_native_content": "Reflection: candidate",
+            "candidate_native_kind": "verbal_reflection",
+            "baseline_family": "reflexion_style",
+            "rag_mode": "not_applicable",
+            "source_checkpoint_id": checkpoint.identity.checkpoint_id,
+            "source_active_state_hash": checkpoint.canonical_sha256,
+            "routability": {"routability": "challenge_routable_v1", "challenge_suite_key": "synthetic"},
+        }
+    )
 
 
 def test_default_updater_retries_and_writes_after_a_failed_actor_answer() -> None:
@@ -113,13 +139,11 @@ def test_read_only_update_disabled_answers_once_without_reflection_retry_or_writ
     assert outcome.metadata["reflexion_reflection_events"] == []
 
 
-def test_provisional_adapter_appends_newest_native_candidate_and_uses_answer_source_ids() -> None:
-    source_state = ReflexionStateV3(
-        reflections=[_native_reflection(entry_id) for entry_id in ("one", "two", "three", "four")],
-        active_capacity=4,
+def test_provisional_adapter_conforms_to_challenge_contract_and_binds_candidate_exposure() -> None:
+    source_checkpoint = _checkpoint(
+        tuple(_native_reflection(entry_id) for entry_id in ("one", "two", "three", "four")), 4
     )
-    source_hash = _state_hash(source_state)
-    candidate = _native_reflection("candidate")
+    source_bytes, source_hash = source_checkpoint.canonical_bytes, source_checkpoint.canonical_sha256
     observer = AnswerCallProvenanceObserver()
     trial = ReflexionTrialContextV3(
         task=_task(),
@@ -137,7 +161,11 @@ def test_provisional_adapter_appends_newest_native_candidate_and_uses_answer_sou
         "memcontam.experiment.phase12.filter_challenge.adapters.reflexion_style"
     )
 
-    result = adapter_module.ReflexionProvisionalAdapter().execute(trial, source_state, candidate)
+    checkpoint = adapter_module.ReflexionFrozenCheckpoint(source_checkpoint, trial)
+    adapter = ReflexionProvisionalAdapter()
+    contract: ChallengeAdapter = adapter
+    assert contract is adapter
+    result = adapter.execute(checkpoint, _candidate(source_checkpoint))
 
     answer_call = result.outcome.method_calls[0]
     assert [entry["entry_id"] for entry in result.outcome.memory_before] == [
@@ -150,9 +178,45 @@ def test_provisional_adapter_appends_newest_native_candidate_and_uses_answer_sou
     assert result.final_context_source_ids == tuple(span.entry_id for span in answer_call.source_spans)
     assert result.final_context_source_ids == ("three", "four", "candidate")
     assert result.candidate_final_context_inclusion is True
-    assert result.candidate_final_context_inclusion == (
-        candidate.entry_id in result.final_context_source_ids
-    )
+    assert result.candidate_entry_id == "candidate"
+    assert result.candidate_final_context_source_ids == result.final_context_source_ids
     assert observer._finalized[answer_call.call_id].answer_call_provenance_status == "explicit_matched"
-    assert [entry.entry_id for entry in source_state.reflections] == ["one", "two", "three", "four"]
-    assert _state_hash(source_state) == source_hash
+    assert source_checkpoint.canonical_bytes == source_bytes
+    assert source_checkpoint.canonical_sha256 == source_hash
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "code"),
+    [
+        ("baseline_family", "full_history", "REFLEXION_BASELINE_MISMATCH"),
+        ("rag_mode", "frozen", "REFLEXION_RAG_MODE_MISMATCH"),
+        ("candidate_native_kind", "thought_template", "REFLEXION_NATIVE_KIND_MISMATCH"),
+        ("source_checkpoint_id", "other-checkpoint", "REFLEXION_CHECKPOINT_ID_MISMATCH"),
+        ("source_active_state_hash", "other-hash", "REFLEXION_CHECKPOINT_HASH_MISMATCH"),
+    ],
+)
+def test_provisional_adapter_rejects_mismatched_candidate_binding(
+    field: str, value: str, code: str
+) -> None:
+    source_checkpoint = _checkpoint((_native_reflection("source"),), 4)
+    trial = ReflexionTrialContextV3(
+        task=_task(),
+        client=ReplayClient(responses_by_sample={"sample-1": {"reflexion_generate": "final: right"}}),
+        model="replay",
+        run_id="provisional-reflexion",
+        trial_id="provisional-reflexion:challenge",
+        condition_id="reflexion_style",
+        branch="contam",
+        config={},
+        order_key=1,
+        verifier=lambda answer, _task: answer == "right",
+    )
+    adapter_module = import_module(
+        "memcontam.experiment.phase12.filter_challenge.adapters.reflexion_style"
+    )
+    candidate = _candidate(source_checkpoint).model_copy(update={field: value})
+
+    with pytest.raises(adapter_module.ReflexionChallengeError, match=code):
+        ReflexionProvisionalAdapter().execute(
+            adapter_module.ReflexionFrozenCheckpoint(source_checkpoint, trial), candidate
+        )
