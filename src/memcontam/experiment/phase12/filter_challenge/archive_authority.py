@@ -49,8 +49,8 @@ def expected_aggregate_state(
         for probe_id in aggregate.witness_probe_ids
     }
     contradiction_satisfied = (
-        aggregate.n_distinct_witness_probes >= kappa.min_distinct_witness_probes
-        and all(count >= kappa.min_witness_replicates_per_probe for count in witnesses_per_probe.values())
+        sum(count >= kappa.min_witness_replicates_per_probe for count in witnesses_per_probe.values())
+        >= kappa.min_distinct_witness_probes
     )
     return ("contradicted", "quarantine", "CONTRADICTED") if contradiction_satisfied else (
         "not_contradicted", "active", "NOT_CONTRADICTED"

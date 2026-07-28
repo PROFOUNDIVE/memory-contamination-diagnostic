@@ -261,6 +261,49 @@ def test_record_hash_uses_task_three_utf8_projection() -> None:
     assert module.canonical_record_hash(record) == expected
 
 
+def test_kappa_contradiction_accepts_one_qualifying_witness_probe() -> None:
+    authority = _authority(_module())
+    archive = _archive(authority)
+    search = authority.search_config.model_copy(
+        update={
+            "kappa_candidates": (
+                authority.search_config.kappa_candidates[0].model_copy(
+                    update={
+                        "min_total_evaluable_replicates": 3,
+                        "min_distinct_evaluable_probes": 2,
+                        "min_witness_replicates_per_probe": 2,
+                        "min_distinct_witness_probes": 1,
+                    }
+                ),
+            )
+        }
+    )
+    first = archive.assessments[0]
+    rows = (
+        first,
+        first.model_copy(update={"filter_assessment_id": "assessment-2"}),
+        first.model_copy(
+            update={"filter_assessment_id": "assessment-3", "probe_id": authority.inventory.probe_ids[1]}
+        ),
+    )
+    aggregate = archive.candidate_aggregates[0].model_copy(
+        update={
+            "n_strictly_evaluable": 3,
+            "n_distinct_evaluable_probes": 2,
+            "n_witness": 3,
+            "n_distinct_witness_probes": 2,
+            "witness_probe_ids": authority.inventory.probe_ids[:2],
+        }
+    )
+    authority_module = importlib.import_module("memcontam.experiment.phase12.filter_challenge.archive_authority")
+
+    assert authority_module.expected_aggregate_state(aggregate, rows, search) == (
+        "contradicted",
+        "quarantine",
+        "CONTRADICTED",
+    )
+
+
 @pytest.mark.parametrize(
     ("path", "code"),
     [
