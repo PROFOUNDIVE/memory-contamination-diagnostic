@@ -62,11 +62,7 @@ def verify_code_quality(
     ]
     if findings or not _evidence_serialization_valid(evidence_root, validation_summary):
         raise FinalVerifierError("CODE_QUALITY_REJECTED")
-    commands = (
-        _command(repository_root, "ruff", (sys.executable, "-m", "ruff", "check", *paths)),
-        _command(repository_root, "mypy", (sys.executable, "-m", "mypy", *paths)),
-        _command(repository_root, "diff-check", ("git", "diff", "--check", base_commit, implementation_commit)),
-    )
+    commands = quality_commands(repository_root, paths, base_commit, implementation_commit)
     if any(command["exit_code"] != 0 for command in commands):
         raise FinalVerifierError("CODE_QUALITY_REJECTED")
     changed_paths: list[JsonValue] = [*changed.splitlines()]
@@ -77,6 +73,16 @@ def verify_code_quality(
         "findings": [],
         "implementation_commit": implementation_commit,
     }
+
+
+def quality_commands(
+    repository_root: Path, paths: tuple[str, ...], base_commit: str, implementation_commit: str
+) -> tuple[dict[str, JsonValue], ...]:
+    return (
+        _command(repository_root, "ruff", (sys.executable, "-m", "ruff", "check", *paths)),
+        _command(repository_root, "mypy", (sys.executable, "-m", "mypy", *paths)),
+        _command(repository_root, "diff-check", ("git", "diff", "--check", base_commit, implementation_commit)),
+    )
 
 
 def _structural_findings(path: Path, repository_path: str | None = None) -> list[str]:

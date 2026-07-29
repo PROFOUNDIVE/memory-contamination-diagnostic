@@ -108,6 +108,10 @@ def _fixture(
             _actual_command_records(
                 repository, implementation_commit, fixture_root, tmp_path / "summary-scratch"
             ),
+            base_commit,
+            final_verifier_integration._search_hash(
+                fixture_root / "FilterChallengeSearchConfig.yaml"
+            ),
         ).model_dump_json()
         + "\n",
         encoding="utf-8",
