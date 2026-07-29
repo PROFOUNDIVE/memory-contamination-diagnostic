@@ -10,6 +10,8 @@ from typing import TypeAlias
 import pytest
 from pydantic import ValidationError
 
+import memcontam.clients.factory as client_factory_module
+from memcontam.clients.config import ProviderConfig
 from memcontam.experiment.phase12.filter_challenge.bct import (
     BCT_ARCHIVE_LAYOUT,
     BCT_EVIDENCE_FIELD_TUPLE,
@@ -26,6 +28,7 @@ from memcontam.experiment.phase12.filter_challenge.bct import (
     BCTEvidence,
     BCTReadiness,
     CallPriceRegistry,
+    ExecutionPreflight,
     ExecutionPreflightRequest,
     ExecutionPrerequisites,
     SoftwareInterfaceChecks,
@@ -199,6 +202,23 @@ def test_family_evidence_requires_applicable_fields_and_explicit_nulls() -> None
         validate_bct_evidence(missing_required.model_copy(update={"witness_status": "witness"}))
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "code"),
+    (
+        ("false_quarantine_status", None, "BCT_REQUIRED_RESULT_MISSING"),
+        ("witness_status", "must-be-null", "BCT_NONAPPLICABLE_RESULT_PRESENT"),
+    ),
+)
+def test_direct_evidence_validation_rejects_family_applicability_bypasses(
+    field: str, value: str | None, code: str
+) -> None:
+    payload = _evidence_payload("BCT-FV5-02-CORRECT")
+    payload[field] = value
+
+    with pytest.raises(ValidationError, match=code):
+        BCTEvidence.model_validate(payload)
+
+
 def test_cost_preview_uses_only_registered_cross_product_and_optional_explicit_price() -> None:
     auxiliary = (
         AuxiliaryCallCandidate(
@@ -311,6 +331,46 @@ def test_execution_preflight_reports_each_prerequisite_blocker(
     )
     assert result.execution_status == "blocked"
     assert len(result.blocking_reason_codes) == 1
+    constructed = 0
+
+    def forbidden_constructor() -> str:
+        nonlocal constructed
+        constructed += 1
+        return "client"
+
+    with pytest.raises(BCTAuthorizationError):
+        authorize_client_construction(
+            _software(), result, forbidden_constructor, stage="pilot_b"
+        )
+    assert constructed == 0
+
+
+@pytest.mark.parametrize(
+    "update",
+    (
+        {"provider_authorization_status": "absent"},
+        {"scientific_inventory_status": "pending_freeze"},
+        {"canonical_patch_status": "pending_before_provider_backed_pilot_b"},
+        {"blocking_reason_codes": ("PROVIDER_AUTHORIZATION_ABSENT",)},
+        {"overall_reason_code": "PROVIDER_AUTHORIZATION_ABSENT"},
+    ),
+)
+def test_direct_preflight_validation_rejects_incoherent_authorized_states(
+    update: dict[str, str | tuple[str, ...]],
+) -> None:
+    payload = {
+        "stage": "main",
+        "execution_status": "authorized",
+        "overall_reason_code": None,
+        "blocking_reason_codes": (),
+        "provider_authorization_status": "authorized",
+        "scientific_inventory_status": "frozen",
+        "canonical_patch_status": "applied",
+        **update,
+    }
+
+    with pytest.raises(ValidationError, match="EXECUTION_AUTHORIZATION_INCOHERENT"):
+        ExecutionPreflight.model_validate(payload)
 
 
 def test_main_requires_selected_policy_before_authorization_and_constructor_is_unreachable() -> None:
@@ -358,10 +418,12 @@ def test_main_requires_selected_policy_before_authorization_and_constructor_is_u
     assert build.execution_status == pilot_b.execution_status == main_ready.execution_status == "authorized"
     assert main_blocked.overall_reason_code == "SELECTED_POLICY_REQUIRED"
     with pytest.raises(BCTAuthorizationError, match="SELECTED_POLICY_REQUIRED"):
-        authorize_client_construction(software, main_blocked, forbidden_constructor)
+        authorize_client_construction(
+            software, main_blocked, forbidden_constructor, stage="main"
+        )
     with pytest.raises(BCTAuthorizationError, match="DOMAIN_SCHEMA_INVALID"):
         authorize_client_construction(
-            _software(domain_schema_valid=False), main_ready, forbidden_constructor
+            _software(domain_schema_valid=False), main_ready, forbidden_constructor, stage="main"
         )
     assert constructed == 0
     assert json.loads(build_readiness(
@@ -382,3 +444,47 @@ def test_main_requires_selected_policy_before_authorization_and_constructor_is_u
             None,
         ),
     ).model_dump_json())["provider_calls_issued"] == 0
+
+
+def test_build_preflight_cannot_construct_a_main_provider_factory_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prerequisites = ExecutionPrerequisites.model_validate(
+        _prerequisites().model_dump()
+        | {
+            "search_config_frozen": True,
+            "inventory_frozen": True,
+            "canonical_patch_status": "applied",
+            "provider_config_enabled": True,
+            "runtime_authorization_present": True,
+        }
+    )
+    software = _software()
+    build = evaluate_execution_preflight(
+        software,
+        ExecutionPreflightRequest(
+            search_config=_search(), selected_policy=None, stage="build", prerequisites=prerequisites
+        ),
+    )
+    constructed = 0
+
+    def forbidden_provider(*_args, **_kwargs) -> str:
+        nonlocal constructed
+        constructed += 1
+        return "client"
+
+    monkeypatch.setattr(client_factory_module, "OpenAICompatibleClient", forbidden_provider)
+
+    with pytest.raises(BCTAuthorizationError, match="EXECUTION_STAGE_MISMATCH"):
+        authorize_client_construction(
+            software,
+            build,
+            lambda: client_factory_module.build_llm_client(
+                ProviderConfig(provider="openai_compatible", live_calls_enabled=True),
+                stage="main",
+                execution_class="live",
+                allow_live_calls=True,
+            ),
+            stage="main",
+        )
+    assert constructed == 0

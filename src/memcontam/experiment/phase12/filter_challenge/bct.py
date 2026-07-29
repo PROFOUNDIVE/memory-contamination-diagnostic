@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Annotated, Callable, Final, Literal, TypeAlias, TypeVar
+from typing import Annotated, Callable, Final, Literal, Self, TypeAlias, TypeVar, assert_never
 
-from pydantic import BeforeValidator, Field
+from pydantic import BeforeValidator, Field, model_validator
 
 from memcontam.experiment.phase12.filter_challenge.registry import validate_stage
 from memcontam.experiment.phase12.filter_challenge.registry_common import (
@@ -199,6 +199,11 @@ class BCTEvidence(StrictRegistry):
     def required_result_fields(self) -> tuple[str, ...]:
         return _family_for(self.test_id).required_result_fields
 
+    @model_validator(mode="after")
+    def _validate_family(self) -> Self:
+        _validate_bct_family(self)
+        return self
+
 
 class SoftwareInterfaceChecks(StrictRegistry):
     domain_schema_valid: bool
@@ -236,12 +241,39 @@ class ExecutionPreflightRequest:
 
 
 class ExecutionPreflight(StrictRegistry):
+    stage: Literal["build", "pilot_b", "main"]
     execution_status: Literal["authorized", "blocked", "not_evaluated"]
     overall_reason_code: str | None
     blocking_reason_codes: StringTuple
     provider_authorization_status: Literal["authorized", "absent"]
     scientific_inventory_status: Literal["frozen", "pending_freeze"]
     canonical_patch_status: Literal["applied", "pending_before_provider_backed_pilot_b"]
+
+    @model_validator(mode="after")
+    def _validate_state(self) -> Self:
+        match self.execution_status:
+            case "authorized":
+                if (
+                    self.overall_reason_code is not None
+                    or self.blocking_reason_codes
+                    or self.provider_authorization_status != "authorized"
+                    or self.scientific_inventory_status != "frozen"
+                    or self.canonical_patch_status != "applied"
+                ):
+                    raise BCTAuthorizationError("EXECUTION_AUTHORIZATION_INCOHERENT")
+            case "blocked":
+                if (
+                    self.overall_reason_code is None
+                    or not self.blocking_reason_codes
+                    or self.blocking_reason_codes[0] != self.overall_reason_code
+                ):
+                    raise BCTAuthorizationError("EXECUTION_BLOCKED_STATE_INCOHERENT")
+            case "not_evaluated":
+                if self.overall_reason_code is None or self.blocking_reason_codes:
+                    raise BCTAuthorizationError("EXECUTION_NOT_EVALUATED_STATE_INCOHERENT")
+            case unreachable:
+                assert_never(unreachable)
+        return self
 
 
 class BCTFamilyStatus(StrictRegistry):
@@ -274,7 +306,7 @@ def _family_for(test_id: BCTTestId) -> BCTFamilyInterface:
     return next(family for family in BCT_FAMILY_INTERFACES if family.test_id == test_id)
 
 
-def validate_bct_evidence(evidence: BCTEvidence) -> BCTEvidence:
+def _validate_bct_family(evidence: BCTEvidence) -> None:
     family = _family_for(evidence.test_id)
     if (
         evidence.candidate_class != family.candidate_class
@@ -289,6 +321,10 @@ def validate_bct_evidence(evidence: BCTEvidence) -> BCTEvidence:
         for field in BCT_RESULT_FIELDS if field not in family.required_result_fields
     ):
         raise BCTContractError("BCT_NONAPPLICABLE_RESULT_PRESENT")
+
+
+def validate_bct_evidence(evidence: BCTEvidence) -> BCTEvidence:
+    _validate_bct_family(evidence)
     return evidence
 
 
@@ -352,7 +388,8 @@ def evaluate_execution_preflight(
     )
     if software.software_interface_status != "ready":
         return ExecutionPreflight(
-            execution_status="not_evaluated", overall_reason_code=software.software_interface_reason_code,
+            stage=request.stage, execution_status="not_evaluated",
+            overall_reason_code=software.software_interface_reason_code,
             blocking_reason_codes=(), provider_authorization_status=provider_status,
             scientific_inventory_status=inventory_status,
             canonical_patch_status=prerequisites.canonical_patch_status,
@@ -362,7 +399,7 @@ def evaluate_execution_preflight(
     )
     if stage_gate.reason_code is not None:
         return ExecutionPreflight(
-            execution_status="blocked", overall_reason_code=stage_gate.reason_code,
+            stage=request.stage, execution_status="blocked", overall_reason_code=stage_gate.reason_code,
             blocking_reason_codes=(stage_gate.reason_code,),
             provider_authorization_status=provider_status,
             scientific_inventory_status=inventory_status,
@@ -378,7 +415,7 @@ def evaluate_execution_preflight(
         ) if not passed
     )
     return ExecutionPreflight(
-        execution_status="blocked" if blockers else "authorized",
+        stage=request.stage, execution_status="blocked" if blockers else "authorized",
         overall_reason_code=blockers[0] if blockers else None,
         blocking_reason_codes=blockers,
         provider_authorization_status=provider_status,
@@ -426,9 +463,13 @@ def authorize_client_construction(
     software: SoftwareInterfaceReadiness,
     execution: ExecutionPreflight,
     client_factory: Callable[[], _Client],
+    *,
+    stage: Literal["build", "pilot_b", "main"],
 ) -> _Client:
     if software.software_interface_status != "ready":
         raise BCTAuthorizationError(software.software_interface_reason_code or "SOFTWARE_NOT_READY")
     if execution.execution_status != "authorized":
         raise BCTAuthorizationError(execution.overall_reason_code or "EXECUTION_NOT_AUTHORIZED")
+    if execution.stage != stage:
+        raise BCTAuthorizationError("EXECUTION_STAGE_MISMATCH")
     return client_factory()
