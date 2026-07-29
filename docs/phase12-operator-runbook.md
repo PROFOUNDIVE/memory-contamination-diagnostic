@@ -197,6 +197,7 @@ causal use, or production contamination diagnosis.
 
 ## Machine-checked CLI index
 
+- `command:phase12 filter-v5`
 - `command:phase12 validate`
 - `command:phase12 plan`
 - `command:phase12 preflight`
