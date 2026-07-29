@@ -453,7 +453,9 @@ def load_all_canonical_configs(root: Path) -> dict[str, ResolvedPhase12Config]:
             raise
         except OSError as exc:
             raise Phase12ConfigError("CANONICAL_CONFIG_MISSING") from exc
-    if {path.name for path in root.glob("*.yaml")} != set(_CANONICAL_CONFIG_NAMES):
+    yaml_names = {path.name for path in root.glob("*.yaml")}
+    yaml_names -= {"pilot_a_game24_minimal.yaml", "pilot_a_game24_scientific.yaml"}
+    if yaml_names != set(_CANONICAL_CONFIG_NAMES):
         raise Phase12ConfigError("CANONICAL_CONFIG_SET_MISMATCH")
     return configs
 

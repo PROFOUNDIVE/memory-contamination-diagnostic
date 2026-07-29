@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 from memcontam.config.phase12 import (
     CanonicalExploratoryConfig,
@@ -76,6 +76,21 @@ def test_all_pre_route_and_candidate_configs_resolve_without_selection() -> None
             "registry_id": exploratory.exploratory_run_template_registry_id,
         }
     )
+
+
+def test_all_pre_route_and_candidate_configs_reject_unknown_yaml_sidecar(
+    tmp_path: Path,
+) -> None:
+    for name in CONFIG_NAMES:
+        (tmp_path / name).write_text((CONFIG_ROOT / name).read_text(encoding="utf-8"), encoding="utf-8")
+    for name in ("pilot_a_game24_minimal.yaml", "pilot_a_game24_scientific.yaml"):
+        (tmp_path / name).write_text((CONFIG_ROOT / name).read_text(encoding="utf-8"), encoding="utf-8")
+    (tmp_path / "unexpected.yaml").write_text(
+        (CONFIG_ROOT / "readiness.yaml").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+
+    with pytest.raises(Phase12ConfigError, match="CANONICAL_CONFIG_SET_MISMATCH"):
+        load_all_canonical_configs(tmp_path)
 
 
 def test_configs_reject_missing_or_cross_layer_ids(tmp_path: Path) -> None:
