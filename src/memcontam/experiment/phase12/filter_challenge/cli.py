@@ -208,12 +208,8 @@ def _build_readiness(args: argparse.Namespace) -> BaseModel:
     archive = BuildArchiveReport.model_validate_json(
         args.archive_report.read_text(encoding="utf-8")
     )
-    prerequisites = ExecutionPrerequisites.model_validate_json(
-        args.execution_prerequisites.read_text(encoding="utf-8")
-    )
-    if prerequisites.runtime_authorization_present:
-        raise BCTAuthorizationError("BCT_EXECUTION_AUTHORIZATION_FORBIDDEN")
-    if prerequisites.canonical_patch_status == "applied":
+    prerequisites = ExecutionPrerequisites.model_validate_json(args.execution_prerequisites.read_text(encoding="utf-8"))
+    if prerequisites.runtime_authorization_present or prerequisites.canonical_patch_status == "applied":
         raise BCTAuthorizationError("BCT_EXECUTION_AUTHORIZATION_FORBIDDEN")
     provenance = next(
         case
