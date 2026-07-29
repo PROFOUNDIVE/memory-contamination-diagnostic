@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_ROOT = ROOT / "tests" / "fixtures" / "phase12"
-APPENDIX_B_MANIFEST_SHA256 = "b129d5a66166b0ec5fc8bb4b32c2ab2a76e09238d074b91687322a97828adda8"
+APPENDIX_B_MANIFEST_SHA256 = "f5436e1ff99a609d699204dd7f2f757872b85c48da1095b5899c01b4a19bb277"
 
 
 @dataclass(frozen=True)
