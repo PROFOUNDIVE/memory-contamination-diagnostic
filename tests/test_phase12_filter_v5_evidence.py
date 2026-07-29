@@ -119,6 +119,7 @@ def test_builder_rejects_plan_summary_and_report_drift(tmp_path: Path) -> None:
     "mutation",
     (
         lambda summary: {key: value for key, value in summary.items() if key != "command_records"},
+        lambda summary: {key: value for key, value in summary.items() if key != "initial_head"},
         lambda summary: {**summary, "command_records": list(reversed(summary["command_records"]))},
         lambda summary: {**summary, "command_records": [{**summary["command_records"][0], "stdout_sha256": "invalid"}, *summary["command_records"][1:]]},
         lambda summary: {**summary, "provider_calls_issued": 1},

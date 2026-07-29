@@ -13,6 +13,7 @@ TASK17_COMMAND_IDS: Final = (
 )
 VALIDATION_GATE_IDS: Final = ("ruff", "mypy", "diff-check")
 _SHA256 = r"^[0-9a-f]{64}$"
+_GIT_SHA = r"^[0-9a-f]{40}$"
 
 
 class Task17CommandRecord(BaseModel):
@@ -43,6 +44,7 @@ class Task17ValidationSummary(BaseModel):
     bct_software_interface_status: Literal["ready"]
     command_records: tuple[Task17CommandRecord, ...]
     information_boundary_status: Literal["pass"]
+    initial_head: str = Field(pattern=_GIT_SHA)
     implementation_commit: str
     mft_ids: tuple[str, ...]
     provider_calls_issued: Literal[0]

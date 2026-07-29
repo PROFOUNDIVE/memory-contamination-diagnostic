@@ -14,12 +14,14 @@ def complete_validation_summary(
     plan_sha256: str,
     implementation_commit: str,
     command_records: tuple[Task17CommandRecord, ...] | None = None,
+    initial_head: str | None = None,
+    archive_search_config_hash: str | None = None,
 ) -> Task17ValidationSummary:
     digest = "0" * 64
     return Task17ValidationSummary(
         archive_freeze_id="phase12-filter-v5-build-freeze-v1",
         archive_implementation_commit=implementation_commit,
-        archive_search_config_hash=digest,
+        archive_search_config_hash=archive_search_config_hash or digest,
         bct_execution_status="blocked",
         bct_software_interface_status="ready",
         command_records=command_records or tuple(
@@ -34,6 +36,7 @@ def complete_validation_summary(
             for command_id in TASK17_COMMAND_IDS
         ),
         information_boundary_status="pass",
+        initial_head=initial_head or implementation_commit,
         implementation_commit=implementation_commit,
         mft_ids=MFT_IDS,
         provider_calls_issued=0,
