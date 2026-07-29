@@ -211,13 +211,9 @@ def _build_readiness(args: argparse.Namespace) -> BaseModel:
     prerequisites = ExecutionPrerequisites.model_validate_json(
         args.execution_prerequisites.read_text(encoding="utf-8")
     )
-    if (
-        prerequisites.search_config_frozen
-        and prerequisites.inventory_frozen
-        and prerequisites.canonical_patch_status == "applied"
-        and prerequisites.provider_config_enabled
-        and prerequisites.runtime_authorization_present
-    ):
+    if prerequisites.runtime_authorization_present:
+        raise BCTAuthorizationError("BCT_EXECUTION_AUTHORIZATION_FORBIDDEN")
+    if prerequisites.canonical_patch_status == "applied":
         raise BCTAuthorizationError("BCT_EXECUTION_AUTHORIZATION_FORBIDDEN")
     provenance = next(
         case
