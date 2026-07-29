@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import subprocess
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
 
 from memcontam.experiment.phase12.filter_challenge.evidence import validate_evidence_bundle
 from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
@@ -14,10 +12,24 @@ from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
     json_value_from_bytes,
     sha256_path,
 )
+from memcontam.experiment.phase12.filter_challenge.final_verifier_integration import (
+    verify_integration,
+)
+from memcontam.experiment.phase12.filter_challenge.final_verifier_plan import (
+    verify_plan_compliance,
+)
+from memcontam.experiment.phase12.filter_challenge.final_verifier_quality import (
+    verify_code_quality,
+)
+from memcontam.experiment.phase12.filter_challenge.final_verifier_scope import verify_scope
+from memcontam.experiment.phase12.filter_challenge.final_verifier_types import (
+    FinalVerifierError,
+    FinalVerifierMode,
+    FinalVerifierRequest,
+)
 from memcontam.experiment.phase12.filter_challenge.mft_state_models import JsonValue
 
 
-FinalVerifierMode = Literal["plan-compliance", "code-quality", "integration", "scope", "terminal"]
 _APPROVAL_MODES: tuple[FinalVerifierMode, ...] = (
     "plan-compliance",
     "code-quality",
@@ -26,38 +38,23 @@ _APPROVAL_MODES: tuple[FinalVerifierMode, ...] = (
 )
 
 
-@dataclass(frozen=True, slots=True)
-class FinalVerifierError(ValueError):
-    code: str
-
-    def __str__(self) -> str:
-        return self.code
-
-
-@dataclass(frozen=True, slots=True)
-class FinalVerifierRequest:
-    mode: FinalVerifierMode
-    repository_root: Path
-    plan: Path
-    expected_plan_sha256: str
-    evidence_root: Path
-    validation_summary: Path
-    output: Path
-    approval_paths: tuple[Path, ...]
-    source_repository_root: Path | None = None
-
-
 def verify_final_report(request: FinalVerifierRequest) -> dict[str, JsonValue]:
+    _validate_mode_inputs(request)
     bindings = _post_commit_bindings(request)
+    summary = json_value_from_bytes(request.validation_summary.read_bytes(), "VALIDATION_SUMMARY_INVALID")
     match request.mode:
         case "plan-compliance":
-            report = _approval_report(request.mode, bindings, {"checklist": _checklist()})
+            report = _approval_report(request.mode, bindings, verify_plan_compliance(request.evidence_root, summary))
         case "code-quality":
-            report = _approval_report(request.mode, bindings, {"commands": [], "findings": []})
+            assert request.base_commit is not None
+            report = _approval_report(request.mode, bindings, verify_code_quality(request.repository_root, request.base_commit, str(bindings["implementation_commit"])))
         case "integration":
-            report = _approval_report(request.mode, bindings, _integration_payload(request.evidence_root))
+            assert request.search_config is not None and request.fixture_root is not None
+            assert request.execution_prerequisites is not None and request.scratch_root is not None
+            report = _approval_report(request.mode, bindings, verify_integration(request.repository_root, request.evidence_root, str(bindings["implementation_commit"]), request.search_config, request.fixture_root, request.execution_prerequisites, request.scratch_root))
         case "scope":
-            report = _approval_report(request.mode, bindings, _scope_payload(request))
+            assert request.base_commit is not None and request.source_repository_root is not None
+            report = _approval_report(request.mode, bindings, verify_scope(request.repository_root, request.source_repository_root, request.base_commit, str(bindings["implementation_commit"])))
         case "terminal":
             report = _terminal_report(request, bindings)
         case unreachable:
@@ -125,58 +122,34 @@ def _approval_report(
     return {"bindings": bindings, "mode": mode, "verdict": "APPROVE", **payload}
 
 
-def _checklist() -> list[JsonValue]:
-    return [{"clause": f"ledger-{index}", "status": "pass"} for index in range(1, 13)]
-
-
-def _integration_payload(evidence_root: Path) -> dict[str, JsonValue]:
-    mft = _report(evidence_root, "mft_fv5_report.json")
-    readiness = _report(evidence_root, "bct_readiness_report.json")
-    mft_report = mft.get("report")
-    readiness_report = readiness.get("report")
-    if not isinstance(mft_report, dict) or not isinstance(readiness_report, dict):
-        raise FinalVerifierError("EVIDENCE_REPORT_INVALID")
-    family_statuses = readiness_report.get("family_statuses")
-    if not isinstance(family_statuses, list):
-        raise FinalVerifierError("EVIDENCE_REPORT_INVALID")
-    return {
-        "bct_family_statuses": {
-            str(item.get("test_id")): item.get("status")
-            for item in family_statuses
-            if isinstance(item, dict)
-        },
-        "command_ids": [
-            "validate-search-config",
-            "validate-selected-policy",
-            "mft",
-            "build-archive",
-            "validate-archive",
-            "cost-preview",
-            "bct-readiness",
-        ],
-        "mft_pass_ids": mft_report.get("ordered_test_ids"),
-        "mutations": [],
-        "provider_calls_issued": readiness_report.get("provider_calls_issued"),
-    }
-
-
-def _scope_payload(request: FinalVerifierRequest) -> dict[str, JsonValue]:
-    source_status: list[JsonValue] = []
-    if request.source_repository_root is not None:
-        source_status.extend(
-            _git(
-                request.source_repository_root,
-                "status",
-                "--porcelain=v1",
-                "SOURCE_REPOSITORY_INVALID",
-            ).splitlines()
-        )
-    return {
-        "authority_status": "matched",
-        "forbidden_diff_count": 0,
-        "source_dirty_allowlist": source_status,
-        "task_worktree_clean": True,
-    }
+def _validate_mode_inputs(request: FinalVerifierRequest) -> None:
+    integration = (
+        request.search_config,
+        request.fixture_root,
+        request.execution_prerequisites,
+        request.scratch_root,
+    )
+    match request.mode:
+        case "plan-compliance" | "terminal":
+            if request.base_commit is not None or request.source_repository_root is not None or any(integration):
+                raise FinalVerifierError("IRRELEVANT_MODE_ARGUMENTS")
+        case "code-quality":
+            if request.base_commit is None:
+                raise FinalVerifierError("MODE_ARGUMENT_REQUIRED")
+            if request.source_repository_root is not None or any(integration):
+                raise FinalVerifierError("IRRELEVANT_MODE_ARGUMENTS")
+        case "integration":
+            if any(value is None for value in integration):
+                raise FinalVerifierError("MODE_ARGUMENT_REQUIRED")
+            if request.base_commit is not None or request.source_repository_root is not None:
+                raise FinalVerifierError("IRRELEVANT_MODE_ARGUMENTS")
+        case "scope":
+            if request.base_commit is None or request.source_repository_root is None:
+                raise FinalVerifierError("MODE_ARGUMENT_REQUIRED")
+            if any(integration):
+                raise FinalVerifierError("IRRELEVANT_MODE_ARGUMENTS")
+        case unreachable:
+            raise AssertionError(unreachable)
 
 
 def _terminal_report(
@@ -202,13 +175,6 @@ def _terminal_report(
         "next_gate_status": "READY_FOR_AUTHORIZED_FILTER_V5_BEHAVIORAL_CAPABILITY_RUN",
         "provider_calls_issued": 0,
     }
-
-
-def _report(root: Path, name: str) -> dict[str, JsonValue]:
-    value = json_value_from_bytes((root / name).read_bytes(), "EVIDENCE_REPORT_INVALID")
-    if not isinstance(value, dict):
-        raise FinalVerifierError("EVIDENCE_REPORT_INVALID")
-    return value
 
 
 def _git(root: Path, *arguments: str) -> str:

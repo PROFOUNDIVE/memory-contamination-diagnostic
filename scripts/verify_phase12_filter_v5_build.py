@@ -44,6 +44,11 @@ def main() -> int:
                 validation_summary=arguments.validation_summary,
                 output=arguments.output,
                 approval_paths=approvals,
+                base_commit=arguments.base_commit,
+                execution_prerequisites=arguments.execution_prerequisites,
+                fixture_root=arguments.fixture_root,
+                scratch_root=arguments.scratch_root,
+                search_config=arguments.search_config,
             )
         )
     except FinalVerifierError as error:

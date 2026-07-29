@@ -26,6 +26,9 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures" / "phase12" / "filter_v5"
 FINAL_MODES: tuple[FinalVerifierMode, ...] = (
     "plan-compliance",
+)
+APPROVAL_MODES: tuple[FinalVerifierMode, ...] = (
+    "plan-compliance",
     "code-quality",
     "integration",
     "scope",
@@ -130,7 +133,7 @@ def test_terminal_refuses_missing_approvals_and_rewritten_evidence(tmp_path: Pat
         verify_final_report(terminal)
 
     approvals = []
-    for mode in FINAL_MODES:
+    for mode in APPROVAL_MODES:
         path = tmp_path / f"{mode}.json"
         path.write_text(
             json.dumps(
