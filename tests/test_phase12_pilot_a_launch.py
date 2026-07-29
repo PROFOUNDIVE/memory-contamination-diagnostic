@@ -602,11 +602,39 @@ def test_plumbing_archive_resolves_legacy_answer_calls_only_when_declared_for_sa
     assert report["reason_code"] == expected_reason_code
 
 
-def test_preserved_legacy_plumbing_archive_validates_without_provider_access() -> None:
-    report = _module().validate_plumbing_archive(LEGACY_PLUMBING_ARCHIVE)
+def test_preserved_legacy_plumbing_archive_validates_without_provider_access(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    module = _module()
+    provider_calls = 0
 
+    def unexpected_build_llm_client(*args: object, **kwargs: object) -> object:
+        del args, kwargs
+        nonlocal provider_calls
+        provider_calls += 1
+        raise AssertionError("provider construction must not happen")
+
+    monkeypatch.setattr(module, "build_llm_client", unexpected_build_llm_client)
+
+    report = module.run_plumbing(
+        CONFIG,
+        arm="Clean",
+        instances=1,
+        allow_live_calls=True,
+        scientific_result=False,
+        run_id="plumbing-legacy-archive",
+        artifact_root=tmp_path,
+        evidence_root=tmp_path / "evidence",
+        client_factory=_Client,
+        context_factory=_runtime_context,
+    )
+    validated = module.validate_plumbing_archive(tmp_path / "runs" / "plumbing-legacy-archive")
+
+    assert provider_calls == 0
     assert report["overall"] == "pass"
     assert report["unresolved_references"] == 0
+    assert validated["overall"] == "pass"
+    assert validated["unresolved_references"] == 0
 
 
 def test_clean_plumbing_archive_cli_mode_writes_a_canonical_report(
