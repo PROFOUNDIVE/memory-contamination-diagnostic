@@ -1,27 +1,12 @@
 from __future__ import annotations
 
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from memcontam.experiment.phase12.filter_challenge.bct import (
-    BCTReadiness,
-    ExecutionPreflightRequest,
-    ExecutionPrerequisites,
-    SoftwareInterfaceChecks,
-    build_cost_preview,
-    build_readiness,
-    evaluate_execution_preflight,
-    evaluate_software_interface_readiness,
-)
-from memcontam.experiment.phase12.filter_challenge.build_archive import build_archive
-from memcontam.experiment.phase12.filter_challenge.build_archive_models import (
-    BuildArchiveReport,
-    BuildArchiveRequest,
-)
 from memcontam.experiment.phase12.filter_challenge.cli import _load_build_inputs
 from memcontam.experiment.phase12.filter_challenge.contracts import FilterPolicyIdentity
+from memcontam.experiment.phase12.filter_challenge.evidence_reports import build_reports
 from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
     AMENDMENT,
     AUTHORITY_HASHES,
@@ -99,7 +84,15 @@ def build_evidence_bundle(request: EvidenceBuildRequest) -> EvidenceBundle:
     bindings = EvidenceBindings(request.implementation_commit, plan_hash, summary_hash)
     inputs = EvidenceInputs(inventory=inventory, mft=mft, search=search, suite=suite)
     header = _header(bindings, inputs)
-    reports = _reports(header, inputs, request)
+    reports = build_reports(
+        header,
+        inputs.inventory,
+        inputs.mft,
+        inputs.search,
+        inputs.suite,
+        request.fixture_root,
+        request.implementation_commit,
+    )
     if request.output_root.exists():
         validate_evidence_bundle(request.output_root)
         raise EvidenceBuildError("EVIDENCE_OUTPUT_EXISTS")
@@ -117,7 +110,6 @@ def build_evidence_bundle(request: EvidenceBuildRequest) -> EvidenceBundle:
     manifest_path = request.output_root / EVIDENCE_FILENAMES[0]
     manifest_path.write_bytes(canonical_json_bytes(manifest))
     return validate_evidence_bundle(request.output_root)
-
 
 def validate_evidence_bundle(root: Path) -> EvidenceBundle:
     if not root.is_dir() or {path.name for path in root.iterdir()} != set(EVIDENCE_FILENAMES):
@@ -183,81 +175,3 @@ def _header(bindings: EvidenceBindings, inputs: EvidenceInputs) -> dict[str, Jso
         "policy": policy,
         "validation_summary_sha256": bindings.validation_summary_sha256,
     }
-
-
-def _reports(
-    header: dict[str, JsonValue],
-    inputs: EvidenceInputs,
-    request: EvidenceBuildRequest,
-) -> dict[str, dict[str, JsonValue]]:
-    archive, readiness = _archive_and_readiness(inputs, request)
-    mft_value = json_value_from_bytes(inputs.mft.model_dump_json().encode(), "MFT_REPORT_INVALID")
-    readiness_value = json_value_from_bytes(readiness.model_dump_json().encode(), "BCT_REPORT_INVALID")
-    archive_value = json_value_from_bytes(archive.model_dump_json().encode(), "ARCHIVE_REPORT_INVALID")
-    passed: dict[str, JsonValue] = {
-        **{result.test_id: result.status for result in inputs.mft.state_report.results},
-        **{case.test_id: case.status for case in inputs.mft.safety_report.cases},
-    }
-    return {
-        "policy_schema_hashes.json": {"header": header, "provider_calls_issued": 0},
-        "mft_fv5_report.json": {"header": header, "report": mft_value},
-        "information_boundary_report.json": {
-            "header": header,
-            "mft_status": passed["MFT-FV5-08-NO-WRITEBACK"],
-            "provider_calls_issued": 0,
-        },
-        "route_invariance_report.json": {
-            "header": header,
-            "mft_status": passed["MFT-FV5-05-ROUTE-INVARIANCE"],
-            "provider_calls_issued": 0,
-        },
-        "answer_call_provenance_report.json": {
-            "header": header,
-            "mft_status": passed["MFT-FV5-13-ANSWER-CALL-PROVENANCE"],
-            "provider_calls_issued": 0,
-        },
-        "archive_validation_report.json": {"header": header, "report": archive_value},
-        "test_lint_typecheck_report.json": {"header": header, "provider_calls_issued": 0},
-        "bct_readiness_report.json": {"header": header, "report": readiness_value},
-    }
-
-
-def _archive_and_readiness(
-    inputs: EvidenceInputs, request: EvidenceBuildRequest
-) -> tuple[BuildArchiveReport, BCTReadiness]:
-    with tempfile.TemporaryDirectory() as temporary_root:
-        archive = build_archive(
-            BuildArchiveRequest(
-                search_config=inputs.search,
-                inventory=inputs.inventory,
-                suite=inputs.suite,
-                implementation_commit=request.implementation_commit,
-                freeze_id="phase12-filter-v5-build-freeze-v1",
-                run_id="filter-v5-build-synthetic",
-                output_root=Path(temporary_root),
-            )
-        )
-    prerequisites = ExecutionPrerequisites.model_validate_json(
-        (request.fixture_root / "bct_execution_prerequisites.json").read_text(encoding="utf-8")
-    )
-    software = evaluate_software_interface_readiness(
-        SoftwareInterfaceChecks(
-            domain_schema_valid=True,
-            search_config_valid=inputs.mft.search_config_hash == inputs.search.search_config_hash,
-            mft_gate_passed=inputs.mft.all_passed,
-            archive_validation_passed=archive.archive_valid,
-            answer_call_provenance_engineering_ready=(
-                inputs.mft.safety_report.cases[4].status == "pass"
-            ),
-        )
-    )
-    execution = evaluate_execution_preflight(
-        software,
-        ExecutionPreflightRequest(
-            search_config=inputs.search,
-            selected_policy=None,
-            stage="build",
-            prerequisites=prerequisites,
-        ),
-    )
-    return archive, build_readiness(software, execution, build_cost_preview(inputs.search, (), None))
