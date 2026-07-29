@@ -13,6 +13,13 @@ from memcontam.experiment.phase12.filter_challenge.mft_state_models import JsonV
 
 
 _FORBIDDEN_PREFIXES = (".sisyphus/", "data/", "docs/", "configs/", "runs/")
+_PILOT_A_PREFIXES = (
+    "src/memcontam/readiness/pilot_a_",
+    "tests/test_phase12_pilot_a_",
+    "configs/phase12/pilot_a",
+    "runs/runs/pilot-a-game24-",
+    ".sisyphus/evidence/pilot-a-",
+)
 _FORBIDDEN_EXACT_PATHS = frozenset(
     {
         "src/memcontam/memory/admission.py",
@@ -20,7 +27,8 @@ _FORBIDDEN_EXACT_PATHS = frozenset(
         "src/memcontam/experiment/phase12/filter_mft.py",
         "src/memcontam/experiment/phase12/filter_v4.py",
         "tests/test_phase12_filter_v4.py",
-        "tests/test_phase12_pilot_a.py",
+        "tests/test_pilot_a_preflight.py",
+        "scripts/inspect_phase12_pilot_a.py",
         "data/phase12/filter_v4/evidence.json",
         "docs/scientific-golden.json",
         "Pilot-A 관련 기록.md",
@@ -35,7 +43,8 @@ def verify_scope(
     forbidden = [
         path
         for path in changed.splitlines()
-        if path.startswith(_FORBIDDEN_PREFIXES) or path in _FORBIDDEN_EXACT_PATHS
+        if path.startswith((*_FORBIDDEN_PREFIXES, *_PILOT_A_PREFIXES))
+        or path in _FORBIDDEN_EXACT_PATHS
     ]
     if forbidden:
         raise FinalVerifierError("SCOPE_FORBIDDEN_DIFF")
@@ -52,11 +61,24 @@ def verify_scope(
         raise FinalVerifierError(error.code) from error
     if not matched:
         raise FinalVerifierError("AUTHORITY_MISMATCH")
-    return {"authority_status": "matched", "base_commit": base_commit, "changed_paths": changed_path_values, "forbidden_diff_count": 0, "source_dirty_allowlist": source_dirty_allowlist, "task_worktree_clean": True}
+    return {
+        "authority_status": "matched",
+        "base_commit": base_commit,
+        "changed_paths": changed_path_values,
+        "forbidden_diff_count": 0,
+        "implementation_commit": implementation_commit,
+        "source_dirty_allowlist": source_dirty_allowlist,
+        "task_worktree_clean": True,
+    }
 
 
 def _git(root: Path, *arguments: str) -> str:
-    result = subprocess.run(("git", "-C", str(root), *arguments), check=False, capture_output=True, text=True)
+    result = subprocess.run(
+        ("git", "-c", "core.quotepath=false", "-C", str(root), *arguments),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
     if result.returncode != 0:
         raise FinalVerifierError("SCOPE_GIT_INVALID")
     return result.stdout.strip()
