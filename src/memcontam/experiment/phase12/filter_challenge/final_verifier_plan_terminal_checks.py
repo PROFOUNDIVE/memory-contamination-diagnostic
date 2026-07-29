@@ -3,24 +3,34 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
+from pydantic import ValidationError
 from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
     EVIDENCE_FILENAMES,
     canonical_json_bytes,
     sha256_path,
 )
 from memcontam.experiment.phase12.filter_challenge.mft_state_models import JsonValue
+from memcontam.experiment.phase12.filter_challenge.validation_summary import Task17ValidationSummary
 
 ReportLookup = Callable[[Path, str], dict[str, JsonValue] | None]
 
 
 def clause_10(report: ReportLookup, root: Path, summary: JsonValue) -> bool:
     validation = report(root, "test_lint_typecheck_report.json")
+    if not isinstance(summary, dict):
+        return False
+    try:
+        contract = Task17ValidationSummary.model_validate(summary)
+    except ValidationError:
+        return False
     return (
         validation is not None
         and validation.get("validation_status") == "pass"
         and validation.get("provider_calls_issued") == 0
-        and isinstance(summary, dict)
-        and summary.get("provider_calls_issued") == 0
+        and validation.get("command_records")
+        == [record.model_dump(mode="json") for record in contract.command_records]
+        and validation.get("validation_gates")
+        == [gate.model_dump(mode="json") for gate in contract.validation_gates]
     )
 
 

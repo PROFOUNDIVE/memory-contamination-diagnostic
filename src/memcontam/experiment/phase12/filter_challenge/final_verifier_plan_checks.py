@@ -11,6 +11,7 @@ from memcontam.experiment.phase12.filter_challenge.contracts import FilterPolicy
 from memcontam.experiment.phase12.filter_challenge.domain_schema import (
     policy_visible_schema_boundary_valid,
     public_domain_schema_hashes,
+    public_domain_schema_schema_names,
 )
 from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
     EVIDENCE_FILENAMES,
@@ -112,6 +113,7 @@ def _clause_1(root: Path, summary: JsonValue) -> bool:
     return (
         policy is not None
         and _value(_value(header, "policy"), "identity") == "Filter-Challenge-v1"
+        and _value(policy, "public_domain_model_names") == list(public_domain_schema_schema_names())
         and _value(policy, "domain_model_schema_hashes") == public_domain_schema_hashes()
         and _value(policy, "policy_visible_schema_boundary") == "pass"
         and policy_visible_schema_boundary_valid()

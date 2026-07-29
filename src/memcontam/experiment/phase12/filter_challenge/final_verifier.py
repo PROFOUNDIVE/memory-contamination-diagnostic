@@ -9,7 +9,6 @@ from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
     EvidenceBuildError,
     canonical_json_bytes,
     descriptor_sha256,
-    json_value_from_bytes,
     sha256_path,
 )
 from memcontam.experiment.phase12.filter_challenge.final_verifier_integration import (
@@ -31,12 +30,13 @@ from memcontam.experiment.phase12.filter_challenge.final_verifier_types import (
     FinalVerifierRequest,
 )
 from memcontam.experiment.phase12.filter_challenge.mft_state_models import JsonValue
+from memcontam.experiment.phase12.filter_challenge.validation_summary import Task17ValidationSummary
 
 
 def verify_final_report(request: FinalVerifierRequest) -> dict[str, JsonValue]:
     _validate_mode_inputs(request)
     bindings = _post_commit_bindings(request)
-    summary = json_value_from_bytes(request.validation_summary.read_bytes(), "VALIDATION_SUMMARY_INVALID")
+    summary = Task17ValidationSummary.model_validate_json(request.validation_summary.read_bytes()).model_dump(mode="json")
     match request.mode:
         case "plan-compliance":
             report = _approval_report(request.mode, bindings, verify_plan_compliance(request.evidence_root, summary))
@@ -76,8 +76,8 @@ def _post_commit_bindings(request: FinalVerifierRequest) -> dict[str, JsonValue]
     implementation_commit = header.get("implementation_commit")
     if not isinstance(implementation_commit, str):
         raise FinalVerifierError("EVIDENCE_IMPLEMENTATION_COMMIT_INVALID")
-    summary = json_value_from_bytes(request.validation_summary.read_bytes(), "VALIDATION_SUMMARY_INVALID")
-    if not isinstance(summary, dict) or summary.get("implementation_commit") != implementation_commit:
+    summary = Task17ValidationSummary.model_validate_json(request.validation_summary.read_bytes())
+    if summary.implementation_commit != implementation_commit:
         raise FinalVerifierError("VALIDATION_SUMMARY_COMMIT_MISMATCH")
     if _git(request.repository_root, "rev-parse", "HEAD^", "EVIDENCE_PARENT_INVALID") != implementation_commit:
         raise FinalVerifierError("EVIDENCE_PARENT_INVALID")
