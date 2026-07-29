@@ -21,6 +21,7 @@ from memcontam.experiment.phase12.filter_challenge.build_archive_models import (
 from memcontam.experiment.phase12.filter_challenge.domain_schema import (
     policy_visible_schema_boundary_valid,
     public_domain_schema_hashes,
+    public_domain_schema_schema_names,
 )
 from memcontam.experiment.phase12.filter_challenge.evidence_contract import json_value_from_bytes
 from memcontam.experiment.phase12.filter_challenge.mft import MergedMftReport
@@ -30,6 +31,7 @@ from memcontam.experiment.phase12.filter_challenge.registry_manifests import (
     ProbeInventoryRegistry,
 )
 from memcontam.experiment.phase12.filter_challenge.registry_search import SearchConfig
+from memcontam.experiment.phase12.filter_challenge.validation_summary import Task17ValidationSummary
 
 
 def build_reports(
@@ -40,6 +42,7 @@ def build_reports(
     suite: OperationalSuiteRegistry,
     fixture_root: Path,
     implementation_commit: str,
+    summary: Task17ValidationSummary,
 ) -> dict[str, dict[str, JsonValue]]:
     archive, readiness = _archive_and_readiness(
         inventory, mft, search, suite, fixture_root, implementation_commit
@@ -52,6 +55,7 @@ def build_reports(
         "policy_schema_hashes.json": {
             "header": header,
             "domain_model_schema_hashes": public_domain_schema_hashes(),
+            "public_domain_model_names": list(public_domain_schema_schema_names()),
             "policy_visible_schema_boundary": "pass" if policy_visible_schema_boundary_valid() else "fail",
             "provider_calls_issued": 0,
         },
@@ -80,8 +84,10 @@ def build_reports(
         },
         "test_lint_typecheck_report.json": {
             "header": header,
+            "command_records": [record.model_dump(mode="json") for record in summary.command_records],
             "provider_calls_issued": 0,
-            "validation_status": "pass",
+            "validation_gates": [gate.model_dump(mode="json") for gate in summary.validation_gates],
+            "validation_status": "pass" if all(gate.status == "pass" for gate in summary.validation_gates) else "fail",
         },
         "bct_readiness_report.json": {
             "header": header,

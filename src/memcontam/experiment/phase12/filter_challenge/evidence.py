@@ -29,6 +29,7 @@ from memcontam.experiment.phase12.filter_challenge.registry_manifests import (
     ProbeInventoryRegistry,
 )
 from memcontam.experiment.phase12.filter_challenge.registry_search import SearchConfig
+from memcontam.experiment.phase12.filter_challenge.validation_summary import Task17ValidationSummary
 
 
 _HEADER_FIELDS: Final = {
@@ -75,10 +76,9 @@ def build_evidence_bundle(request: EvidenceBuildRequest) -> EvidenceBundle:
         raise EvidenceBuildError("PLAN_SHA256_MISMATCH")
     require_clean_repository(request.repository_root, request.implementation_commit)
     summary_hash = sha256_path(request.validation_summary)
-    summary = json_value_from_bytes(
-        request.validation_summary.read_bytes(), "VALIDATION_SUMMARY_INVALID"
+    summary = _validate_summary(
+        request.validation_summary.read_bytes(), request.expected_plan_sha256, request.implementation_commit
     )
-    _validate_summary(summary, request.expected_plan_sha256, request.implementation_commit)
     search, inventory, suite = _load_build_inputs(request.search_config, request.fixture_root)
     mft = build_mft_report(search, inventory, suite)
     bindings = EvidenceBindings(request.implementation_commit, plan_hash, summary_hash)
@@ -92,6 +92,7 @@ def build_evidence_bundle(request: EvidenceBuildRequest) -> EvidenceBundle:
         inputs.suite,
         request.fixture_root,
         request.implementation_commit,
+        summary,
     )
     if request.output_root.exists():
         validate_evidence_bundle(request.output_root)
@@ -145,15 +146,18 @@ def validate_evidence_bundle(root: Path) -> EvidenceBundle:
     )
 
 
-def _validate_summary(summary: JsonValue, plan_hash: str, implementation_commit: str) -> None:
-    if not isinstance(summary, dict):
-        raise EvidenceBuildError("VALIDATION_SUMMARY_INVALID")
-    if summary.get("reviewed_plan_sha256") != plan_hash:
+def _validate_summary(summary_bytes: bytes, plan_hash: str, implementation_commit: str) -> Task17ValidationSummary:
+    try:
+        summary = Task17ValidationSummary.model_validate_json(summary_bytes)
+    except ValueError as error:
+        raise EvidenceBuildError("VALIDATION_SUMMARY_INVALID") from error
+    if summary.reviewed_plan_sha256 != plan_hash:
         raise EvidenceBuildError("VALIDATION_SUMMARY_PLAN_MISMATCH")
-    if summary.get("implementation_commit") != implementation_commit:
+    if summary.implementation_commit != implementation_commit:
         raise EvidenceBuildError("VALIDATION_SUMMARY_COMMIT_MISMATCH")
-    if summary.get("provider_calls_issued") != 0:
+    if summary.provider_calls_issued != 0:
         raise EvidenceBuildError("VALIDATION_SUMMARY_PROVIDER_CALLS_INVALID")
+    return summary
 
 
 def _header(bindings: EvidenceBindings, inputs: EvidenceInputs) -> dict[str, JsonValue]:

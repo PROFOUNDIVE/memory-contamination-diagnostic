@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Final
-
 from pydantic import TypeAdapter
+
+from memcontam.experiment.phase12.filter_challenge import PUBLIC_DOMAIN_MODEL_NAMES
 
 from memcontam.experiment.phase12.filter_challenge.contracts import (
     AnswerCallRelation,
@@ -26,18 +26,16 @@ from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
 from memcontam.experiment.phase12.filter_challenge.mft_state_models import JsonValue
 
 
-PUBLIC_DOMAIN_MODEL_NAMES: Final = (
-    "FilterPolicyIdentity", "ChallengeRoutability", "ChallengeCandidate",
-    "ProbeInventoryManifest", "OperationalProbeSuite", "ProbeEligibilityState",
-    "PairedExecutionIdentity", "AnswerCallRelation", "CandidateExposureRecord",
-    "ProbeDisposition", "ChallengeAssessmentState", "ChallengeRoutingDecision",
-    "CandidateAssessmentAggregate",
-)
+from typing import Final
 _FORBIDDEN_PROPERTIES: Final = {
     "candidate_role", "correctness_label", "irrelevance_label", "is_injected",
     "origin_class", "injection_class", "treatment_arm", "future_main_outcome",
     "suffix_outcome",
 }
+
+
+def public_domain_schema_schema_names() -> tuple[str, ...]:
+    return PUBLIC_DOMAIN_MODEL_NAMES
 
 
 def public_domain_schema_hashes() -> dict[str, JsonValue]:
@@ -55,21 +53,22 @@ def policy_visible_schema_boundary_valid() -> bool:
 
 
 def _public_schemas() -> tuple[tuple[str, dict[str, JsonValue]], ...]:
-    return (
-        ("FilterPolicyIdentity", FilterPolicyIdentity.model_json_schema()),
-        ("ChallengeRoutability", TypeAdapter(ChallengeRoutability).json_schema()),
-        ("ChallengeCandidate", ChallengeCandidate.model_json_schema()),
-        ("ProbeInventoryManifest", ProbeInventoryManifest.model_json_schema()),
-        ("OperationalProbeSuite", OperationalProbeSuite.model_json_schema()),
-        ("ProbeEligibilityState", TypeAdapter(ProbeEligibilityState).json_schema()),
-        ("PairedExecutionIdentity", TypeAdapter(PairedExecutionIdentity).json_schema()),
-        ("AnswerCallRelation", TypeAdapter(AnswerCallRelation).json_schema()),
-        ("CandidateExposureRecord", CandidateExposureRecord.model_json_schema()),
-        ("ProbeDisposition", TypeAdapter(ProbeDisposition).json_schema()),
-        ("ChallengeAssessmentState", TypeAdapter(ChallengeAssessmentState).json_schema()),
-        ("ChallengeRoutingDecision", TypeAdapter(ChallengeRoutingDecision).json_schema()),
-        ("CandidateAssessmentAggregate", CandidateAssessmentAggregate.model_json_schema()),
-    )
+    schemas = {
+        "FilterPolicyIdentity": FilterPolicyIdentity.model_json_schema(),
+        "ChallengeCandidate": ChallengeCandidate.model_json_schema(),
+        "ChallengeRoutability": TypeAdapter(ChallengeRoutability).json_schema(),
+        "ProbeInventoryManifest": ProbeInventoryManifest.model_json_schema(),
+        "OperationalProbeSuite": OperationalProbeSuite.model_json_schema(),
+        "ProbeEligibilityState": TypeAdapter(ProbeEligibilityState).json_schema(),
+        "PairedExecutionIdentity": TypeAdapter(PairedExecutionIdentity).json_schema(),
+        "AnswerCallRelation": TypeAdapter(AnswerCallRelation).json_schema(),
+        "CandidateExposureRecord": CandidateExposureRecord.model_json_schema(),
+        "ProbeDisposition": TypeAdapter(ProbeDisposition).json_schema(),
+        "ChallengeAssessmentState": TypeAdapter(ChallengeAssessmentState).json_schema(),
+        "ChallengeRoutingDecision": TypeAdapter(ChallengeRoutingDecision).json_schema(),
+        "CandidateAssessmentAggregate": CandidateAssessmentAggregate.model_json_schema(),
+    }
+    return tuple((name, schemas[name]) for name in PUBLIC_DOMAIN_MODEL_NAMES)
 
 
 def _contains_forbidden_property(value: object) -> bool:
