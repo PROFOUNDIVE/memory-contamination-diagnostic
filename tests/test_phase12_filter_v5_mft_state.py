@@ -8,6 +8,11 @@ from pathlib import Path
 import pytest
 import yaml  # type: ignore[import-untyped]
 
+import memcontam.experiment.phase12.filter_challenge.executor as executor_module
+import memcontam.experiment.phase12.filter_challenge.executor_identity as identity_module
+import memcontam.experiment.phase12.filter_challenge.executor_source as source_module
+import memcontam.experiment.phase12.filter_challenge.mft_state as mft_state_module
+import memcontam.experiment.phase12.filter_challenge.native_execution as native_module
 from memcontam.experiment.phase12.filter_challenge.mft_state import (
     MFT_STATE_IDS,
     MftGateResult,
@@ -40,6 +45,14 @@ EXPECTED_IDS = (
     "MFT-FV5-07-SCRIPTED-IRRELEVANT",
     "MFT-FV5-08-NO-WRITEBACK",
 )
+
+
+class _SeamBomb(RuntimeError):
+    pass
+
+
+def _bomb(*_args, **_kwargs):
+    raise _SeamBomb("production seam reached")
 
 
 def _context() -> MftStateContext:
@@ -99,6 +112,24 @@ def test_pair_match_exposes_explicit_candidate_only_config_and_hash_diff() -> No
     assert result.actual.source_state_before_hash == result.actual.source_state_after_hash
 
 
+@pytest.mark.parametrize(
+    ("module", "name"),
+    (
+        (executor_module, "execute_isolated_pair"),
+        (identity_module, "runtime_identity_projections"),
+    ),
+)
+def test_pair_match_reaches_production_executor_identity_seams(
+    monkeypatch: pytest.MonkeyPatch, module, name: str
+) -> None:
+    monkeypatch.setattr(module, name, _bomb)
+
+    with pytest.raises(_SeamBomb, match="production seam reached"):
+        mft_state_module._evaluate(
+            "MFT-FV5-01-PAIR-MATCH", _context(), "none", "0" * 64
+        )
+
+
 def test_exposure_tristate_fail_open_and_nonharm_routes_are_exact() -> None:
     results = {result.test_id: result.actual for result in run_mft_state_gates(_context()).results}
 
@@ -142,6 +173,23 @@ def test_exposure_tristate_fail_open_and_nonharm_routes_are_exact() -> None:
     ) * 4
 
 
+def test_fail_open_attempt_evidence_comes_from_fake_clients(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = mft_state_module._scripts
+
+    def one_attempt(context, **kwargs):
+        kwargs["attempts"] = 1
+        return original(context, **kwargs)
+
+    monkeypatch.setattr(mft_state_module, "_scripts", one_attempt)
+
+    report = run_mft_state_gates(_context())
+    result = report.results[3]
+    assert result.status == "fail"
+    assert result.actual.scripted_attempt_counts == (1,) * 6
+
+
 def test_route_metadata_and_challenge_artifacts_cannot_change_science_or_state() -> None:
     results = {result.test_id: result.actual for result in run_mft_state_gates(_context()).results}
 
@@ -159,6 +207,25 @@ def test_route_metadata_and_challenge_artifacts_cannot_change_science_or_state()
     assert no_writeback.ordinary_trial_write_count == 0
     assert no_writeback.updater_write_count == 0
     assert no_writeback.source_state_before_hash == no_writeback.source_state_after_hash
+
+
+@pytest.mark.parametrize(
+    ("module", "name"),
+    (
+        (executor_module, "execute_isolated_pair"),
+        (source_module, "source_snapshot"),
+        (native_module, "execute_native_pair"),
+    ),
+)
+def test_no_writeback_reaches_production_source_native_and_sink_seams(
+    monkeypatch: pytest.MonkeyPatch, module, name: str
+) -> None:
+    monkeypatch.setattr(module, name, _bomb)
+
+    with pytest.raises(_SeamBomb, match="production seam reached"):
+        mft_state_module._evaluate(
+            "MFT-FV5-08-NO-WRITEBACK", _context(), "none", "0" * 64
+        )
 
 
 @pytest.mark.parametrize(
