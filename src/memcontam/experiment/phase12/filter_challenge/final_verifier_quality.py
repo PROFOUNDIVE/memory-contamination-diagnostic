@@ -27,18 +27,20 @@ from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
     sha256_path,
 )
 from memcontam.experiment.phase12.filter_challenge.final_verifier_types import FinalVerifierError
+from memcontam.experiment.phase12.filter_challenge.final_verifier_provider_scan import (
+    provider_construction_found,
+)
 from memcontam.experiment.phase12.filter_challenge.mft import MergedMftReport
 from memcontam.experiment.phase12.filter_challenge.mft_state_models import JsonValue
 
 
-_FORBIDDEN_PROVIDER_TARGETS = {
-    "memcontam.clients.factory.build_llm_client",
-    "memcontam.clients.openai_compatible.OpenAICompatibleClient",
-    "memcontam.clients.openai_responses.OpenAIResponsesClient",
-}
-_SHORT_PROVIDER_TARGETS = {
-    target.rsplit(".", 1)[-1]: target for target in _FORBIDDEN_PROVIDER_TARGETS
-}
+_PROVIDER_IMPLEMENTATION_PATHS = frozenset(
+    {
+        "src/memcontam/clients/factory.py",
+        "src/memcontam/clients/openai_compatible.py",
+        "src/memcontam/clients/openai_responses.py",
+    }
+)
 
 
 def verify_code_quality(
@@ -52,7 +54,12 @@ def verify_code_quality(
     paths = tuple(path for path in changed.splitlines() if path.endswith(".py"))
     if not paths:
         raise FinalVerifierError("CODE_QUALITY_PYTHON_FILES_REQUIRED")
-    findings = [finding for path in paths for finding in _structural_findings(repository_root / path)]
+    findings = [
+        finding
+        for path in paths
+        if path.startswith(("src/", "scripts/"))
+        for finding in _structural_findings(repository_root / path, path)
+    ]
     if findings or not _evidence_serialization_valid(evidence_root, validation_summary):
         raise FinalVerifierError("CODE_QUALITY_REJECTED")
     commands = (
@@ -62,57 +69,25 @@ def verify_code_quality(
     )
     if any(command["exit_code"] != 0 for command in commands):
         raise FinalVerifierError("CODE_QUALITY_REJECTED")
-    return {"commands": list(commands), "findings": []}
+    changed_paths: list[JsonValue] = [*changed.splitlines()]
+    return {
+        "base_commit": base_commit,
+        "changed_paths": changed_paths,
+        "commands": list(commands),
+        "findings": [],
+        "implementation_commit": implementation_commit,
+    }
 
 
-def _structural_findings(path: Path) -> list[str]:
+def _structural_findings(path: Path, repository_path: str | None = None) -> list[str]:
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     except SyntaxError:
         return [f"syntax:{path.as_posix()}"]
-    if "filter_challenge" not in path.as_posix():
+    if repository_path in _PROVIDER_IMPLEMENTATION_PATHS:
         return []
-    aliases = _provider_aliases(tree)
-    found = any(
-        isinstance(node, ast.Call) and _resolved_name(node.func, aliases) in _FORBIDDEN_PROVIDER_TARGETS
-        for node in ast.walk(tree)
-    )
+    found = provider_construction_found(tree)
     return [f"provider:{path.as_posix()}"] if found else []
-
-
-def _provider_aliases(tree: ast.Module) -> dict[str, str]:
-    aliases: dict[str, str] = {}
-    for node in tree.body:
-        match node:
-            case ast.Import(names=names):
-                for item in names:
-                    aliases[item.asname or item.name.split(".")[0]] = item.name
-            case ast.ImportFrom(module=module, names=names) if module is not None:
-                for item in names:
-                    aliases[item.asname or item.name] = f"{module}.{item.name}"
-            case ast.Assign(targets=targets, value=value):
-                resolved = _resolved_name(value, aliases)
-                if resolved is not None:
-                    for target in targets:
-                        if isinstance(target, ast.Name):
-                            aliases[target.id] = resolved
-            case _:
-                continue
-    return aliases
-
-
-def _resolved_name(node: ast.expr, aliases: dict[str, str]) -> str | None:
-    match node:
-        case ast.Name(id=name):
-            return aliases.get(name, _SHORT_PROVIDER_TARGETS.get(name))
-        case ast.Attribute(value=value, attr=attribute):
-            base = _resolved_name(value, aliases)
-            return f"{base}.{attribute}" if base is not None else None
-        case ast.Call(func=ast.Name(id="getattr"), args=(base, ast.Constant(value=attribute))):
-            resolved = _resolved_name(base, aliases)
-            return f"{resolved}.{attribute}" if isinstance(attribute, str) and resolved is not None else None
-        case _:
-            return None
 
 
 def _evidence_serialization_valid(evidence_root: Path, validation_summary: Path) -> bool:

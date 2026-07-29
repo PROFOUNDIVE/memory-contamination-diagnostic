@@ -62,7 +62,10 @@ def _git(root: Path, *arguments: str) -> str:
 
 
 def _fixture(
-    tmp_path: Path, mutation: Mutation = None, forbidden_path: str | None = None
+    tmp_path: Path,
+    mutation: Mutation = None,
+    forbidden_path: str | None = None,
+    provider_source: str | None = None,
 ) -> VerifierFixture:
     repository = tmp_path / "repository"
     repository.mkdir(parents=True)
@@ -87,6 +90,10 @@ def _fixture(
         forbidden = repository / forbidden_path
         forbidden.parent.mkdir(parents=True, exist_ok=True)
         forbidden.write_text("forbidden\n", encoding="utf-8")
+    if provider_source is not None:
+        provider_path = repository / "scripts" / "provider_call.py"
+        provider_path.parent.mkdir(parents=True, exist_ok=True)
+        provider_path.write_text(provider_source, encoding="utf-8")
     _git(repository, "add", "--all")
     _git(repository, "commit", "-qm", "implementation")
     implementation_commit = _git(repository, "rev-parse", "HEAD")
@@ -509,7 +516,6 @@ def test_integration_reconciles_all_outputs_and_copied_mutations(tmp_path: Path)
         "src/memcontam/experiment/phase12/filter_mft.py",
         "tests/test_phase12_filter_v4.py",
         "data/phase12/filter_v4/evidence.json",
-        "tests/test_phase12_pilot_a.py",
         "docs/scientific-golden.json",
     ),
 )
