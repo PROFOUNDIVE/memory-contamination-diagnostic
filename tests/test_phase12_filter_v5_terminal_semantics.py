@@ -1,53 +1,90 @@
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from pathlib import Path
+from typing import Literal
 
 import pytest
 from tests.test_phase12_filter_v5_final_verifier_modes import (
+    VerifierFixture,
     _fixture,
     _request,
     _terminal_request,
 )
 
+from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
+    canonical_json_bytes,
+    json_value_from_bytes,
+)
 from memcontam.experiment.phase12.filter_challenge.final_verifier import (
     FinalVerifierError,
     verify_final_report,
 )
+from memcontam.experiment.phase12.filter_challenge.mft_state_models import JsonValue
 
 
-ApprovalMutation = Callable[[dict[str, object]], None]
+JsonObject = dict[str, JsonValue]
+ApprovalMode = Literal["plan-compliance", "code-quality", "integration", "scope"]
+ApprovalMutation = Callable[[JsonObject], None]
+_APPROVAL_MODES: tuple[ApprovalMode, ...] = (
+    "plan-compliance", "code-quality", "integration", "scope",
+)
 
 
-def _approvals(tmp_path: Path) -> tuple[object, tuple[Path, Path, Path, Path]]:
+def _approvals(tmp_path: Path) -> tuple[VerifierFixture, tuple[Path, Path, Path, Path]]:
     fixture = _fixture(tmp_path)
-    paths = tuple(tmp_path / f"f{index}.json" for index in range(1, 5))
-    for mode, path in zip(("plan-compliance", "code-quality", "integration", "scope"), paths, strict=True):
+    paths: tuple[Path, Path, Path, Path] = (
+        tmp_path / "f1.json", tmp_path / "f2.json", tmp_path / "f3.json", tmp_path / "f4.json",
+    )
+    for mode, path in zip(_APPROVAL_MODES, paths, strict=True):
         verify_final_report(_request(fixture, mode, path))
     return fixture, paths
 
 
 def _replace(path: Path, mutation: ApprovalMutation) -> None:
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload = _json_object(json_value_from_bytes(path.read_bytes(), "TEST_APPROVAL_INVALID"))
     mutation(payload)
-    path.write_text(json.dumps(payload), encoding="utf-8")
+    path.write_bytes(canonical_json_bytes(payload))
+
+
+def _json_object(value: JsonValue) -> JsonObject:
+    assert isinstance(value, dict)
+    return value
+
+
+def _json_array(value: JsonValue) -> list[JsonValue]:
+    assert isinstance(value, list)
+    return value
+
+
+def _json_field(value: JsonObject, name: str) -> JsonValue:
+    assert name in value
+    return value[name]
+
+
+def _command(report: JsonObject) -> JsonObject:
+    return _json_object(_json_array(_json_field(report, "commands"))[0])
+
+
+def _reconciled_output(report: JsonObject, name: str) -> JsonObject:
+    outputs = _json_object(_json_field(report, "reconciled_outputs"))
+    return _json_object(_json_field(outputs, name))
 
 
 def test_terminal_rejects_semantic_approval_tampering(tmp_path: Path) -> None:
     fixture, paths = _approvals(tmp_path)
     f1, f2, f3, f4 = paths
     mutations: tuple[tuple[Path, ApprovalMutation], ...] = (
-        (f2, lambda report: report["commands"][0].__setitem__("stdout_sha256", "f" * 64)),
+        (f2, lambda report: _command(report).__setitem__("stdout_sha256", "f" * 64)),
         (f2, lambda report: report.__setitem__("base_commit", "b" * 40)),
         (f4, lambda report: report.__setitem__("base_commit", "b" * 40)),
         (f2, lambda report: report.__setitem__("changed_paths", ["scripts/tampered.py"])),
-        (f3, lambda report: report["commands"][0].__setitem__("stdout_sha256", "f" * 64)),
-        (f3, lambda report: report["mft_pass_ids"].__setitem__(0, "MFT-FV5-TAMPERED")),
-        (f3, lambda report: report["reconciled_outputs"]["validate-selected-policy"].__setitem__("execution_authorized", True)),
-        (f3, lambda report: report["reconciled_outputs"]["build-archive"].__setitem__("implementation_commit", "b" * 40)),
-        (f3, lambda report: report["reconciled_outputs"]["bct-readiness"].__setitem__("provider_calls_issued", 1)),
-        (f3, lambda report: report["bct_family_statuses"].__setitem__("BCT-FV5-01-CERTIFIED", "executed")),
+        (f3, lambda report: _command(report).__setitem__("stdout_sha256", "f" * 64)),
+        (f3, lambda report: _json_array(_json_field(report, "mft_pass_ids")).__setitem__(0, "MFT-FV5-TAMPERED")),
+        (f3, lambda report: _reconciled_output(report, "validate-selected-policy").__setitem__("execution_authorized", True)),
+        (f3, lambda report: _reconciled_output(report, "build-archive").__setitem__("implementation_commit", "b" * 40)),
+        (f3, lambda report: _reconciled_output(report, "bct-readiness").__setitem__("provider_calls_issued", 1)),
+        (f3, lambda report: _json_object(_json_field(report, "bct_family_statuses")).__setitem__("BCT-FV5-01-CERTIFIED", "executed")),
         (f4, lambda report: report.__setitem__("authority_status", "tampered")),
         (f4, lambda report: report.__setitem__("source_dirty_allowlist", [])),
         (f4, lambda report: report.__setitem__("task_worktree_clean", False)),
@@ -66,7 +103,7 @@ def test_terminal_lists_every_unresolved_scientific_choice(tmp_path: Path) -> No
 
     report = verify_final_report(_terminal_request(fixture, tmp_path / "terminal.json", paths))
 
-    choices = report["remaining_scientific_choices"]
+    choices = _json_object(report["remaining_scientific_choices"])
     assert list(choices) == [
         "inventory",
         "operational_suite",
