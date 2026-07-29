@@ -30,7 +30,8 @@ class _ProviderConstructionScanner(ast.NodeVisitor):
 
     def visit_Import(self, node: ast.Import) -> None:
         for item in node.names:
-            self._aliases[item.asname or item.name.split(".")[0]] = item.name
+            bound_name = item.asname or item.name.split(".")[0]
+            self._aliases[bound_name] = item.name if item.asname is not None else bound_name
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         if node.module is None:

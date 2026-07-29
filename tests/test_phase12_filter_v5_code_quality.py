@@ -44,6 +44,21 @@ from memcontam.experiment.phase12.filter_challenge.final_verifier_quality import
             "    first = second = provider.OpenAIResponsesClient\n"
             "    return second(None, allow_live_calls=True)\n",
         ),
+        (
+            "scripts/unaliased_factory.py",
+            "import memcontam.clients.factory\n"
+            "memcontam.clients.factory.build_llm_client(None)\n",
+        ),
+        (
+            "scripts/unaliased_compatible.py",
+            "import memcontam.clients.openai_compatible\n"
+            "memcontam.clients.openai_compatible.OpenAICompatibleClient(None)\n",
+        ),
+        (
+            "scripts/unaliased_responses.py",
+            "import memcontam.clients.openai_responses\n"
+            "memcontam.clients.openai_responses.OpenAIResponsesClient(None)\n",
+        ),
     ),
 )
 def test_code_quality_rejects_provider_calls_outside_filter_challenge_and_nested_scopes(
