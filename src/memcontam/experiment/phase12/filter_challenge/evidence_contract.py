@@ -35,6 +35,38 @@ AUTHORITY_HASHES: Final[dict[str, str]] = {
     "protocol": "9dcd3855f3f65b8d623b3d3c3600a6a7b0231228c19231359d883e3f40b1959a",
     "theory": "56c42b1af761c2f3838638316823d0ce394c6c543f17aff97f4657721c964983",
 }
+AUTHORITY_BINDINGS: Final = (
+    (
+        "accepted_erratum",
+        Path("/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts/AGENTS.md"),
+        AUTHORITY_HASHES["accepted_erratum"],
+    ),
+    (
+        "amendment",
+        Path("/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts/Phase 12 Filter-v5 Verifier-Backed Challenge Amendment.md"),
+        AMENDMENT["sha256"],
+    ),
+    (
+        "theory",
+        Path("/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts/Phase 12 — THEORETICAL ARTIFACT.md"),
+        AUTHORITY_HASHES["theory"],
+    ),
+    (
+        "baseline",
+        Path("/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts/Phase 12-Compatible Baseline Memory and Lightweight Filter Design revised-v3.md"),
+        AUTHORITY_HASHES["baseline"],
+    ),
+    (
+        "protocol",
+        Path("/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts/Phase 12-Compatible Contamination Construction Intervention Timing and Sensitivity Protocol.md"),
+        AUTHORITY_HASHES["protocol"],
+    ),
+    (
+        "experiment_design",
+        Path("/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts/Phase 12-Compatible Pilot Main and Exploratory Experiment Design.md"),
+        AUTHORITY_HASHES["experiment_design"],
+    ),
+)
 POLICY: Final[dict[str, str]] = {
     "canonical_patch_status": "pending_before_provider_backed_pilot_b",
     "claim_boundary": "build_layer_implementation_and_state_transition_only",
@@ -71,7 +103,9 @@ def canonical_json_bytes(value: JsonValue) -> bytes:
 def descriptor_sha256(path: Path) -> DescriptorHash:
     if not path.is_absolute():
         raise EvidenceBuildError("DESCRIPTOR_PATH_ABSOLUTE_REQUIRED")
-    parts = tuple(part for part in path.parts if part not in {"/", ".", ".."})
+    if any(part in {".", ".."} for part in path.parts):
+        raise EvidenceBuildError("DESCRIPTOR_PATH_COMPONENT_INVALID")
+    parts = tuple(part for part in path.parts if part != "/")
     if not parts:
         raise EvidenceBuildError("DESCRIPTOR_PATH_INVALID")
     root_fd = os.open("/", os.O_RDONLY | os.O_DIRECTORY)
