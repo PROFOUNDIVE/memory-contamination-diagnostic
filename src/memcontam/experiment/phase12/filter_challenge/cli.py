@@ -9,6 +9,7 @@ from typing import Literal, TypeAlias, assert_never
 from pydantic import BaseModel, ValidationError
 
 from memcontam.experiment.phase12.filter_challenge.bct import (
+    BCTAuthorizationError,
     ExecutionPreflightRequest,
     ExecutionPrerequisites,
     SoftwareInterfaceChecks,
@@ -134,6 +135,7 @@ def run(args: argparse.Namespace) -> None:
         report = _dispatch(args.filter_v5_command, args)
     except (
         BuildArchiveError,
+        BCTAuthorizationError,
         MftReportError,
         OSError,
         RegistryValidationError,
@@ -209,6 +211,14 @@ def _build_readiness(args: argparse.Namespace) -> BaseModel:
     prerequisites = ExecutionPrerequisites.model_validate_json(
         args.execution_prerequisites.read_text(encoding="utf-8")
     )
+    if (
+        prerequisites.search_config_frozen
+        and prerequisites.inventory_frozen
+        and prerequisites.canonical_patch_status == "applied"
+        and prerequisites.provider_config_enabled
+        and prerequisites.runtime_authorization_present
+    ):
+        raise BCTAuthorizationError("BCT_EXECUTION_AUTHORIZATION_FORBIDDEN")
     provenance = next(
         case
         for case in mft.safety_report.cases

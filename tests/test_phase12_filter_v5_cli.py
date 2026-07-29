@@ -262,6 +262,50 @@ def test_bct_readiness_consumes_explicit_reports_without_constructing_client(
     assert error.value.code == 2
 
 
+def test_bct_readiness_rejects_authorized_prerequisites(tmp_path: Path) -> None:
+    mft = tmp_path / "mft.json"
+    assert _run(
+        "mft", "--search-config", str(SEARCH), "--fixture-root", str(FIXTURES),
+        "--output", str(mft),
+    ).returncode == 0
+    archive_report = tmp_path / "archive.json"
+    assert _run(
+        "build-archive", "--search-config", str(SEARCH), "--fixture-root", str(FIXTURES),
+        "--implementation-commit", COMMIT, "--freeze-id", "freeze-v1",
+        "--run-id", "run-v1", "--output-root", str(tmp_path / "archives"),
+        "--output", str(archive_report),
+    ).returncode == 0
+    assert _run(
+        "validate-archive", "--archive", str(tmp_path / "archives" / "run-v1"),
+        "--expected-implementation-commit", COMMIT,
+        "--expected-search-config-hash", SEARCH_HASH, "--output", str(archive_report),
+    ).returncode == 0
+
+    prerequisites = tmp_path / "authorized_prerequisites.json"
+    payload = json.loads(PREREQUISITES.read_text(encoding="utf-8"))
+    payload.update(
+        {
+            "search_config_frozen": True,
+            "inventory_frozen": True,
+            "canonical_patch_status": "applied",
+            "provider_config_enabled": True,
+            "runtime_authorization_present": True,
+        }
+    )
+    prerequisites.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+
+    output = tmp_path / "readiness.json"
+    result = _run(
+        "bct-readiness", "--search-config", str(SEARCH), "--mft-report", str(mft),
+        "--archive-report", str(archive_report), "--execution-prerequisites", str(prerequisites),
+        "--output", str(output),
+    )
+
+    assert result.returncode != 0
+    assert "BCT_EXECUTION_AUTHORIZATION_FORBIDDEN" in result.stderr
+    assert not output.exists()
+
+
 def test_build_archive_rejects_existing_target(tmp_path: Path) -> None:
     target = tmp_path / "archives" / "run-v1"
     target.mkdir(parents=True)
