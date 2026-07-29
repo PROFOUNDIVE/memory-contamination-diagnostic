@@ -333,15 +333,13 @@ def test_execution_preflight_reports_each_prerequisite_blocker(
     assert len(result.blocking_reason_codes) == 1
     constructed = 0
 
-    def forbidden_constructor() -> str:
+    def forbidden_constructor(_stage: str) -> str:
         nonlocal constructed
         constructed += 1
         return "client"
 
     with pytest.raises(BCTAuthorizationError):
-        authorize_client_construction(
-            _software(), result, forbidden_constructor, stage="pilot_b"
-        )
+        authorize_client_construction(_software(), result, forbidden_constructor)
     assert constructed == 0
 
 
@@ -410,7 +408,7 @@ def test_main_requires_selected_policy_before_authorization_and_constructor_is_u
     )
     constructed = 0
 
-    def forbidden_constructor() -> str:
+    def forbidden_constructor(_stage: str) -> str:
         nonlocal constructed
         constructed += 1
         return "client"
@@ -418,12 +416,10 @@ def test_main_requires_selected_policy_before_authorization_and_constructor_is_u
     assert build.execution_status == pilot_b.execution_status == main_ready.execution_status == "authorized"
     assert main_blocked.overall_reason_code == "SELECTED_POLICY_REQUIRED"
     with pytest.raises(BCTAuthorizationError, match="SELECTED_POLICY_REQUIRED"):
-        authorize_client_construction(
-            software, main_blocked, forbidden_constructor, stage="main"
-        )
+        authorize_client_construction(software, main_blocked, forbidden_constructor)
     with pytest.raises(BCTAuthorizationError, match="DOMAIN_SCHEMA_INVALID"):
         authorize_client_construction(
-            _software(domain_schema_valid=False), main_ready, forbidden_constructor, stage="main"
+            _software(domain_schema_valid=False), main_ready, forbidden_constructor
         )
     assert constructed == 0
     assert json.loads(build_readiness(
@@ -467,24 +463,29 @@ def test_build_preflight_cannot_construct_a_main_provider_factory_client(
         ),
     )
     constructed = 0
+    supplied_stages: list[str] = []
 
     def forbidden_provider(*_args, **_kwargs) -> str:
         nonlocal constructed
         constructed += 1
         return "client"
 
+    def provider_factory(stage: str):
+        supplied_stages.append(stage)
+        return client_factory_module.build_llm_client(
+            ProviderConfig(provider="openai_compatible", live_calls_enabled=True),
+            stage=stage,
+            execution_class="live",
+            allow_live_calls=True,
+        )
+
     monkeypatch.setattr(client_factory_module, "OpenAICompatibleClient", forbidden_provider)
 
-    with pytest.raises(BCTAuthorizationError, match="EXECUTION_STAGE_MISMATCH"):
+    with pytest.raises(ValueError, match="unsupported provider configuration"):
         authorize_client_construction(
             software,
             build,
-            lambda: client_factory_module.build_llm_client(
-                ProviderConfig(provider="openai_compatible", live_calls_enabled=True),
-                stage="main",
-                execution_class="live",
-                allow_live_calls=True,
-            ),
-            stage="main",
+            provider_factory,
         )
+    assert supplied_stages == ["build"]
     assert constructed == 0

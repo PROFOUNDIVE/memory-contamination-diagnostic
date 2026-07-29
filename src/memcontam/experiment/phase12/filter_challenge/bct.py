@@ -462,14 +462,10 @@ _Client = TypeVar("_Client")
 def authorize_client_construction(
     software: SoftwareInterfaceReadiness,
     execution: ExecutionPreflight,
-    client_factory: Callable[[], _Client],
-    *,
-    stage: Literal["build", "pilot_b", "main"],
+    client_factory: Callable[[Literal["build", "pilot_b", "main"]], _Client],
 ) -> _Client:
     if software.software_interface_status != "ready":
         raise BCTAuthorizationError(software.software_interface_reason_code or "SOFTWARE_NOT_READY")
     if execution.execution_status != "authorized":
         raise BCTAuthorizationError(execution.overall_reason_code or "EXECUTION_NOT_AUTHORIZED")
-    if execution.stage != stage:
-        raise BCTAuthorizationError("EXECUTION_STAGE_MISMATCH")
-    return client_factory()
+    return client_factory(execution.stage)
