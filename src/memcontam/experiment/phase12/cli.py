@@ -107,6 +107,12 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
     phase12 = subparsers.add_parser("phase12")
     commands = phase12.add_subparsers(dest="phase12_command", required=True)
 
+    from memcontam.experiment.phase12.filter_challenge.cli import (
+        add_parser as add_filter_v5_parser,
+    )
+
+    add_filter_v5_parser(commands)
+
     validate = commands.add_parser("validate")
     validate.add_argument("--config", type=Path, required=True)
 
@@ -170,7 +176,11 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
 
 
 def run(args: argparse.Namespace) -> None:
-    if args.phase12_command == "validate":
+    if args.phase12_command == "filter-v5":
+        from memcontam.experiment.phase12.filter_challenge.cli import run as run_filter_v5
+
+        run_filter_v5(args)
+    elif args.phase12_command == "validate":
         _validate_config(args.config)
         print(f"valid phase12 config: {args.config}")
     elif args.phase12_command == "plan":
