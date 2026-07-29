@@ -57,6 +57,8 @@ def main() -> int:
     print(json.dumps(report, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
     if arguments.mode == "terminal":
         print("FILTER_V5_BUILD_AND_MFT_COMPLETE")
+    else:
+        print("APPROVE")
     return 0
 
 

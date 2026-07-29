@@ -22,20 +22,15 @@ from memcontam.experiment.phase12.filter_challenge.final_verifier_quality import
     verify_code_quality,
 )
 from memcontam.experiment.phase12.filter_challenge.final_verifier_scope import verify_scope
+from memcontam.experiment.phase12.filter_challenge.final_verifier_terminal import (
+    build_terminal_report,
+)
 from memcontam.experiment.phase12.filter_challenge.final_verifier_types import (
     FinalVerifierError,
     FinalVerifierMode,
     FinalVerifierRequest,
 )
 from memcontam.experiment.phase12.filter_challenge.mft_state_models import JsonValue
-
-
-_APPROVAL_MODES: tuple[FinalVerifierMode, ...] = (
-    "plan-compliance",
-    "code-quality",
-    "integration",
-    "scope",
-)
 
 
 def verify_final_report(request: FinalVerifierRequest) -> dict[str, JsonValue]:
@@ -47,16 +42,16 @@ def verify_final_report(request: FinalVerifierRequest) -> dict[str, JsonValue]:
             report = _approval_report(request.mode, bindings, verify_plan_compliance(request.evidence_root, summary))
         case "code-quality":
             assert request.base_commit is not None
-            report = _approval_report(request.mode, bindings, verify_code_quality(request.repository_root, request.base_commit, str(bindings["implementation_commit"])))
+            report = _approval_report(request.mode, bindings, verify_code_quality(request.repository_root, request.base_commit, str(bindings["implementation_commit"]), request.evidence_root, request.validation_summary))
         case "integration":
             assert request.search_config is not None and request.fixture_root is not None
             assert request.execution_prerequisites is not None and request.scratch_root is not None
-            report = _approval_report(request.mode, bindings, verify_integration(request.repository_root, request.evidence_root, str(bindings["implementation_commit"]), request.search_config, request.fixture_root, request.execution_prerequisites, request.scratch_root))
+            report = _approval_report(request.mode, bindings, verify_integration(request.repository_root, request.evidence_root, str(bindings["implementation_commit"]), request.search_config, request.fixture_root, request.execution_prerequisites, request.scratch_root, request.validation_summary))
         case "scope":
             assert request.base_commit is not None and request.source_repository_root is not None
             report = _approval_report(request.mode, bindings, verify_scope(request.repository_root, request.source_repository_root, request.base_commit, str(bindings["implementation_commit"])))
         case "terminal":
-            report = _terminal_report(request, bindings)
+            report = build_terminal_report(request, bindings)
         case unreachable:
             raise AssertionError(unreachable)
     request.output.parent.mkdir(parents=True, exist_ok=True)
@@ -129,6 +124,8 @@ def _validate_mode_inputs(request: FinalVerifierRequest) -> None:
         request.execution_prerequisites,
         request.scratch_root,
     )
+    if request.mode != "terminal" and request.approval_paths:
+        raise FinalVerifierError("IRRELEVANT_MODE_ARGUMENTS")
     match request.mode:
         case "plan-compliance" | "terminal":
             if request.base_commit is not None or request.source_repository_root is not None or any(integration):
@@ -150,31 +147,6 @@ def _validate_mode_inputs(request: FinalVerifierRequest) -> None:
                 raise FinalVerifierError("IRRELEVANT_MODE_ARGUMENTS")
         case unreachable:
             raise AssertionError(unreachable)
-
-
-def _terminal_report(
-    request: FinalVerifierRequest, bindings: dict[str, JsonValue]
-) -> dict[str, JsonValue]:
-    if len(request.approval_paths) != len(_APPROVAL_MODES):
-        raise FinalVerifierError("FINAL_APPROVALS_REQUIRED")
-    for mode, path in zip(_APPROVAL_MODES, request.approval_paths, strict=True):
-        approval = json_value_from_bytes(path.read_bytes(), "FINAL_APPROVAL_INVALID")
-        if not isinstance(approval, dict) or (
-            approval.get("mode") != mode
-            or approval.get("verdict") != "APPROVE"
-            or approval.get("bindings") != bindings
-        ):
-            raise FinalVerifierError("FINAL_APPROVAL_MISMATCH")
-    return {
-        "bindings": bindings,
-        "build_status": "FILTER_V5_BUILD_AND_MFT_COMPLETE",
-        "evidence_paths_and_hashes": [
-            {"path": name, "sha256": sha256_path(request.evidence_root / name)}
-            for name in EVIDENCE_FILENAMES
-        ],
-        "next_gate_status": "READY_FOR_AUTHORIZED_FILTER_V5_BEHAVIORAL_CAPABILITY_RUN",
-        "provider_calls_issued": 0,
-    }
 
 
 def _git(root: Path, *arguments: str) -> str:

@@ -13,13 +13,30 @@ from memcontam.experiment.phase12.filter_challenge.mft_state_models import JsonV
 
 
 _FORBIDDEN_PREFIXES = (".sisyphus/", "data/", "docs/", "configs/", "runs/")
+_FORBIDDEN_EXACT_PATHS = frozenset(
+    {
+        "src/memcontam/memory/admission.py",
+        "src/memcontam/memory/filtered_state.py",
+        "src/memcontam/experiment/phase12/filter_mft.py",
+        "src/memcontam/experiment/phase12/filter_v4.py",
+        "tests/test_phase12_filter_v4.py",
+        "tests/test_phase12_pilot_a.py",
+        "data/phase12/filter_v4/evidence.json",
+        "docs/scientific-golden.json",
+        "Pilot-A 관련 기록.md",
+    }
+)
 
 
 def verify_scope(
     repository_root: Path, source_repository_root: Path, base_commit: str, implementation_commit: str
 ) -> dict[str, JsonValue]:
     changed = _git(repository_root, "diff", "--name-only", base_commit, implementation_commit)
-    forbidden = [path for path in changed.splitlines() if path.startswith(_FORBIDDEN_PREFIXES)]
+    forbidden = [
+        path
+        for path in changed.splitlines()
+        if path.startswith(_FORBIDDEN_PREFIXES) or path in _FORBIDDEN_EXACT_PATHS
+    ]
     if forbidden:
         raise FinalVerifierError("SCOPE_FORBIDDEN_DIFF")
     if _git(repository_root, "status", "--porcelain=v1"):
@@ -28,13 +45,14 @@ def verify_scope(
     if source_status != ["?? Pilot-A 관련 기록.md"]:
         raise FinalVerifierError("SOURCE_DIRTY_ALLOWLIST_MISMATCH")
     source_dirty_allowlist: list[JsonValue] = [*source_status]
+    changed_path_values: list[JsonValue] = [*changed.splitlines()]
     try:
         matched = all(descriptor_sha256(path).sha256 == digest for _, path, digest in AUTHORITY_BINDINGS)
     except EvidenceBuildError as error:
         raise FinalVerifierError(error.code) from error
     if not matched:
         raise FinalVerifierError("AUTHORITY_MISMATCH")
-    return {"authority_status": "matched", "forbidden_diff_count": 0, "source_dirty_allowlist": source_dirty_allowlist, "task_worktree_clean": True}
+    return {"authority_status": "matched", "base_commit": base_commit, "changed_paths": changed_path_values, "forbidden_diff_count": 0, "source_dirty_allowlist": source_dirty_allowlist, "task_worktree_clean": True}
 
 
 def _git(root: Path, *arguments: str) -> str:
