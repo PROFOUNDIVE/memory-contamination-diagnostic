@@ -115,6 +115,21 @@ def test_builder_rejects_plan_summary_and_report_drift(tmp_path: Path) -> None:
         validate_evidence_bundle(request.output_root)
 
 
+def test_validator_rejects_manifest_report_hash_mismatch(tmp_path: Path) -> None:
+    request = _prepared_request(tmp_path)
+    build_evidence_bundle(request)
+
+    report_path = request.output_root / EVIDENCE_FILENAMES[1]
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["provider_calls_issued"] = 1
+    report_path.write_text(
+        json.dumps(report, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8"
+    )
+
+    with pytest.raises(EvidenceBuildError, match=r"^EVIDENCE_HASH_MISMATCH$"):
+        validate_evidence_bundle(request.output_root)
+
+
 @pytest.mark.parametrize(
     "mutation",
     (

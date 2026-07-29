@@ -138,7 +138,7 @@ def validate_evidence_bundle(root: Path) -> EvidenceBundle:
     if any(
         report_hashes.get(name) != sha256_path(root / name) for name in NON_MANIFEST_FILENAMES
     ):
-        raise EvidenceBuildError("EVIDENCE_GRAPH_MISMATCH")
+        raise EvidenceBuildError("EVIDENCE_HASH_MISMATCH")
     return EvidenceBundle(
         header=header,
         implementation_manifest_sha256=sha256_path(root / EVIDENCE_FILENAMES[0]),
