@@ -12,6 +12,9 @@ from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
 from memcontam.experiment.phase12.filter_challenge.final_verifier_plan_checks import (
     LEDGER_CHECKS,
 )
+from memcontam.experiment.phase12.filter_challenge.final_verifier_terminal_semantics import (
+    validate_terminal_semantics,
+)
 from memcontam.experiment.phase12.filter_challenge.final_verifier_types import (
     FinalVerifierError,
     FinalVerifierRequest,
@@ -31,17 +34,12 @@ def build_terminal_report(
     request: FinalVerifierRequest, bindings: dict[str, JsonValue]
 ) -> dict[str, JsonValue]:
     approvals = _load_approvals(request, bindings)
-    plan = approvals["plan-compliance"]
+    semantic = validate_terminal_semantics(request, bindings, approvals)
     integration = approvals["integration"]
-    scope = approvals["scope"]
-    outputs = integration.get("reconciled_outputs")
-    checklist = plan.get("checklist")
-    if not isinstance(outputs, dict) or not isinstance(checklist, list):
-        raise FinalVerifierError("FINAL_APPROVAL_MISMATCH")
-    bct = outputs.get("bct-readiness")
-    base_commit = scope.get("base_commit")
-    if not isinstance(base_commit, str) or not isinstance(bct, dict) or len(checklist) != 12:
-        raise FinalVerifierError("FINAL_APPROVAL_MISMATCH")
+    outputs = semantic.outputs
+    checklist = semantic.checklist
+    bct = semantic.bct
+    base_commit = semantic.base_commit
     head = _git(request.repository_root, "rev-parse", "HEAD")
     ordered_commit_series: list[JsonValue] = [
         value
@@ -72,17 +70,26 @@ def build_terminal_report(
         "archive_result": outputs.get("validate-archive"),
         "bct_result": bct,
         "canonical_patch_status": bct["canonical_patch_status"],
-        "remaining_scientific_choices": {
-            "blocking_reason_codes": bct["blocking_reason_codes"],
-            "provider_authorization_status": bct["provider_authorization_status"],
-            "scientific_inventory_status": bct["scientific_inventory_status"],
-        },
+        "remaining_scientific_choices": _remaining_choices(bct),
         "next_gate_status": "READY_FOR_AUTHORIZED_FILTER_V5_BEHAVIORAL_CAPABILITY_RUN",
         "provider_calls_issued": integration.get("provider_calls_issued"),
         "evidence_paths_and_hashes": [
             {"path": name, "sha256": sha256_path(request.evidence_root / name)}
             for name in EVIDENCE_FILENAMES
         ],
+    }
+
+
+def _remaining_choices(bct: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    return {
+        "inventory": bct["scientific_inventory_status"],
+        "operational_suite": "unresolved", "decision_rule": "unresolved", "kappa": "unresolved",
+        "coverage_contract": "unresolved", "probe_count": "unresolved", "replicate_count": "unresolved",
+        "retry_count": "unresolved", "canonicalizer": "unresolved", "tolerance": "unresolved",
+        "evaluability_rate": "unresolved", "inclusion_rate": "unresolved", "ordinary_route_rate": "unresolved",
+        "price_registry": "unresolved", "monetary_cost_cap": "unresolved", "latency_cap": "unresolved",
+        "ci_procedure": "unresolved", "constraint_order": "unresolved", "tie_break": "unresolved",
+        "provider_authorization": bct["provider_authorization_status"],
     }
 
 
