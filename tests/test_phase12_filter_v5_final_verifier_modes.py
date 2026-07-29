@@ -17,6 +17,7 @@ from memcontam.experiment.phase12.filter_challenge.evidence import (
 )
 from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
     canonical_json_bytes,
+    json_value_from_bytes,
 )
 from memcontam.experiment.phase12.filter_challenge.final_verifier import (
     FinalVerifierError,
@@ -30,6 +31,7 @@ from memcontam.experiment.phase12.filter_challenge.final_verifier_quality import
     _structural_findings,
     verify_code_quality,
 )
+from memcontam.experiment.phase12.filter_challenge.mft_state_models import JsonValue
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -250,12 +252,30 @@ def test_modes_reject_irrelevant_or_missing_mode_inputs(tmp_path: Path) -> None:
         verify_final_report(replace(plan_request, base_commit=fixture.base_commit))
 
 
-def _write_json(path: Path, value: dict[str, object]) -> None:
+JsonObject = dict[str, JsonValue]
+
+
+def _json_object(value: JsonValue) -> JsonObject:
+    assert isinstance(value, dict)
+    return value
+
+
+def _json_array(value: JsonValue) -> list[JsonValue]:
+    assert isinstance(value, list)
+    return value
+
+
+def _json_field(value: JsonObject, name: str) -> JsonValue:
+    assert name in value
+    return value[name]
+
+
+def _write_json(path: Path, value: JsonObject) -> None:
     path.write_bytes(canonical_json_bytes(value))
 
 
-def _report(root: Path, name: str) -> dict[str, object]:
-    return json.loads((root / name).read_text(encoding="utf-8"))
+def _report(root: Path, name: str) -> JsonObject:
+    return _json_object(json_value_from_bytes((root / name).read_bytes(), "TEST_REPORT_INVALID"))
 
 
 def _mutate_ledger_clause(root: Path, summary: Path, clause: int) -> None:
@@ -264,33 +284,50 @@ def _mutate_ledger_clause(root: Path, summary: Path, clause: int) -> None:
     archive = _report(root, "archive_validation_report.json")
     readiness = _report(root, "bct_readiness_report.json")
     validation = _report(root, "test_lint_typecheck_report.json")
+    policy_header = _json_object(_json_field(policy, "header"))
+    policy_config_schema_hashes = _json_object(_json_field(policy_header, "config_schema_hashes"))
+    mft_report = _json_object(_json_field(mft, "report"))
+    mft_state = _json_object(_json_field(mft_report, "state_report"))
+    mft_results = _json_array(_json_field(mft_state, "results"))
+    mft_safety = _json_object(_json_field(mft_report, "safety_report"))
+    mft_cases = _json_array(_json_field(mft_safety, "cases"))
+    archive_report = _json_object(_json_field(archive, "report"))
+    readiness_report = _json_object(_json_field(readiness, "report"))
     match clause:
         case 1:
             policy["domain_model_schema_hashes"] = {}
             _write_json(root / "policy_schema_hashes.json", policy)
         case 2:
-            mft["report"]["state_report"]["results"][0]["actual"]["source_state_after_hash"] = "drift"
+            result = _json_object(mft_results[0])
+            actual = _json_object(_json_field(result, "actual"))
+            actual["source_state_after_hash"] = "drift"
             _write_json(root / "mft_fv5_report.json", mft)
         case 3:
-            mft["report"]["safety_report"]["cases"][3]["assertions"][0]["actual"] = ["unknown"]
+            assertions = _json_array(_json_field(_json_object(mft_cases[3]), "assertions"))
+            _json_object(assertions[0])["actual"] = ["unknown"]
             _write_json(root / "mft_fv5_report.json", mft)
         case 4:
-            mft["report"]["safety_report"]["cases"][4]["assertions"][0]["actual"] = ["missing"]
+            assertions = _json_array(_json_field(_json_object(mft_cases[4]), "assertions"))
+            _json_object(assertions[0])["actual"] = ["missing"]
             _write_json(root / "mft_fv5_report.json", mft)
         case 5:
-            mft["report"]["state_report"]["results"][2]["actual"]["route_targets"] = ["active"]
+            result = _json_object(mft_results[2])
+            actual = _json_object(_json_field(result, "actual"))
+            actual["route_targets"] = ["active"]
             _write_json(root / "mft_fv5_report.json", mft)
         case 6:
-            policy["header"]["config_schema_hashes"]["search_config"] = "drift"
+            policy_config_schema_hashes["search_config"] = "drift"
             _write_json(root / "policy_schema_hashes.json", policy)
         case 7:
-            archive["report"]["run_id"] = "drift"
+            archive_report["run_id"] = "drift"
             _write_json(root / "archive_validation_report.json", archive)
         case 8:
-            mft["report"]["execution_counts"][0]["count"] = 0
+            execution_counts = _json_array(_json_field(mft_report, "execution_counts"))
+            _json_object(execution_counts[0])["count"] = 0
             _write_json(root / "mft_fv5_report.json", mft)
         case 9:
-            readiness["report"]["family_statuses"][0]["test_id"] = "BCT-FV5-INVALID"
+            family_statuses = _json_array(_json_field(readiness_report, "family_statuses"))
+            _json_object(family_statuses[0])["test_id"] = "BCT-FV5-INVALID"
             _write_json(root / "bct_readiness_report.json", readiness)
         case 10:
             validation["validation_status"] = "fail"
@@ -305,13 +342,16 @@ def _mutate_ledger_clause(root: Path, summary: Path, clause: int) -> None:
                 "test_lint_typecheck_report.json", "bct_readiness_report.json",
             ):
                 report = _report(root, name)
-                report["header"]["policy"]["canonical_patch_status"] = "applied"
+                header = _json_object(_json_field(report, "header"))
+                _json_object(_json_field(header, "policy"))["canonical_patch_status"] = "applied"
                 _write_json(root / name, report)
             manifest = _report(root, "implementation_manifest.json")
-            manifest["header"]["policy"]["canonical_patch_status"] = "applied"
+            manifest_header = _json_object(_json_field(manifest, "header"))
+            _json_object(_json_field(manifest_header, "policy"))["canonical_patch_status"] = "applied"
+            manifest_reports = _json_object(_json_field(manifest, "reports"))
             manifest["reports"] = {
                 name: hashlib.sha256((root / name).read_bytes()).hexdigest()
-                for name in manifest["reports"]
+                for name in manifest_reports
             }
             _write_json(root / "implementation_manifest.json", manifest)
         case unreachable:
@@ -392,13 +432,16 @@ def test_integration_reconciles_all_outputs_and_copied_mutations(tmp_path: Path)
     fixture = _fixture(tmp_path)
 
     report = verify_final_report(_request(fixture, "integration", tmp_path / "f3.json"))
+    reconciled_outputs = _json_object(_json_field(report, "reconciled_outputs"))
+    selected_policy = _json_object(_json_field(reconciled_outputs, "validate-selected-policy"))
+    mutations = _json_array(_json_field(report, "mutations"))
 
-    assert set(report["reconciled_outputs"]) == {
+    assert set(reconciled_outputs) == {
         "validate-search-config", "validate-selected-policy", "mft", "build-archive",
         "validate-archive", "cost-preview", "bct-readiness",
     }
-    assert report["reconciled_outputs"]["validate-selected-policy"]["execution_authorized"] is False
-    assert {item["mutation_id"] for item in report["mutations"]} >= {
+    assert selected_policy["execution_authorized"] is False
+    assert {_json_object(item)["mutation_id"] for item in mutations} >= {
         "archive_bytes", "bct_authorization", "provenance_evidence",
     }
     assert report["execution_guards"] == {
