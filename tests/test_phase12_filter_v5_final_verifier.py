@@ -132,7 +132,7 @@ def test_terminal_refuses_missing_approvals_and_rewritten_evidence(tmp_path: Pat
     with pytest.raises(FinalVerifierError, match="FINAL_APPROVALS_REQUIRED"):
         verify_final_report(terminal)
 
-    approvals = []
+    approvals: list[Path] = []
     for mode in APPROVAL_MODES:
         path = tmp_path / f"{mode}.json"
         path.write_text(
@@ -149,9 +149,8 @@ def test_terminal_refuses_missing_approvals_and_rewritten_evidence(tmp_path: Pat
         _request(evidence, "terminal", tmp_path / "terminal.json"),
         approval_paths=tuple(approvals),
     )
-    terminal_report = verify_final_report(terminal)
-    assert terminal_report["build_status"] == "FILTER_V5_BUILD_AND_MFT_COMPLETE"
-    assert terminal_report["provider_calls_issued"] == 0
+    with pytest.raises(FinalVerifierError, match="FINAL_APPROVAL_MISMATCH"):
+        verify_final_report(terminal)
 
     (evidence.output_root / EVIDENCE_FILENAMES[1]).write_text("{}\n", encoding="utf-8")
     with pytest.raises(FinalVerifierError, match="EVIDENCE_BYTES_REWRITTEN"):
