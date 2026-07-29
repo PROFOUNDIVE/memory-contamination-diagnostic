@@ -1,21 +1,27 @@
 from __future__ import annotations
 
-import hashlib
 import json
-import os
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
+from memcontam.experiment.phase12.filter_challenge.final_verifier_command_records import (
+    command_record,
+    reconcile_summary_records,
+    record_json,
+)
 from memcontam.experiment.phase12.filter_challenge.evidence_contract import json_value_from_bytes
 from memcontam.experiment.phase12.filter_challenge.final_verifier_integration_support import (
+    GUARD_SENTINEL_CONTENT,
+    GuardedCommand,
     install_execution_guards,
     load_yaml_object,
+    run_guarded_command,
 )
 from memcontam.experiment.phase12.filter_challenge.final_verifier_types import FinalVerifierError
 from memcontam.experiment.phase12.filter_challenge.mft import MFT_IDS
 from memcontam.experiment.phase12.filter_challenge.mft_state_models import JsonValue
+from memcontam.experiment.phase12.filter_challenge.validation_summary import Task17CommandRecord
 
 
 COMMAND_IDS = (
@@ -43,11 +49,11 @@ def verify_integration(
         raise FinalVerifierError("SCRATCH_ROOT_EXISTS")
     scratch_root.mkdir(parents=True)
     guard_root = install_execution_guards(scratch_root)
-    outputs, commands = _run_commands(
+    outputs, records, command_guards = _run_commands(
         repository_root, implementation_commit, search_config, fixture_root, prerequisites, scratch_root, guard_root
     )
-    _reconcile_outputs(evidence_root, outputs, validation_summary)
-    mutations = _run_mutations(
+    _reconcile_outputs(evidence_root, outputs, validation_summary, records)
+    mutations, mutation_guards = _run_mutations(
         repository_root, outputs, search_config, prerequisites, scratch_root, guard_root
     )
     readiness = outputs["bct-readiness"]
@@ -66,12 +72,12 @@ def verify_integration(
     return {
         "bct_family_statuses": {str(item["test_id"]): item["status"] for item in families if isinstance(item, dict)},
         "command_ids": list(COMMAND_IDS),
-        "commands": commands,
+        "commands": [record_json(record) for record in records],
         "mft_pass_ids": mft["ordered_test_ids"],
         "mutations": mutations,
         "provider_calls_issued": 0,
         "reconciled_outputs": reconciled_outputs,
-        "execution_guards": {"bct_behavior": "not_reached", "provider_constructor": "not_reached"},
+        "execution_guards": _execution_guards((*command_guards, *mutation_guards)),
     }
 
 
@@ -83,7 +89,7 @@ def _run_commands(
     prerequisites: Path,
     scratch_root: Path,
     guard_root: Path,
-) -> tuple[dict[str, dict[str, JsonValue]], list[JsonValue]]:
+) -> tuple[dict[str, dict[str, JsonValue]], tuple[Task17CommandRecord, ...], tuple[GuardedCommand, ...]]:
     output = scratch_root / "outputs"
     archive_root = scratch_root / "archives"
     output.mkdir()
@@ -96,24 +102,30 @@ def _run_commands(
         ("cost-preview", ("--search-config", str(search_config), "--output", str(output / "cost.json"))),
         ("bct-readiness", ("--search-config", str(search_config), "--mft-report", str(output / "mft.json"), "--archive-report", str(output / "archive-validation.json"), "--execution-prerequisites", str(prerequisites), "--output", str(output / "bct-readiness.json"))),
     )
-    records: list[JsonValue] = []
+    records: list[Task17CommandRecord] = []
+    guards: list[GuardedCommand] = []
     values: dict[str, dict[str, JsonValue]] = {}
     for command_id, arguments in invocations:
-        result = _cli(repository_root, command_id, arguments, guard_root)
-        records.append(_record(repository_root, command_id, arguments, result))
+        guarded = run_guarded_command(repository_root, command_id, arguments, guard_root)
+        result = guarded.result
+        guards.append(guarded)
         if result.returncode != 0:
             raise FinalVerifierError("INTEGRATION_COMMAND_FAILED")
+        records.append(command_record(repository_root, scratch_root, command_id, arguments, result.stdout, result.stderr))
         path = output / {
             "validate-search-config": "validate-search.json", "validate-selected-policy": "validate-selected-policy.json",
             "mft": "mft.json", "build-archive": "build-archive.json", "validate-archive": "archive-validation.json",
             "cost-preview": "cost.json", "bct-readiness": "bct-readiness.json",
         }[command_id]
         values[command_id] = _json(path)
-    return values, records
+    return values, tuple(records), tuple(guards)
 
 
 def _reconcile_outputs(
-    evidence_root: Path, outputs: dict[str, dict[str, JsonValue]], validation_summary: Path
+    evidence_root: Path,
+    outputs: dict[str, dict[str, JsonValue]],
+    validation_summary: Path,
+    records: tuple[Task17CommandRecord, ...],
 ) -> None:
     expected_mft = _json(evidence_root / "mft_fv5_report.json").get("report")
     expected_archive = _json(evidence_root / "archive_validation_report.json").get("report")
@@ -137,27 +149,7 @@ def _reconcile_outputs(
         or outputs["bct-readiness"] != expected_bct
     ):
         raise FinalVerifierError("INTEGRATION_EVIDENCE_MISMATCH")
-    _reconcile_summary_records(validation_summary, outputs)
-
-
-def _reconcile_summary_records(validation_summary: Path, outputs: dict[str, dict[str, JsonValue]]) -> None:
-    summary = load_yaml_object(validation_summary)
-    records = summary.get("command_records", summary.get("commands"))
-    if records is None:
-        return
-    if not isinstance(records, list) or len(records) != len(COMMAND_IDS):
-        raise FinalVerifierError("INTEGRATION_SUMMARY_RECORDS_MISMATCH")
-    if any(
-        not isinstance(record, dict)
-        or record.get("command_id") != command_id
-        or record.get("exit_code") != 0
-        or not isinstance(record.get("stdout_sha256"), str)
-        or not isinstance(record.get("stderr_sha256"), str)
-        for command_id, record in zip(COMMAND_IDS, records, strict=True)
-    ):
-        raise FinalVerifierError("INTEGRATION_SUMMARY_RECORDS_MISMATCH")
-    if any(not output for output in outputs.values()):
-        raise FinalVerifierError("INTEGRATION_SUMMARY_RECORDS_MISMATCH")
+    reconcile_summary_records(validation_summary, records)
 
 
 def _run_mutations(
@@ -167,7 +159,7 @@ def _run_mutations(
     prerequisites: Path,
     scratch_root: Path,
     guard_root: Path,
-) -> list[JsonValue]:
+) -> tuple[list[JsonValue], tuple[GuardedCommand, ...]]:
     archive = scratch_root / "archives" / "filter-v5-build-synthetic"
     mutated_archive = scratch_root / "mutated-archive"
     shutil.copytree(archive, mutated_archive)
@@ -176,7 +168,7 @@ def _run_mutations(
     (mutated_archive / "run.json").write_text(
         json.dumps(run, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8"
     )
-    archive_failure = _cli(
+    archive_failure = run_guarded_command(
         repository_root,
         "validate-archive",
         ("--archive", str(mutated_archive), "--expected-implementation-commit", str(outputs["build-archive"]["implementation_commit"]), "--expected-search-config-hash", str(outputs["validate-search-config"]["search_config_hash"]), "--output", str(scratch_root / "archive-mutation.json")),
@@ -186,7 +178,7 @@ def _run_mutations(
     payload = json.loads(prerequisites.read_text(encoding="utf-8"))
     payload["runtime_authorization_present"] = True
     mutated_prerequisites.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
-    bct_failure = _cli(
+    bct_failure = run_guarded_command(
         repository_root,
         "bct-readiness",
         ("--search-config", str(search_config), "--mft-report", str(scratch_root / "outputs" / "mft.json"), "--archive-report", str(scratch_root / "outputs" / "archive-validation.json"), "--execution-prerequisites", str(mutated_prerequisites), "--output", str(scratch_root / "bct-mutation.json")),
@@ -197,15 +189,15 @@ def _run_mutations(
     (scratch_root / "provenance-mutation.json").write_text(
         json.dumps(provenance_report, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8"
     )
-    provenance_failure = _cli(
+    provenance_failure = run_guarded_command(
         repository_root,
         "bct-readiness",
         ("--search-config", str(search_config), "--mft-report", str(scratch_root / "provenance-mutation.json"), "--archive-report", str(scratch_root / "outputs" / "archive-validation.json"), "--execution-prerequisites", str(prerequisites), "--output", str(scratch_root / "provenance-mutation-output.json")),
         guard_root,
     )
-    archive_observed = _code(archive_failure, "IMPLEMENTATION_COMMIT_MISMATCH")
-    bct_observed = _code(bct_failure, "BCT_EXECUTION_AUTHORIZATION_FORBIDDEN")
-    provenance_observed = _code(provenance_failure, "MFT_STATUS_MISMATCH")
+    archive_observed = _code(archive_failure.result, "IMPLEMENTATION_COMMIT_MISMATCH")
+    bct_observed = _code(bct_failure.result, "BCT_EXECUTION_AUTHORIZATION_FORBIDDEN")
+    provenance_observed = _code(provenance_failure.result, "MFT_STATUS_MISMATCH")
     if (
         archive_observed != "IMPLEMENTATION_COMMIT_MISMATCH"
         or bct_observed != "BCT_EXECUTION_AUTHORIZATION_FORBIDDEN"
@@ -216,22 +208,13 @@ def _run_mutations(
         {"mutation_id": "archive_bytes", "expected": "IMPLEMENTATION_COMMIT_MISMATCH", "observed": archive_observed},
         {"mutation_id": "bct_authorization", "expected": "BCT_EXECUTION_AUTHORIZATION_FORBIDDEN", "observed": bct_observed},
         {"mutation_id": "provenance_evidence", "expected": "MFT_STATUS_MISMATCH", "observed": provenance_observed},
-    ]
+    ], (archive_failure, bct_failure, provenance_failure)
 
 
-def _cli(
-    root: Path, command_id: str, arguments: tuple[str, ...], guard_root: Path
-) -> subprocess.CompletedProcess[str]:
-    environment = os.environ | {
-        "PYTHONPATH": os.pathsep.join((str(guard_root), str(Path(__file__).parents[4])))
-    }
-    return subprocess.run((sys.executable, "-m", "memcontam.cli", "phase12", "filter-v5", command_id, *arguments), cwd=root, env=environment, check=False, capture_output=True, text=True)
-
-
-def _record(
-    root: Path, command_id: str, arguments: tuple[str, ...], result: subprocess.CompletedProcess[str]
-) -> dict[str, JsonValue]:
-    return {"argv": ["phase12", "filter-v5", command_id, *arguments], "command_id": command_id, "cwd": str(root), "exit_code": result.returncode, "stdout_sha256": hashlib.sha256(result.stdout.encode()).hexdigest(), "stderr_sha256": hashlib.sha256(result.stderr.encode()).hexdigest()}
+def _execution_guards(commands: tuple[GuardedCommand, ...]) -> dict[str, JsonValue]:
+    if not commands or any(command.sentinel_content != GUARD_SENTINEL_CONTENT for command in commands):
+        raise FinalVerifierError("FINAL_VERIFIER_EXECUTION_GUARD_REACHED")
+    return {"bct_behavior": "not_reached", "provider_constructor": "not_reached"}
 
 
 def _code(result: subprocess.CompletedProcess[str], expected: str) -> str:

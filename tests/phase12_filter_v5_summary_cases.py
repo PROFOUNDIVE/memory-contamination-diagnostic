@@ -10,7 +10,11 @@ from memcontam.experiment.phase12.filter_challenge.validation_summary import (
 )
 
 
-def complete_validation_summary(plan_sha256: str, implementation_commit: str) -> Task17ValidationSummary:
+def complete_validation_summary(
+    plan_sha256: str,
+    implementation_commit: str,
+    command_records: tuple[Task17CommandRecord, ...] | None = None,
+) -> Task17ValidationSummary:
     digest = "0" * 64
     return Task17ValidationSummary(
         archive_freeze_id="phase12-filter-v5-build-freeze-v1",
@@ -18,7 +22,7 @@ def complete_validation_summary(plan_sha256: str, implementation_commit: str) ->
         archive_search_config_hash=digest,
         bct_execution_status="blocked",
         bct_software_interface_status="ready",
-        command_records=tuple(
+        command_records=command_records or tuple(
             Task17CommandRecord(
                 command_id=command_id,
                 cwd="<repository>",

@@ -32,7 +32,15 @@ from memcontam.experiment.phase12.filter_challenge.final_verifier_quality import
     _structural_findings,
     verify_code_quality,
 )
+from memcontam.experiment.phase12.filter_challenge import final_verifier_integration
+from memcontam.experiment.phase12.filter_challenge.final_verifier_command_records import (
+    reconcile_summary_records,
+)
+from memcontam.experiment.phase12.filter_challenge.final_verifier_integration_support import (
+    install_execution_guards,
+)
 from memcontam.experiment.phase12.filter_challenge.mft_state_models import JsonValue
+from memcontam.experiment.phase12.filter_challenge.validation_summary import Task17CommandRecord
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -87,7 +95,13 @@ def _fixture(
     plan_sha256 = hashlib.sha256(plan.read_bytes()).hexdigest()
     summary = tmp_path / "validation-summary.json"
     summary.write_text(
-        complete_validation_summary(plan_sha256, implementation_commit).model_dump_json()
+        complete_validation_summary(
+            plan_sha256,
+            implementation_commit,
+            _actual_command_records(
+                repository, implementation_commit, fixture_root, tmp_path / "summary-scratch"
+            ),
+        ).model_dump_json()
         + "\n",
         encoding="utf-8",
     )
@@ -108,6 +122,24 @@ def _fixture(
     _git(repository, "commit", "-qm", "evidence")
     source = _source_repository(tmp_path, mutation == "source_dirty")
     return VerifierFixture(base_commit, evidence, source)
+
+
+def _actual_command_records(
+    repository: Path, implementation_commit: str, fixture_root: Path, scratch_root: Path
+) -> tuple[Task17CommandRecord, ...]:
+    scratch_root.mkdir()
+    guard_root = install_execution_guards(scratch_root)
+    _, records, _ = final_verifier_integration._run_commands(
+        repository,
+        implementation_commit,
+        fixture_root / "FilterChallengeSearchConfig.yaml",
+        fixture_root,
+        fixture_root / "bct_execution_prerequisites.json",
+        scratch_root,
+        guard_root,
+    )
+    shutil.rmtree(scratch_root)
+    return records
 
 
 def _source_repository(tmp_path: Path, dirty: bool) -> Path:
@@ -448,12 +480,19 @@ def test_integration_reconciles_all_outputs_and_copied_mutations(tmp_path: Path)
     reconciled_outputs = _json_object(_json_field(report, "reconciled_outputs"))
     selected_policy = _json_object(_json_field(reconciled_outputs, "validate-selected-policy"))
     mutations = _json_array(_json_field(report, "mutations"))
+    commands = _json_array(_json_field(report, "commands"))
 
     assert set(reconciled_outputs) == {
         "validate-search-config", "validate-selected-policy", "mft", "build-archive",
         "validate-archive", "cost-preview", "bct-readiness",
     }
     assert selected_policy["execution_authorized"] is False
+    assert all(_json_object(command)["cwd"] == "<repository>" for command in commands)
+    assert all(
+        str(fixture.evidence.repository_root)
+        not in _json_array(_json_field(_json_object(command), "normalized_argv"))
+        for command in commands
+    )
     assert {_json_object(item)["mutation_id"] for item in mutations} >= {
         "archive_bytes", "bct_authorization", "provenance_evidence",
     }
@@ -561,3 +600,62 @@ def test_nonterminal_rejects_approval_paths_and_cli_emits_approval_marker(tmp_pa
     )
     assert rejected.returncode == 2
     assert rejected.stdout.strip() == "IRRELEVANT_MODE_ARGUMENTS"
+
+
+def _summary_command_records() -> list[dict[str, JsonValue]]:
+    return [
+        {
+            "command_id": command_id,
+            "cwd": "<repository>",
+            "exit_code": 0,
+            "normalized_argv": ["phase12", "filter-v5", command_id],
+            "stderr_sha256": "a" * 64,
+            "stdout_sha256": "b" * 64,
+        }
+        for command_id in final_verifier_integration.COMMAND_IDS
+    ]
+
+
+@pytest.mark.parametrize(
+    ("mutation"),
+    (
+        lambda records: None,
+        lambda records: list(reversed(records)),
+        lambda records: [{**records[0], "normalized_argv": ["wrong"]}, *records[1:]],
+        lambda records: [{**records[0], "cwd": "<scratch>"}, *records[1:]],
+        lambda records: [{**records[0], "exit_code": 1}, *records[1:]],
+        lambda records: [{**records[0], "stdout_sha256": "c" * 64}, *records[1:]],
+        lambda records: [{**records[0], "stderr_sha256": "d" * 64}, *records[1:]],
+    ),
+)
+def test_integration_rejects_every_summary_record_mismatch(
+    tmp_path: Path, mutation: object
+) -> None:
+    summary = tmp_path / "summary.json"
+    records = _summary_command_records()
+    assert callable(mutation)
+    mutated = mutation(records)
+    summary_payload = complete_validation_summary("0" * 64, "a" * 40).model_dump(mode="json")
+    if mutated is None:
+        del summary_payload["command_records"]
+    else:
+        summary_payload["command_records"] = mutated
+    summary.write_text(json.dumps(summary_payload), encoding="utf-8")
+    actual_records = tuple(Task17CommandRecord.model_validate(record) for record in records)
+
+    with pytest.raises(FinalVerifierError, match="INTEGRATION_SUMMARY_RECORDS_MISMATCH"):
+        reconcile_summary_records(summary, actual_records)
+
+
+def test_integration_rejects_broken_guard_startup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    fixture = _fixture(tmp_path)
+
+    def install_broken_guards(scratch_root: Path) -> Path:
+        guard_root = scratch_root / "broken-guards"
+        guard_root.mkdir()
+        return guard_root
+
+    monkeypatch.setattr(final_verifier_integration, "install_execution_guards", install_broken_guards)
+
+    with pytest.raises(FinalVerifierError, match="FINAL_VERIFIER_EXECUTION_GUARD_REACHED"):
+        verify_final_report(_request(fixture, "integration", tmp_path / "f3.json"))
