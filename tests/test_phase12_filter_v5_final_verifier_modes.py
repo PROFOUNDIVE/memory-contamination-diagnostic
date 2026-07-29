@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Literal
 
 import pytest
+from tests.phase12_filter_v5_summary_cases import complete_validation_summary
 
 from memcontam.experiment.phase12.filter_challenge.evidence import (
     EvidenceBuildRequest,
@@ -86,15 +87,7 @@ def _fixture(
     plan_sha256 = hashlib.sha256(plan.read_bytes()).hexdigest()
     summary = tmp_path / "validation-summary.json"
     summary.write_text(
-        json.dumps(
-            {
-                "implementation_commit": implementation_commit,
-                "provider_calls_issued": 0,
-                "reviewed_plan_sha256": plan_sha256,
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        )
+        complete_validation_summary(plan_sha256, implementation_commit).model_dump_json()
         + "\n",
         encoding="utf-8",
     )
@@ -393,6 +386,26 @@ def test_plan_compliance_rejects_each_mutated_ledger_clause(tmp_path: Path, clau
     summary = json.loads(fixture.evidence.validation_summary.read_text(encoding="utf-8"))
 
     with pytest.raises(FinalVerifierError, match=f"LEDGER_CLAUSE_{clause:02d}_REJECTED"):
+        verify_plan_compliance(fixture.evidence.output_root, summary)
+
+
+def test_plan_compliance_rejects_public_model_order_and_validation_report_drift(tmp_path: Path) -> None:
+    fixture = _fixture(tmp_path)
+    summary = json.loads(fixture.evidence.validation_summary.read_text(encoding="utf-8"))
+    policy = _report(fixture.evidence.output_root, "policy_schema_hashes.json")
+    policy["public_domain_model_names"] = list(
+        reversed(_json_array(_json_field(policy, "public_domain_model_names")))
+    )
+    _write_json(fixture.evidence.output_root / "policy_schema_hashes.json", policy)
+    with pytest.raises(FinalVerifierError, match="LEDGER_CLAUSE_01_REJECTED"):
+        verify_plan_compliance(fixture.evidence.output_root, summary)
+
+    fixture = _fixture(tmp_path / "validation")
+    summary = json.loads(fixture.evidence.validation_summary.read_text(encoding="utf-8"))
+    validation = _report(fixture.evidence.output_root, "test_lint_typecheck_report.json")
+    validation["command_records"] = []
+    _write_json(fixture.evidence.output_root / "test_lint_typecheck_report.json", validation)
+    with pytest.raises(FinalVerifierError, match="LEDGER_CLAUSE_10_REJECTED"):
         verify_plan_compliance(fixture.evidence.output_root, summary)
 
 

@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from tests.phase12_filter_v5_summary_cases import complete_validation_summary
 
 from memcontam.experiment.phase12.filter_challenge.evidence import (
     EVIDENCE_FILENAMES,
@@ -46,15 +47,7 @@ def _prepared_request(tmp_path: Path, output_name: str = "evidence") -> Evidence
     plan_sha256 = hashlib.sha256(plan.read_bytes()).hexdigest()
     summary = tmp_path / "validation-summary.json"
     summary.write_text(
-        json.dumps(
-            {
-                "implementation_commit": implementation_commit,
-                "provider_calls_issued": 0,
-                "reviewed_plan_sha256": plan_sha256,
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        )
+        complete_validation_summary(plan_sha256, implementation_commit).model_dump_json()
         + "\n",
         encoding="utf-8",
     )
@@ -115,11 +108,30 @@ def test_builder_rejects_plan_summary_and_report_drift(tmp_path: Path) -> None:
         build_evidence_bundle(request)
     summary_request = _prepared_request(tmp_path / "summary")
     summary_request.validation_summary.write_text("{}\n", encoding="utf-8")
-    with pytest.raises(EvidenceBuildError, match="VALIDATION_SUMMARY_PLAN_MISMATCH"):
+    with pytest.raises(EvidenceBuildError, match="VALIDATION_SUMMARY_INVALID"):
         build_evidence_bundle(summary_request)
     (request.output_root / EVIDENCE_FILENAMES[1]).write_text("{}\n", encoding="utf-8")
     with pytest.raises(EvidenceBuildError, match="EVIDENCE_GRAPH_MISMATCH"):
         validate_evidence_bundle(request.output_root)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        lambda summary: {key: value for key, value in summary.items() if key != "command_records"},
+        lambda summary: {**summary, "command_records": list(reversed(summary["command_records"]))},
+        lambda summary: {**summary, "command_records": [{**summary["command_records"][0], "stdout_sha256": "invalid"}, *summary["command_records"][1:]]},
+        lambda summary: {**summary, "provider_calls_issued": 1},
+        lambda summary: {**summary, "validation_gates": [{**summary["validation_gates"][0], "status": "fail"}, *summary["validation_gates"][1:]]},
+    ),
+)
+def test_builder_rejects_incomplete_or_invalid_task17_summary(tmp_path: Path, mutation: object) -> None:
+    request = _prepared_request(tmp_path)
+    summary = complete_validation_summary(request.expected_plan_sha256, request.implementation_commit).model_dump(mode="json")
+    assert callable(mutation)
+    request.validation_summary.write_text(json.dumps(mutation(summary)), encoding="utf-8")
+    with pytest.raises(EvidenceBuildError, match="VALIDATION_SUMMARY_INVALID"):
+        build_evidence_bundle(request)
 
 
 def test_builder_script_accepts_exact_required_arguments(tmp_path: Path) -> None:

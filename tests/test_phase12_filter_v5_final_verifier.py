@@ -8,6 +8,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from tests.phase12_filter_v5_summary_cases import complete_validation_summary
 
 from memcontam.experiment.phase12.filter_challenge.evidence import (
     EVIDENCE_FILENAMES,
@@ -58,15 +59,7 @@ def _committed_evidence_request(tmp_path: Path) -> EvidenceBuildRequest:
     plan_sha256 = hashlib.sha256(plan.read_bytes()).hexdigest()
     summary = tmp_path / "validation-summary.json"
     summary.write_text(
-        json.dumps(
-            {
-                "implementation_commit": implementation_commit,
-                "provider_calls_issued": 0,
-                "reviewed_plan_sha256": plan_sha256,
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        )
+        complete_validation_summary(plan_sha256, implementation_commit).model_dump_json()
         + "\n",
         encoding="utf-8",
     )
