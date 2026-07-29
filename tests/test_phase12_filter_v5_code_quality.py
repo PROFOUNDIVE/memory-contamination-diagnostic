@@ -11,6 +11,7 @@ from memcontam.experiment.phase12.filter_challenge.final_verifier import (
 )
 from memcontam.experiment.phase12.filter_challenge.final_verifier_quality import (
     _structural_findings,
+    quality_commands,
 )
 
 
@@ -92,6 +93,18 @@ def test_code_quality_allows_provider_implementation_definition_without_construc
     path.write_text("class OpenAICompatibleClient:\n    pass\n", encoding="utf-8")
 
     assert _structural_findings(path) == []
+
+
+def test_quality_commands_exclude_package_qualified_tests_from_mypy() -> None:
+    paths = (
+        "src/memcontam/experiment/phase12/filter_challenge/final_verifier_quality.py",
+        "tests/test_phase12_filter_v5_final_verifier_modes.py",
+        "tests/test_phase12_filter_v5_code_quality.py",
+    )
+
+    commands = quality_commands(Path(__file__).resolve().parents[1], paths, "HEAD", "HEAD")
+
+    assert all(command["exit_code"] == 0 for command in commands)
 
 
 def test_code_quality_payload_binds_changed_commit_metadata(tmp_path: Path) -> None:

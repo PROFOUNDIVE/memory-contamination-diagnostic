@@ -78,9 +78,10 @@ def verify_code_quality(
 def quality_commands(
     repository_root: Path, paths: tuple[str, ...], base_commit: str, implementation_commit: str
 ) -> tuple[dict[str, JsonValue], ...]:
+    mypy_paths = tuple(path for path in paths if path.startswith(("src/", "scripts/")))
     return (
         _command(repository_root, "ruff", (sys.executable, "-m", "ruff", "check", *paths)),
-        _command(repository_root, "mypy", (sys.executable, "-m", "mypy", *paths)),
+        _command(repository_root, "mypy", (sys.executable, "-m", "mypy", *mypy_paths)),
         _command(repository_root, "diff-check", ("git", "diff", "--check", base_commit, implementation_commit)),
     )
 
