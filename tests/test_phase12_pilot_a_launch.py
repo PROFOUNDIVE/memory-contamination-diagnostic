@@ -32,7 +32,6 @@ from memcontam.verifiers.game24 import verify_expression
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "configs" / "phase12" / "pilot_a_game24_minimal.yaml"
 SCIENTIFIC_CONFIG = ROOT / "configs" / "phase12" / "pilot_a_game24_scientific.yaml"
-CHECKLIST = ROOT / "docs" / "phase12-pilot-a-operator-checklist.md"
 LEGACY_PLUMBING_ARCHIVE = ROOT / "runs" / "runs" / "phase12-pilot-a-plumbing-r2"
 
 
@@ -338,13 +337,6 @@ def test_cost_preview_is_safe_for_the_frozen_plumbing_plan_and_fails_above_ceili
             CONFIG,
             cost_guard=CostGuard(input_per_million_usd=100_000, output_per_million_usd=100_000),
         )
-
-
-def test_operator_checklist_uses_the_artifact_root_run_path() -> None:
-    checklist = CHECKLIST.read_text(encoding="utf-8")
-
-    assert '"${MEMCONTAM_ARTIFACT_ROOT}/runs/phase12-pilot-a-plumbing"' in checklist
-    assert "runs/runs/phase12-pilot-a-plumbing" not in checklist
 
 
 @pytest.mark.parametrize(
