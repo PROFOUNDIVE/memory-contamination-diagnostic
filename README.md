@@ -29,6 +29,23 @@ contamination removal, or a deployable security defense.
 This framing does not expand the repository's build-only evidence boundary or report scientific
 execution.
 
+### Planned Confirmatory Matrix and Timeline
+
+The matrix and timeline below describe planned study design, not executed or completed evidence.
+
+| Axis | Planned scope |
+|---|---|
+| Tasks | `Game24`, `Math Equation Balancer`, and `WordSorting` |
+| Memory-bearing baseline conditions | `context-bounded Full History`, `RAG-Frozen`, `BoT-style proxy`, and `Reflexion-style proxy` |
+| No-memory condition | `NoMem` is a Clean-only memory-free singleton, not a five-arm memory-bearing condition |
+| Planned Main-A arms | `Clean`, `Correct` (auxiliary), `Irrelevant` (auxiliary), `Contam`, and `Filter` |
+| Tool and model controls | Equal tool availability with `tool.mode = text_only`, no code execution, and one primary model snapshot fixed before Pilot-A and Main |
+
+The conservative 3-week route is the default. A 5-week extension is not selected and remains
+contingent on readiness, budget, and reserved evidence.
+
+The planned research window is an eight-week Fast Track ending no later than August 31, 2026.
+
 ## Current Status
 
 Baseline-Fidelity-V2 authority and evidence are the sole current status authority, recorded in
