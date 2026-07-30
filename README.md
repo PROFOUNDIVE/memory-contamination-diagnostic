@@ -8,6 +8,27 @@ This repository covers implementation contracts, deterministic replay QA, and bu
 evidence only. It provides no scientific, benchmark, manuscript, causal, production,
 paid-provider, Pilot-A, Pilot-B, or main-run evidence.
 
+## Study Scope and Supported Research Question
+
+This repository is a bounded diagnostic harness for studying how controlled erroneous external
+memory affects verifier-based continual or multi-step reasoning.
+
+The confirmatory study is memory-mechanism-isolated and text-only. Every condition receives
+equal answer-generation tool availability, uses `tool.mode = text_only`, and permits no code
+execution. Tool-augmented work is separately versioned exploratory work and is not pooled with
+confirmatory evidence.
+
+The registered secondary research question is:
+
+> How do failure recurrence, stored persistence, and applicable propagation vary across the prespecified memory mechanisms for the fixed canonical contamination candidate in each task?
+
+Filter-v5 is a bounded mitigation baseline. It may reduce exposure to contract-invalid injected
+roots and their recorded descendants, but it is not semantic-truth detection, universal
+contamination removal, or a deployable security defense.
+
+This framing does not expand the repository's build-only evidence boundary or report scientific
+execution.
+
 ## Current Status
 
 Baseline-Fidelity-V2 authority and evidence are the sole current status authority, recorded in
