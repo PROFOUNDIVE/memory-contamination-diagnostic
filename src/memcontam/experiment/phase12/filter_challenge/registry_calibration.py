@@ -42,6 +42,16 @@ class CalibrationAuthorization(StrictRegistry):
     artifact_root: str
     ledger_id: Literal["filter-v5-bct-budget-v1"]
     model_id: Literal["gpt-4o-2024-11-20"]
+    approved_plan_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    authority_manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    freeze_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    provider: Literal["openai_responses"]
+    decoding_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    maximum_calls: int = Field(ge=1, le=570)
+    maximum_input_tokens: int = Field(ge=1, le=2_334_720)
+    maximum_output_tokens: int = Field(ge=1, le=364_800)
+    hard_ceiling_microusd: int = Field(ge=1, le=10_000_000)
+    maximum_wall_seconds: int = Field(ge=1, le=10_800)
 
     @model_validator(mode="after")
     def _validate_expiry(self) -> CalibrationAuthorization:

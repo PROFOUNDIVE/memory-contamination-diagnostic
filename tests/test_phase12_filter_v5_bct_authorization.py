@@ -25,6 +25,16 @@ def test_authorization_requires_matching_descriptor_digest_and_is_unexpired(tmp_
         artifact_root="/home/hyunwoo/git/memory-contamination-diagnostic-filter-v5/runs/phase12-filter-v5-bct-live-v1",
         ledger_id="filter-v5-bct-budget-v1",
         model_id="gpt-4o-2024-11-20",
+        approved_plan_sha256="c" * 64,
+        authority_manifest_sha256="d" * 64,
+        freeze_sha256="e" * 64,
+        provider="openai_responses",
+        decoding_sha256="f" * 64,
+        maximum_calls=90,
+        maximum_input_tokens=368640,
+        maximum_output_tokens=57600,
+        hard_ceiling_microusd=2_000_000,
+        maximum_wall_seconds=3600,
     )
     path = tmp_path / "authorization.json"
     path.write_text(authorization.model_dump_json(), encoding="utf-8")

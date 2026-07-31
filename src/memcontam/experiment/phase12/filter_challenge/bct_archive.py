@@ -117,20 +117,20 @@ def validate_live_archive(root: Path) -> ArchiveValidation:
     return ArchiveValidation(True)
 
 
-def build_evidence_report(bundle: Path, report_id: str, stage_result: Path, plan_digest: str) -> Path:
-    stage = CalibrationStageResult.model_validate_json(stage_result.read_text(encoding="utf-8"))
+def build_evidence_report(bundle: Path, report_id: str, stage_result: Path | None, plan_digest: str) -> Path:
+    stage = None if stage_result is None else CalibrationStageResult.model_validate_json(stage_result.read_text(encoding="utf-8"))
     bundle.mkdir(parents=True, exist_ok=True)
-    path = bundle / f"{report_id}_report.json"
+    path = bundle / f"{report_id.replace('-', '_')}_report.json"
     if path.exists():
         raise LedgerError("EVIDENCE_REPORT_EXISTS")
     payload = {
         "schema_version": "phase12_fv5_evidence_report_v1",
         "report_id": report_id,
         "approved_plan_sha256": plan_digest,
-        "stage_result_sha256": _sha256(stage_result),
-        "stage_result_path": str(stage_result),
-        "stage_disposition": stage.disposition,
-        "provider_calls_issued": stage.provider_calls_issued,
+        "stage_result_sha256": None if stage_result is None else _sha256(stage_result),
+        "stage_result_path": None if stage_result is None else str(stage_result),
+        "stage_disposition": "completed" if stage is None else stage.disposition,
+        "provider_calls_issued": 0 if stage is None else stage.provider_calls_issued,
     }
     path.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
     return path
@@ -139,20 +139,22 @@ def build_evidence_report(bundle: Path, report_id: str, stage_result: Path, plan
 def validate_evidence_bundle(bundle: Path, plan_digest: str, through: str = "screening") -> ArchiveValidation:
     try:
         required = {
-            "authority-methods": ("authority-transition", "methods-lock"),
-            "freeze-a": ("authority-transition", "methods-lock", "freeze-a"),
-            "screening": ("authority-transition", "methods-lock", "freeze-a", "screening"),
-            "freeze-b": ("authority-transition", "methods-lock", "freeze-a", "screening", "freeze-b-search-config"),
-            "bct": ("authority-transition", "methods-lock", "freeze-a", "screening", "freeze-b-search-config", "bct-execution", "archive-validation", "claim-scope"),
-            "readiness": ("authority-transition", "methods-lock", "freeze-a", "screening", "freeze-b-search-config", "bct-execution", "archive-validation", "claim-scope", "pilot-b-readiness"),
+            "authority-methods": ("authority_transition", "methods_lock"),
+            "freeze-a": ("authority_transition", "methods_lock", "freeze_a"),
+            "screening": ("authority_transition", "methods_lock", "freeze_a", "screening"),
+            "freeze-b": ("authority_transition", "methods_lock", "freeze_a", "screening", "freeze_b_search_config"),
+            "bct": ("authority_transition", "methods_lock", "freeze_a", "screening", "freeze_b_search_config", "bct_execution", "archive_validation", "claim_scope"),
+            "readiness": ("authority_transition", "methods_lock", "freeze_a", "screening", "freeze_b_search_config", "bct_execution", "archive_validation", "claim_scope", "pilot_b_readiness"),
         }.get(through)
         if required is None or any(not (bundle / f"{name}_report.json").is_file() for name in required):
             raise LedgerError("EVIDENCE_REPORT_MISSING")
         for path in tuple(bundle.glob("*_report.json")):
             payload = json.loads(path.read_text(encoding="utf-8"))
             stage_path = payload.get("stage_result_path")
-            if payload.get("approved_plan_sha256") != plan_digest or not isinstance(stage_path, str) or payload.get("stage_result_sha256") != _sha256(Path(stage_path)):
+            if payload.get("approved_plan_sha256") != plan_digest:
                 raise LedgerError("EVIDENCE_PLAN_DIGEST_MISMATCH")
+            if stage_path is not None and (not isinstance(stage_path, str) or payload.get("stage_result_sha256") != _sha256(Path(stage_path))):
+                raise LedgerError("EVIDENCE_STAGE_DIGEST_MISMATCH")
     except (LedgerError, OSError, UnicodeError, json.JSONDecodeError) as error:
         return ArchiveValidation(False, error.code if isinstance(error, LedgerError) else "EVIDENCE_REPORT_INVALID")
     return ArchiveValidation(True)

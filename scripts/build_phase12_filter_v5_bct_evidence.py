@@ -20,16 +20,18 @@ def main() -> int:
     parser.add_argument("--bundle", type=Path, required=True)
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--artifact-root", type=Path, required=True)
-    parser.add_argument("--stage-result", type=Path, required=True)
+    parser.add_argument("--stage-result", type=Path)
     arguments = parser.parse_args()
     names = (arguments.report,) if arguments.report else {
         "authority-methods": REPORTS[:2], "bct": REPORTS[5:8], "terminal-fill": REPORTS[4:8],
     }.get(arguments.report_set, ())
     if not names:
         parser.error("one report selector is required")
+    if arguments.stage_result is None and set(names) - {"authority-transition", "methods-lock"}:
+        parser.error("--stage-result is required for stage-bound reports")
     digest = hashlib.sha256(arguments.plan.read_bytes()).hexdigest()
     for name in names:
-        path = arguments.bundle / f"{name}_report.json"
+        path = arguments.bundle / f"{name.replace('-', '_')}_report.json"
         if not path.exists():
             build_evidence_report(arguments.bundle, name, arguments.stage_result, digest)
     return 0
