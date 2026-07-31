@@ -54,6 +54,7 @@ def test_bct_waiting_evidence_has_a_regular_experiment_package_boundary() -> Non
 
 def test_pyrightconfig_resolves_the_src_package_root() -> None:
     settings = json.loads(PYRIGHT_CONFIG.read_text(encoding="utf-8"))
+    assert settings["include"] == ["src", "scripts", "tests"]
     assert settings["executionEnvironments"] == [
         {"root": "src", "extraPaths": ["src"]},
         {"root": "scripts", "extraPaths": ["src"]},
