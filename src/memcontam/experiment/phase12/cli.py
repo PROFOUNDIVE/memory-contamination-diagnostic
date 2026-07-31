@@ -110,8 +110,16 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
     from memcontam.experiment.phase12.filter_challenge.cli import (
         add_parser as add_filter_v5_parser,
     )
+    from memcontam.experiment.phase12.filter_challenge.bct_live import add_calibration_parsers
 
     add_filter_v5_parser(commands)
+    filter_v5 = commands.choices["filter-v5"]
+    filter_v5_actions = [
+        action for action in filter_v5._actions if isinstance(action, argparse._SubParsersAction)
+    ]
+    if len(filter_v5_actions) != 1:
+        raise RuntimeError("filter-v5 parser is missing subcommands")
+    add_calibration_parsers(filter_v5_actions[0])
 
     validate = commands.add_parser("validate")
     validate.add_argument("--config", type=Path, required=True)
@@ -177,9 +185,16 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
 
 def run(args: argparse.Namespace) -> None:
     if args.phase12_command == "filter-v5":
+        from memcontam.experiment.phase12.filter_challenge.bct_live import run_calibration_command
         from memcontam.experiment.phase12.filter_challenge.cli import run as run_filter_v5
 
-        run_filter_v5(args)
+        if args.filter_v5_command in {
+            "validate-calibration-config", "screening-cost-preview", "screen-controls",
+            "bct-cost-preview", "bct-run", "validate-bct-archive", "pilot-b-readiness",
+        }:
+            run_calibration_command(args)
+        else:
+            run_filter_v5(args)
     elif args.phase12_command == "validate":
         _validate_config(args.config)
         print(f"valid phase12 config: {args.config}")

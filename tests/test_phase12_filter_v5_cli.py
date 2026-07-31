@@ -31,7 +31,9 @@ MFT_IDS = (
 )
 COMMANDS = (
     "validate-search-config", "validate-selected-policy", "mft", "build-archive",
-    "validate-archive", "cost-preview", "bct-readiness",
+    "validate-archive", "cost-preview", "bct-readiness", "validate-calibration-config",
+    "screening-cost-preview", "screen-controls", "bct-cost-preview", "bct-run",
+    "validate-bct-archive", "pilot-b-readiness",
 )
 
 
@@ -60,13 +62,13 @@ def _archive_bytes(root: Path) -> dict[str, bytes]:
     }
 
 
-def test_filter_v5_help_exposes_only_exact_offline_commands() -> None:
+def test_filter_v5_help_exposes_exact_fixture_and_calibration_commands() -> None:
     result = _run("--help")
 
     assert result.returncode == 0
     assert all(command in result.stdout for command in COMMANDS)
-    assert "bct-run" not in result.stdout
-    assert "pilot-b" not in result.stdout
+    assert "bct-run" in result.stdout
+    assert "pilot-b-readiness" in result.stdout
     assert "main" not in result.stdout
 
 
