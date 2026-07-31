@@ -202,7 +202,17 @@ def _cost_preview(args: argparse.Namespace, stage: Literal["screening", "bct"]) 
     _validate_config(args.config)
     require_artifact_root(args.ledger.parent)
     calls, wall_seconds, hard_ceiling = (90, 3600, 2) if stage == "screening" else (480, 7200, 8)
-    payload = {"schema_version": "phase12_fv5_authorization_request_v1", "stage": stage, "maximum_calls": calls, "wall_seconds": wall_seconds, "hard_ceiling_usd": hard_ceiling, "ledger_id": LEDGER_ID, "artifact_root": str(ARTIFACT_ROOT), "provider_calls_issued": 0}
+    freeze_path = args.freeze_a if stage == "screening" else args.freeze_b
+    try:
+        freeze = json.loads(freeze_path.read_text(encoding="utf-8"))
+    except (AttributeError, OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise CalibrationAuthorizationError("CALIBRATION_FREEZE_INVALID") from error
+    if not isinstance(freeze, dict):
+        raise CalibrationAuthorizationError("CALIBRATION_FREEZE_INVALID")
+    schedule = freeze.get("method_call_schedule")
+    if stage == "screening" and (not isinstance(schedule, list) or len(schedule) != calls):
+        raise CalibrationAuthorizationError("CALL_SCHEDULE_MISMATCH")
+    payload = {"schema_version": "phase12_fv5_authorization_request_v1", "stage": stage, "maximum_calls": calls, "maximum_input_tokens": 368640 if stage == "screening" else 1966080, "maximum_output_tokens": 57600 if stage == "screening" else 307200, "wall_seconds": wall_seconds, "hard_ceiling_usd": hard_ceiling, "ledger_id": LEDGER_ID, "artifact_root": str(ARTIFACT_ROOT), "freeze_sha256": hashlib.sha256(freeze_path.read_bytes()).hexdigest(), "schedule_sha256": hashlib.sha256(json.dumps(schedule, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest(), "approved_plan_sha256": freeze.get("approved_plan_sha256"), "provider_calls_issued": 0}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
     _print(payload)
