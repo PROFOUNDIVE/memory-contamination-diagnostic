@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
+import importlib
 import re
 from pathlib import Path
 from typing import Final
 
-import yaml
+from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
+    EvidenceBuildError,
+    approved_plan_sha256,
+)
 
 
 TASKS: Final = ["game24", "math_equation_balancer", "word_sorting"]
@@ -29,7 +32,8 @@ def _require(condition: bool, code: str) -> None:
 
 
 def _load(path: Path) -> dict[str, object]:
-    value = yaml.safe_load(path.read_text(encoding="utf-8"))
+    safe_load = getattr(importlib.import_module("yaml"), "safe_load")
+    value = safe_load(path.read_text(encoding="utf-8"))
     _require(isinstance(value, dict), "METHODS_CONFIG_INVALID")
     return value
 
@@ -38,8 +42,10 @@ def validate(document: Path, config: Path, plan: Path) -> None:
     data = _load(config)
     document_text = document.read_text(encoding="utf-8")
     descriptor = plan.parents[1] / "approvals" / "phase12-post-filter-v5-calibration-readiness.plan.sha256"
-    digest = hashlib.sha256(plan.read_bytes()).hexdigest()
-    _require(descriptor.read_bytes() == digest.encode("ascii") + b"\n", "METHODS_PLAN_BINDING_MISMATCH")
+    try:
+        digest = approved_plan_sha256(plan, descriptor)
+    except EvidenceBuildError as error:
+        raise MethodsError("METHODS_PLAN_BINDING_MISMATCH") from error
     _require(data.get("schema_version") == "phase12_fv5_bct_calibration_methods_v1" and data.get("approved_plan_sha256") == digest, "METHODS_PLAN_BINDING_MISMATCH")
     scope = data.get("scope")
     if not isinstance(scope, dict):
@@ -76,7 +82,7 @@ def main() -> int:
     arguments = parser.parse_args()
     try:
         validate(arguments.document, arguments.config, arguments.plan)
-    except (MethodsError, OSError, yaml.YAMLError) as error:
+    except (ImportError, MethodsError, OSError) as error:
         print(error.code if isinstance(error, MethodsError) else "METHODS_INPUT_INVALID")
         return 2
     print("METHODS_LOCK_VALID")

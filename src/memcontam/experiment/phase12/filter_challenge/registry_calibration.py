@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -11,6 +12,11 @@ from typing import Final, Literal, TypeAlias
 from pydantic import Field, model_validator
 
 from memcontam.experiment.phase12.filter_challenge.registry_common import StrictRegistry
+from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
+    EvidenceBuildError,
+    approval_descriptor_path,
+    approved_plan_sha256,
+)
 
 
 ARTIFACT_ROOT: Final = Path(
@@ -24,12 +30,39 @@ TASKS: Final[tuple[Task, ...]] = ("game24", "math_equation_balancer", "word_sort
 BASELINES: Final[tuple[Baseline, ...]] = ("full_history", "rag_frozen", "bot_style", "reflexion_style")
 CANDIDATE_CLASSES: Final[tuple[CandidateClass, ...]] = ("certified_false", "correct", "irrelevant", "ordinary_false")
 CONTROL_SIDE: Final[tuple[Literal["control"], ...]] = ("control",)
+_CALIBRATION_SCHEMA: Final = "schema_version: phase12_fv5_bct_calibration_methods_v1\n"
+_PLAN_DIGEST: Final = re.compile(r"^approved_plan_sha256: ([0-9a-f]{64})$", re.MULTILINE)
 
 
 class CalibrationRegistryError(ValueError):
     def __init__(self, code: str) -> None:
         self.code = code
         super().__init__(code)
+
+
+class CalibrationConfigError(ValueError):
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(code)
+
+
+def validate_calibration_config(path: Path, repository_root: Path) -> None:
+    try:
+        payload = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        raise CalibrationConfigError("CALIBRATION_CONFIG_INVALID") from error
+    if not payload.startswith(_CALIBRATION_SCHEMA):
+        raise CalibrationConfigError("CALIBRATION_CONFIG_INVALID")
+    matches = _PLAN_DIGEST.findall(payload)
+    if len(matches) != 1:
+        raise CalibrationConfigError("CALIBRATION_CONFIG_INVALID")
+    plan = repository_root / ".omo" / "plans" / "phase12-post-filter-v5-calibration-readiness.md"
+    try:
+        approved = approved_plan_sha256(plan, approval_descriptor_path(plan))
+    except EvidenceBuildError as error:
+        raise CalibrationConfigError("CALIBRATION_CONFIG_PLAN_MISMATCH") from error
+    if matches[0] != approved:
+        raise CalibrationConfigError("CALIBRATION_CONFIG_PLAN_MISMATCH")
 
 
 class CalibrationAuthorization(StrictRegistry):

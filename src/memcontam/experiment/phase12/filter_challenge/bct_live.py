@@ -9,7 +9,7 @@ import stat
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Callable, Literal, Mapping, TypeVar
+from typing import Callable, Final, Literal, Mapping, TypeVar
 
 from pydantic import ValidationError
 
@@ -22,11 +22,13 @@ from memcontam.experiment.phase12.filter_challenge.freeze_a import validate_free
 from memcontam.experiment.phase12.filter_challenge.registry_calibration import (
     ARTIFACT_ROOT,
     BCTAuthorizationV1,
+    CalibrationConfigError,
     CalibrationAuthorization,
     CalibrationStageResult,
     LEDGER_ID,
     ScreeningAuthorizationV1,
     require_artifact_root,
+    validate_calibration_config,
 )
 
 
@@ -37,6 +39,7 @@ class CalibrationAuthorizationError(ValueError):
 
 
 _Authorization = TypeVar("_Authorization", bound=CalibrationAuthorization)
+REPOSITORY_ROOT: Final = Path(__file__).resolve().parents[5]
 
 
 def add_calibration_parsers(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -227,11 +230,9 @@ def _cost_preview(args: argparse.Namespace, stage: Literal["screening", "bct"]) 
 
 def _validate_config(path: Path) -> None:
     try:
-        payload = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeError) as error:
-        raise CalibrationAuthorizationError("CALIBRATION_CONFIG_INVALID") from error
-    if not payload.startswith("schema_version: phase12_fv5_bct_calibration_methods_v1\n"):
-        raise CalibrationAuthorizationError("CALIBRATION_CONFIG_INVALID")
+        validate_calibration_config(path, REPOSITORY_ROOT)
+    except CalibrationConfigError as error:
+        raise CalibrationAuthorizationError(error.code) from error
 
 
 def _read_nofollow(path: Path) -> bytes:

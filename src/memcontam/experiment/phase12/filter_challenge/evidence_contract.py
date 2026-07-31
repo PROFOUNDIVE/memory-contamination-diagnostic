@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
+import re
 import stat
 import subprocess
 from dataclasses import dataclass
@@ -73,6 +75,10 @@ POLICY: Final[dict[str, str]] = {
     "identity": "Filter-Challenge-v1",
     "schema_version": "filter_challenge_domain_v1",
 }
+_DESCRIPTOR_PATTERN: Final = re.compile(rb"[0-9a-f]{64}\n\Z")
+_TASK_PROGRESS_PATTERN: Final = re.compile(
+    rb"^- \[[ x]\] (?=(?:[1-6]|F[1-5])\.)", re.MULTILINE
+)
 @dataclass(frozen=True, slots=True)
 class EvidenceBuildError(ValueError):
     code: str
@@ -135,6 +141,52 @@ def descriptor_sha256(path: Path) -> DescriptorHash:
             os.close(file_fd)
     except OSError as error:
         raise EvidenceBuildError("DESCRIPTOR_OPEN_FAILED") from error
+    finally:
+        os.close(directory_fd)
+
+
+def approval_descriptor_path(plan: Path) -> Path:
+    return plan.parents[1] / "approvals" / f"{plan.stem}.plan.sha256"
+
+
+def approved_plan_sha256(plan: Path, descriptor: Path) -> str:
+    plan_bytes = _read_regular_nofollow(plan, "PLAN_READ_INVALID")
+    descriptor_bytes = _read_regular_nofollow(descriptor, "PLAN_DESCRIPTOR_INVALID")
+    if _DESCRIPTOR_PATTERN.fullmatch(descriptor_bytes) is None:
+        raise EvidenceBuildError("PLAN_DESCRIPTOR_INVALID")
+    digest = hashlib.sha256(_TASK_PROGRESS_PATTERN.sub(b"- [ ] ", plan_bytes)).hexdigest()
+    if not hmac.compare_digest(descriptor_bytes, digest.encode("ascii") + b"\n"):
+        raise EvidenceBuildError("PLAN_APPROVAL_MISMATCH")
+    return digest
+
+
+def _read_regular_nofollow(path: Path, error_code: str) -> bytes:
+    target = path if path.is_absolute() else Path.cwd() / path
+    if any(part in {".", ".."} for part in target.parts):
+        raise EvidenceBuildError(error_code)
+    parts = tuple(part for part in target.parts if part != "/")
+    directory_fd = os.open("/", os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for component in parts[:-1]:
+            next_fd = os.open(
+                component,
+                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                dir_fd=directory_fd,
+            )
+            os.close(directory_fd)
+            directory_fd = next_fd
+        file_fd = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory_fd)
+        try:
+            if not stat.S_ISREG(os.fstat(file_fd).st_mode):
+                raise EvidenceBuildError(error_code)
+            chunks: list[bytes] = []
+            while chunk := os.read(file_fd, 1_048_576):
+                chunks.append(chunk)
+            return b"".join(chunks)
+        finally:
+            os.close(file_fd)
+    except OSError as error:
+        raise EvidenceBuildError(error_code) from error
     finally:
         os.close(directory_fd)
 

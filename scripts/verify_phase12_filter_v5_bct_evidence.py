@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 from pathlib import Path
 
 from memcontam.experiment.phase12.filter_challenge.bct_archive import validate_evidence_bundle
+from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
+    EvidenceBuildError,
+    approval_descriptor_path,
+    approved_plan_sha256,
+)
 
 
 def main() -> int:
@@ -14,7 +18,12 @@ def main() -> int:
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--artifact-root", type=Path, required=True)
     arguments = parser.parse_args()
-    report = validate_evidence_bundle(arguments.bundle, hashlib.sha256(arguments.plan.read_bytes()).hexdigest(), arguments.through)
+    try:
+        digest = approved_plan_sha256(arguments.plan, approval_descriptor_path(arguments.plan))
+    except EvidenceBuildError as error:
+        print(error.code)
+        return 2
+    report = validate_evidence_bundle(arguments.bundle, digest, arguments.through)
     print("APPROVE" if report.valid else report.reason_code)
     return 0 if report.valid else 2
 

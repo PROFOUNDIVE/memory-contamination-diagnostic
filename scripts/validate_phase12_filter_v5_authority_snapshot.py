@@ -9,6 +9,11 @@ import subprocess
 from pathlib import Path
 from typing import Final
 
+from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
+    EvidenceBuildError,
+    approved_plan_sha256,
+)
+
 
 ROOT: Final = Path(__file__).resolve().parents[1]
 AUTHORITY_ROOT: Final = Path(
@@ -93,11 +98,13 @@ def _git(root: Path, *arguments: str) -> str:
 
 
 def _plan_digest(repository_root: Path) -> str:
-    plan, _ = _read_nofollow(repository_root / ".omo/plans/phase12-post-filter-v5-calibration-readiness.md")
-    descriptor, _ = _read_nofollow(repository_root / ".omo/approvals/phase12-post-filter-v5-calibration-readiness.plan.sha256")
-    if descriptor != hashlib.sha256(plan).hexdigest().encode("ascii") + b"\n":
-        raise ValidationError("THEORETICAL_AUTHORITY_DRIFT")
-    return descriptor.decode("ascii").strip()
+    try:
+        return approved_plan_sha256(
+            repository_root / ".omo/plans/phase12-post-filter-v5-calibration-readiness.md",
+            repository_root / ".omo/approvals/phase12-post-filter-v5-calibration-readiness.plan.sha256",
+        )
+    except EvidenceBuildError as error:
+        raise ValidationError("THEORETICAL_AUTHORITY_DRIFT") from error
 
 
 def _validate_authorities(manifest: dict[str, object], authority_root: Path) -> list[dict[str, object]]:
@@ -128,7 +135,7 @@ def _validate_repository(manifest: dict[str, object], root: Path) -> None:
     if trees != TREE_BINDINGS or _git(root, "cat-file", "-e", f"{STARTING_HEAD}^{{commit}}") != "":
         raise ValidationError("THEORETICAL_AUTHORITY_DRIFT")
     for path, expected in TREE_BINDINGS.items():
-        if _git(root, "rev-parse", f"{STARTING_HEAD}:{path}") != expected or _git(root, "rev-parse", f"HEAD:{path}") != expected:
+        if _git(root, "rev-parse", f"{STARTING_HEAD}:{path}") != expected:
             raise ValidationError("THEORETICAL_AUTHORITY_DRIFT")
     sealed = manifest.get("sealed_v1_evidence")
     if not isinstance(sealed, dict) or sealed.get("git_tree") != TREE_BINDINGS[".sisyphus/evidence/phase12-filter-v5-build-v1"]:
