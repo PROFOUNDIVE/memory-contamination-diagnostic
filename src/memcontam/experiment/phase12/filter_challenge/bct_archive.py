@@ -4,6 +4,7 @@ import fcntl
 import hashlib
 import json
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Literal
@@ -12,7 +13,8 @@ from memcontam.experiment.phase12.filter_challenge.registry_calibration import C
 
 
 SHARED_WALL_SECONDS: Final = 10_800
-PROCESS_WALL_SECONDS: Final = {"screening": 3_600, "bct": 7_200}
+_ZERO_HASH: Final = "0" * 64
+_Stage = Literal["screening", "bct"]
 
 
 class LedgerError(ValueError):
@@ -22,9 +24,41 @@ class LedgerError(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
+class ResourceBudget:
+    calls: int
+    input_tokens: int
+    output_tokens: int
+    microusd: int
+    wall_seconds: int
+
+
+_SHARED_CAP: Final = ResourceBudget(570, 2_334_720, 364_800, 10_000_000, 10_800)
+_STAGE_CAPS: Final = {
+    "screening": ResourceBudget(90, 368_640, 57_600, 2_000_000, 3_600),
+    "bct": ResourceBudget(480, 1_966_080, 307_200, 8_000_000, 7_200),
+}
+
+
+@dataclass(frozen=True, slots=True)
 class ProcessReservation:
     reservation_id: str
-    reserved_wall_seconds: int
+    stage: _Stage
+    resources: ResourceBudget
+
+    @property
+    def reserved_wall_seconds(self) -> int:
+        return self.resources.wall_seconds
+
+
+@dataclass(frozen=True, slots=True)
+class ProcessDeadline:
+    deadline_monotonic: float
+
+    def clamp_timeout(self, requested_seconds: float, monotonic_now: float | None = None) -> float:
+        if requested_seconds < 0:
+            raise LedgerError("REQUEST_TIMEOUT_INVALID")
+        now = time.monotonic() if monotonic_now is None else monotonic_now
+        return min(requested_seconds, max(0.0, self.deadline_monotonic - now))
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,30 +73,57 @@ class BudgetLedger:
 
     @property
     def remaining_wall_seconds(self) -> int:
-        return SHARED_WALL_SECONDS - _reserved_wall_seconds(self._records())
+        return self.remaining_resources.wall_seconds
 
-    def reserve_process(self, stage: Literal["screening", "bct"], run_id: str) -> ProcessReservation:
-        requested = PROCESS_WALL_SECONDS[stage]
+    @property
+    def remaining_resources(self) -> ResourceBudget:
+        return _subtract(_SHARED_CAP, _consumed_resources(self._records()))
+
+    def reserve_process(self, stage: _Stage, run_id: str) -> ProcessReservation:
+        requested = _STAGE_CAPS[stage]
         with self._locked() as stream:
             records = _read_records(stream)
-            if SHARED_WALL_SECONDS - _reserved_wall_seconds(records) < requested:
+            if not _fits(_subtract(_SHARED_CAP, _consumed_resources(records)), requested):
                 raise LedgerError("WALL_TIME_CAP_EXCEEDED")
             reservation_id = f"{run_id}:{stage}:wall"
             if reservation_id in {_string_value(row["reservation_id"]) for row in records if row["kind"] == "reserve"}:
                 raise LedgerError("RUN_ID_ALREADY_EXISTS")
-            _append(stream, records, {"kind": "reserve", "reservation_id": reservation_id, "wall_seconds": requested})
-        return ProcessReservation(reservation_id, requested)
+            _append(
+                stream,
+                records,
+                {"kind": "reserve", "reservation_id": reservation_id, "stage": stage, "resources": _budget_json(requested)},
+            )
+        return ProcessReservation(reservation_id, stage, requested)
 
     def settle_process(self, reservation: ProcessReservation, elapsed_seconds: int) -> None:
-        if elapsed_seconds < 0 or elapsed_seconds > reservation.reserved_wall_seconds:
-            raise LedgerError("WALL_TIME_SETTLEMENT_INVALID")
+        self.settle(reservation, ResourceBudget(0, 0, 0, 0, elapsed_seconds))
+
+    def settle(self, reservation: ProcessReservation, used: ResourceBudget) -> None:
+        if not _fits(reservation.resources, used):
+            raise LedgerError("RESOURCE_SETTLEMENT_INVALID")
         with self._locked() as stream:
             records = _read_records(stream)
             if reservation.reservation_id not in {row["reservation_id"] for row in records if row["kind"] == "reserve"}:
                 raise LedgerError("LEDGER_RESERVATION_UNKNOWN")
             if reservation.reservation_id in {row["reservation_id"] for row in records if row["kind"] == "settle"}:
                 raise LedgerError("LEDGER_RESERVATION_SETTLED")
-            _append(stream, records, {"kind": "settle", "reservation_id": reservation.reservation_id, "wall_seconds": elapsed_seconds})
+            _append(stream, records, {"kind": "settle", "reservation_id": reservation.reservation_id, "resources": _budget_json(used)})
+
+    def deadline_for(self, reservation: ProcessReservation, started_at: float | None = None) -> ProcessDeadline:
+        records = self._records()
+        if reservation.reservation_id not in {row["reservation_id"] for row in records if row["kind"] == "reserve"}:
+            raise LedgerError("LEDGER_RESERVATION_UNKNOWN")
+        if reservation.reservation_id in {row["reservation_id"] for row in records if row["kind"] == "settle"}:
+            raise LedgerError("LEDGER_RESERVATION_SETTLED")
+        now = time.monotonic() if started_at is None else started_at
+        return ProcessDeadline(now + reservation.resources.wall_seconds)
+
+    def invalidate_timeout(self, reservation: ProcessReservation) -> None:
+        with self._locked() as stream:
+            records = _read_records(stream)
+            if reservation.reservation_id not in {row["reservation_id"] for row in records if row["kind"] == "reserve"}:
+                raise LedgerError("LEDGER_RESERVATION_UNKNOWN")
+            _append(stream, records, {"kind": "invalidate", "reservation_id": reservation.reservation_id})
 
     def head(self) -> str:
         records = self._records()
@@ -100,18 +161,31 @@ def append_archive_record(root: Path, stream: Literal["public", "audit"], payloa
         raise LedgerError("AUDIT_FIELD_IN_PUBLIC_STREAM")
     root.mkdir(parents=True, exist_ok=True)
     path = root / f"{stream}.jsonl"
-    with path.open("a", encoding="utf-8") as output:
-        output.write(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n")
+    with _LedgerLock(path) as output:
+        records = _read_archive_records(output)
+        record = _archive_record(records, output.tell(), payload)
+        output.seek(0, os.SEEK_END)
+        output.write(_canonical_json(record) + "\n")
         output.flush()
         os.fsync(output.fileno())
+        _fsync_parent(path)
 
 
 def validate_live_archive(root: Path) -> ArchiveValidation:
     try:
-        public = _jsonl(root / "public.jsonl")
-        audit = _jsonl(root / "audit.jsonl")
+        public = _read_archive_path(root / "public.jsonl")
+        audit = _read_archive_path(root / "audit.jsonl")
         if not public or not audit or any(_contains_hidden_label(row) for row in public):
             raise LedgerError("LIVE_ARCHIVE_INVALID")
+        public_runs = [_string_value(row["run_id"]) for row in public]
+        audit_runs = [_string_value(row["run_id"]) for row in audit]
+        if len(public_runs) != len(set(public_runs)) or len(audit_runs) != len(set(audit_runs)):
+            raise LedgerError("LIVE_ARCHIVE_REUSED_RUN_ID")
+        if set(public_runs) != set(audit_runs):
+            raise LedgerError("LIVE_ARCHIVE_RECONCILIATION_MISSING")
+        for public_row, audit_row in zip(public, audit, strict=True):
+            if _archive_identity(public_row) != _archive_identity(audit_row):
+                raise LedgerError("LIVE_ARCHIVE_RECONCILIATION_MISSING")
     except (LedgerError, OSError, UnicodeError, json.JSONDecodeError) as error:
         return ArchiveValidation(False, error.code if isinstance(error, LedgerError) else "LIVE_ARCHIVE_INVALID")
     return ArchiveValidation(True)
@@ -162,8 +236,8 @@ def validate_evidence_bundle(bundle: Path, plan_digest: str, through: str = "scr
 
 def _read_records(stream) -> list[dict[str, object]]:
     stream.seek(0)
-    records = [json.loads(line) for line in stream if line.strip()]
-    previous = "0" * 64
+    records = [_record_value(json.loads(line)) for line in stream if line.strip()]
+    previous = _ZERO_HASH
     for sequence, record in enumerate(records, start=1):
         if record.get("sequence") != sequence or record.get("previous_hash") != previous:
             raise LedgerError("LEDGER_CHAIN_INVALID")
@@ -171,34 +245,28 @@ def _read_records(stream) -> list[dict[str, object]]:
         if record.get("record_hash") != _hash(payload):
             raise LedgerError("LEDGER_CHAIN_INVALID")
         previous = str(record["record_hash"])
+    _validate_ledger_records(records)
     return records
 
 
 def _append(stream, records: list[dict[str, object]], payload: dict[str, object]) -> None:
-    record = {**payload, "sequence": len(records) + 1, "previous_hash": records[-1]["record_hash"] if records else "0" * 64}
+    record = {**payload, "sequence": len(records) + 1, "previous_hash": records[-1]["record_hash"] if records else _ZERO_HASH}
     record["record_hash"] = _hash(record)
     stream.seek(0, os.SEEK_END)
-    stream.write(json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n")
+    stream.write(_canonical_json(record) + "\n")
     stream.flush()
     os.fsync(stream.fileno())
+    _fsync_parent(Path(stream.name))
 
 
-def _reserved_wall_seconds(records: list[dict[str, object]]) -> int:
-    reserved = {
-        _string_value(row["reservation_id"]): _integer_value(row["wall_seconds"])
-        for row in records
-        if row["kind"] == "reserve"
-    }
-    settled = {
-        _string_value(row["reservation_id"]): _integer_value(row["wall_seconds"])
-        for row in records
-        if row["kind"] == "settle"
-    }
-    return sum(settled.get(key, value) for key, value in reserved.items())
-
-
-def _contains_hidden_label(payload: dict[str, object]) -> bool:
-    return bool({"candidate_role", "correctness_label", "hidden_label"} & payload.keys())
+def _contains_hidden_label(payload: object) -> bool:
+    if isinstance(payload, dict):
+        return bool({"candidate_role", "correctness_label", "hidden_label"} & payload.keys()) or any(
+            _contains_hidden_label(value) for value in payload.values()
+        )
+    if isinstance(payload, list):
+        return any(_contains_hidden_label(value) for value in payload)
+    return False
 
 
 def _jsonl(path: Path) -> list[dict[str, object]]:
@@ -206,7 +274,7 @@ def _jsonl(path: Path) -> list[dict[str, object]]:
 
 
 def _hash(payload: dict[str, object]) -> str:
-    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    return hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
 
 
 def _sha256(path: Path) -> str:
@@ -223,3 +291,147 @@ def _string_value(value: object) -> str:
     if not isinstance(value, str):
         raise LedgerError("LEDGER_CHAIN_INVALID")
     return value
+
+
+def _budget_json(value: ResourceBudget) -> dict[str, int]:
+    return {"calls": value.calls, "input_tokens": value.input_tokens, "output_tokens": value.output_tokens, "microusd": value.microusd, "wall_seconds": value.wall_seconds}
+
+
+def _budget_value(value: object) -> ResourceBudget:
+    if not isinstance(value, dict):
+        raise LedgerError("LEDGER_CHAIN_INVALID")
+    budget = ResourceBudget(*(_integer_value(value.get(name)) for name in ("calls", "input_tokens", "output_tokens", "microusd", "wall_seconds")))
+    if min(budget.calls, budget.input_tokens, budget.output_tokens, budget.microusd, budget.wall_seconds) < 0:
+        raise LedgerError("LEDGER_CHAIN_INVALID")
+    return budget
+
+
+def _fits(limit: ResourceBudget, requested: ResourceBudget) -> bool:
+    return all(a >= b for a, b in zip(_budget_json(limit).values(), _budget_json(requested).values(), strict=True))
+
+
+def _subtract(limit: ResourceBudget, used: ResourceBudget) -> ResourceBudget:
+    if not _fits(limit, used):
+        raise LedgerError("WALL_TIME_CAP_EXCEEDED")
+    return ResourceBudget(*(a - b for a, b in zip(_budget_json(limit).values(), _budget_json(used).values(), strict=True)))
+
+
+def _consumed_resources(records: list[dict[str, object]]) -> ResourceBudget:
+    reserved = { _string_value(row["reservation_id"]): _budget_value(row["resources"]) for row in records if row["kind"] == "reserve" }
+    settled = { _string_value(row["reservation_id"]): _budget_value(row["resources"]) for row in records if row["kind"] == "settle" }
+    values = tuple(settled.get(identifier, budget) for identifier, budget in reserved.items())
+    return ResourceBudget(
+        sum(item.calls for item in values),
+        sum(item.input_tokens for item in values),
+        sum(item.output_tokens for item in values),
+        sum(item.microusd for item in values),
+        sum(item.wall_seconds for item in values),
+    )
+
+
+def _validate_ledger_records(records: list[dict[str, object]]) -> None:
+    reservations: set[str] = set()
+    settled: set[str] = set()
+    for row in records:
+        kind = _string_value(row["kind"])
+        match kind:
+            case "reserve":
+                identifier = _string_value(row["reservation_id"])
+                if identifier in reservations or _string_value(row["stage"]) not in _STAGE_CAPS:
+                    raise LedgerError("LEDGER_CHAIN_INVALID")
+                resources = _budget_value(row["resources"])
+                if resources != _STAGE_CAPS[_string_value(row["stage"])]:
+                    raise LedgerError("LEDGER_CHAIN_INVALID")
+                reservations.add(identifier)
+            case "settle":
+                identifier = _string_value(row["reservation_id"])
+                if identifier not in reservations or identifier in settled or not _fits(_reservation_resources(records, identifier), _budget_value(row["resources"])):
+                    raise LedgerError("LEDGER_CHAIN_INVALID")
+                settled.add(identifier)
+            case "invalidate":
+                if _string_value(row["reservation_id"]) not in reservations:
+                    raise LedgerError("LEDGER_CHAIN_INVALID")
+            case _:
+                raise LedgerError("LEDGER_CHAIN_INVALID")
+
+
+def _reservation_resources(records: list[dict[str, object]], identifier: str) -> ResourceBudget:
+    return next(_budget_value(row["resources"]) for row in records if row["kind"] == "reserve" and row["reservation_id"] == identifier)
+
+
+def _record_value(value: object) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise LedgerError("LEDGER_CHAIN_INVALID")
+    return value
+
+
+def _canonical_json(payload: dict[str, object]) -> str:
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
+
+
+def _fsync_parent(path: Path) -> None:
+    descriptor = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _archive_record(records: list[dict[str, object]], start: int, payload: dict[str, object]) -> dict[str, object]:
+    run_id = _string_value(payload.get("run_id"))
+    status = _string_value(payload.get("status"))
+    if status not in {"planned", "completed", "invalidated", "not_issued"}:
+        raise LedgerError("LIVE_ARCHIVE_STATUS_INVALID")
+    failure_code = payload.get("failure_code")
+    if failure_code is not None:
+        _string_value(failure_code)
+    inclusion_state = payload.get("inclusion_state", "included")
+    if inclusion_state not in {"included", "excluded"}:
+        raise LedgerError("LIVE_ARCHIVE_INCLUSION_INVALID")
+    record = {**payload, "run_id": run_id, "status": status, "failure_code": failure_code, "inclusion_state": inclusion_state, "sequence": len(records) + 1, "previous_hash": records[-1]["record_hash"] if records else _ZERO_HASH, "raw_byte_start": start, "raw_byte_end": start}
+    for _ in range(4):
+        record["record_hash"] = _hash({key: value for key, value in record.items() if key != "record_hash"})
+        end = start + len((_canonical_json(record) + "\n").encode("utf-8"))
+        if record["raw_byte_end"] == end:
+            return record
+        record["raw_byte_end"] = end
+    raise LedgerError("LIVE_ARCHIVE_RANGE_INVALID")
+
+
+def _read_archive_records(stream) -> list[dict[str, object]]:
+    stream.seek(0)
+    offset = 0
+    records: list[dict[str, object]] = []
+    for line in stream:
+        encoded = line.encode("utf-8")
+        if line.strip():
+            record = _record_value(json.loads(line))
+            if record.get("raw_byte_start") != offset or record.get("raw_byte_end") != offset + len(encoded):
+                raise LedgerError("LIVE_ARCHIVE_RANGE_INVALID")
+            records.append(record)
+        offset += len(encoded)
+    previous = _ZERO_HASH
+    for sequence, record in enumerate(records, start=1):
+        if record.get("sequence") != sequence or record.get("previous_hash") != previous:
+            raise LedgerError("LIVE_ARCHIVE_CHAIN_INVALID")
+        unsigned = {key: value for key, value in record.items() if key != "record_hash"}
+        if record.get("record_hash") != _hash(unsigned):
+            raise LedgerError("LIVE_ARCHIVE_CHAIN_INVALID")
+        previous = _string_value(record["record_hash"])
+    return records
+
+
+def _read_archive_path(path: Path) -> list[dict[str, object]]:
+    with _LedgerLock(path) as stream:
+        return _read_archive_records(stream)
+
+
+def _archive_identity(row: dict[str, object]) -> tuple[str, str, str | None, str]:
+    failure = row["failure_code"]
+    status = _string_value(row["status"])
+    inclusion = _string_value(row["inclusion_state"])
+    if status not in {"planned", "completed", "invalidated", "not_issued"}:
+        raise LedgerError("LIVE_ARCHIVE_STATUS_INVALID")
+    if inclusion not in {"included", "excluded"}:
+        raise LedgerError("LIVE_ARCHIVE_INCLUSION_INVALID")
+    return (_string_value(row["run_id"]), status, None if failure is None else _string_value(failure), inclusion)

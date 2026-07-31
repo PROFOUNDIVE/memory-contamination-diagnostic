@@ -152,17 +152,29 @@ def _run_stage(
         else:
             artifact_root.mkdir(parents=True, exist_ok=True)
             ledger = BudgetLedger(artifact_root / "budget-ledger.jsonl")
-            ledger.reserve_process(stage, run_id)
-            client_factory()
-            append_archive_record(artifact_root / run_id, "public", {"run_id": run_id, "status": "planned"})
-            append_archive_record(artifact_root / run_id, "audit", {"stage": stage})
-            result = CalibrationStageResult(
-                stage=stage,
-                disposition="completed",
-                terminal_status="CALIBRATION_EXECUTION_READY",
-                reason_code="AUTHORIZATION_VALIDATED",
-                provider_calls_issued=0,
-            )
+            reservation = ledger.reserve_process(stage, run_id)
+            try:
+                client_factory()
+            except TimeoutError:
+                ledger.invalidate_timeout(reservation)
+                result = CalibrationStageResult(
+                    stage=stage,
+                    disposition="invalidated",
+                    terminal_status="FILTER_V5_PILOT_B_BLOCKED_BY_INVALID_BCT_EVIDENCE",
+                    reason_code="CALIBRATION_DEADLINE_EXCEEDED",
+                    provider_calls_issued=0,
+                )
+            else:
+                archive_payload: dict[str, object] = {"run_id": run_id, "status": "planned"}
+                append_archive_record(artifact_root / run_id, "public", archive_payload)
+                append_archive_record(artifact_root / run_id, "audit", {**archive_payload, "stage": stage})
+                result = CalibrationStageResult(
+                    stage=stage,
+                    disposition="completed",
+                    terminal_status="CALIBRATION_EXECUTION_READY",
+                    reason_code="AUTHORIZATION_VALIDATED",
+                    provider_calls_issued=0,
+                )
     result.write_atomic(stage_result)
     return result
 
