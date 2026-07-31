@@ -18,6 +18,13 @@ from memcontam.experiment.phase12.filter_challenge.bct_archive import (
     append_archive_record,
     validate_live_archive,
 )
+from memcontam.experiment.phase12.filter_challenge.bct_waiting_evidence import (
+    waiting_screening_stage,
+)
+from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
+    approval_descriptor_path,
+    approved_plan_sha256,
+)
 from memcontam.experiment.phase12.filter_challenge.freeze_a import validate_freeze_a
 from memcontam.experiment.phase12.filter_challenge.registry_calibration import (
     ARTIFACT_ROOT,
@@ -121,6 +128,22 @@ def run_screen_controls(
 
 
 def _run_cli_stage(args: argparse.Namespace, stage: Literal["screening", "bct"]) -> CalibrationStageResult:
+    if stage == "bct":
+        require_artifact_root(args.artifact_root)
+        if args.artifact_root.exists():
+            result = _blocked("bct", "LIVE_ARTIFACT_ROOT_EXISTS")
+            result.write_atomic(args.stage_result)
+            return result
+        plan = REPOSITORY_ROOT / ".omo/plans/phase12-post-filter-v5-calibration-readiness.md"
+        raw_screening = waiting_screening_stage(
+            REPOSITORY_ROOT / "docs/evidence/phase12-filter-v5-bct-v1",
+            approved_plan_sha256(plan, approval_descriptor_path(plan)),
+        )
+        if raw_screening is not None:
+            result = CalibrationStageResult.waiting("bct", raw_screening.terminal_status)
+            result.write_atomic(args.stage_result)
+            return result
+
     def factory() -> None:
         _build_live_factory(args.config)
 

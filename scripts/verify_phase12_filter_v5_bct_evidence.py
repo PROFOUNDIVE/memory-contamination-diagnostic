@@ -3,7 +3,13 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from memcontam.experiment.phase12.filter_challenge.bct_archive import validate_evidence_bundle
+from memcontam.experiment.phase12.filter_challenge.bct_archive import (
+    ArchiveValidation,
+    validate_evidence_bundle,
+)
+from memcontam.experiment.phase12.filter_challenge.bct_waiting_evidence import (
+    validate_waiting_bct_reports,
+)
 from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
     EvidenceBuildError,
     approval_descriptor_path,
@@ -24,6 +30,13 @@ def main() -> int:
         print(error.code)
         return 2
     report = validate_evidence_bundle(arguments.bundle, digest, arguments.through)
+    if report.valid and arguments.through in {"bct", "readiness"}:
+        waiting_valid = validate_waiting_bct_reports(
+            arguments.bundle, digest, arguments.artifact_root
+        )
+        report = ArchiveValidation(
+            waiting_valid, None if waiting_valid else "EVIDENCE_BCT_WAITING_INVALID"
+        )
     print("APPROVE" if report.valid else report.reason_code)
     return 0 if report.valid else 2
 

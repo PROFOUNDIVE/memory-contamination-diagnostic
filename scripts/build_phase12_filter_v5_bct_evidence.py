@@ -9,6 +9,10 @@ from memcontam.experiment.phase12.filter_challenge.bct_archive import (
     build_evidence_report,
     validate_evidence_bundle,
 )
+from memcontam.experiment.phase12.filter_challenge.bct_waiting_evidence import (
+    BCT_REPORT_IDS,
+    waiting_bct_report_fields,
+)
 from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
     EvidenceBuildError,
     approval_descriptor_path,
@@ -65,6 +69,15 @@ def main() -> int:
         ):
             print("EVIDENCE_FREEZE_B_WAITING_INVALID")
             return 2
+    bct_fields = None
+    if set(names) & set(BCT_REPORT_IDS):
+        if arguments.stage_result is None or arguments.artifact_root.exists():
+            print("EVIDENCE_BCT_WAITING_INVALID")
+            return 2
+        bct_fields = waiting_bct_report_fields(arguments.bundle, digest, arguments.stage_result)
+        if bct_fields is None:
+            print("EVIDENCE_BCT_WAITING_INVALID")
+            return 2
     for name in names:
         path = arguments.bundle / f"{name.replace('-', '_')}_report.json"
         if path.exists() and not arguments.reseal_existing:
@@ -80,10 +93,14 @@ def main() -> int:
                 digest,
             )
             payload = json.loads(replacement.read_text(encoding="utf-8"))
-        payload["input_digests"] = {
-            "freeze_a": _sha256(arguments.freeze_a),
-            "authorization_request": _sha256(arguments.authorization_request),
-        }
+        if name in BCT_REPORT_IDS:
+            assert bct_fields is not None
+            payload |= bct_fields
+        else:
+            payload["input_digests"] = {
+                "freeze_a": _sha256(arguments.freeze_a),
+                "authorization_request": _sha256(arguments.authorization_request),
+            }
         if name == "freeze-b-search-config":
             payload["terminal_status"] = WAITING_SCREENING_TERMINAL
             payload["input_digests"] |= {
