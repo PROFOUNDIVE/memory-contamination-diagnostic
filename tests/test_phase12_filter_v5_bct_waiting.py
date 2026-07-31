@@ -23,6 +23,8 @@ CONFIG = ROOT / "configs" / "phase12" / "filter_v5_bct_calibration.yaml"
 BCT_REQUEST = ROOT / "data" / "phase12" / "filter_v5_bct_v1" / "bct_authorization_request.json"
 EVIDENCE_SCRIPT = ROOT / "scripts" / "build_phase12_filter_v5_bct_evidence.py"
 VERIFY_SCRIPT = ROOT / "scripts" / "verify_phase12_filter_v5_bct_evidence.py"
+EXPERIMENT_PACKAGE = ROOT / "src" / "memcontam" / "experiment" / "__init__.py"
+PYRIGHT_CONFIG = ROOT / "pyrightconfig.json"
 
 
 def _verify(bundle: Path) -> subprocess.CompletedProcess[str]:
@@ -44,6 +46,19 @@ def _verify(bundle: Path) -> subprocess.CompletedProcess[str]:
         text=True,
         check=False,
     )
+
+
+def test_bct_waiting_evidence_has_a_regular_experiment_package_boundary() -> None:
+    assert EXPERIMENT_PACKAGE.is_file()
+
+
+def test_pyrightconfig_resolves_the_src_package_root() -> None:
+    settings = json.loads(PYRIGHT_CONFIG.read_text(encoding="utf-8"))
+    assert settings["executionEnvironments"] == [
+        {"root": "src", "extraPaths": ["src"]},
+        {"root": "scripts", "extraPaths": ["src"]},
+        {"root": "tests", "extraPaths": ["src"]},
+    ]
 
 
 def _upstream_bundle(path: Path) -> Path:
