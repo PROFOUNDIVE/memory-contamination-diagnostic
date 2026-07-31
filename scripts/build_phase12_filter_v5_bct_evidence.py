@@ -18,6 +18,9 @@ from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
     EvidenceBuildError,
     approval_descriptor_path,
     approved_plan_sha256,
+    read_regular_nofollow,
+    sha256_bytes,
+    sha256_regular_nofollow,
 )
 from memcontam.experiment.phase12.filter_challenge.registry_calibration import CalibrationStageResult
 
@@ -99,7 +102,7 @@ def main() -> int:
                 arguments.stage_result,
                 digest,
             )
-            payload = json.loads(replacement.read_text(encoding="utf-8"))
+            payload = json.loads(read_regular_nofollow(replacement, "EVIDENCE_REPORT_INVALID"))
         if arguments.report_set == "terminal-fill":
             stage = CalibrationStageResult.model_validate_json(arguments.stage_result.read_text(encoding="utf-8"))
             payload["terminal_status"] = stage.terminal_status
@@ -131,6 +134,10 @@ def main() -> int:
                 "freeze_a": _sha256(arguments.freeze_a),
                 "authorization_request": _sha256(arguments.authorization_request),
             }
+            if name == "freeze-a":
+                payload["input_digests"]["source_universe"] = _sha256(
+                    Path.cwd() / "data/phase12/filter_v5_bct_v1/source_universe_v1.json"
+                )
         if name == "freeze-b-search-config":
             payload["terminal_status"] = WAITING_SCREENING_TERMINAL
             payload["input_digests"] |= {
@@ -142,6 +149,13 @@ def main() -> int:
                 report_id: _sha256(arguments.bundle / f"{report_id.replace('-', '_')}_report.json")
                 for report_id in REPORTS[:4]
             }
+        payload["output_seal"] = sha256_bytes(
+            json.dumps(
+                {key: value for key, value in payload.items() if key != "output_seal"},
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        )
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
             json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n",
@@ -153,16 +167,15 @@ def main() -> int:
 def _sha256(path: Path | None) -> str | None:
     if path is None:
         return None
-    import hashlib
-
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return sha256_regular_nofollow(path, "EVIDENCE_REPORT_INVALID")
 
 
 def _validate_resealable(path: Path, report_id: str) -> None:
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload = json.loads(read_regular_nofollow(path, "EVIDENCE_REPORT_INVALID"))
     if (
         not isinstance(payload, dict)
-        or payload.get("schema_version") != "phase12_fv5_evidence_report_v1"
+        or payload.get("schema_version")
+        not in {"phase12_fv5_evidence_report_v1", f"phase12_fv5_{report_id.replace('-', '_')}_report_v1"}
         or payload.get("report_id") != report_id
         or payload.get("provider_calls_issued") != 0
     ):
