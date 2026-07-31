@@ -6,6 +6,7 @@ import hmac
 import json
 import os
 import stat
+import subprocess
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
@@ -25,6 +26,7 @@ from memcontam.experiment.phase12.filter_challenge.code_prespec import CodePresp
 from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
     approval_descriptor_path,
     approved_plan_sha256,
+    sha256_regular_nofollow,
 )
 from memcontam.experiment.phase12.filter_challenge.freeze_a import validate_freeze_a
 from memcontam.experiment.phase12.filter_challenge.pilot_b_readiness import (
@@ -189,9 +191,9 @@ def _run_stage(
     else:
         try:
             approved = load_authorization(authorization, expected_digest, model)
-            _validate_runtime_authorization(approved, run_id)
-            if authorization_request is None or approved.request_sha256 != hashlib.sha256(authorization_request.read_bytes()).hexdigest():
+            if authorization_request is None:
                 raise CalibrationAuthorizationError("AUTHORIZATION_REQUEST_MISMATCH")
+            _validate_runtime_authorization(approved, run_id, authorization_request)
         except CalibrationAuthorizationError as error:
             result = _blocked(stage, error.code)
         else:
@@ -234,13 +236,43 @@ def _blocked(stage: Literal["screening", "bct"], reason: str) -> CalibrationStag
     )
 
 
-def _validate_runtime_authorization(authorization: CalibrationAuthorization, run_id: str) -> None:
+def _validate_runtime_authorization(
+    authorization: CalibrationAuthorization, run_id: str, request_path: Path
+) -> None:
     if authorization.run_id != run_id:
         raise CalibrationAuthorizationError("AUTHORIZATION_RUN_ID_MISMATCH")
     if authorization.expires_at <= datetime.now(UTC):
         raise CalibrationAuthorizationError("AUTHORIZATION_EXPIRED")
     if authorization.ledger_id != LEDGER_ID:
         raise CalibrationAuthorizationError("AUTHORIZATION_LEDGER_MISMATCH")
+    plan = REPOSITORY_ROOT / ".omo/plans/phase12-post-filter-v5-calibration-readiness.md"
+    authority = REPOSITORY_ROOT / "docs/evidence/phase12-filter-v5-bct-v1/authority_transition_manifest.json"
+    try:
+        request = json.loads(_read_nofollow(request_path))
+        head = subprocess.run(
+            ["git", "-C", str(REPOSITORY_ROOT), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        plan_digest = approved_plan_sha256(plan, approval_descriptor_path(plan))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, subprocess.SubprocessError, ValueError) as error:
+        raise CalibrationAuthorizationError("AUTHORIZATION_TRUSTED_INPUT_INVALID") from error
+    expected = {
+        "request_sha256": sha256_regular_nofollow(request_path, "AUTHORIZATION_REQUEST_MISMATCH"),
+        "implementation_commit": head,
+        "approved_plan_sha256": plan_digest,
+        "authority_manifest_sha256": sha256_regular_nofollow(authority, "AUTHORIZATION_AUTHORITY_MISMATCH"),
+        "freeze_sha256": request.get("freeze_sha256"),
+        "maximum_calls": request.get("maximum_calls"),
+        "maximum_input_tokens": request.get("maximum_input_tokens"),
+        "maximum_output_tokens": request.get("maximum_output_tokens"),
+        "maximum_wall_seconds": request.get("wall_seconds"),
+    }
+    if any(getattr(authorization, field) != value for field, value in expected.items()):
+        raise CalibrationAuthorizationError("AUTHORIZATION_TRUSTED_INPUT_MISMATCH")
+    if authorization.hard_ceiling_microusd != request.get("hard_ceiling_usd", 0) * 1_000_000:
+        raise CalibrationAuthorizationError("AUTHORIZATION_TRUSTED_INPUT_MISMATCH")
 
 
 def _cost_preview(args: argparse.Namespace, stage: Literal["screening", "bct"]) -> None:

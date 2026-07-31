@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 from typing import Final
 
 from memcontam.experiment.phase12.filter_challenge.bct_archive import validate_evidence_bundle
+from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
+    read_regular_nofollow,
+    sha256_regular_nofollow,
+)
 from memcontam.experiment.phase12.filter_challenge.registry_calibration import CalibrationStageResult
 
 
@@ -21,7 +24,9 @@ def waiting_screening_stage(bundle: Path, plan_digest: str) -> CalibrationStageR
     if not isinstance(stage_path, str):
         return None
     try:
-        stage = CalibrationStageResult.model_validate_json(Path(stage_path).read_text(encoding="utf-8"))
+        stage = CalibrationStageResult.model_validate_json(
+            read_regular_nofollow(Path(stage_path), "EVIDENCE_STAGE_DIGEST_MISMATCH")
+        )
     except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
         return None
     if (
@@ -39,7 +44,9 @@ def waiting_bct_report_fields(bundle: Path, plan_digest: str, stage_result: Path
     if screening is None:
         return None
     try:
-        stage = CalibrationStageResult.model_validate_json(stage_result.read_text(encoding="utf-8"))
+        stage = CalibrationStageResult.model_validate_json(
+            read_regular_nofollow(stage_result, "EVIDENCE_STAGE_DIGEST_MISMATCH")
+        )
     except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
         return None
     if (
@@ -81,7 +88,7 @@ def validate_waiting_bct_reports(bundle: Path, plan_digest: str, artifact_root: 
         )
         if (
             fields is None
-            or payload.get("schema_version") != "phase12_fv5_evidence_report_v1"
+            or payload.get("schema_version") != f"phase12_fv5_{report_id.replace('-', '_')}_report_v1"
             or payload.get("report_id") != report_id
             or payload.get("approved_plan_sha256") != plan_digest
             or payload.get("stage_disposition") != "blocked_before_stage"
@@ -93,9 +100,9 @@ def validate_waiting_bct_reports(bundle: Path, plan_digest: str, artifact_root: 
 
 
 def _payload(path: Path) -> dict[str, object]:
-    value = json.loads(path.read_text(encoding="utf-8"))
+    value = json.loads(read_regular_nofollow(path, "EVIDENCE_REPORT_INVALID"))
     return value if isinstance(value, dict) else {}
 
 
 def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return sha256_regular_nofollow(path, "EVIDENCE_REPORT_INVALID")

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
 from memcontam.experiment.phase12.filter_challenge.bct_archive import validate_evidence_bundle
+from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
+    read_regular_nofollow,
+    sha256_regular_nofollow,
+)
 from memcontam.experiment.phase12.filter_challenge.code_prespec import (
     CodePrespecError,
     validate_code_prespec,
@@ -93,7 +96,9 @@ def validate_readiness_report(bundle: Path) -> None:
     if not isinstance(stage_path, str) or not isinstance(code_path, str):
         raise ValueError("EVIDENCE_READINESS_INVALID")
     try:
-        stage = CalibrationStageResult.model_validate_json(Path(stage_path).read_text(encoding="utf-8"))
+        stage = CalibrationStageResult.model_validate_json(
+            read_regular_nofollow(Path(stage_path), "EVIDENCE_READINESS_INVALID")
+        )
         expected = {
             report_id: _sha(bundle / f"{report_id.replace('-', '_')}_report.json")
             for report_id in (
@@ -107,6 +112,9 @@ def validate_readiness_report(bundle: Path) -> None:
     if (
         payload.get("prior_report_sha256") != expected
         or payload.get("code_prespec_sha256") != _sha(Path(code_path))
+        or payload.get("schema_version") != "phase12_fv5_pilot_b_readiness_report_v1"
+        or payload.get("common_envelope") != "phase12_fv5_evidence_report_v1"
+        or payload.get("stage_disposition") != stage.disposition
         or payload.get("terminal_status") != stage.terminal_status
         or stage.stage != "pilot_b_readiness"
         or stage.provider_calls_issued != 0
@@ -159,7 +167,9 @@ def _result(
 
 def _report(bundle: Path, report_id: str) -> dict[str, object]:
     try:
-        value = json.loads((bundle / f"{report_id.replace('-', '_')}_report.json").read_text(encoding="utf-8"))
+        value = json.loads(
+            read_regular_nofollow(bundle / f"{report_id.replace('-', '_')}_report.json", "EVIDENCE_READINESS_INVALID")
+        )
         return value if isinstance(value, dict) else {}
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return {}
@@ -170,7 +180,9 @@ def _stage(payload: dict[str, object]) -> CalibrationStageResult | None:
     if not isinstance(path, str):
         return None
     try:
-        return CalibrationStageResult.model_validate_json(Path(path).read_text(encoding="utf-8"))
+        return CalibrationStageResult.model_validate_json(
+            read_regular_nofollow(Path(path), "EVIDENCE_READINESS_INVALID")
+        )
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
         return None
 
@@ -208,4 +220,4 @@ def _families(value: object) -> tuple[str, ...]:
 
 
 def _sha(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return sha256_regular_nofollow(path, "EVIDENCE_READINESS_INVALID")

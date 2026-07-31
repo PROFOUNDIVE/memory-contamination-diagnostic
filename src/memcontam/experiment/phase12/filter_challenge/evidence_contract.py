@@ -150,8 +150,8 @@ def approval_descriptor_path(plan: Path) -> Path:
 
 
 def approved_plan_sha256(plan: Path, descriptor: Path) -> str:
-    plan_bytes = _read_regular_nofollow(plan, "PLAN_READ_INVALID")
-    descriptor_bytes = _read_regular_nofollow(descriptor, "PLAN_DESCRIPTOR_INVALID")
+    plan_bytes = read_regular_nofollow(plan, "PLAN_READ_INVALID")
+    descriptor_bytes = read_regular_nofollow(descriptor, "PLAN_DESCRIPTOR_INVALID")
     if _DESCRIPTOR_PATTERN.fullmatch(descriptor_bytes) is None:
         raise EvidenceBuildError("PLAN_DESCRIPTOR_INVALID")
     digest = hashlib.sha256(_TASK_PROGRESS_PATTERN.sub(b"- [ ] ", plan_bytes)).hexdigest()
@@ -160,7 +160,7 @@ def approved_plan_sha256(plan: Path, descriptor: Path) -> str:
     return digest
 
 
-def _read_regular_nofollow(path: Path, error_code: str) -> bytes:
+def read_regular_nofollow(path: Path, error_code: str) -> bytes:
     target = path if path.is_absolute() else Path.cwd() / path
     if any(part in {".", ".."} for part in target.parts):
         raise EvidenceBuildError(error_code)
@@ -203,7 +203,11 @@ def sha256_bytes(raw: bytes) -> str:
 
 
 def sha256_path(path: Path) -> str:
-    return sha256_bytes(path.read_bytes())
+    return sha256_regular_nofollow(path, "DESCRIPTOR_OPEN_FAILED")
+
+
+def sha256_regular_nofollow(path: Path, error_code: str) -> str:
+    return sha256_bytes(read_regular_nofollow(path, error_code))
 
 
 def require_clean_repository(root: Path, implementation_commit: str) -> None:

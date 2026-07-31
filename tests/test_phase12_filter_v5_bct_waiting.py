@@ -184,7 +184,7 @@ def test_bct_waiting_branch_uses_raw_screening_terminal_and_seals_reports(
 
     rejected = _verify(bundle)
     assert rejected.returncode != 0
-    assert rejected.stdout == "EVIDENCE_BCT_WAITING_INVALID\n"
+    assert rejected.stdout == "EVIDENCE_REPORT_CONTRACT_INVALID\n"
 
 
 def test_bct_waiting_verifier_rejects_stage_terminal_and_hash_tampering(tmp_path: Path) -> None:
@@ -199,7 +199,7 @@ def test_bct_waiting_verifier_rejects_stage_terminal_and_hash_tampering(tmp_path
     report = json.loads(report_path.read_text(encoding="utf-8"))
     report["terminal_status"] = "AWAITING_BCT_AUTHORIZATION"
     report_path.write_text(json.dumps(report, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
-    assert _verify(bundle).stdout == "EVIDENCE_BCT_WAITING_INVALID\n"
+    assert _verify(bundle).stdout == "EVIDENCE_REPORT_CONTRACT_INVALID\n"
 
 
 def test_bct_waiting_branch_rejects_an_existing_live_root(
@@ -241,4 +241,4 @@ def test_bct_waiting_verifier_rejects_malformed_report_bytes(tmp_path: Path) -> 
     report = json.loads(report_path.read_text(encoding="utf-8"))
     report["upstream_report_sha256"]["screening"] = "0" * 64
     report_path.write_text(json.dumps(report, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
-    assert _verify(bundle).stdout == "EVIDENCE_BCT_WAITING_INVALID\n"
+    assert _verify(bundle).stdout == "EVIDENCE_REPORT_CONTRACT_INVALID\n"

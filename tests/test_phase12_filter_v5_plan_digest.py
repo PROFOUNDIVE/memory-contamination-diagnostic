@@ -250,4 +250,4 @@ def test_freeze_b_waiting_report_rejects_terminal_tampering(tmp_path: Path) -> N
 
     # Then: a non-screening terminal cannot be accepted as the Task-4 waiting branch.
     assert result.returncode != 0
-    assert result.stdout == "EVIDENCE_FREEZE_B_WAITING_INVALID\n"
+    assert result.stdout == "EVIDENCE_REPORT_CONTRACT_INVALID\n"
