@@ -1,0 +1,18 @@
+{
+  "schema_version": "phase12_fv5_authority_transition_manifest_v1",
+  "approved_plan_sha256": "e8d44600fb3a9177ae691fd8f49ac1c06305b004db7ccd50d391c9876356a230",
+  "external_files_changed": false,
+  "starting_repository": {"head": "32efbe15fc645de84585acb55b78946cfcd4298a", "worktree_clean": true},
+  "git_trees": {"src/memcontam/experiment/phase12/filter_challenge": "9d3641dfe5c7481d51b12d66486160875f2109ec", ".sisyphus/evidence/phase12-filter-v5-build-v1": "1c4f11a5fffb52c8bb2e80bfd0a1722449df936c"},
+  "consumer_bindings": {"historical": ["pilot_a_v1", "filter_v5_build_v1"], "new": ["filter_v5_bct_calibration_v1", "exploratory_code_source_fidelity_v2"]},
+  "source_universe": {"path": "data/phase12/filter_v5_bct_v1/source_universe_v1.json", "sha256": "6120bb46e40232d41e315b24e1771c23e1223440f2956ba532f75edb3bb0a9b6"},
+  "external_authorities": [
+    {"authority_id": "A3", "relative_path": "Phase 12 Filter-v5 Verifier-Backed Challenge Amendment.md", "sha256": "d75d4ad5d5b13a057fc5cf49fd02f00277b83c4863f39b2aa1975660f5fecfee", "byte_count": 94830, "identity": {"device": 50, "inode": 6464895358946233497, "mode": 436}},
+    {"authority_id": "A4", "relative_path": "Phase 12 — THEORETICAL ARTIFACT.md", "sha256": "56c42b1af761c2f3838638316823d0ce394c6c543f17aff97f4657721c964983", "byte_count": 31632, "identity": {"device": 50, "inode": 2080189936882145498, "mode": 436}},
+    {"authority_id": "A5", "relative_path": "Phase 12-Compatible Baseline Memory and Lightweight Filter Design revised-v3.md", "sha256": "8a279c1a644e84adc508c87f12b02009e22555072379252f29af06b8878fcae9", "byte_count": 74440, "identity": {"device": 50, "inode": 3560936744870047012, "mode": 436}},
+    {"authority_id": "A6", "relative_path": "Phase 12-Compatible Contamination Construction Intervention Timing and Sensitivity Protocol.md", "sha256": "9dcd3855f3f65b8d623b3d3c3600a6a7b0231228c19231359d883e3f40b1959a", "byte_count": 97777, "identity": {"device": 50, "inode": 259546316006265263, "mode": 436}},
+    {"authority_id": "A7", "relative_path": "Phase 12-Compatible Pilot Main and Exploratory Experiment Design.md", "sha256": "984fe2881690d93a8ccced87abf03de4bf0012158462cf07ed23505414073eb0", "byte_count": 93387, "identity": {"device": 50, "inode": 5267689970170674721, "mode": 436}},
+    {"authority_id": "A8", "relative_path": "AGENTS.md", "sha256": "362f3ba6c51dec7ebfd61b68a9c908e64ef84858e93f796bf5de6b40fb70cd46", "byte_count": 10499, "identity": {"device": 50, "inode": 15862317511576007358, "mode": 436}}
+  ],
+  "sealed_v1_evidence": {"git_tree": "1c4f11a5fffb52c8bb2e80bfd0a1722449df936c", "files": {"answer_call_provenance_report.json": "33e93f4c977d18865458e08288617901932f6a2d6a44930e338c6bd421f22a20", "archive_validation_report.json": "1111264578ffd917ffe8846c5c026aec362ab854ea682fd1797af8600e5697d4", "bct_readiness_report.json": "4c93a9bc6d340037ee3029ec42a92b6107bb19278c02337febc96d7f58209917", "implementation_manifest.json": "dd964902513ddcfebe10f482191310f4e57e931eb66adebfb3343def21e07571", "information_boundary_report.json": "33e93f4c977d18865458e08288617901932f6a2d6a44930e338c6bd421f22a20", "mft_fv5_report.json": "e5b5263f0152521ea61f6ab704a5329c81851d0732770537dfc6790224733cb0", "policy_schema_hashes.json": "6c2503ee62b0266fb34a831c7caf662c55bbe314f1cfdc49fc31ee8351e5ae9e", "route_invariance_report.json": "33e93f4c977d18865458e08288617901932f6a2d6a44930e338c6bd421f22a20", "test_lint_typecheck_report.json": "7599d01305b33b9395b5481cb1c7209a6e9d2a49273e880d459f7916ccb6a6b5"}}
+}

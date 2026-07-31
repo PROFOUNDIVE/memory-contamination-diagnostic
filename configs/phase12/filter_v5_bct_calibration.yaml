@@ -1,0 +1,40 @@
+schema_version: phase12_fv5_bct_calibration_methods_v1
+approved_plan_sha256: e8d44600fb3a9177ae691fd8f49ac1c06305b004db7ccd50d391c9876356a230
+scope:
+  tasks: [game24, math_equation_balancer, word_sorting]
+  baselines: [full_history, rag_frozen, bot_style, reflexion_style]
+  excluded_baselines: [nomem]
+  strata: [game24:full_history, game24:rag_frozen, game24:bot_style, game24:reflexion_style, math_equation_balancer:full_history, math_equation_balancer:rag_frozen, math_equation_balancer:bot_style, math_equation_balancer:reflexion_style, word_sorting:full_history, word_sorting:rag_frozen, word_sorting:bot_style, word_sorting:reflexion_style]
+search_config:
+  ids: [SC-S1K1-C50-T50-R0, SC-S1K1-C50-T50-R1, SC-S1K1-C50-T80-R0, SC-S1K1-C50-T80-R1, SC-S1K1-C80-T50-R0, SC-S1K1-C80-T50-R1, SC-S1K1-C80-T80-R0, SC-S1K1-C80-T80-R1, SC-S2K2-C50-T50-R0, SC-S2K2-C50-T50-R1, SC-S2K2-C50-T80-R0, SC-S2K2-C50-T80-R1, SC-S2K2-C80-T50-R0, SC-S2K2-C80-T50-R1, SC-S2K2-C80-T80-R0, SC-S2K2-C80-T80-R1]
+  primary_parser: raw_only
+  canonicalization: sensitivity_only_unpooled
+  retry: R0_executes; R1_budget_rejected
+laws:
+  generators: [game24_exact_fraction, meb_standard_precedence, word_sorting_first_difference]
+  certificates: [phase12_fv5_game24_certificate_v1, phase12_fv5_meb_certificate_v1, phase12_fv5_word_sorting_certificate_v1]
+  duplicate_exclusions: [pilot_a, candidate_examples, future_main, reserved_extension, exact, canonical, near_duplicate]
+  game24: sorted_4_multisets_digits_1_to_9; exact_Fraction_binary_trees; fraction_essential; minimum_canonical_expression
+  meb: a_b_c_1_to_9_target_minus24_to_24; standard_precedence_solvable; left_to_right_unsolvable; ordered_16_operator_pairs
+  word_sorting: three_word_a_to_f_combinations; first_difference_index_1; final_character_disagreement; deterministic_rotation
+budget:
+  screening: {maximum_calls: 90, native_call_multiplier: 5, input_tokens: 368640, output_tokens: 57600, wall_seconds: 3600, hard_ceiling_usd: 2}
+  bct: {maximum_calls: 480, native_call_multiplier: 5, input_tokens: 1966080, output_tokens: 307200, wall_seconds: 7200, hard_ceiling_usd: 8}
+  shared: {maximum_calls: 570, input_tokens: 2334720, output_tokens: 364800, wall_seconds: 10800, warning_usd: 8, hard_ceiling_usd: 10, derivation: 18x5_plus_3x2x4x2x2x5}
+native_stage_graph:
+  full_history: [answer:issued]
+  rag_frozen: [answer:issued]
+  bot_style: [bot_problem_distill:issued, bot_instantiate_solve:issued_if_distill_parses_else_not_issued]
+  reflexion_style: [answer:issued]
+wall_time_ledger: filter-v5-bct-budget-v1; append_only; fsync; unresolved_reservations_retained; cumulative_cap_10800
+terminal_table: [AWAITING_SCREENING_AUTHORIZATION, FILTER_V5_PILOT_B_BLOCKED_BY_INVALID_CALIBRATION_EVIDENCE, FILTER_V5_PILOT_B_NOT_ESTIMABLE, AWAITING_BCT_AUTHORIZATION, FILTER_V5_PILOT_B_BLOCKED_BY_INVALID_BCT_EVIDENCE, READY_FOR_SEPARATE_FILTER_V5_PILOT_B_AUTHORIZATION]
+report_matrix:
+  - {report_id: authority-transition, schema_id: phase12_fv5_authority_transition_report_v1, bindings: [starting_head, authority_snapshot, consumer_bindings]}
+  - {report_id: methods-lock, schema_id: phase12_fv5_methods_lock_report_v1, bindings: [authority_report, methods_document, config]}
+  - {report_id: freeze-a, schema_id: phase12_fv5_freeze_a_report_v1, bindings: [methods, source_universe, implementation_commit]}
+  - {report_id: screening, schema_id: phase12_fv5_screening_report_v1, bindings: [freeze_a, authorization_request, archive]}
+  - {report_id: freeze-b-search-config, schema_id: phase12_fv5_freeze_b_search_config_report_v1, bindings: [screening, freeze_b, search_config]}
+  - {report_id: bct-execution, schema_id: phase12_fv5_bct_execution_report_v1, bindings: [freeze_b, authorization_request, archive]}
+  - {report_id: archive-validation, schema_id: phase12_fv5_archive_validation_report_v1, bindings: [bct_execution, archive_seal]}
+  - {report_id: claim-scope, schema_id: phase12_fv5_claim_scope_report_v1, bindings: [archive_validation, metrics]}
+  - {report_id: pilot-b-readiness, schema_id: phase12_fv5_pilot_b_readiness_report_v1, bindings: [prior_eight_reports, terminal_status, inactive_code_prespec]}

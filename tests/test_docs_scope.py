@@ -24,7 +24,7 @@ EXPECTED_DOCS = frozenset(
     {
         "baseline-fidelity-v2-evidence.md", "baseline-fidelity-v2.md",
         "bge-m3-cache-setup.md", "logging-v3-phase12.md",
-        "phase12-filter-v5-build-status.md", "phase12-implementation-contract.md",
+        "phase12-filter-v5-bct-methods-lock.md", "phase12-filter-v5-build-status.md", "phase12-implementation-contract.md",
         "phase12-operator-runbook.md",
     }
 )
@@ -143,7 +143,7 @@ def test_v2_evidence_historical_snapshot_has_exact_sealed_rows() -> None:
 def test_readme_is_current_authority_index() -> None:
     text = README.read_text(encoding="utf-8")
     assert set(re.findall(r"\]\((docs/[^)#]+)\)", text)) == {
-        f"docs/{name}" for name in EXPECTED_DOCS
+        f"docs/{name}" for name in EXPECTED_DOCS - {"phase12-filter-v5-bct-methods-lock.md"}
     }
     assert "## Documentation Authorities" in text
     assert "Baseline-Fidelity-V2 authority and evidence are the sole current status authority" in text
