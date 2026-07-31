@@ -229,9 +229,40 @@ def validate_evidence_bundle(bundle: Path, plan_digest: str, through: str = "scr
                 raise LedgerError("EVIDENCE_PLAN_DIGEST_MISMATCH")
             if stage_path is not None and (not isinstance(stage_path, str) or payload.get("stage_result_sha256") != _sha256(Path(stage_path))):
                 raise LedgerError("EVIDENCE_STAGE_DIGEST_MISMATCH")
+        if "freeze_b_search_config" in required:
+            _validate_freeze_b_waiting_report(bundle, plan_digest)
     except (LedgerError, OSError, UnicodeError, json.JSONDecodeError) as error:
         return ArchiveValidation(False, error.code if isinstance(error, LedgerError) else "EVIDENCE_REPORT_INVALID")
     return ArchiveValidation(True)
+
+
+def _validate_freeze_b_waiting_report(bundle: Path, plan_digest: str) -> None:
+    payload = json.loads((bundle / "freeze_b_search_config_report.json").read_text(encoding="utf-8"))
+    stage_path = payload.get("stage_result_path")
+    if not isinstance(stage_path, str):
+        raise LedgerError("EVIDENCE_FREEZE_B_WAITING_INVALID")
+    stage = CalibrationStageResult.model_validate_json(Path(stage_path).read_text(encoding="utf-8"))
+    upstream = {
+        report_id: _sha256(bundle / f"{report_id.replace('-', '_')}_report.json")
+        for report_id in ("authority-transition", "methods-lock", "freeze-a", "screening")
+    }
+    inputs = payload.get("input_digests")
+    if (
+        payload.get("approved_plan_sha256") != plan_digest
+        or payload.get("stage_disposition") != "blocked_before_stage"
+        or payload.get("terminal_status") != "AWAITING_SCREENING_AUTHORIZATION"
+        or payload.get("provider_calls_issued") != 0
+        or stage.stage != "screening"
+        or stage.disposition != "blocked_before_stage"
+        or stage.terminal_status != "AWAITING_SCREENING_AUTHORIZATION"
+        or stage.provider_calls_issued != 0
+        or payload.get("upstream_report_sha256") != upstream
+        or not isinstance(inputs, dict)
+        or inputs.get("freeze_b") is not None
+        or inputs.get("search_config") is not None
+        or inputs.get("bct_authorization_request") is not None
+    ):
+        raise LedgerError("EVIDENCE_FREEZE_B_WAITING_INVALID")
 
 
 def _read_records(stream) -> list[dict[str, object]]:

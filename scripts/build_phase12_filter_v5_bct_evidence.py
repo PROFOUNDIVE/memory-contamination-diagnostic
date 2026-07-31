@@ -5,18 +5,23 @@ import json
 import tempfile
 from pathlib import Path
 
-from memcontam.experiment.phase12.filter_challenge.bct_archive import build_evidence_report
+from memcontam.experiment.phase12.filter_challenge.bct_archive import (
+    build_evidence_report,
+    validate_evidence_bundle,
+)
 from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
     EvidenceBuildError,
     approval_descriptor_path,
     approved_plan_sha256,
 )
+from memcontam.experiment.phase12.filter_challenge.registry_calibration import CalibrationStageResult
 
 
 REPORTS = (
     "authority-transition", "methods-lock", "freeze-a", "screening", "freeze-b-search-config",
     "bct-execution", "archive-validation", "claim-scope", "pilot-b-readiness",
 )
+WAITING_SCREENING_TERMINAL = "AWAITING_SCREENING_AUTHORIZATION"
 
 
 def main() -> int:
@@ -43,6 +48,23 @@ def main() -> int:
     except EvidenceBuildError as error:
         print(error.code)
         return 2
+    if "freeze-b-search-config" in names:
+        if arguments.stage_result is None or arguments.artifact_root.exists():
+            print("EVIDENCE_FREEZE_B_WAITING_INVALID")
+            return 2
+        upstream = validate_evidence_bundle(arguments.bundle, digest, "screening")
+        stage = CalibrationStageResult.model_validate_json(
+            arguments.stage_result.read_text(encoding="utf-8")
+        )
+        if (
+            not upstream.valid
+            or stage.stage != "screening"
+            or stage.disposition != "blocked_before_stage"
+            or stage.terminal_status != WAITING_SCREENING_TERMINAL
+            or stage.provider_calls_issued != 0
+        ):
+            print("EVIDENCE_FREEZE_B_WAITING_INVALID")
+            return 2
     for name in names:
         path = arguments.bundle / f"{name.replace('-', '_')}_report.json"
         if path.exists() and not arguments.reseal_existing:
@@ -62,6 +84,17 @@ def main() -> int:
             "freeze_a": _sha256(arguments.freeze_a),
             "authorization_request": _sha256(arguments.authorization_request),
         }
+        if name == "freeze-b-search-config":
+            payload["terminal_status"] = WAITING_SCREENING_TERMINAL
+            payload["input_digests"] |= {
+                "freeze_b": None,
+                "search_config": None,
+                "bct_authorization_request": None,
+            }
+            payload["upstream_report_sha256"] = {
+                report_id: _sha256(arguments.bundle / f"{report_id.replace('-', '_')}_report.json")
+                for report_id in REPORTS[:4]
+            }
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
             json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n",

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import json
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,7 @@ EVIDENCE_SCRIPT = ROOT / "scripts" / "build_phase12_filter_v5_bct_evidence.py"
 VERIFY_SCRIPT = ROOT / "scripts" / "verify_phase12_filter_v5_bct_evidence.py"
 FREEZE_A = ROOT / "data" / "phase12" / "filter_v5_bct_v1" / "freeze_a.json"
 SCREENING_REQUEST = ROOT / "data" / "phase12" / "filter_v5_bct_v1" / "screening_authorization_request.json"
+SCREENING_STAGE = ROOT / ".omo" / "evidence" / "phase12-post-filter-v5-calibration-readiness" / "task-3-screening-stage-result.json"
 APPROVED_DIGEST = "e8d44600fb3a9177ae691fd8f49ac1c06305b004db7ccd50d391c9876356a230"
 
 
@@ -170,3 +172,82 @@ def test_reseal_replaces_only_stale_task3_reports_with_approved_digest(tmp_path:
     )
     assert verified.returncode == 0, verified.stdout + verified.stderr
     assert verified.stdout == "APPROVE\n"
+
+
+def _build_waiting_freeze_b_report(bundle: Path) -> Path:
+    for report_id in ("authority-transition", "methods-lock", "freeze-a"):
+        build_evidence_report(bundle, report_id, None, APPROVED_DIGEST)
+    build_evidence_report(bundle, "screening", SCREENING_STAGE, APPROVED_DIGEST)
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(EVIDENCE_SCRIPT),
+            "--report",
+            "freeze-b-search-config",
+            "--bundle",
+            str(bundle),
+            "--plan",
+            str(PLAN),
+            "--artifact-root",
+            str(ROOT / "runs" / "phase12-filter-v5-bct-live-v1"),
+            "--stage-result",
+            str(SCREENING_STAGE),
+            "--freeze-a",
+            str(FREEZE_A),
+            "--authorization-request",
+            str(SCREENING_REQUEST),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    return bundle / "freeze_b_search_config_report.json"
+
+
+def test_freeze_b_waiting_report_binds_screening_terminal(tmp_path: Path) -> None:
+    # Given: valid upstream reports and the raw absent-screening-authorization result.
+    report = _build_waiting_freeze_b_report(tmp_path / "bundle")
+
+    # When: the waiting report is built.
+    payload = json.loads(report.read_text(encoding="utf-8"))
+
+    # Then: it records the screening terminal and explicit unavailable downstream inputs.
+    assert payload["terminal_status"] == "AWAITING_SCREENING_AUTHORIZATION"
+    assert payload["input_digests"]["freeze_b"] is None
+    assert payload["input_digests"]["search_config"] is None
+    assert payload["input_digests"]["bct_authorization_request"] is None
+
+
+def test_freeze_b_waiting_report_rejects_terminal_tampering(tmp_path: Path) -> None:
+    # Given: a valid report whose terminal status is modified after construction.
+    bundle = tmp_path / "bundle"
+    report = _build_waiting_freeze_b_report(bundle)
+    payload = json.loads(report.read_text(encoding="utf-8"))
+    payload["terminal_status"] = "AWAITING_BCT_AUTHORIZATION"
+    report.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+
+    # When: the aggregate validator checks through report 5.
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(VERIFY_SCRIPT),
+            "--through",
+            "freeze-b",
+            "--bundle",
+            str(bundle),
+            "--plan",
+            str(PLAN),
+            "--artifact-root",
+            str(ROOT / "runs" / "phase12-filter-v5-bct-live-v1"),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    # Then: a non-screening terminal cannot be accepted as the Task-4 waiting branch.
+    assert result.returncode != 0
+    assert result.stdout == "EVIDENCE_FREEZE_B_WAITING_INVALID\n"
