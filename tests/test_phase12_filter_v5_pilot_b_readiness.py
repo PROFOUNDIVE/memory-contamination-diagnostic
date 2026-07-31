@@ -18,25 +18,6 @@ ROOT = Path(__file__).resolve().parents[1]
 PRESPEC = ROOT / "configs" / "phase12" / "exploratory_code_source_fidelity_v2.yaml"
 
 
-def test_code_v2_call_table_totals_12_expected_13_max() -> None:
-    # Given: the immutable inactive code-source-fidelity prespec.
-    # When: its build-only contract is validated.
-    prespec = validate_code_prespec(PRESPEC, ROOT)
-
-    # Then: it reserves exactly the six future cells without activation.
-    assert tuple(cell.cell_id for cell in prespec.cells) == (
-        "code-v2-nomem-text_only",
-        "code-v2-nomem-python_sandbox",
-        "code-v2-bot_style-text_only",
-        "code-v2-bot_style-python_sandbox",
-        "code-v2-dc_rs-text_only",
-        "code-v2-dc_rs-python_sandbox",
-    )
-    assert sum(cell.expected_calls for cell in prespec.cells) == 12
-    assert sum(cell.maximum_calls for cell in prespec.cells) == 13
-    assert prespec.provider_calls_issued == prespec.tool_calls_issued == 0
-
-
 @pytest.mark.parametrize(
     ("evidence", "expected"),
     (

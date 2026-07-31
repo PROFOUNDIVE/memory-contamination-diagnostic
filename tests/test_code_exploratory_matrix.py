@@ -8,6 +8,7 @@ from typing import Literal, cast
 import pytest
 
 from memcontam.evaluation.phase12_aggregate import AggregateTrial, ValidatedRun
+from memcontam.experiment.phase12.filter_challenge.code_prespec import validate_code_prespec
 from memcontam.experiment.phase12.contracts import ValidatedExploratoryActivation
 from memcontam.logging.schema_v3 import (
     MemoryArmExecutionKey,
@@ -20,6 +21,7 @@ from memcontam.logging.schema_v3 import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+PRESPEC = ROOT / "configs" / "phase12" / "exploratory_code_source_fidelity_v2.yaml"
 SLOT = "game24|exploratory|slot-001"
 
 
@@ -144,6 +146,25 @@ def _run(baseline: str, mode: str, score: Literal[0, 1], plan, activation):
         artifact_id=f"{baseline}:{mode}:artifact",
         tool_events=(_tool_event(baseline),) if mode == "python_sandbox" else (),
     )
+
+
+def test_code_v2_call_table_totals_12_expected_13_max() -> None:
+    # Given: the immutable inactive code-source-fidelity prespec.
+    # When: its build-only contract is validated.
+    prespec = validate_code_prespec(PRESPEC, ROOT)
+
+    # Then: it reserves exactly the six future cells without activation.
+    assert tuple(cell.cell_id for cell in prespec.cells) == (
+        "code-v2-nomem-text_only",
+        "code-v2-nomem-python_sandbox",
+        "code-v2-bot_style-text_only",
+        "code-v2-bot_style-python_sandbox",
+        "code-v2-dc_rs-text_only",
+        "code-v2-dc_rs-python_sandbox",
+    )
+    assert sum(cell.expected_calls for cell in prespec.cells) == 12
+    assert sum(cell.maximum_calls for cell in prespec.cells) == 13
+    assert prespec.provider_calls_issued == prespec.tool_calls_issued == 0
 
 
 def test_plans_inactive_matrix_and_aggregates_activated_paired_seed() -> None:
