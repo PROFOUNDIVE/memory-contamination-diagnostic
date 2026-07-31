@@ -21,11 +21,16 @@ from memcontam.experiment.phase12.filter_challenge.bct_archive import (
 from memcontam.experiment.phase12.filter_challenge.bct_waiting_evidence import (
     waiting_screening_stage,
 )
+from memcontam.experiment.phase12.filter_challenge.code_prespec import CodePrespecError, validate_code_prespec
 from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
     approval_descriptor_path,
     approved_plan_sha256,
 )
 from memcontam.experiment.phase12.filter_challenge.freeze_a import validate_freeze_a
+from memcontam.experiment.phase12.filter_challenge.pilot_b_readiness import (
+    readiness_from_bundle,
+    readiness_from_fixture,
+)
 from memcontam.experiment.phase12.filter_challenge.registry_calibration import (
     ARTIFACT_ROOT,
     BCTAuthorizationV1,
@@ -75,6 +80,8 @@ def add_calibration_parsers(commands: argparse._SubParsersAction[argparse.Argume
     archive.add_argument("--output", type=Path, required=True)
     readiness = commands.add_parser("pilot-b-readiness")
     readiness.add_argument("--bundle", type=Path, required=True)
+    readiness.add_argument("--code-prespec", type=Path, required=True)
+    readiness.add_argument("--fixture", type=Path)
     readiness.add_argument("--stage-result", type=Path, required=True)
 
 
@@ -96,7 +103,18 @@ def run_calibration_command(args: argparse.Namespace) -> None:
             args.output.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
             _print(payload)
         case "pilot-b-readiness":
-            result = CalibrationStageResult.waiting("pilot_b_readiness", "AWAITING_SCREENING_AUTHORIZATION")
+            try:
+                validate_code_prespec(args.code_prespec, REPOSITORY_ROOT)
+                plan = REPOSITORY_ROOT / ".omo/plans/phase12-post-filter-v5-calibration-readiness.md"
+                result = (
+                    readiness_from_fixture(args.fixture)
+                    if args.fixture is not None
+                    else readiness_from_bundle(
+                        args.bundle, approved_plan_sha256(plan, approval_descriptor_path(plan))
+                    )
+                )
+            except CodePrespecError as error:
+                result = _blocked("bct", error.code).model_copy(update={"stage": "pilot_b_readiness"})
             result.write_atomic(args.stage_result)
             _print(result.model_dump(mode="json"))
         case _:

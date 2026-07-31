@@ -1,0 +1,39 @@
+schema_version: phase12_exploratory_code_source_fidelity_v2
+config_id: phase12-exploratory-code-source-fidelity-v2
+authority_snapshot:
+  path: docs/evidence/phase12-filter-v5-bct-v1/authority_transition_manifest.json
+  sha256: 8ec54eba36214371e5b6e513392a4b6392d27f4839ebd23158eddcd08706c499
+reservation:
+  anchor_id: fv5-code-anchor-game24-001
+  task_family: game24
+  position: 10
+  abstract_slot: game24|exploratory|slot-001
+evidence_layer: build
+scientific_result: false
+activation_status: inactive
+cost_cap_status: not_authorized_unpriced
+provider_calls_issued: 0
+tool_calls_issued: 0
+pilot_b_calls_issued: 0
+main_calls_issued: 0
+code_calls_issued: 0
+no_pooling: true
+sandbox:
+  image_lock_path: containers/python-sandbox/image.lock.json
+  oci_digest: sha256:0d3b86d0b5df1ce0aa7bd7777cdecad541c8da355f02c097209d8da47b0372f3
+  recipe_sha256: 51ae963c13280337858be40d20b89cde8d67d4a88527b186313612c2783b2c9f
+  executor_identity: oci-python-sandbox
+  provider_native_interpreter: false
+cells:
+  - {cell_id: code-v2-nomem-text_only, baseline: nomem, tool_mode: text_only, expected_calls: 1, maximum_calls: 1, max_tool_rounds: 1}
+  - {cell_id: code-v2-nomem-python_sandbox, baseline: nomem, tool_mode: python_sandbox, expected_calls: 2, maximum_calls: 2, max_tool_rounds: 1}
+  - {cell_id: code-v2-bot_style-text_only, baseline: bot_style, tool_mode: text_only, expected_calls: 2, maximum_calls: 2, max_tool_rounds: 1}
+  - {cell_id: code-v2-bot_style-python_sandbox, baseline: bot_style, tool_mode: python_sandbox, expected_calls: 3, maximum_calls: 3, max_tool_rounds: 1}
+  - {cell_id: code-v2-dc_rs-text_only, baseline: dc_rs, tool_mode: text_only, expected_calls: 2, maximum_calls: 2, max_tool_rounds: 1}
+  - {cell_id: code-v2-dc_rs-python_sandbox, baseline: dc_rs, tool_mode: python_sandbox, expected_calls: 2, maximum_calls: 3, max_tool_rounds: 1}
+contrasts: [within_method_text_code_verified_accuracy_delta, nomem_adjusted_memory_tool_interaction]
+metrics: [tool_invocation_rate, successful_execution_rate, repair_rate, accuracy_conditional_on_tool_use, memory_code_uptake_rate, code_reuse_rate]
+fidelity_labels:
+  nomem: NoMem-negative-control
+  bot_style: BoT-code-enabled-adapted
+  dc_rs: DC-RS-source-oriented-adapted

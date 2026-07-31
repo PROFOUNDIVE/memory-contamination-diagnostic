@@ -13,6 +13,7 @@ from memcontam.experiment.phase12.filter_challenge.bct_waiting_evidence import (
     BCT_REPORT_IDS,
     waiting_bct_report_fields,
 )
+from memcontam.experiment.phase12.filter_challenge.code_prespec import validate_code_prespec
 from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
     EvidenceBuildError,
     approval_descriptor_path,
@@ -36,6 +37,7 @@ def main() -> int:
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--artifact-root", type=Path, required=True)
     parser.add_argument("--stage-result", type=Path)
+    parser.add_argument("--code-prespec", type=Path)
     parser.add_argument("--freeze-a", type=Path)
     parser.add_argument("--authorization-request", type=Path)
     parser.add_argument("--reseal-existing", action="store_true")
@@ -45,6 +47,11 @@ def main() -> int:
     }.get(arguments.report_set, ())
     if not names:
         parser.error("one report selector is required")
+    if arguments.report_set == "terminal-fill" and all(
+        (arguments.bundle / f"{name.replace('-', '_')}_report.json").exists()
+        for name in REPORTS[4:8]
+    ):
+        return 0
     if arguments.stage_result is None and set(names) - {"authority-transition", "methods-lock", "freeze-a"}:
         parser.error("--stage-result is required for stage-bound reports")
     try:
@@ -52,7 +59,7 @@ def main() -> int:
     except EvidenceBuildError as error:
         print(error.code)
         return 2
-    if "freeze-b-search-config" in names:
+    if "freeze-b-search-config" in names and arguments.report_set != "terminal-fill":
         if arguments.stage_result is None or arguments.artifact_root.exists():
             print("EVIDENCE_FREEZE_B_WAITING_INVALID")
             return 2
@@ -70,7 +77,7 @@ def main() -> int:
             print("EVIDENCE_FREEZE_B_WAITING_INVALID")
             return 2
     bct_fields = None
-    if set(names) & set(BCT_REPORT_IDS):
+    if set(names) & set(BCT_REPORT_IDS) and arguments.report_set != "terminal-fill":
         if arguments.stage_result is None or arguments.artifact_root.exists():
             print("EVIDENCE_BCT_WAITING_INVALID")
             return 2
@@ -93,7 +100,30 @@ def main() -> int:
                 digest,
             )
             payload = json.loads(replacement.read_text(encoding="utf-8"))
-        if name in BCT_REPORT_IDS:
+        if arguments.report_set == "terminal-fill":
+            stage = CalibrationStageResult.model_validate_json(arguments.stage_result.read_text(encoding="utf-8"))
+            payload["terminal_status"] = stage.terminal_status
+            payload["input_digests"] = {}
+            payload["upstream_report_sha256"] = {
+                report_id: _sha256(arguments.bundle / f"{report_id.replace('-', '_')}_report.json")
+                for report_id in REPORTS[: REPORTS.index(name)]
+                if (arguments.bundle / f"{report_id.replace('-', '_')}_report.json").is_file()
+            }
+        elif name == "pilot-b-readiness":
+            if arguments.code_prespec is None:
+                parser.error("--code-prespec is required for pilot-b-readiness")
+            validate_code_prespec(arguments.code_prespec, Path.cwd())
+            payload["terminal_status"] = CalibrationStageResult.model_validate_json(
+                arguments.stage_result.read_text(encoding="utf-8")
+            ).terminal_status
+            payload["code_prespec_path"] = str(arguments.code_prespec)
+            payload["code_prespec_sha256"] = _sha256(arguments.code_prespec)
+            payload["prior_report_sha256"] = {
+                report_id: _sha256(arguments.bundle / f"{report_id.replace('-', '_')}_report.json")
+                for report_id in REPORTS[:8]
+            }
+            payload["input_digests"] = {}
+        elif name in BCT_REPORT_IDS:
             assert bct_fields is not None
             payload |= bct_fields
         else:

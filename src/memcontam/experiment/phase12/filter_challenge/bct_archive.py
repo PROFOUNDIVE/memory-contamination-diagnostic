@@ -231,6 +231,12 @@ def validate_evidence_bundle(bundle: Path, plan_digest: str, through: str = "scr
                 raise LedgerError("EVIDENCE_STAGE_DIGEST_MISMATCH")
         if "freeze_b_search_config" in required:
             _validate_freeze_b_waiting_report(bundle, plan_digest)
+        if "pilot_b_readiness" in required:
+            from memcontam.experiment.phase12.filter_challenge.pilot_b_readiness import (
+                validate_readiness_report,
+            )
+
+            validate_readiness_report(bundle)
     except (LedgerError, OSError, UnicodeError, json.JSONDecodeError) as error:
         return ArchiveValidation(False, error.code if isinstance(error, LedgerError) else "EVIDENCE_REPORT_INVALID")
     return ArchiveValidation(True)
@@ -241,6 +247,8 @@ def _validate_freeze_b_waiting_report(bundle: Path, plan_digest: str) -> None:
     stage_path = payload.get("stage_result_path")
     if not isinstance(stage_path, str):
         raise LedgerError("EVIDENCE_FREEZE_B_WAITING_INVALID")
+
+
     stage = CalibrationStageResult.model_validate_json(Path(stage_path).read_text(encoding="utf-8"))
     upstream = {
         report_id: _sha256(bundle / f"{report_id.replace('-', '_')}_report.json")
