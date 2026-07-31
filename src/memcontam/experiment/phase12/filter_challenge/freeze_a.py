@@ -111,7 +111,7 @@ def _state(task: str, baseline: str) -> NativeState:
         )
         for position in (7, 8)
     )
-    native_state = {"records": []} if baseline == "full_history" else {"entries": []}
+    native_state: dict[str, list[object]] = {"records": []} if baseline == "full_history" else {"entries": []}
     return NativeState(baseline=baseline, entries=entries, native_state=native_state)
 
 
