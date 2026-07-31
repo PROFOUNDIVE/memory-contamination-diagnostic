@@ -18,6 +18,7 @@ from memcontam.experiment.phase12.filter_challenge.bct_archive import (
     append_archive_record,
     validate_live_archive,
 )
+from memcontam.experiment.phase12.filter_challenge.freeze_a import validate_freeze_a
 from memcontam.experiment.phase12.filter_challenge.registry_calibration import (
     ARTIFACT_ROOT,
     BCTAuthorizationV1,
@@ -203,6 +204,12 @@ def _cost_preview(args: argparse.Namespace, stage: Literal["screening", "bct"]) 
     require_artifact_root(args.ledger.parent)
     calls, wall_seconds, hard_ceiling = (90, 3600, 2) if stage == "screening" else (480, 7200, 8)
     freeze_path = args.freeze_a if stage == "screening" else args.freeze_b
+    if stage == "screening":
+        validate_freeze_a(
+            args.config,
+            args.config.resolve().parents[2] / "data/phase12/filter_v5_bct_v1/source_universe_v1.json",
+            freeze_path.parent,
+        )
     try:
         freeze = json.loads(freeze_path.read_text(encoding="utf-8"))
     except (AttributeError, OSError, UnicodeDecodeError, json.JSONDecodeError) as error:

@@ -164,3 +164,39 @@ def build_freeze_a(config: Path, source_universe: Path, output_root: Path) -> Pa
     path = output_root / "freeze_a.json"
     _write(path, freeze)
     return path
+
+
+def validate_freeze_a(config: Path, source_universe: Path, output_root: Path) -> dict[str, object]:
+    root = _repository_root(config)
+    _validate_source_universe(source_universe, root)
+    try:
+        freeze = json.loads((output_root / "freeze_a.json").read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise FreezeAError("FREEZE_A_INVALID") from error
+    if not isinstance(freeze, dict) or freeze.get("schema_version") != "phase12_fv5_freeze_a_v1":
+        raise FreezeAError("FREEZE_A_INVALID")
+    manifests = freeze.get("manifest_sha256")
+    if not isinstance(manifests, dict):
+        raise FreezeAError("FREEZE_A_INVALID")
+    for name, digest in manifests.items():
+        if not isinstance(name, str) or not isinstance(digest, str) or _sha(output_root / name) != digest:
+            raise FreezeAError("FREEZE_A_MANIFEST_HASH_MISMATCH")
+    probes = freeze.get("probes")
+    if not isinstance(probes, dict) or tuple(probes) != TASKS or any(not isinstance(probes[task], list | tuple) or len(probes[task]) != 6 for task in TASKS):
+        raise FreezeAError("CALIBRATION_PROBE_SCHEDULE_INVALID")
+    construction = json.loads((output_root / "probe_construction_manifest_v1.json").read_text(encoding="utf-8"))
+    if not isinstance(construction, dict) or not isinstance(construction.get("probes"), dict):
+        raise FreezeAError("FREEZE_A_INVALID")
+    for task, records in construction["probes"].items():
+        if not isinstance(task, str) or not isinstance(records, list):
+            raise FreezeAError("FREEZE_A_INVALID")
+        for record in records:
+            if not isinstance(record, dict) or not isinstance(record.get("certificate"), dict):
+                raise FreezeAError("FREEZE_A_INVALID")
+            certificate = record["certificate"]
+            signature = str(certificate.get("input_canonical"))
+            if signature in _EXCLUDED.get(task, set()):
+                raise FreezeAError("LEAKAGE_PILOT_INSTANCE" if task == "game24" else "LEAKAGE_CANDIDATE_EXAMPLE")
+    if len(freeze.get("control_schedule", [])) != 72 or len(freeze.get("method_call_schedule", [])) != 90:
+        raise FreezeAError("CALL_SCHEDULE_MISMATCH")
+    return freeze
