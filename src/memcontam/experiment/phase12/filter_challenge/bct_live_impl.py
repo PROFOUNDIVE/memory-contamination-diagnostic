@@ -1,23 +1,25 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
-import hmac
 import json
-import os
-import stat
-import subprocess
 from dataclasses import asdict
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Callable, Final, Literal, Mapping, TypeVar
-
-from pydantic import ValidationError
 
 from memcontam.experiment.phase12.filter_challenge.bct_archive import (
     BudgetLedger,
     append_archive_record,
     validate_live_archive,
+)
+from memcontam.experiment.phase12.filter_challenge.bct_live_cli import (
+    add_calibration_parsers,
+    run_calibration_command as _dispatch_calibration_command,
+)
+from memcontam.experiment.phase12.filter_challenge.bct_live_preview import build_cost_preview
+from memcontam.experiment.phase12.filter_challenge.bct_live_authorization import (
+    CalibrationAuthorizationError,
+    load_authorization as _load_authorization,
+    validate_runtime_authorization,
 )
 from memcontam.experiment.phase12.filter_challenge.bct_waiting_evidence import (
     waiting_screening_stage,
@@ -26,110 +28,70 @@ from memcontam.experiment.phase12.filter_challenge.code_prespec import CodePresp
 from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
     approval_descriptor_path,
     approved_plan_sha256,
-    sha256_regular_nofollow,
 )
-from memcontam.experiment.phase12.filter_challenge.freeze_a import validate_freeze_a
 from memcontam.experiment.phase12.filter_challenge.pilot_b_readiness import (
     readiness_from_bundle,
     readiness_from_fixture,
 )
 from memcontam.experiment.phase12.filter_challenge.registry_calibration import (
-    ARTIFACT_ROOT,
     BCTAuthorizationV1,
     CalibrationConfigError,
     CalibrationAuthorization,
     CalibrationStageResult,
-    LEDGER_ID,
     ScreeningAuthorizationV1,
     require_artifact_root,
     validate_calibration_config,
 )
 
 
-class CalibrationAuthorizationError(ValueError):
-    def __init__(self, code: str) -> None:
-        self.code = code
-        super().__init__(code)
-
-
-_Authorization = TypeVar("_Authorization", bound=CalibrationAuthorization)
 REPOSITORY_ROOT: Final = Path(__file__).resolve().parents[5]
-
-
-def add_calibration_parsers(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-    validate = commands.add_parser("validate-calibration-config")
-    validate.add_argument("--config", type=Path, required=True)
-    for name, freeze in (("screening-cost-preview", "--freeze-a"), ("bct-cost-preview", "--freeze-b")):
-        preview = commands.add_parser(name)
-        preview.add_argument("--config", type=Path, required=True)
-        preview.add_argument(freeze, type=Path, required=True)
-        preview.add_argument("--ledger", type=Path, required=True)
-        preview.add_argument("--output", type=Path, required=True)
-    for name, authorization in (("screen-controls", "screening"), ("bct-run", "bct")):
-        run = commands.add_parser(name)
-        run.add_argument("--config", type=Path, required=True)
-        run.add_argument("--freeze-a" if authorization == "screening" else "--freeze-b", type=Path, required=True)
-        run.add_argument("--authorization-request", type=Path, required=True)
-        run.add_argument("--authorization", type=Path)
-        run.add_argument("--expected-authorization-sha256")
-        run.add_argument("--artifact-root", type=Path, required=True)
-        run.add_argument("--run-id", required=True)
-        run.add_argument("--stage-result", type=Path, required=True)
-    archive = commands.add_parser("validate-bct-archive")
-    archive.add_argument("--config", type=Path, required=True)
-    archive.add_argument("--freeze-b", type=Path, required=True)
-    archive.add_argument("--archive", type=Path, required=True)
-    archive.add_argument("--output", type=Path, required=True)
-    readiness = commands.add_parser("pilot-b-readiness")
-    readiness.add_argument("--bundle", type=Path, required=True)
-    readiness.add_argument("--code-prespec", type=Path, required=True)
-    readiness.add_argument("--fixture", type=Path)
-    readiness.add_argument("--stage-result", type=Path, required=True)
+_Authorization = TypeVar("_Authorization", bound=CalibrationAuthorization)
+__all__ = (
+    "CalibrationAuthorizationError",
+    "_run_cli_stage",
+    "_validate_config",
+    "add_calibration_parsers",
+    "load_authorization",
+    "run_calibration_command",
+    "run_screen_controls",
+)
 
 
 def run_calibration_command(args: argparse.Namespace) -> None:
-    command = args.filter_v5_command
-    match command:
-        case "validate-calibration-config":
-            _validate_config(args.config)
-            _print({"valid": True, "provider_calls_issued": 0})
-        case "screening-cost-preview" | "bct-cost-preview":
-            _cost_preview(args, "screening" if command == "screening-cost-preview" else "bct")
-        case "screen-controls":
-            _print(_run_cli_stage(args, "screening").model_dump(mode="json"))
-        case "bct-run":
-            _print(_run_cli_stage(args, "bct").model_dump(mode="json"))
-        case "validate-bct-archive":
-            report = validate_live_archive(args.archive)
-            payload = asdict(report)
-            args.output.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
-            _print(payload)
-        case "pilot-b-readiness":
-            try:
-                validate_code_prespec(args.code_prespec, REPOSITORY_ROOT)
-                plan = REPOSITORY_ROOT / ".omo/plans/phase12-post-filter-v5-calibration-readiness.md"
-                result = (
-                    readiness_from_fixture(args.fixture)
-                    if args.fixture is not None
-                    else readiness_from_bundle(
-                        args.bundle, approved_plan_sha256(plan, approval_descriptor_path(plan))
-                    )
-                )
-            except CodePrespecError as error:
-                result = _blocked("bct", error.code).model_copy(update={"stage": "pilot_b_readiness"})
-            result.write_atomic(args.stage_result)
-            _print(result.model_dump(mode="json"))
-        case _:
-            raise CalibrationAuthorizationError("CALIBRATION_COMMAND_UNKNOWN")
+    def validate() -> None:
+        _validate_config(args.config)
+        _print({"valid": True, "provider_calls_issued": 0})
 
+    def validate_archive() -> None:
+        payload = asdict(validate_live_archive(args.archive))
+        args.output.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+        _print(payload)
 
-def load_authorization(path: Path, expected_digest: str, model: type[_Authorization]) -> _Authorization:
-    if not hmac.compare_digest(expected_digest.encode("ascii"), hashlib.sha256(_read_nofollow(path)).hexdigest().encode("ascii")):
-        raise CalibrationAuthorizationError("AUTHORIZATION_DIGEST_MISMATCH")
     try:
-        return model.model_validate_json(_read_nofollow(path))
-    except (ValidationError, UnicodeDecodeError) as error:
-        raise CalibrationAuthorizationError("AUTHORIZATION_INVALID") from error
+        _dispatch_calibration_command(args, {
+            "validate-calibration-config": validate,
+            "screening-cost-preview": lambda: _write_cost_preview(args, "screening"),
+            "bct-cost-preview": lambda: _write_cost_preview(args, "bct"),
+            "screen-controls": lambda: _print(_run_cli_stage(args, "screening").model_dump(mode="json")),
+            "bct-run": lambda: _print(_run_cli_stage(args, "bct").model_dump(mode="json")),
+            "validate-bct-archive": validate_archive,
+            "pilot-b-readiness": lambda: _run_pilot_b_readiness(args),
+        })
+    except ValueError as error:
+        raise CalibrationAuthorizationError(str(error)) from error
+
+
+def _run_pilot_b_readiness(args: argparse.Namespace) -> None:
+    try:
+        validate_code_prespec(args.code_prespec, REPOSITORY_ROOT)
+        plan = REPOSITORY_ROOT / ".omo/plans/phase12-post-filter-v5-calibration-readiness.md"
+        result = readiness_from_fixture(args.fixture) if args.fixture is not None else readiness_from_bundle(
+            args.bundle, approved_plan_sha256(plan, approval_descriptor_path(plan))
+        )
+    except CodePrespecError as error:
+        result = _blocked("bct", error.code).model_copy(update={"stage": "pilot_b_readiness"})
+    result.write_atomic(args.stage_result)
+    _print(result.model_dump(mode="json"))
 
 
 def run_screen_controls(
@@ -168,7 +130,8 @@ def _run_cli_stage(args: argparse.Namespace, stage: Literal["screening", "bct"])
         _build_live_factory(args.config)
 
     model = ScreeningAuthorizationV1 if stage == "screening" else BCTAuthorizationV1
-    return _run_stage(stage, args.artifact_root, args.run_id, args.stage_result, args.authorization, args.expected_authorization_sha256, model, factory, args.authorization_request)
+    freeze = args.freeze_a if stage == "screening" else args.freeze_b
+    return _run_stage(stage, args.artifact_root, args.run_id, args.stage_result, args.authorization, args.expected_authorization_sha256, model, factory, args.authorization_request, args.config, freeze)
 
 
 def _run_stage(
@@ -181,6 +144,8 @@ def _run_stage(
     model: type[_Authorization],
     client_factory: Callable[[], None],
     authorization_request: Path | None = None,
+    config: Path | None = None,
+    freeze: Path | None = None,
 ) -> CalibrationStageResult:
     require_artifact_root(artifact_root)
     if authorization is None and expected_digest is None:
@@ -193,7 +158,9 @@ def _run_stage(
             approved = load_authorization(authorization, expected_digest, model)
             if authorization_request is None:
                 raise CalibrationAuthorizationError("AUTHORIZATION_REQUEST_MISMATCH")
-            _validate_runtime_authorization(approved, run_id, authorization_request)
+            if config is None or freeze is None:
+                raise CalibrationAuthorizationError("AUTHORIZATION_TRUSTED_INPUT_INVALID")
+            validate_runtime_authorization(approved, run_id, authorization_request, config, freeze, artifact_root, REPOSITORY_ROOT, stage)
         except CalibrationAuthorizationError as error:
             result = _blocked(stage, error.code)
         else:
@@ -236,66 +203,9 @@ def _blocked(stage: Literal["screening", "bct"], reason: str) -> CalibrationStag
     )
 
 
-def _validate_runtime_authorization(
-    authorization: CalibrationAuthorization, run_id: str, request_path: Path
-) -> None:
-    if authorization.run_id != run_id:
-        raise CalibrationAuthorizationError("AUTHORIZATION_RUN_ID_MISMATCH")
-    if authorization.expires_at <= datetime.now(UTC):
-        raise CalibrationAuthorizationError("AUTHORIZATION_EXPIRED")
-    if authorization.ledger_id != LEDGER_ID:
-        raise CalibrationAuthorizationError("AUTHORIZATION_LEDGER_MISMATCH")
-    plan = REPOSITORY_ROOT / ".omo/plans/phase12-post-filter-v5-calibration-readiness.md"
-    authority = REPOSITORY_ROOT / "docs/evidence/phase12-filter-v5-bct-v1/authority_transition_manifest.json"
-    try:
-        request = json.loads(_read_nofollow(request_path))
-        head = subprocess.run(
-            ["git", "-C", str(REPOSITORY_ROOT), "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-        plan_digest = approved_plan_sha256(plan, approval_descriptor_path(plan))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError, subprocess.SubprocessError, ValueError) as error:
-        raise CalibrationAuthorizationError("AUTHORIZATION_TRUSTED_INPUT_INVALID") from error
-    expected = {
-        "request_sha256": sha256_regular_nofollow(request_path, "AUTHORIZATION_REQUEST_MISMATCH"),
-        "implementation_commit": head,
-        "approved_plan_sha256": plan_digest,
-        "authority_manifest_sha256": sha256_regular_nofollow(authority, "AUTHORIZATION_AUTHORITY_MISMATCH"),
-        "freeze_sha256": request.get("freeze_sha256"),
-        "maximum_calls": request.get("maximum_calls"),
-        "maximum_input_tokens": request.get("maximum_input_tokens"),
-        "maximum_output_tokens": request.get("maximum_output_tokens"),
-        "maximum_wall_seconds": request.get("wall_seconds"),
-    }
-    if any(getattr(authorization, field) != value for field, value in expected.items()):
-        raise CalibrationAuthorizationError("AUTHORIZATION_TRUSTED_INPUT_MISMATCH")
-    if authorization.hard_ceiling_microusd != request.get("hard_ceiling_usd", 0) * 1_000_000:
-        raise CalibrationAuthorizationError("AUTHORIZATION_TRUSTED_INPUT_MISMATCH")
-
-
-def _cost_preview(args: argparse.Namespace, stage: Literal["screening", "bct"]) -> None:
-    _validate_config(args.config)
+def _write_cost_preview(args: argparse.Namespace, stage: Literal["screening", "bct"]) -> None:
     require_artifact_root(args.ledger.parent)
-    calls, wall_seconds, hard_ceiling = (90, 3600, 2) if stage == "screening" else (480, 7200, 8)
-    freeze_path = args.freeze_a if stage == "screening" else args.freeze_b
-    if stage == "screening":
-        validate_freeze_a(
-            args.config,
-            args.config.resolve().parents[2] / "data/phase12/filter_v5_bct_v1/source_universe_v1.json",
-            freeze_path.parent,
-        )
-    try:
-        freeze = json.loads(freeze_path.read_text(encoding="utf-8"))
-    except (AttributeError, OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise CalibrationAuthorizationError("CALIBRATION_FREEZE_INVALID") from error
-    if not isinstance(freeze, dict):
-        raise CalibrationAuthorizationError("CALIBRATION_FREEZE_INVALID")
-    schedule = freeze.get("method_call_schedule")
-    if stage == "screening" and (not isinstance(schedule, list) or len(schedule) != calls):
-        raise CalibrationAuthorizationError("CALL_SCHEDULE_MISMATCH")
-    payload = {"schema_version": "phase12_fv5_authorization_request_v1", "stage": stage, "maximum_calls": calls, "maximum_input_tokens": 368640 if stage == "screening" else 1966080, "maximum_output_tokens": 57600 if stage == "screening" else 307200, "wall_seconds": wall_seconds, "hard_ceiling_usd": hard_ceiling, "ledger_id": LEDGER_ID, "artifact_root": str(ARTIFACT_ROOT), "freeze_sha256": hashlib.sha256(freeze_path.read_bytes()).hexdigest(), "schedule_sha256": hashlib.sha256(json.dumps(schedule, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest(), "approved_plan_sha256": freeze.get("approved_plan_sha256"), "provider_calls_issued": 0}
+    payload = build_cost_preview(args, stage, _validate_config)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
     _print(payload)
@@ -308,26 +218,7 @@ def _validate_config(path: Path) -> None:
         raise CalibrationAuthorizationError(error.code) from error
 
 
-def _read_nofollow(path: Path) -> bytes:
-    target = path.absolute()
-    descriptor = os.open("/", os.O_RDONLY | os.O_DIRECTORY)
-    try:
-        parts = target.parts[1:]
-        for part in parts[:-1]:
-            next_descriptor = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=descriptor)
-            os.close(descriptor)
-            descriptor = next_descriptor
-        file_descriptor = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW, dir_fd=descriptor)
-        try:
-            if not stat.S_ISREG(os.fstat(file_descriptor).st_mode):
-                raise CalibrationAuthorizationError("AUTHORIZATION_INVALID")
-            return os.read(file_descriptor, os.fstat(file_descriptor).st_size)
-        finally:
-            os.close(file_descriptor)
-    except OSError as error:
-        raise CalibrationAuthorizationError("AUTHORIZATION_INVALID") from error
-    finally:
-        os.close(descriptor)
+load_authorization = _load_authorization
 
 
 def _build_live_factory(config: Path) -> None:
