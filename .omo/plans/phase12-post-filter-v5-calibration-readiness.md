@@ -269,7 +269,7 @@ Your next move: execute this plan in a separate worker session from the locked r
 - [x] F2. Code quality review
   Procedure: Run the full Verification strategy gate, inspect changed Python for strict Pydantic models, typed errors, authorization-before-construction, descriptor-safe reads, crash-safe ledger operations, no secret logging, no duplicate framework, and ≤250 pure LOC per new module unless explicitly split. Review every changed production caller via CodeGraph/LSP.
   Acceptance: all applicable commands exit 0 and findings are empty; output `$ATTEMPT_DIR/final-f2-code-quality.json` with exact argv/commit/hashes. A missing paid authorization may skip only live calls, never local tests/replay/report verification.
-- [ ] F3. Real manual QA
+- [x] F3. Real manual QA
   Procedure: Agent drives the actual CLI in fresh repository-local scratch root `$ATTEMPT_DIR/final-f3-scratch` after creating it and rejecting any symlink: zero-call config/preflight, absent/copied/expired/digest-swapped authorizations, duplicate run ID, concurrent fake ledger reservations, crash after dispatch intent, copied archive tamper, all six readiness branches, and—when external authorizations were supplied—the real screening/BCT archive validators. Inspect JSON/JSONL bytes and ledger heads, not only stdout.
   Acceptance: exact waiting/structural/invalid/ready and model-behavior distinctions hold; partial evidence and conservative reservations survive; every scheduled stage and settled call reconciles; no unauthorized provider/code/Pilot-B/Main execution. Output `$ATTEMPT_DIR/final-f3-real-qa.json`.
 - [ ] F4. Scope fidelity
