@@ -1,5 +1,9 @@
 schema_version: phase12_fv5_bct_calibration_methods_v1
 approved_plan_sha256: e8d44600fb3a9177ae691fd8f49ac1c06305b004db7ccd50d391c9876356a230
+runtime:
+  provider: openai_responses
+  model_id: gpt-4o-2024-11-20
+  decoding: {temperature: 0, top_p: 1, max_output_tokens: 640, seed_parameter_sent: false, requested_seed_metadata: 0}
 scope:
   tasks: [game24, math_equation_balancer, word_sorting]
   baselines: [full_history, rag_frozen, bot_style, reflexion_style]
