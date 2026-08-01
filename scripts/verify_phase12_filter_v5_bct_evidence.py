@@ -29,7 +29,11 @@ def main() -> int:
     except EvidenceBuildError as error:
         print(error.code)
         return 2
-    report = validate_evidence_bundle(arguments.bundle, digest, arguments.through)
+    try:
+        report = validate_evidence_bundle(arguments.bundle, digest, arguments.through)
+    except ValueError as error:
+        print(error)
+        return 2
     if report.valid and arguments.through in {"bct", "readiness"}:
         waiting_valid = validate_waiting_bct_reports(
             arguments.bundle, digest, arguments.artifact_root

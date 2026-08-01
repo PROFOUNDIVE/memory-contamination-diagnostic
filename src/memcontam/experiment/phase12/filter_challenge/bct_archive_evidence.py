@@ -8,12 +8,16 @@ from memcontam.experiment.phase12.filter_challenge.bct_archive_models import (
     ArchiveValidation,
     LedgerError,
 )
+from memcontam.experiment.phase12.filter_challenge.bct_archive_evidence_inputs import (
+    validate_current_readiness_inputs,
+)
 from memcontam.experiment.phase12.filter_challenge.bct_archive_storage import _hash, _sha256_path
 from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
     EvidenceBuildError,
     read_regular_nofollow,
     sha256_regular_nofollow,
 )
+from memcontam.experiment.phase12.filter_challenge.mft_state_models import JsonValue
 from memcontam.experiment.phase12.filter_challenge.registry_calibration import CalibrationStageResult
 
 
@@ -113,6 +117,7 @@ def validate_evidence_bundle(
         }.get(through)
         if required is None:
             raise LedgerError("EVIDENCE_REPORT_MISSING")
+        reports: dict[str, dict[str, JsonValue]] = {}
         for name in required:
             path = bundle / f"{name}_report.json"
             payload = json.loads(read_regular_nofollow(path, "EVIDENCE_REPORT_INVALID"))
@@ -141,6 +146,7 @@ def validate_evidence_bundle(
                     source, "EVIDENCE_SOURCE_UNIVERSE_INVALID"
                 ):
                     raise LedgerError("EVIDENCE_SOURCE_UNIVERSE_INVALID")
+            reports[name] = payload
             if stage_path is not None and (
                 not isinstance(stage_path, str)
                 or payload.get("stage_result_sha256")
@@ -156,6 +162,7 @@ def validate_evidence_bundle(
         if "freeze_b_search_config" in required:
             _validate_freeze_b_waiting_report(bundle, plan_digest)
         if "pilot_b_readiness" in required:
+            validate_current_readiness_inputs(reports)
             from memcontam.experiment.phase12.filter_challenge.pilot_b_readiness import (
                 validate_readiness_report,
             )
