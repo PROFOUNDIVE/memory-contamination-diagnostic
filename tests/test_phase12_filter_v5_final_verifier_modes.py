@@ -4,10 +4,10 @@ import hashlib
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
-import tempfile
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields, replace
 from pathlib import Path
 from typing import Literal
 
@@ -49,8 +49,7 @@ from memcontam.experiment.phase12.filter_challenge.validation_summary import Tas
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures" / "phase12" / "filter_v5"
 Mutation = Literal["forbidden_diff", "invalid_python", "mft_failure", "source_dirty"] | None
-_COMMAND_RECORDS: dict[tuple[str, str], tuple[Task17CommandRecord, ...]] = {}
-_FIXTURE_TEMPLATE_ROOT = tempfile.TemporaryDirectory(prefix="phase12-filter-v5-fixtures-")
+_COMMAND_RECORDS: dict[tuple[str, str], tuple[bytes, ...]] = {}
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,17 +64,24 @@ class FixtureTemplate:
     base_commit: str
     implementation_commit: str
     plan_bytes: bytes
-    repository: Path
-    source_repository: Path
+    repository_bundle: bytes
+    repository_overrides: tuple[FixtureFile, ...]
+    source_bundle: bytes
+    source_overrides: tuple[FixtureFile, ...]
     summary_bytes: bytes
+
+
+@dataclass(frozen=True, slots=True)
+class FixtureFile:
+    relative_path: str
+    contents: bytes
+    mode: int
 
 
 _FIXTURE_TEMPLATES: dict[str, FixtureTemplate] = {}
 
 
 def _reset_fixture_templates() -> None:
-    for template in _FIXTURE_TEMPLATES.values():
-        shutil.rmtree(template.repository.parent)
     _FIXTURE_TEMPLATES.clear()
 
 
@@ -96,22 +102,15 @@ def _fixture(
     forbidden_path: str | None = None,
     provider_source: str | None = None,
 ) -> VerifierFixture:
-    if mutation is None and forbidden_path is None and provider_source is None:
-        key = _fixture_template_key()
-        template = _FIXTURE_TEMPLATES.get(key)
-        if template is None:
-            fixture = _build_fixture(Path(_FIXTURE_TEMPLATE_ROOT.name) / key)
-            template = FixtureTemplate(
-                base_commit=fixture.base_commit,
-                implementation_commit=fixture.evidence.implementation_commit,
-                plan_bytes=fixture.evidence.plan.read_bytes(),
-                repository=fixture.evidence.repository_root,
-                source_repository=fixture.source_repository,
-                summary_bytes=fixture.evidence.validation_summary.read_bytes(),
-            )
-            _FIXTURE_TEMPLATES[key] = template
-        return _materialize_fixture(tmp_path, template)
-    return _build_fixture(tmp_path, mutation, forbidden_path, provider_source)
+    key = _fixture_template_key(mutation, forbidden_path, provider_source)
+    template = _FIXTURE_TEMPLATES.get(key)
+    if template is None:
+        template_root = tmp_path / ".fixture-template"
+        fixture = _build_fixture(template_root, mutation, forbidden_path, provider_source)
+        template = _fixture_template(fixture)
+        shutil.rmtree(template_root)
+        _FIXTURE_TEMPLATES[key] = template
+    return _materialize_fixture(tmp_path, template)
 
 
 def _build_fixture(
@@ -188,21 +187,53 @@ def _build_fixture(
     return VerifierFixture(base_commit, evidence, source)
 
 
-def _fixture_template_key() -> str:
-    digest = hashlib.sha256(b"MARKER: int = 1\n# Approved synthetic plan\n")
+def _fixture_template_key(
+    mutation: Mutation = None,
+    forbidden_path: str | None = None,
+    provider_source: str | None = None,
+) -> str:
+    digest = hashlib.sha256(b"fixture-template-v2\0")
+    for value in (
+        b"MARKER: int = 1\n",
+        b"# Approved synthetic plan\n",
+        (mutation or "").encode(),
+        (forbidden_path or "").encode(),
+        (provider_source or "").encode(),
+    ):
+        digest.update(len(value).to_bytes(8, "big"))
+        digest.update(value)
     for path in sorted(FIXTURES.rglob("*")):
         if path.is_file():
-            digest.update(path.relative_to(FIXTURES).as_posix().encode())
-            digest.update(path.read_bytes())
+            for value in (
+                path.relative_to(FIXTURES).as_posix().encode(),
+                stat.S_IMODE(path.stat().st_mode).to_bytes(4, "big"),
+                path.read_bytes(),
+            ):
+                digest.update(len(value).to_bytes(8, "big"))
+                digest.update(value)
     return digest.hexdigest()
+
+
+def _fixture_template(fixture: VerifierFixture) -> FixtureTemplate:
+    return FixtureTemplate(
+        base_commit=fixture.base_commit,
+        implementation_commit=fixture.evidence.implementation_commit,
+        plan_bytes=fixture.evidence.plan.read_bytes(),
+        repository_bundle=_repository_bundle(fixture.evidence.repository_root),
+        repository_overrides=_working_tree_files(fixture.evidence.repository_root),
+        source_bundle=_repository_bundle(fixture.source_repository),
+        source_overrides=_working_tree_files(fixture.source_repository),
+        summary_bytes=fixture.evidence.validation_summary.read_bytes(),
+    )
 
 
 def _materialize_fixture(tmp_path: Path, template: FixtureTemplate) -> VerifierFixture:
     repository = tmp_path / "repository"
-    _clone_repository(template.repository, repository)
+    _clone_repository(template.repository_bundle, repository)
+    _write_fixture_files(repository, template.repository_overrides)
     source = tmp_path / "source"
-    _clone_repository(template.source_repository, source)
-    _copy_untracked_files(template.source_repository, source)
+    _clone_repository(template.source_bundle, source)
+    _write_fixture_files(source, template.source_overrides)
     plan = tmp_path / "approved-plan.md"
     plan.write_bytes(template.plan_bytes)
     summary = tmp_path / "validation-summary.json"
@@ -221,23 +252,63 @@ def _materialize_fixture(tmp_path: Path, template: FixtureTemplate) -> VerifierF
     return VerifierFixture(template.base_commit, evidence, source)
 
 
-def _clone_repository(source: Path, destination: Path) -> None:
+def _repository_bundle(repository: Path) -> bytes:
+    bundle_path = repository.parent / f".{repository.name}.bundle"
     subprocess.run(
-        ("git", "clone", "--local", "--no-hardlinks", str(source), str(destination)),
+        ("git", "bundle", "create", str(bundle_path), "--all"),
+        cwd=repository,
         check=True,
         capture_output=True,
         text=True,
     )
+    bundle = bundle_path.read_bytes()
+    bundle_path.unlink()
+    return bundle
+
+
+def _clone_repository(bundle: bytes, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    bundle_path = destination.parent / f".{destination.name}.bundle"
+    bundle_path.write_bytes(bundle)
+    subprocess.run(
+        ("git", "clone", "--no-local", str(bundle_path), str(destination)),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    bundle_path.unlink()
     _git(destination, "config", "core.quotePath", "false")
 
 
-def _copy_untracked_files(source: Path, destination: Path) -> None:
-    for entry in _git(source, "status", "--porcelain=v1", "-z").split("\0"):
-        if entry.startswith("?? "):
-            relative_path = Path(entry.removeprefix("?? "))
-            target = destination / relative_path
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source / relative_path, target)
+def _working_tree_files(repository: Path) -> tuple[FixtureFile, ...]:
+    files: list[FixtureFile] = []
+    names = set(_git(repository, "diff", "--name-only", "-z").split("\0"))
+    names.update(_git(repository, "ls-files", "--others", "--exclude-standard", "-z").split("\0"))
+    for name in sorted(name for name in names if name):
+        relative_path = Path(name)
+        assert not relative_path.is_absolute()
+        assert ".." not in relative_path.parts
+        path = repository / relative_path
+        if path.is_file():
+            files.append(
+                FixtureFile(
+                    relative_path=relative_path.as_posix(),
+                    contents=path.read_bytes(),
+                    mode=stat.S_IMODE(path.stat().st_mode),
+                )
+            )
+    return tuple(files)
+
+
+def _write_fixture_files(root: Path, files: tuple[FixtureFile, ...]) -> None:
+    for file in files:
+        relative_path = Path(file.relative_path)
+        assert not relative_path.is_absolute()
+        assert ".." not in relative_path.parts
+        target = root / relative_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(file.contents)
+        target.chmod(file.mode)
 
 
 def _actual_command_records(
@@ -251,7 +322,7 @@ def _actual_command_records(
     key = (implementation_commit, digest.hexdigest())
     cached = _COMMAND_RECORDS.get(key)
     if cached is not None:
-        return cached
+        return tuple(Task17CommandRecord.model_validate_json(record) for record in cached)
     scratch_root.mkdir()
     guard_root = install_execution_guards(scratch_root)
     _, records, _ = final_verifier_integration._run_commands(
@@ -264,7 +335,7 @@ def _actual_command_records(
         guard_root,
     )
     shutil.rmtree(scratch_root)
-    _COMMAND_RECORDS[key] = records
+    _COMMAND_RECORDS[key] = tuple(record.model_dump_json().encode() for record in records)
     return records
 
 
@@ -813,3 +884,50 @@ def test_fixture_template_materializes_independent_equivalent_repositories(
     assert first.evidence.implementation_commit == second.evidence.implementation_commit
     assert first.evidence.validation_summary.read_bytes() == second.evidence.validation_summary.read_bytes()
     assert (second.source_repository / "Pilot-A 관련 기록.md").read_text(encoding="utf-8") == "untracked\n"
+
+
+def test_fixture_template_cache_uses_immutable_bytes_and_isolates_materialization_mutations(
+    tmp_path: Path,
+) -> None:
+    _reset_fixture_templates()
+    first = _fixture(tmp_path / "first")
+    key = _fixture_template_key()
+    template = _FIXTURE_TEMPLATES[key]
+    cached_template = template
+    evidence_path = first.evidence.output_root / "mft_fv5_report.json"
+    evidence_bytes = evidence_path.read_bytes()
+    source_path = first.source_repository / "Pilot-A 관련 기록.md"
+
+    assert all(not isinstance(getattr(template, field.name), Path) for field in fields(template))
+    assert all(
+        isinstance(record, bytes) for records in _COMMAND_RECORDS.values() for record in records
+    )
+
+    evidence_path.write_text("tampered\n", encoding="utf-8")
+    source_path.write_text("tampered\n", encoding="utf-8")
+    first.evidence.plan.write_text("tampered\n", encoding="utf-8")
+    first.evidence.validation_summary.write_text("tampered\n", encoding="utf-8")
+
+    second = _fixture(tmp_path / "second")
+
+    assert _FIXTURE_TEMPLATES[key] == cached_template
+    assert (second.evidence.output_root / "mft_fv5_report.json").read_bytes() == evidence_bytes
+    assert (second.source_repository / "Pilot-A 관련 기록.md").read_text(encoding="utf-8") == "untracked\n"
+    assert second.evidence.plan.read_text(encoding="utf-8") == "# Approved synthetic plan\n"
+    assert second.evidence.validation_summary.read_text(encoding="utf-8") != "tampered\n"
+    assert _fixture_template_key("mft_failure") != key
+
+
+def test_fixture_template_cache_separates_mutation_inputs(tmp_path: Path) -> None:
+    _reset_fixture_templates()
+    clean = _fixture(tmp_path / "clean")
+    mutated = _fixture(tmp_path / "mutated", "mft_failure")
+
+    assert set(_FIXTURE_TEMPLATES) == {
+        _fixture_template_key(),
+        _fixture_template_key("mft_failure"),
+    }
+    assert clean.evidence.implementation_commit == mutated.evidence.implementation_commit
+    assert (mutated.evidence.output_root / "mft_fv5_report.json").read_bytes() != (
+        clean.evidence.output_root / "mft_fv5_report.json"
+    ).read_bytes()
