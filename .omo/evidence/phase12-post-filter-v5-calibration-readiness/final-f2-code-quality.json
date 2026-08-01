@@ -1,0 +1,60 @@
+{
+  "schema_version": "phase12_f2_code_quality_v3",
+  "review_id": "phase12-post-filter-v5-calibration-readiness/final-f2-code-quality",
+  "reviewed_commit": "22a12ce0c7d60376be4bff91e0127b192da11c43",
+  "starting_commit": "32efbe15fc645de84585acb55b78946cfcd4298a",
+  "worktree_identity": {
+    "state": "uncommitted_f2_remediation",
+    "sealed_evidence_modified": false,
+    "live_artifact_root_absent": true,
+    "replay_scratch_root_absent_after_verification": true,
+    "provider_calls_issued": 0
+  },
+  "hashes": {
+    "approved_plan_sha256": "e8d44600fb3a9177ae691fd8f49ac1c06305b004db7ccd50d391c9876356a230",
+    "plan_file_sha256": "a00b583111ff76e46635ed813fbb99af1026c4d137f36b2a8aa52a34cb5f3f7b",
+    "plan_descriptor_sha256": "7b878988972b5bc3c1a2ba24785b978cc26b973e1e44e8059ff8d3133227842e",
+    "calibration_config_sha256": "76c710a8fcb6b77b8c759dacffa4610ae0335e05f1729d6c8bb58fab27213548",
+    "replay_gate_sha256": "47993cfb9462a36bf396abea7f77ccab92f94b49321e223874a6f6c06e75dde1"
+  },
+  "module_pure_loc": {
+    "limit": 250,
+    "method": "nonblank non-comment Python lines",
+    "modules": {
+      "bct_archive.py": 32,
+      "bct_archive_models.py": 49,
+      "bct_archive_storage.py": 41,
+      "bct_archive_ledger.py": 174,
+      "bct_archive_ledger_validation.py": 60,
+      "bct_archive_records.py": 122,
+      "bct_archive_evidence.py": 188,
+      "bct_live.py": 23,
+      "bct_live_impl.py": 199,
+      "bct_live_authorization.py": 102,
+      "bct_live_cli.py": 38,
+      "bct_live_preview.py": 56
+    }
+  },
+  "verification": [
+    {"argv": ["python", "-m", "memcontam.cli", "validate-config", "configs/pilot_multitask_replay.yaml"], "result": "exit 0; valid config"},
+    {"argv": ["python", "-m", "pytest", "tests/test_task_verifiers.py", "tests/test_cli_run.py", "tests/test_contamination_catalog.py", "tests/test_openai_compatible_client.py", "tests/test_aggregate.py", "-q"], "result": "exit 0; 147 passed, 3 skipped in 12.45s"},
+    {"argv": ["python", "-m", "pytest", "tests/test_phase12_filter_v5_bct_authorization.py", "tests/test_phase12_filter_v5_bct_archive.py", "tests/test_phase12_filter_v5_bct_archive_facade.py", "tests/test_phase12_filter_v5_bct_waiting.py", "tests/test_phase12_filter_v5_budget_ledger.py", "tests/test_phase12_filter_v5_deadlines.py", "tests/test_phase12_filter_v5_evidence_security.py", "tests/test_phase12_filter_v5_replay_gate.py", "tests/test_phase12_filter_v5_pilot_b_readiness.py", "-q"], "result": "exit 0; 42 passed in 12.59s"},
+    {"argv": ["python", "-m", "pytest", "tests/test_phase12_filter_v5_*.py", "-q"], "result": "exit 0; 501 passed in 450.28s"},
+    {"argv": ["python", "-m", "pytest", "tests/test_phase12_*.py", "tests/test_filter_information_boundary.py", "tests/test_method_calls.py", "tests/test_live_call_guard.py", "-q"], "result": "exit 0; 768 passed in 598.51s"},
+    {"argv": ["python", "-m", "ruff", "check", "src", "tests", "scripts"], "result": "exit 0; All checks passed"},
+    {"argv": ["python", "-m", "mypy", "src/memcontam/experiment/phase12/filter_challenge", "src/memcontam/experiment/phase12/cli.py"], "result": "exit 0; Success: no issues found in 82 source files"},
+    {"argv": ["python", "scripts/verify_phase12_filter_v5_bct_evidence.py", "--through", "readiness", "--bundle", "docs/evidence/phase12-filter-v5-bct-v1", "--plan", ".omo/plans/phase12-post-filter-v5-calibration-readiness.md", "--artifact-root", "runs/phase12-filter-v5-bct-live-v1"], "result": "exit 0; APPROVE"},
+    {"argv": ["python", "scripts/validate_phase12_filter_v5_methods_lock.py", "--document", "docs/phase12-filter-v5-bct-methods-lock.md", "--config", "configs/phase12/filter_v5_bct_calibration.yaml", "--plan", ".omo/plans/phase12-post-filter-v5-calibration-readiness.md"], "result": "exit 0; METHODS_LOCK_VALID"},
+    {"argv": ["python", "scripts/validate_phase12_filter_v5_authority_snapshot.py", "--manifest", "docs/evidence/phase12-filter-v5-bct-v1/authority_transition_manifest.json", "--output", ".omo/evidence/phase12-post-filter-v5-calibration-readiness/f2-authority-snapshot.json", "--repository-root", "/home/hyunwoo/git/memory-contamination-diagnostic-filter-v5"], "result": "exit 0; AUTHORITY_SNAPSHOT_VALID"},
+    {"argv": ["python", "scripts/reset_phase12_filter_v5_replay_gate.py", "--run-root", "runs/phase12-filter-v5-bct-replay-gate", "--expected-run-id", "phase12-filter-v5-bct-replay-gate"], "result": "exit 0 before and after replay"},
+    {"argv": ["python", "-m", "memcontam.cli", "run", "configs/pilot_multitask_replay.yaml", "--run-id", "phase12-filter-v5-bct-replay-gate"], "result": "exit 0; wrote 90 replay trials"},
+    {"argv": ["python", "-m", "memcontam.cli", "aggregate", "runs/phase12-filter-v5-bct-replay-gate"], "result": "exit 0; completed aggregate n_trials=90"},
+    {"argv": ["python", "scripts/verify_phase12_filter_v5_replay_gate.py", "--run-root", "runs/phase12-filter-v5-bct-replay-gate", "--expected-run-id", "phase12-filter-v5-bct-replay-gate", "--expected-config", "configs/pilot_multitask_replay.yaml", "--expected-rows", "90"], "result": "exit 0; REPLAY_GATE_VALID"},
+    {"argv": ["python", "-c", "import sys; import memcontam.experiment.phase12.filter_challenge.bct_live as facade; import memcontam.experiment.phase12.filter_challenge.bct_live_impl as implementation; assert facade is implementation is sys.modules['memcontam.experiment.phase12.filter_challenge.bct_live']"], "result": "exit 0; BCT_LIVE_FACADE_RUNTIME_ALIAS_VALID"},
+    {"argv": ["git", "diff", "--check"], "result": "exit 0"}
+  ],
+  "lsp_diagnostics": {"changed_python_source_and_tests": "clean"},
+  "findings": [],
+  "verdict": "APPROVE",
+  "blockers": []
+}
