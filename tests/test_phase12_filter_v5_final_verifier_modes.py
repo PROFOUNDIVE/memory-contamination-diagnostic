@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal
@@ -14,6 +15,7 @@ import pytest
 from .phase12_filter_v5_summary_cases import complete_validation_summary
 
 from memcontam.experiment.phase12.filter_challenge.evidence import (
+    EvidenceBundle,
     EvidenceBuildRequest,
     build_evidence_bundle,
 )
@@ -48,6 +50,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures" / "phase12" / "filter_v5"
 Mutation = Literal["forbidden_diff", "invalid_python", "mft_failure", "source_dirty"] | None
 _COMMAND_RECORDS: dict[tuple[str, str], tuple[Task17CommandRecord, ...]] = {}
+_FIXTURE_TEMPLATE_ROOT = tempfile.TemporaryDirectory(prefix="phase12-filter-v5-fixtures-")
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +58,25 @@ class VerifierFixture:
     base_commit: str
     evidence: EvidenceBuildRequest
     source_repository: Path
+
+
+@dataclass(frozen=True, slots=True)
+class FixtureTemplate:
+    base_commit: str
+    implementation_commit: str
+    plan_bytes: bytes
+    repository: Path
+    source_repository: Path
+    summary_bytes: bytes
+
+
+_FIXTURE_TEMPLATES: dict[str, FixtureTemplate] = {}
+
+
+def _reset_fixture_templates() -> None:
+    for template in _FIXTURE_TEMPLATES.values():
+        shutil.rmtree(template.repository.parent)
+    _FIXTURE_TEMPLATES.clear()
 
 
 def _git(root: Path, *arguments: str) -> str:
@@ -69,6 +91,30 @@ def _git(root: Path, *arguments: str) -> str:
 
 
 def _fixture(
+    tmp_path: Path,
+    mutation: Mutation = None,
+    forbidden_path: str | None = None,
+    provider_source: str | None = None,
+) -> VerifierFixture:
+    if mutation is None and forbidden_path is None and provider_source is None:
+        key = _fixture_template_key()
+        template = _FIXTURE_TEMPLATES.get(key)
+        if template is None:
+            fixture = _build_fixture(Path(_FIXTURE_TEMPLATE_ROOT.name) / key)
+            template = FixtureTemplate(
+                base_commit=fixture.base_commit,
+                implementation_commit=fixture.evidence.implementation_commit,
+                plan_bytes=fixture.evidence.plan.read_bytes(),
+                repository=fixture.evidence.repository_root,
+                source_repository=fixture.source_repository,
+                summary_bytes=fixture.evidence.validation_summary.read_bytes(),
+            )
+            _FIXTURE_TEMPLATES[key] = template
+        return _materialize_fixture(tmp_path, template)
+    return _build_fixture(tmp_path, mutation, forbidden_path, provider_source)
+
+
+def _build_fixture(
     tmp_path: Path,
     mutation: Mutation = None,
     forbidden_path: str | None = None,
@@ -140,6 +186,58 @@ def _fixture(
     _git(repository, "commit", "-qm", "evidence")
     source = _source_repository(tmp_path, mutation == "source_dirty")
     return VerifierFixture(base_commit, evidence, source)
+
+
+def _fixture_template_key() -> str:
+    digest = hashlib.sha256(b"MARKER: int = 1\n# Approved synthetic plan\n")
+    for path in sorted(FIXTURES.rglob("*")):
+        if path.is_file():
+            digest.update(path.relative_to(FIXTURES).as_posix().encode())
+            digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+def _materialize_fixture(tmp_path: Path, template: FixtureTemplate) -> VerifierFixture:
+    repository = tmp_path / "repository"
+    _clone_repository(template.repository, repository)
+    source = tmp_path / "source"
+    _clone_repository(template.source_repository, source)
+    _copy_untracked_files(template.source_repository, source)
+    plan = tmp_path / "approved-plan.md"
+    plan.write_bytes(template.plan_bytes)
+    summary = tmp_path / "validation-summary.json"
+    summary.write_bytes(template.summary_bytes)
+    fixture_root = repository / "fixtures"
+    evidence = EvidenceBuildRequest(
+        repository_root=repository,
+        plan=plan,
+        expected_plan_sha256=hashlib.sha256(template.plan_bytes).hexdigest(),
+        implementation_commit=template.implementation_commit,
+        search_config=fixture_root / "FilterChallengeSearchConfig.yaml",
+        fixture_root=fixture_root,
+        validation_summary=summary,
+        output_root=repository / "evidence",
+    )
+    return VerifierFixture(template.base_commit, evidence, source)
+
+
+def _clone_repository(source: Path, destination: Path) -> None:
+    subprocess.run(
+        ("git", "clone", "--local", "--no-hardlinks", str(source), str(destination)),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    _git(destination, "config", "core.quotePath", "false")
+
+
+def _copy_untracked_files(source: Path, destination: Path) -> None:
+    for entry in _git(source, "status", "--porcelain=v1", "-z").split("\0"):
+        if entry.startswith("?? "):
+            relative_path = Path(entry.removeprefix("?? "))
+            target = destination / relative_path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source / relative_path, target)
 
 
 def _actual_command_records(
@@ -692,3 +790,26 @@ def test_integration_rejects_broken_guard_startup(tmp_path: Path, monkeypatch: p
 
     with pytest.raises(FinalVerifierError, match="FINAL_VERIFIER_EXECUTION_GUARD_REACHED"):
         verify_final_report(_request(fixture, "integration", tmp_path / "f3.json"))
+
+
+def test_fixture_template_materializes_independent_equivalent_repositories(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _reset_fixture_templates()
+    calls = 0
+    original = build_evidence_bundle
+
+    def counted(request: EvidenceBuildRequest) -> EvidenceBundle:
+        nonlocal calls
+        calls += 1
+        return original(request)
+
+    monkeypatch.setattr("tests.test_phase12_filter_v5_final_verifier_modes.build_evidence_bundle", counted)
+    first = _fixture(tmp_path / "first")
+    second = _fixture(tmp_path / "second")
+
+    assert calls == 1
+    assert first.evidence.repository_root != second.evidence.repository_root
+    assert first.evidence.implementation_commit == second.evidence.implementation_commit
+    assert first.evidence.validation_summary.read_bytes() == second.evidence.validation_summary.read_bytes()
+    assert (second.source_repository / "Pilot-A 관련 기록.md").read_text(encoding="utf-8") == "untracked\n"
