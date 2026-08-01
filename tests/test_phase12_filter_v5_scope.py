@@ -4,7 +4,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from tests.test_phase12_filter_v5_final_verifier_modes import _fixture, _request
+from .test_phase12_filter_v5_final_verifier_modes import _fixture, _request
 
 from memcontam.experiment.phase12.filter_challenge.final_verifier import (
     FinalVerifierError,
@@ -55,10 +55,22 @@ _DEFAULT_SCOPE_PATHS = tuple(transition[0] for transition in _APPROVED_SCOPE_TRA
 def test_scope_rejects_actual_pilot_a_and_core_path_families(
     tmp_path: Path, forbidden_path: str
 ) -> None:
-    fixture = _fixture(tmp_path, forbidden_path=forbidden_path)
+    fixture = _fixture(tmp_path)
+    repository = fixture.evidence.repository_root
+    _git(repository, "reset", "--hard", fixture.base_commit)
+    target = repository / forbidden_path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("forbidden\n", encoding="utf-8")
+    _git(repository, "add", "--all")
+    _git(repository, "commit", "-qm", "forbidden")
 
     with pytest.raises(FinalVerifierError, match="SCOPE_FORBIDDEN_DIFF"):
-        verify_final_report(_request(fixture, "scope", tmp_path / "f4.json"))
+        verify_scope(
+            repository,
+            fixture.source_repository,
+            fixture.base_commit,
+            _git(repository, "rev-parse", "HEAD"),
+        )
 
 
 def test_scope_payload_binds_changed_commit_metadata(tmp_path: Path) -> None:
