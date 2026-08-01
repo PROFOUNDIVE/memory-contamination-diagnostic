@@ -30,7 +30,7 @@ from memcontam.experiment.phase12.filter_challenge.executor_types import (
     ReplicateSeedContract,
 )
 from memcontam.memory.checkpoint_v3 import NativeState, serialize_checkpoint
-from phase12_filter_v5_executor_cases import (
+from .phase12_filter_v5_executor_cases import (
     bot_case,
     full_history_case,
     rag_case,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -10,7 +11,7 @@ from pathlib import Path
 from typing import Literal
 
 import pytest
-from tests.phase12_filter_v5_summary_cases import complete_validation_summary
+from .phase12_filter_v5_summary_cases import complete_validation_summary
 
 from memcontam.experiment.phase12.filter_challenge.evidence import (
     EvidenceBuildRequest,
@@ -46,6 +47,7 @@ from memcontam.experiment.phase12.filter_challenge.validation_summary import Tas
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures" / "phase12" / "filter_v5"
 Mutation = Literal["forbidden_diff", "invalid_python", "mft_failure", "source_dirty"] | None
+_COMMAND_RECORDS: dict[tuple[str, str], tuple[Task17CommandRecord, ...]] = {}
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,7 +59,12 @@ class VerifierFixture:
 
 def _git(root: Path, *arguments: str) -> str:
     return subprocess.run(
-        ["git", *arguments], cwd=root, check=True, capture_output=True, text=True
+        ["git", *arguments],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "GIT_AUTHOR_DATE": "2000-01-01T00:00:00Z", "GIT_COMMITTER_DATE": "2000-01-01T00:00:00Z"},
     ).stdout.strip()
 
 
@@ -138,6 +145,15 @@ def _fixture(
 def _actual_command_records(
     repository: Path, implementation_commit: str, fixture_root: Path, scratch_root: Path
 ) -> tuple[Task17CommandRecord, ...]:
+    digest = hashlib.sha256()
+    for path in sorted(fixture_root.rglob("*")):
+        if path.is_file():
+            digest.update(path.relative_to(fixture_root).as_posix().encode())
+            digest.update(path.read_bytes())
+    key = (implementation_commit, digest.hexdigest())
+    cached = _COMMAND_RECORDS.get(key)
+    if cached is not None:
+        return cached
     scratch_root.mkdir()
     guard_root = install_execution_guards(scratch_root)
     _, records, _ = final_verifier_integration._run_commands(
@@ -150,6 +166,7 @@ def _actual_command_records(
         guard_root,
     )
     shutil.rmtree(scratch_root)
+    _COMMAND_RECORDS[key] = records
     return records
 
 
@@ -304,6 +321,12 @@ def _json_array(value: JsonValue) -> list[JsonValue]:
 def _json_field(value: JsonObject, name: str) -> JsonValue:
     assert name in value
     return value[name]
+
+
+def _string_field(value: JsonObject, name: str) -> str:
+    field = _json_field(value, name)
+    assert isinstance(field, str)
+    return field
 
 
 def _write_json(path: Path, value: JsonObject) -> None:
@@ -504,7 +527,7 @@ def test_integration_reconciles_all_outputs_and_copied_mutations(tmp_path: Path)
         not in _json_array(_json_field(_json_object(command), "normalized_argv"))
         for command in commands
     )
-    assert {_json_object(item)["mutation_id"] for item in mutations} >= {
+    assert {_string_field(_json_object(item), "mutation_id") for item in mutations} >= {
         "archive_bytes", "bct_authorization", "provenance_evidence",
     }
     assert report["execution_guards"] == {

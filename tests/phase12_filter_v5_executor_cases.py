@@ -31,7 +31,7 @@ from memcontam.memory.bot_buffer import BotBufferIdentity
 from memcontam.memory.checkpoint_v3 import NativeState, serialize_checkpoint
 from memcontam.rag.branch_index import BGE_M3_PRIMARY_IDENTITY, BranchIndex
 from memcontam.rag.phase12_corpus import BranchCorpus, Document
-from phase12_filter_v5_executor_support import (
+from .phase12_filter_v5_executor_support import (
     BotClient,
     Embedder,
     ExecutorCase,

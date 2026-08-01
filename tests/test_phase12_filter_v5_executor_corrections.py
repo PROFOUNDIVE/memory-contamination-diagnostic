@@ -15,7 +15,7 @@ from memcontam.experiment.phase12.filter_challenge.executor import (
     consume_routing,
     execute_isolated_pair,
 )
-from phase12_filter_v5_executor_cases import (
+from .phase12_filter_v5_executor_cases import (
     bot_case,
     full_history_case,
     rag_case,

@@ -15,13 +15,13 @@ from memcontam.experiment.phase12.filter_challenge.executor import (
     ReflexionExecutionRequest,
     execute_isolated_pair,
 )
-from phase12_filter_v5_executor_cases import (
+from .phase12_filter_v5_executor_cases import (
     bot_case,
     full_history_case,
     rag_case,
     reflexion_case,
 )
-from phase12_filter_v5_executor_support import pair_request, task
+from .phase12_filter_v5_executor_support import pair_request, task
 
 
 def test_executor_rejects_rag_challenge_task_mismatch() -> None:
