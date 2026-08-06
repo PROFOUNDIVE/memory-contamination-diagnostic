@@ -13,6 +13,21 @@ from typing import Final
 
 DIRECTORY_FLAGS: Final = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 FILE_FLAGS: Final = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC
+REPOSITORY_READ_DIRECTORIES: Final = (
+    Path(".sisyphus"),
+    Path(".sisyphus/evidence"),
+    Path(".sisyphus/evidence/phase12-filter-v5-build-v1"),
+    Path("configs"),
+    Path("configs/phase12"),
+    Path("configs/phase12/filter_v5_rootless_local"),
+    Path("data"),
+    Path("data/phase12"),
+    Path("data/phase12/filter_v5_bct_v1"),
+    Path("docs"),
+    Path("docs/evidence"),
+    Path("docs/evidence/phase12-filter-v5-bct-v1"),
+    Path("docs/evidence/phase12-filter-v5-rootless-local"),
+)
 
 
 class SetupError(Exception):
@@ -152,6 +167,33 @@ def _validate_pin(pin: InputPin, raw: bytes) -> None:
         raise SetupError("ROOTLESS_T1_INPUT_PIN_MISMATCH")
 
 
+def _normalize_repository_read_directories(root: int) -> None:
+    for relative_path in REPOSITORY_READ_DIRECTORIES:
+        directory = os.dup(root)
+        try:
+            for component in relative_path.parts:
+                try:
+                    next_directory = os.open(component, DIRECTORY_FLAGS, dir_fd=directory)
+                except OSError as error:
+                    raise SetupError("ROOTLESS_T1_DESTINATION_UNSAFE") from error
+                try:
+                    info = os.fstat(next_directory)
+                    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+                        raise SetupError("ROOTLESS_T1_DESTINATION_UNSAFE")
+                    mode = stat.S_IMODE(info.st_mode)
+                    if mode & 0o022:
+                        os.fchmod(next_directory, mode & ~0o022)
+                        os.fsync(next_directory)
+                        os.fsync(directory)
+                except (OSError, SetupError):
+                    os.close(next_directory)
+                    raise
+                os.close(directory)
+                directory = next_directory
+        finally:
+            os.close(directory)
+
+
 def _destination_parent(root: int, relative_path: Path, *, create: bool) -> int | None:
     directory = os.dup(root)
     try:
@@ -245,12 +287,13 @@ def setup_inputs(repository_root: Path, source_root: Path) -> None:
     repository_descriptor = -1
     try:
         source_descriptor = _open_root(source_root)
-        repository_descriptor = _open_root(repository_root)
         sources: list[bytes] = []
         for pin in INPUT_PINS:
             raw = _read_relative(source_descriptor, pin.relative_path)
             _validate_pin(pin, raw)
             sources.append(raw)
+        repository_descriptor = _open_root(repository_root)
+        _normalize_repository_read_directories(repository_descriptor)
         existing = tuple(
             _existing_destination(repository_descriptor, pin, raw)
             for pin, raw in zip(INPUT_PINS, sources, strict=True)
