@@ -303,6 +303,70 @@ def test_materializer_creates_only_verified_destinations_once(tmp_path: Path) ->
     assert tuple(destination.read_bytes() for destination in destinations) == before
 
 
+@pytest.mark.parametrize(
+    "relative_argument",
+    (
+        "repo-root",
+        "historical-screening-plan",
+        "historical-screening-descriptor",
+        "historical-post-descriptor",
+    ),
+)
+def test_materializer_cli_rejects_every_relative_input_path(
+    tmp_path: Path, relative_argument: str
+) -> None:
+    fixture = _make_clean_fixture(tmp_path)
+    sources = _external_sources(tmp_path)
+    arguments = {
+        "repo-root": fixture,
+        "historical-screening-plan": sources[0],
+        "historical-screening-descriptor": sources[1],
+        "historical-post-descriptor": sources[2],
+    }
+    arguments[relative_argument] = Path(os.path.relpath(arguments[relative_argument], ROOT))
+
+    result = _run(
+        [
+            sys.executable,
+            "-B",
+            str(MATERIALIZER),
+            "--repo-root",
+            str(arguments["repo-root"]),
+            "--historical-screening-plan",
+            str(arguments["historical-screening-plan"]),
+            "--historical-screening-descriptor",
+            str(arguments["historical-screening-descriptor"]),
+            "--historical-post-descriptor",
+            str(arguments["historical-post-descriptor"]),
+        ],
+        ROOT,
+    )
+
+    assert result.returncode == 64
+    assert result.stderr.strip() == "ROOTLESS_LEGACY_PATH_INVALID"
+
+
+@pytest.mark.parametrize("relative_argument", ("plan", "descriptor", "metadata"))
+def test_reviewed_plan_api_rejects_every_relative_input_path(
+    tmp_path: Path, relative_argument: str
+) -> None:
+    module, plan, descriptor, metadata, _ = _review_fixture(tmp_path)
+    arguments = {"plan": plan, "descriptor": descriptor, "metadata": metadata}
+    arguments[relative_argument] = Path(os.path.relpath(arguments[relative_argument], ROOT))
+
+    with pytest.raises(module.LegacyFenceError, match="ROOTLESS_LEGACY_PATH_INVALID"):
+        module.validate_reviewed_plan(
+            arguments["plan"], arguments["descriptor"], arguments["metadata"]
+        )
+
+
+def test_materializer_rejects_noncanonical_absolute_path() -> None:
+    module = _load_materializer()
+
+    with pytest.raises(module.LegacyFenceError, match="ROOTLESS_LEGACY_PATH_INVALID"):
+        module._absolute(Path("/tmp/rootless-segment/../rootless-input"))
+
+
 def test_materializer_rejects_unsafe_source_and_base_blob_drift_before_writes(tmp_path: Path) -> None:
     # Given: a clean fixture with an unsafe external source.
     fixture = _make_clean_fixture(tmp_path)
@@ -581,6 +645,42 @@ def test_partial_materialization_temp_rejects_without_destination_overwrite(tmp_
     # Then: it cannot claim success or overwrite a destination after interruption.
     assert not (directory / "input").exists()
     assert temporary.read_bytes() == b"partial"
+
+
+def test_materializer_fsyncs_parent_after_mkdir_before_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    module = _load_materializer()
+    parent_path = tmp_path / "materializer-parent"
+    parent_path.mkdir(mode=0o700)
+    parent = os.open(parent_path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    events: list[str] = []
+    real_mkdir = module.os.mkdir
+    real_fsync = module.os.fsync
+    real_open = module.os.open
+
+    def recording_mkdir(path: str, mode: int, *, dir_fd: int) -> None:
+        events.append(f"mkdir:{path}")
+        real_mkdir(path, mode, dir_fd=dir_fd)
+
+    def recording_fsync(descriptor: int) -> None:
+        events.append("fsync:parent")
+        real_fsync(descriptor)
+
+    def recording_open(path: str, flags: int, *args: object, **kwargs: object) -> int:
+        events.append(f"open:{path}")
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(module.os, "mkdir", recording_mkdir)
+    monkeypatch.setattr(module.os, "fsync", recording_fsync)
+    monkeypatch.setattr(module.os, "open", recording_open)
+    try:
+        child = module._open_or_create_directory(parent, "child")
+        os.close(child)
+    finally:
+        os.close(parent)
+
+    assert events == ["mkdir:child", "fsync:parent", "open:child"]
 
 
 def test_real_read_rejects_group_writable_ancestor(tmp_path: Path) -> None:
@@ -864,6 +964,50 @@ def test_setup_materializes_fixed_private_inputs_and_is_idempotent(tmp_path: Pat
         assert info.st_nlink == 1
         assert len(raw) == SETUP_INPUTS[relative][0]
         assert sha256(raw).hexdigest() == SETUP_INPUTS[relative][1]
+
+
+def test_setup_fsyncs_each_parent_after_mkdir_before_descending(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    setup = _load_script(SETUP, "rootless_t1_setup_mkdir_fsync")
+    repository = tmp_path / "setup-fsync"
+    repository.mkdir(mode=0o700)
+    root = os.open(repository, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    events: list[str] = []
+    real_mkdir = setup.os.mkdir
+    real_fsync = setup.os.fsync
+    real_open = setup.os.open
+
+    def recording_mkdir(path: str, mode: int, *, dir_fd: int) -> None:
+        events.append(f"mkdir:{path}")
+        real_mkdir(path, mode, dir_fd=dir_fd)
+
+    def recording_fsync(descriptor: int) -> None:
+        events.append("fsync:parent")
+        real_fsync(descriptor)
+
+    def recording_open(path: str, flags: int, *args: object, **kwargs: object) -> int:
+        events.append(f"open:{path}")
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(setup.os, "mkdir", recording_mkdir)
+    monkeypatch.setattr(setup.os, "fsync", recording_fsync)
+    monkeypatch.setattr(setup.os, "open", recording_open)
+    try:
+        parent = setup._destination_parent(root, Path("first/second/input"), create=True)
+        assert parent is not None
+        os.close(parent)
+    finally:
+        os.close(root)
+
+    assert events == [
+        "mkdir:first",
+        "fsync:parent",
+        "open:first",
+        "mkdir:second",
+        "fsync:parent",
+        "open:second",
+    ]
 
 
 @pytest.mark.parametrize("attack", ("missing", "symlink", "hardlink", "mode", "mismatch", "ancestor"))
@@ -1324,7 +1468,91 @@ def test_qa_writer_retries_interruption_after_publication(
     with pytest.raises(InterruptedError):
         writer.write_rootless_task_qa("t1", command, writer.ROLE_ASSERTIONS["t1"], destination)
     before = destination.read_bytes()
+    temporary = destination.with_name(f".{destination.name}.tmp")
+    final_info = os.lstat(destination)
+    temporary_info = os.lstat(temporary)
+    assert final_info.st_nlink == temporary_info.st_nlink == 2
+    assert (final_info.st_dev, final_info.st_ino) == (temporary_info.st_dev, temporary_info.st_ino)
 
     writer.write_rootless_task_qa("t1", command, writer.ROLE_ASSERTIONS["t1"], destination)
     assert destination.read_bytes() == before
-    assert not destination.with_name(f".{destination.name}.tmp").exists()
+    assert os.lstat(destination).st_nlink == 1
+    assert not temporary.exists()
+
+
+def test_qa_writer_rejects_final_hard_link_to_unrelated_alias(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    writer = _load_script(QA_WRITER, "rootless_task_qa_final_alias")
+    monkeypatch.setattr(writer, "ROOT", tmp_path)
+    destination = tmp_path / "runs/phase12-filter-v5-rootless-qa/t1-legacy-fence.json"
+    destination.parent.mkdir(parents=True, mode=0o700)
+    command = _registered_command(writer, tmp_path)
+    writer.write_rootless_task_qa("t1", command, writer.ROLE_ASSERTIONS["t1"], destination)
+    os.link(destination, destination.with_name("unrelated-final-alias.json"))
+    command = _registered_command(writer, tmp_path)
+
+    with pytest.raises(ValueError, match="ROOTLESS_TASK_QA_EXISTING_INVALID"):
+        writer.write_rootless_task_qa("t1", command, writer.ROLE_ASSERTIONS["t1"], destination)
+
+
+def test_qa_writer_rejects_temporary_hard_link_to_unrelated_alias(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    writer = _load_script(QA_WRITER, "rootless_task_qa_temporary_alias")
+    monkeypatch.setattr(writer, "ROOT", tmp_path)
+    destination = tmp_path / "runs/phase12-filter-v5-rootless-qa/t1-legacy-fence.json"
+    destination.parent.mkdir(parents=True, mode=0o700)
+    temporary = destination.with_name(f".{destination.name}.tmp")
+    command = _registered_command(writer, tmp_path)
+    raw = writer._canonical_json(
+        writer._task_payload(
+            "t1", command, writer.ROLE_ASSERTIONS["t1"], "2026-08-06T00:00:00Z"
+        )
+    )
+    temporary.write_bytes(raw)
+    os.chmod(temporary, 0o600)
+    os.link(temporary, destination.with_name("unrelated-temporary-alias.json"))
+
+    with pytest.raises(ValueError, match="ROOTLESS_TASK_QA_EXISTING_INVALID"):
+        writer.write_rootless_task_qa("t1", command, writer.ROLE_ASSERTIONS["t1"], destination)
+
+
+def test_qa_writer_rejects_final_and_temporary_on_different_inodes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    writer = _load_script(QA_WRITER, "rootless_task_qa_different_inodes")
+    monkeypatch.setattr(writer, "ROOT", tmp_path)
+    destination = tmp_path / "runs/phase12-filter-v5-rootless-qa/t1-legacy-fence.json"
+    destination.parent.mkdir(parents=True, mode=0o700)
+    temporary = destination.with_name(f".{destination.name}.tmp")
+    command = _registered_command(writer, tmp_path)
+    raw = writer._canonical_json(
+        writer._task_payload(
+            "t1", command, writer.ROLE_ASSERTIONS["t1"], "2026-08-06T00:00:00Z"
+        )
+    )
+    destination.write_bytes(raw)
+    temporary.write_bytes(raw)
+    os.chmod(destination, 0o600)
+    os.chmod(temporary, 0o600)
+
+    with pytest.raises(ValueError, match="ROOTLESS_TASK_QA_EXISTING_INVALID"):
+        writer.write_rootless_task_qa("t1", command, writer.ROLE_ASSERTIONS["t1"], destination)
+
+
+def test_qa_writer_rejects_artifact_with_more_than_two_links(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    writer = _load_script(QA_WRITER, "rootless_task_qa_excess_links")
+    monkeypatch.setattr(writer, "ROOT", tmp_path)
+    destination = tmp_path / "runs/phase12-filter-v5-rootless-qa/t1-legacy-fence.json"
+    destination.parent.mkdir(parents=True, mode=0o700)
+    command = _registered_command(writer, tmp_path)
+    writer.write_rootless_task_qa("t1", command, writer.ROLE_ASSERTIONS["t1"], destination)
+    os.link(destination, destination.with_name("first-alias.json"))
+    os.link(destination, destination.with_name("second-alias.json"))
+    command = _registered_command(writer, tmp_path)
+
+    with pytest.raises(ValueError, match="ROOTLESS_TASK_QA_EXISTING_INVALID"):
+        writer.write_rootless_task_qa("t1", command, writer.ROLE_ASSERTIONS["t1"], destination)
