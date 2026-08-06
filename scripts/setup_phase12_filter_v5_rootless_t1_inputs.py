@@ -161,6 +161,8 @@ def _destination_parent(root: int, relative_path: Path, *, create: bool) -> int 
                     os.mkdir(component, 0o700, dir_fd=directory)
                 except FileExistsError:
                     pass
+                else:
+                    os.fsync(directory)
             try:
                 next_directory = os.open(component, DIRECTORY_FLAGS, dir_fd=directory)
             except FileNotFoundError:

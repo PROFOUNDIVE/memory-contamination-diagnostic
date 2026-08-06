@@ -86,10 +86,12 @@ def _fail(code: str) -> Never:
 
 
 def _absolute(path: Path) -> Path:
-    candidate = path if path.is_absolute() else Path.cwd() / path
-    if not candidate.is_absolute() or any(part in {".", ".."} for part in candidate.parts):
+    text = os.fspath(path)
+    if not text.startswith("/") or text != os.path.normpath(text) or any(
+        part in {".", ".."} for part in path.parts
+    ):
         _fail("ROOTLESS_LEGACY_PATH_INVALID")
-    return candidate
+    return path
 
 
 def _safe_directory(info: os.stat_result, current_uid: int, require_private: bool = True) -> None:
@@ -372,6 +374,11 @@ def _open_or_create_directory(parent: int, name: str) -> int:
         os.mkdir(name, 0o700, dir_fd=parent)
     except FileExistsError:
         pass
+    else:
+        try:
+            os.fsync(parent)
+        except OSError as error:
+            raise LegacyFenceError("ROOTLESS_LEGACY_DESTINATION_UNSAFE") from error
     try:
         descriptor = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=parent)
     except OSError as error:
