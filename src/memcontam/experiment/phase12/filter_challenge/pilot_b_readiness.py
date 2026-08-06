@@ -7,6 +7,7 @@ from typing import Literal
 
 from memcontam.experiment.phase12.filter_challenge.bct_archive import validate_evidence_bundle
 from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
+    EvidenceBuildError,
     read_regular_nofollow,
     sha256_regular_nofollow,
 )
@@ -53,6 +54,28 @@ def derive_terminal(evidence: ReadinessEvidence) -> CalibrationStageResult:
 
 
 def readiness_from_bundle(bundle: Path, plan_digest: str) -> CalibrationStageResult:
+    for report_name in ("screening", "freeze_b_search_config", "bct_execution"):
+        try:
+            raw_report = read_regular_nofollow(
+                bundle / f"{report_name}_report.json", "EVIDENCE_READINESS_INVALID"
+            )
+        except (EvidenceBuildError, OSError):
+            continue
+        if has_forbidden_rootless_profile(raw_report):
+            raise ValueError(ROOTLESS_PROFILE_FORBIDDEN)
+        try:
+            report = json.loads(raw_report)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        stage_path = report.get("stage_result_path") if isinstance(report, dict) else None
+        if not isinstance(stage_path, str):
+            continue
+        try:
+            raw_stage = read_regular_nofollow(Path(stage_path), "EVIDENCE_READINESS_INVALID")
+        except (EvidenceBuildError, OSError):
+            continue
+        if has_forbidden_rootless_profile(raw_stage):
+            raise ValueError(ROOTLESS_PROFILE_FORBIDDEN)
     if not validate_evidence_bundle(bundle, plan_digest, "screening").valid:
         return _result(
             "blocked_before_stage",
