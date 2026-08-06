@@ -10,6 +10,11 @@ from memcontam.experiment.phase12.contracts import (
     ValidatedRouteSelection,
     canonical_json_hash,
 )
+from memcontam.experiment.phase12.filter_challenge.rootless_local_firewall import (
+    ROOTLESS_PROFILE_FORBIDDEN,
+    has_forbidden_rootless_profile,
+)
+from memcontam.experiment.phase12.filter_challenge.mft_state_models import JsonValue
 from memcontam.manifests.archive_validation import ArchiveValidationReport
 
 
@@ -69,12 +74,16 @@ class AdmissionDecision:
 
 
 def evaluate_scientific_admission(
-    request: ScientificRunRequest,
+    request: ScientificRunRequest | Mapping[str, JsonValue],
     certificates: CertificateBundle,
     archive: ArchiveValidationReport,
     route_selection: ValidatedRouteSelection | None,
     exploratory_activation: ValidatedExploratoryActivation | None,
 ) -> AdmissionDecision:
+    if isinstance(request, Mapping):
+        if has_forbidden_rootless_profile(request):
+            raise AdmissionDenied(ROOTLESS_PROFILE_FORBIDDEN)
+        raise AdmissionDenied("RUN_FAMILY_UNSUPPORTED")
     if request.is_exploratory:
         return _evaluate_exploratory(
             request, certificates, archive, route_selection, exploratory_activation

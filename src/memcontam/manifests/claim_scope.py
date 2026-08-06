@@ -7,6 +7,10 @@ from pathlib import Path
 from typing import Any, Literal
 
 from memcontam.experiment.phase12.contracts import canonical_json_hash
+from memcontam.experiment.phase12.filter_challenge.rootless_local_firewall import (
+    ROOTLESS_PROFILE_FORBIDDEN,
+    has_forbidden_rootless_profile,
+)
 from memcontam.manifests.aggregate_manifest import AggregateManifest, AggregateManifestRow
 
 
@@ -51,6 +55,11 @@ class ClaimScopeLedger:
 def build_claim_scope(
     claims: Sequence[ClaimScopeRow | Mapping[str, Any]], aggregate_manifest: AggregateManifest
 ) -> ClaimScopeLedger:
+    if any(
+        isinstance(claim, Mapping) and has_forbidden_rootless_profile(claim)
+        for claim in claims
+    ):
+        raise ClaimScopeError(ROOTLESS_PROFILE_FORBIDDEN)
     aggregates = _aggregate_rows(aggregate_manifest)
     rows = tuple(_build_row(claim, aggregates) for claim in claims)
     ledger = ClaimScopeLedger(rows)
@@ -80,7 +89,7 @@ def write_claim_scope(ledger: ClaimScopeLedger, path: Path | str) -> str:
 def read_claim_scope(path: Path | str) -> ClaimScopeLedger:
     try:
         rows = tuple(
-            _row_from_dict(json.loads(line))
+            _row_from_json(line)
             for line in Path(path).read_text(encoding="utf-8").splitlines()
             if line.strip()
         )
@@ -89,6 +98,12 @@ def read_claim_scope(path: Path | str) -> ClaimScopeLedger:
             raise
         raise ClaimScopeError("CLAIM_SCOPE_SCHEMA_INVALID") from error
     return ClaimScopeLedger(rows)
+
+
+def _row_from_json(line: str) -> ClaimScopeRow:
+    if has_forbidden_rootless_profile(line):
+        raise ClaimScopeError(ROOTLESS_PROFILE_FORBIDDEN)
+    return _row_from_dict(json.loads(line))
 
 
 def _build_row(

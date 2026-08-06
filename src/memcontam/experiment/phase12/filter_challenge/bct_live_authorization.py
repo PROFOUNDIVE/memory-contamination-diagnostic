@@ -23,6 +23,10 @@ from memcontam.experiment.phase12.filter_challenge.registry_calibration import (
     CalibrationAuthorization,
     LEDGER_ID,
 )
+from memcontam.experiment.phase12.filter_challenge.rootless_local_firewall import (
+    ROOTLESS_PROFILE_FORBIDDEN,
+    has_forbidden_rootless_profile,
+)
 
 
 class CalibrationAuthorizationError(ValueError):
@@ -36,6 +40,8 @@ _Authorization = TypeVar("_Authorization", bound=CalibrationAuthorization)
 
 def load_authorization(path: Path, expected_digest: str, model: type[_Authorization]) -> _Authorization:
     raw = read_regular_nofollow(path, "AUTHORIZATION_INVALID")
+    if has_forbidden_rootless_profile(raw):
+        raise CalibrationAuthorizationError(ROOTLESS_PROFILE_FORBIDDEN)
     if not hmac.compare_digest(expected_digest, hashlib.sha256(raw).hexdigest()):
         raise CalibrationAuthorizationError("AUTHORIZATION_DIGEST_MISMATCH")
     try:

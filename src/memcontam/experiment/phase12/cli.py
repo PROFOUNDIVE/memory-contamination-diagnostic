@@ -16,6 +16,10 @@ from memcontam.config.phase12 import (
 from memcontam.contamination.phase12.registry import load_candidate_registry
 from memcontam.contamination.phase12.renderers import RendererRegistry
 from memcontam.experiment.phase12.branching import BranchSet, build_matched_branches
+from memcontam.experiment.phase12.filter_challenge.rootless_local_firewall import (
+    ROOTLESS_PROFILE_FORBIDDEN,
+    has_forbidden_rootless_profile,
+)
 from memcontam.experiment.phase12.contracts import (
     MemoryArmExecutionKey,
     PrefixExecutionKey,
@@ -391,6 +395,8 @@ def _load_admission_evidence(
         from memcontam.readiness.phase12_certificate import load_p12i
 
         payload = json.loads(args.admission_bundle.read_text(encoding="utf-8"))
+        if isinstance(payload, dict) and has_forbidden_rootless_profile(payload):
+            raise AdmissionDenied(ROOTLESS_PROFILE_FORBIDDEN)
         request = ScientificRunRequest(
             args.run_family,
             args.candidate,

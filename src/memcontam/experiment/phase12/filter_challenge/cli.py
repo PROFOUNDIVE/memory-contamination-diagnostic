@@ -33,7 +33,7 @@ from memcontam.experiment.phase12.filter_challenge.mft import (
     build_mft_report,
 )
 from memcontam.experiment.phase12.filter_challenge.mft_state_models import JsonValue
-from memcontam.experiment.phase12.filter_challenge.registry import validate_stage
+from memcontam.experiment.phase12.filter_challenge.registry import parse_selected_policy, validate_stage
 from memcontam.experiment.phase12.filter_challenge.registry_common import (
     RegistryValidationError,
     StrictRegistry,
@@ -249,7 +249,10 @@ def _load_search(path: Path) -> SearchConfig:
 
 
 def _load_policy(path: Path) -> SelectedPolicy:
-    return SelectedPolicy.model_validate(_load_yaml(path))
+    payload = _load_yaml(path)
+    if isinstance(payload, dict):
+        return parse_selected_policy(payload)
+    return SelectedPolicy.model_validate(payload)
 
 
 def _load_yaml(path: Path) -> JsonValue:

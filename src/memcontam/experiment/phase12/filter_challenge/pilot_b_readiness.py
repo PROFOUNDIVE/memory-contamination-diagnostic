@@ -15,6 +15,10 @@ from memcontam.experiment.phase12.filter_challenge.code_prespec import (
     validate_code_prespec,
 )
 from memcontam.experiment.phase12.filter_challenge.registry_calibration import CalibrationStageResult
+from memcontam.experiment.phase12.filter_challenge.rootless_local_firewall import (
+    ROOTLESS_PROFILE_FORBIDDEN,
+    has_forbidden_rootless_profile,
+)
 
 
 Terminal = Literal[
@@ -81,11 +85,16 @@ def readiness_from_bundle(bundle: Path, plan_digest: str) -> CalibrationStageRes
 
 def readiness_from_fixture(path: Path) -> CalibrationStageResult:
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        raw = path.read_bytes()
+        if has_forbidden_rootless_profile(raw):
+            raise ValueError(ROOTLESS_PROFILE_FORBIDDEN)
+        payload = json.loads(raw)
         if not isinstance(payload, dict):
             raise ValueError
         return derive_terminal(ReadinessEvidence(**payload))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError) as error:
+        if str(error) == ROOTLESS_PROFILE_FORBIDDEN:
+            raise
         raise ValueError("READINESS_FIXTURE_INVALID") from error
 
 

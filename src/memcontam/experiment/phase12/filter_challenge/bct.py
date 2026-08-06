@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Annotated, Callable, Final, Literal, Self, TypeAlias, TypeVar, assert_never
 
 from pydantic import BeforeValidator, Field, model_validator
 
 from memcontam.experiment.phase12.filter_challenge.registry import validate_stage
+from memcontam.experiment.phase12.filter_challenge.mft_state_models import JsonValue
+from memcontam.experiment.phase12.filter_challenge.rootless_local_firewall import (
+    ROOTLESS_PROFILE_FORBIDDEN,
+    has_forbidden_rootless_profile,
+)
 from memcontam.experiment.phase12.filter_challenge.registry_common import (
     NonNegativeInt,
     StrictRegistry,
@@ -323,7 +329,11 @@ def _validate_bct_family(evidence: BCTEvidence) -> None:
         raise BCTContractError("BCT_NONAPPLICABLE_RESULT_PRESENT")
 
 
-def validate_bct_evidence(evidence: BCTEvidence) -> BCTEvidence:
+def validate_bct_evidence(evidence: BCTEvidence | Mapping[str, JsonValue]) -> BCTEvidence:
+    if isinstance(evidence, Mapping):
+        if has_forbidden_rootless_profile(evidence):
+            raise BCTContractError(ROOTLESS_PROFILE_FORBIDDEN)
+        evidence = BCTEvidence.model_validate(evidence)
     _validate_bct_family(evidence)
     return evidence
 
@@ -460,10 +470,18 @@ _Client = TypeVar("_Client")
 
 
 def authorize_client_construction(
-    software: SoftwareInterfaceReadiness,
-    execution: ExecutionPreflight,
+    software: SoftwareInterfaceReadiness | Mapping[str, JsonValue],
+    execution: ExecutionPreflight | Mapping[str, JsonValue],
     client_factory: Callable[[Literal["build", "pilot_b", "main"]], _Client],
 ) -> _Client:
+    if isinstance(software, Mapping):
+        if has_forbidden_rootless_profile(software):
+            raise BCTAuthorizationError(ROOTLESS_PROFILE_FORBIDDEN)
+        software = SoftwareInterfaceReadiness.model_validate(software)
+    if isinstance(execution, Mapping):
+        if has_forbidden_rootless_profile(execution):
+            raise BCTAuthorizationError(ROOTLESS_PROFILE_FORBIDDEN)
+        execution = ExecutionPreflight.model_validate(execution)
     if software.software_interface_status != "ready":
         raise BCTAuthorizationError(software.software_interface_reason_code or "SOFTWARE_NOT_READY")
     if execution.execution_status != "authorized":
