@@ -14,7 +14,7 @@ from memcontam.experiment.phase12.filter_challenge.rootless_local_models import 
 
 ROOTLESS_PROFILE_FORBIDDEN: Final = "ROOTLESS_PROFILE_FORBIDDEN"
 _YAML_ROOTLESS_PROFILE: Final = re.compile(
-    rf"(?m)^[ \t]*profile[ \t]*:[ \t]*[\"']?{ROOTLESS_PROFILE}[\"']?[ \t]*(?:#.*)?$"
+    rf"(?m)^profile[ \t]*:[ \t]*[\"']?{ROOTLESS_PROFILE}[\"']?[ \t]*(?:#.*)?\r?$"
 )
 
 
@@ -28,16 +28,6 @@ class _JsonObject(dict[str, JsonValue]):
 
 def _object_pairs(items: list[tuple[str, JsonValue]]) -> _JsonObject:
     return _JsonObject(items)
-
-
-def _contains_rootless_profile(value: JsonValue | _JsonObject) -> bool:
-    if isinstance(value, _JsonObject) and value.has_rootless_profile:
-        return True
-    if isinstance(value, Mapping):
-        return any(_contains_rootless_profile(item) for item in value.values())
-    if isinstance(value, (list, tuple)):
-        return any(_contains_rootless_profile(item) for item in value)
-    return False
 
 
 def has_forbidden_rootless_profile(
@@ -55,7 +45,24 @@ def has_forbidden_rootless_profile(
         except UnicodeDecodeError:
             return False
         return _YAML_ROOTLESS_PROFILE.search(text) is not None
-    return _contains_rootless_profile(decoded)
+    return isinstance(decoded, _JsonObject) and decoded.has_rootless_profile
 
 
-__all__ = ("ROOTLESS_PROFILE_FORBIDDEN", "has_forbidden_rootless_profile")
+def has_forbidden_rootless_aggregate_profile(value: bytes | str) -> bool:
+    try:
+        decoded: JsonValue | _JsonObject = json.loads(value, object_pairs_hook=_object_pairs)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    records = decoded
+    if isinstance(decoded, _JsonObject):
+        records = decoded.get("rows", decoded.get("aggregates", decoded.get("claims")))
+    return isinstance(records, list) and any(
+        isinstance(record, _JsonObject) and record.has_rootless_profile for record in records
+    )
+
+
+__all__ = (
+    "ROOTLESS_PROFILE_FORBIDDEN",
+    "has_forbidden_rootless_aggregate_profile",
+    "has_forbidden_rootless_profile",
+)

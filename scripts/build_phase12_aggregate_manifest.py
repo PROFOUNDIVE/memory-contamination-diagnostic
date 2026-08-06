@@ -20,13 +20,13 @@ from memcontam.manifests.claim_scope import (
 from memcontam.manifests.run_manifest import read_run_manifest
 from memcontam.experiment.phase12.filter_challenge.rootless_local_firewall import (
     ROOTLESS_PROFILE_FORBIDDEN,
-    has_forbidden_rootless_profile,
+    has_forbidden_rootless_aggregate_profile,
 )
 
 
 def _records(path: Path) -> list[dict[str, Any]]:
     raw = path.read_bytes()
-    if has_forbidden_rootless_profile(raw):
+    if has_forbidden_rootless_aggregate_profile(raw):
         raise ValueError(ROOTLESS_PROFILE_FORBIDDEN)
     payload = json.loads(raw)
     if isinstance(payload, dict):
