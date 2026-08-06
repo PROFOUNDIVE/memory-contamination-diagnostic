@@ -87,11 +87,23 @@ def _fail(code: str) -> Never:
 
 def _absolute(path: Path) -> Path:
     text = os.fspath(path)
-    if not text.startswith("/") or text != os.path.normpath(text) or any(
+    if not text.startswith("/") or text.startswith("//") or text != os.path.normpath(text) or any(
         part in {".", ".."} for part in path.parts
     ):
         _fail("ROOTLESS_LEGACY_PATH_INVALID")
     return path
+
+
+def _parse_cli_path(raw: str, *, file_source: bool) -> Path:
+    if raw == "/":
+        if file_source:
+            _fail("ROOTLESS_LEGACY_PATH_INVALID")
+        return Path(raw)
+    if not raw.startswith("/") or raw.startswith("//") or raw.endswith("/"):
+        _fail("ROOTLESS_LEGACY_PATH_INVALID")
+    if any(component in {"", ".", ".."} for component in raw[1:].split("/")):
+        _fail("ROOTLESS_LEGACY_PATH_INVALID")
+    return _absolute(Path(raw))
 
 
 def _safe_directory(info: os.stat_result, current_uid: int, require_private: bool = True) -> None:
@@ -528,18 +540,18 @@ def materialize(repository_root: Path, sources: tuple[Path, Path, Path]) -> None
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=REVIEW_METADATA_FORGEABILITY)
-    parser.add_argument("--repo-root", type=Path, required=True)
-    parser.add_argument("--historical-screening-plan", type=Path, required=True)
-    parser.add_argument("--historical-screening-descriptor", type=Path, required=True)
-    parser.add_argument("--historical-post-descriptor", type=Path, required=True)
+    parser.add_argument("--repo-root", required=True)
+    parser.add_argument("--historical-screening-plan", required=True)
+    parser.add_argument("--historical-screening-descriptor", required=True)
+    parser.add_argument("--historical-post-descriptor", required=True)
     arguments = parser.parse_args()
     try:
         materialize(
-            arguments.repo_root,
+            _parse_cli_path(arguments.repo_root, file_source=False),
             (
-                arguments.historical_screening_plan,
-                arguments.historical_screening_descriptor,
-                arguments.historical_post_descriptor,
+                _parse_cli_path(arguments.historical_screening_plan, file_source=True),
+                _parse_cli_path(arguments.historical_screening_descriptor, file_source=True),
+                _parse_cli_path(arguments.historical_post_descriptor, file_source=True),
             ),
         )
     except LegacyFenceError as error:
