@@ -13,7 +13,7 @@ import unicodedata
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Final, TypeAlias
+from typing import Final, Never, TypeAlias
 
 
 TRUSTED_BASE: Final = "c057fb1adf9571ef21cd19fa2733c5ac47b40798"
@@ -81,7 +81,7 @@ INPUT_PINS: Final = (
 )
 
 
-def _fail(code: str) -> None:
+def _fail(code: str) -> Never:
     raise LegacyFenceError(code)
 
 
@@ -107,7 +107,7 @@ def _read_regular(path: Path, required_mode: int | None, current_uid_only: bool)
         _fail("ROOTLESS_LEGACY_PATH_INVALID")
     directory = os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
     try:
-        _safe_directory(os.fstat(directory), current_uid, False)
+        _safe_directory(os.fstat(directory), current_uid)
         for component in parts[:-1]:
             next_directory = os.open(
                 component,
@@ -116,7 +116,7 @@ def _read_regular(path: Path, required_mode: int | None, current_uid_only: bool)
             )
             os.close(directory)
             directory = next_directory
-            _safe_directory(os.fstat(directory), current_uid, False)
+            _safe_directory(os.fstat(directory), current_uid)
         file_descriptor = os.open(
             parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=directory
         )
@@ -244,15 +244,16 @@ def _verify_manifest(repository_root: Path) -> str:
     payload = _parse_canonical_object(manifest)
     if set(payload) != {"schema_version", "profile", "kind", "ordered_inputs"}:
         _fail("ROOTLESS_LEGACY_MANIFEST_INVALID")
+    ordered_inputs = payload["ordered_inputs"]
     if (
         payload["schema_version"] != "rootless_external_input_manifest_v1"
         or payload["profile"] != PROFILE
         or payload["kind"] != "external_input_manifest"
-        or not isinstance(payload["ordered_inputs"], list)
-        or len(payload["ordered_inputs"]) != len(INPUT_PINS)
+        or not isinstance(ordered_inputs, list)
+        or len(ordered_inputs) != len(INPUT_PINS)
     ):
         _fail("ROOTLESS_LEGACY_MANIFEST_INVALID")
-    for record, pin in zip(payload["ordered_inputs"], INPUT_PINS, strict=True):
+    for record, pin in zip(ordered_inputs, INPUT_PINS, strict=True):
         if not isinstance(record, dict) or set(record) != {
             "role",
             "repo_relative_destination",
@@ -275,18 +276,24 @@ def _verify_manifest(repository_root: Path) -> str:
 
 def _git(repository_root: Path, *arguments: str) -> bytes:
     validation = subprocess.run(
-        [sys.executable, "-B", "-I", "-S", str(GIT_CONTEXT_VALIDATOR), "--repo-root", str(repository_root)],
+        [
+            os.path.realpath(sys.executable),
+            "-B",
+            "-I",
+            "-S",
+            str(GIT_CONTEXT_VALIDATOR),
+            "--repo-root",
+            str(repository_root),
+        ],
         check=False,
         capture_output=True,
         env={"LC_ALL": "C", "PATH": "/usr/bin:/bin"},
     )
-    if validation.returncode != 0:
+    if validation.returncode != 0 or validation.stdout or validation.stderr:
         _fail("ROOTLESS_LEGACY_GIT_INVALID")
     result = subprocess.run(
         [
-            "git",
-            "-C",
-            str(repository_root),
+            "/usr/bin/git",
             "--no-optional-locks",
             "-c",
             "core.fsmonitor=false",
@@ -314,6 +321,8 @@ def _git(repository_root: Path, *arguments: str) -> bytes:
             "submodule.recurse=false",
             "-c",
             "diff.ignoreSubmodules=none",
+            "-C",
+            str(repository_root),
             *arguments,
         ],
         check=False,
@@ -329,7 +338,7 @@ def _git(repository_root: Path, *arguments: str) -> bytes:
             "GIT_NO_REPLACE_OBJECTS": "1",
         },
     )
-    if result.returncode != 0:
+    if result.returncode != 0 or result.stderr:
         _fail("ROOTLESS_LEGACY_GIT_INVALID")
     return result.stdout
 
@@ -406,6 +415,14 @@ def _write_once(directory: int, name: str, raw: bytes) -> None:
         os.fsync(directory)
     except OSError as error:
         raise LegacyFenceError("ROOTLESS_LEGACY_DESTINATION_UNSAFE") from error
+
+
+def _require_absent(directory: int, name: str) -> None:
+    try:
+        os.stat(name, dir_fd=directory, follow_symlinks=False)
+    except FileNotFoundError:
+        return
+    _fail("ROOTLESS_LEGACY_REMATERIALIZATION_REJECTED")
 
 
 def _read_pinned_sources(sources: tuple[Path, Path, Path]) -> tuple[bytes, bytes, bytes]:
@@ -488,6 +505,8 @@ def materialize(repository_root: Path, sources: tuple[Path, Path, Path]) -> None
             plans = _open_or_create_directory(omo, "plans")
             approvals = _open_or_create_directory(omo, "approvals")
             try:
+                for directory, pin in zip((plans, approvals, approvals), INPUT_PINS, strict=True):
+                    _require_absent(directory, pin.destination.name)
                 for directory, pin, raw in zip((plans, approvals, approvals), INPUT_PINS, raw_sources, strict=True):
                     _write_once(directory, pin.destination.name, raw)
             finally:
@@ -517,7 +536,7 @@ def main() -> int:
             ),
         )
     except LegacyFenceError as error:
-        print(error.code, file=os.sys.stderr)
+        print(error.code, file=sys.stderr)
         return 64
     return 0
 
