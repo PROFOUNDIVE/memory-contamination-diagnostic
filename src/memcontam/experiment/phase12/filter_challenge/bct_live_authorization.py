@@ -13,6 +13,7 @@ from pydantic import ValidationError
 
 from memcontam.experiment.phase12.filter_challenge.bct_archive_storage import _hash
 from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
+    EvidenceBuildError,
     approval_descriptor_path,
     approved_plan_sha256,
     read_regular_nofollow,
@@ -36,6 +37,15 @@ class CalibrationAuthorizationError(ValueError):
 
 
 _Authorization = TypeVar("_Authorization", bound=CalibrationAuthorization)
+
+
+def reject_rootless_authorization(path: Path) -> None:
+    try:
+        raw = read_regular_nofollow(path, "AUTHORIZATION_INVALID")
+    except EvidenceBuildError:
+        return
+    if has_forbidden_rootless_profile(raw):
+        raise CalibrationAuthorizationError(ROOTLESS_PROFILE_FORBIDDEN)
 
 
 def load_authorization(path: Path, expected_digest: str, model: type[_Authorization]) -> _Authorization:

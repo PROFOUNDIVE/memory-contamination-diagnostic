@@ -19,6 +19,7 @@ from memcontam.experiment.phase12.filter_challenge.bct_live_preview import build
 from memcontam.experiment.phase12.filter_challenge.bct_live_authorization import (
     CalibrationAuthorizationError,
     load_authorization as _load_authorization,
+    reject_rootless_authorization,
     validate_runtime_authorization,
 )
 from memcontam.experiment.phase12.filter_challenge.bct_waiting_evidence import (
@@ -113,6 +114,8 @@ def run_screen_controls(
 
 
 def _run_cli_stage(args: argparse.Namespace, stage: Literal["screening", "bct"]) -> CalibrationStageResult:
+    if args.authorization is not None:
+        reject_rootless_authorization(args.authorization)
     if stage == "bct":
         require_artifact_root(args.artifact_root)
         if args.artifact_root.exists():
