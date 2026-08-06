@@ -77,6 +77,21 @@ SETUP_INPUTS = {
         "f595fc0a17e330e387e96b7506b65bd2631285e3506ec68afcef8a9294261fbe",
     ),
 }
+REPOSITORY_READ_DIRECTORIES = (
+    ".sisyphus",
+    ".sisyphus/evidence",
+    ".sisyphus/evidence/phase12-filter-v5-build-v1",
+    "configs",
+    "configs/phase12",
+    "configs/phase12/filter_v5_rootless_local",
+    "data",
+    "data/phase12",
+    "data/phase12/filter_v5_bct_v1",
+    "docs",
+    "docs/evidence",
+    "docs/evidence/phase12-filter-v5-bct-v1",
+    "docs/evidence/phase12-filter-v5-rootless-local",
+)
 
 
 def _canonical_json(value: dict[str, object]) -> bytes:
@@ -344,6 +359,148 @@ def test_materializer_cli_rejects_every_relative_input_path(
 
     assert result.returncode == 64
     assert result.stderr.strip() == "ROOTLESS_LEGACY_PATH_INVALID"
+
+
+@pytest.mark.parametrize(
+    ("form", "malformed"),
+    (
+        ("relative", "relative/input"),
+        ("dot", "/safe/./input"),
+        ("dotdot", "/safe/segment/../input"),
+        ("repeated-separator", "/safe//input"),
+        ("trailing-separator", "/safe/input/"),
+        ("double-leading-separator", "//safe/input"),
+    ),
+)
+@pytest.mark.parametrize(
+    "argument_name",
+    (
+        "repo_root",
+        "historical_screening_plan",
+        "historical_screening_descriptor",
+        "historical_post_descriptor",
+    ),
+)
+def test_materializer_argparse_rejects_raw_noncanonical_path_before_path_construction(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    form: str,
+    malformed: str,
+    argument_name: str,
+) -> None:
+    module = _load_materializer()
+    arguments = {
+        "repo_root": "/safe/repository",
+        "historical_screening_plan": "/safe/screening-plan",
+        "historical_screening_descriptor": "/safe/screening-descriptor",
+        "historical_post_descriptor": "/safe/post-descriptor",
+    }
+    arguments[argument_name] = malformed
+    calls: list[tuple[Path, tuple[Path, Path, Path]]] = []
+
+    def record_materialize(repository: Path, sources: tuple[Path, Path, Path]) -> None:
+        calls.append((repository, sources))
+
+    monkeypatch.setattr(module, "materialize", record_materialize)
+    monkeypatch.setattr(
+        module.sys,
+        "argv",
+        [
+            "materialize",
+            "--repo-root",
+            arguments["repo_root"],
+            "--historical-screening-plan",
+            arguments["historical_screening_plan"],
+            "--historical-screening-descriptor",
+            arguments["historical_screening_descriptor"],
+            "--historical-post-descriptor",
+            arguments["historical_post_descriptor"],
+        ],
+    )
+
+    assert module.main() == 64, form
+    assert calls == []
+    assert capsys.readouterr().err.strip() == "ROOTLESS_LEGACY_PATH_INVALID"
+
+
+@pytest.mark.parametrize(
+    "malformed_form",
+    ("dot", "dotdot", "repeated-separator", "trailing-separator", "double-leading-separator"),
+)
+def test_materializer_subprocess_rejects_raw_noncanonical_repo_root(
+    tmp_path: Path, malformed_form: str
+) -> None:
+    fixture = _make_clean_fixture(tmp_path)
+    sources = _external_sources(tmp_path)
+    malformed = {
+        "dot": f"{fixture.parent}/./{fixture.name}",
+        "dotdot": f"{fixture.parent}/segment/../{fixture.name}",
+        "repeated-separator": f"{fixture.parent}//{fixture.name}",
+        "trailing-separator": f"{fixture}/",
+        "double-leading-separator": f"/{fixture}",
+    }[malformed_form]
+
+    result = _run(
+        [
+            sys.executable,
+            "-B",
+            str(MATERIALIZER),
+            "--repo-root",
+            malformed,
+            "--historical-screening-plan",
+            str(sources[0]),
+            "--historical-screening-descriptor",
+            str(sources[1]),
+            "--historical-post-descriptor",
+            str(sources[2]),
+        ],
+        ROOT,
+    )
+
+    assert result.returncode == 64
+    assert result.stderr.strip() == "ROOTLESS_LEGACY_PATH_INVALID"
+
+
+@pytest.mark.parametrize(
+    "argument_name",
+    ("historical_screening_plan", "historical_screening_descriptor", "historical_post_descriptor"),
+)
+def test_materializer_argparse_rejects_root_as_file_source(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], argument_name: str
+) -> None:
+    module = _load_materializer()
+    arguments = {
+        "repo_root": "/safe/repository",
+        "historical_screening_plan": "/safe/screening-plan",
+        "historical_screening_descriptor": "/safe/screening-descriptor",
+        "historical_post_descriptor": "/safe/post-descriptor",
+    }
+    arguments[argument_name] = "/"
+    calls: list[tuple[Path, tuple[Path, Path, Path]]] = []
+
+    def record_materialize(repository: Path, sources: tuple[Path, Path, Path]) -> None:
+        calls.append((repository, sources))
+
+    monkeypatch.setattr(module, "materialize", record_materialize)
+    monkeypatch.setattr(
+        module.sys,
+        "argv",
+        [
+            "materialize",
+            "--repo-root",
+            arguments["repo_root"],
+            "--historical-screening-plan",
+            arguments["historical_screening_plan"],
+            "--historical-screening-descriptor",
+            arguments["historical_screening_descriptor"],
+            "--historical-post-descriptor",
+            arguments["historical_post_descriptor"],
+        ],
+    )
+
+    assert module.main() == 64
+    assert calls == []
+    assert capsys.readouterr().err.strip() == "ROOTLESS_LEGACY_PATH_INVALID"
 
 
 @pytest.mark.parametrize("relative_argument", ("plan", "descriptor", "metadata"))
@@ -939,6 +1096,10 @@ def _setup_roots(tmp_path: Path) -> tuple[Path, Path]:
     source = tmp_path / "setup-source"
     repository.mkdir(mode=0o700)
     source.mkdir(mode=0o700)
+    for relative in REPOSITORY_READ_DIRECTORIES:
+        directory = repository / relative
+        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(directory, 0o700)
     for relative in SETUP_INPUTS:
         target = source / relative
         target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -964,6 +1125,98 @@ def test_setup_materializes_fixed_private_inputs_and_is_idempotent(tmp_path: Pat
         assert info.st_nlink == 1
         assert len(raw) == SETUP_INPUTS[relative][0]
         assert sha256(raw).hexdigest() == SETUP_INPUTS[relative][1]
+
+
+def test_setup_normalizes_only_closed_repository_read_directories(tmp_path: Path) -> None:
+    setup = _load_script(SETUP, "rootless_t1_setup_repository_modes")
+    assert tuple(str(path) for path in setup.REPOSITORY_READ_DIRECTORIES) == REPOSITORY_READ_DIRECTORIES
+    repository = tmp_path / "repository-modes"
+    repository.mkdir(mode=0o700)
+    for relative in REPOSITORY_READ_DIRECTORIES:
+        directory = repository / relative
+        directory.mkdir(parents=True, exist_ok=True, mode=0o775)
+    for relative in REPOSITORY_READ_DIRECTORIES:
+        os.chmod(repository / relative, 0o775)
+    unrelated = repository / "unrelated"
+    unrelated.mkdir(mode=0o775)
+    os.chmod(unrelated, 0o775)
+    root = setup._open_root(repository)
+    try:
+        setup._normalize_repository_read_directories(root)
+    finally:
+        os.close(root)
+
+    assert all(
+        stat.S_IMODE(os.lstat(repository / relative).st_mode) == 0o755
+        for relative in REPOSITORY_READ_DIRECTORIES
+    )
+    assert stat.S_IMODE(os.lstat(unrelated).st_mode) == 0o775
+
+
+def test_setup_rejects_symlink_in_repository_read_directory_chain(tmp_path: Path) -> None:
+    setup = _load_script(SETUP, "rootless_t1_setup_repository_symlink")
+    repository = tmp_path / "repository-symlink"
+    outside = tmp_path / "outside"
+    repository.mkdir(mode=0o700)
+    outside.mkdir(mode=0o700)
+    (repository / "configs").symlink_to(outside, target_is_directory=True)
+    root = setup._open_root(repository)
+    try:
+        with pytest.raises(setup.SetupError, match="ROOTLESS_T1_DESTINATION_UNSAFE"):
+            setup._normalize_repository_read_directories(root)
+    finally:
+        os.close(root)
+
+
+def test_setup_fsyncs_normalized_directory_and_containing_parent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    setup = _load_script(SETUP, "rootless_t1_setup_repository_fsync")
+    monkeypatch.setattr(setup, "REPOSITORY_READ_DIRECTORIES", (Path("fixed"),))
+    repository = tmp_path / "repository-fsync"
+    fixed = repository / "fixed"
+    fixed.mkdir(parents=True, mode=0o775)
+    os.chmod(repository, 0o700)
+    os.chmod(fixed, 0o775)
+    root = setup._open_root(repository)
+    events: list[str] = []
+    real_fchmod = setup.os.fchmod
+    real_fsync = setup.os.fsync
+    child_descriptors: set[int] = set()
+    real_open = setup.os.open
+
+    def recording_open(path: str, flags: int, *args: object, **kwargs: object) -> int:
+        descriptor = real_open(path, flags, *args, **kwargs)
+        if path == "fixed":
+            child_descriptors.add(descriptor)
+        return descriptor
+
+    def recording_fchmod(descriptor: int, mode: int) -> None:
+        events.append(f"fchmod:{mode:04o}")
+        real_fchmod(descriptor, mode)
+
+    def recording_fsync(descriptor: int) -> None:
+        events.append("fsync:child" if descriptor in child_descriptors else "fsync:parent")
+        real_fsync(descriptor)
+
+    monkeypatch.setattr(setup.os, "open", recording_open)
+    monkeypatch.setattr(setup.os, "fchmod", recording_fchmod)
+    monkeypatch.setattr(setup.os, "fsync", recording_fsync)
+    try:
+        setup._normalize_repository_read_directories(root)
+    finally:
+        os.close(root)
+
+    assert events == ["fchmod:0755", "fsync:child", "fsync:parent"]
+
+
+def test_explicit_setup_makes_real_worktree_legacy_fence_consumable() -> None:
+    setup = _load_script(SETUP, "rootless_t1_setup_real_worktree")
+    materializer = _load_materializer()
+
+    setup.setup_inputs(ROOT, TRUSTED_INPUT_ROOT)
+
+    assert materializer.validate_legacy_fence(ROOT) == sha256(_manifest_bytes()).hexdigest()
 
 
 def test_setup_fsyncs_each_parent_after_mkdir_before_descending(
