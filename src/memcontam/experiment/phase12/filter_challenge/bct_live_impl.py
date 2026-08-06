@@ -42,6 +42,9 @@ from memcontam.experiment.phase12.filter_challenge.registry_calibration import (
     require_artifact_root,
     validate_calibration_config,
 )
+from memcontam.experiment.phase12.filter_challenge.rootless_local_firewall import (
+    ROOTLESS_PROFILE_FORBIDDEN,
+)
 
 
 REPOSITORY_ROOT: Final = Path(__file__).resolve().parents[5]
@@ -162,6 +165,8 @@ def _run_stage(
                 raise CalibrationAuthorizationError("AUTHORIZATION_TRUSTED_INPUT_INVALID")
             validate_runtime_authorization(approved, run_id, authorization_request, config, freeze, artifact_root, REPOSITORY_ROOT, stage)
         except CalibrationAuthorizationError as error:
+            if error.code == ROOTLESS_PROFILE_FORBIDDEN:
+                raise
             result = _blocked(stage, error.code)
         else:
             artifact_root.mkdir(parents=True, exist_ok=True)
