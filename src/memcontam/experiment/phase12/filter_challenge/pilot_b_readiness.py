@@ -54,7 +54,14 @@ def derive_terminal(evidence: ReadinessEvidence) -> CalibrationStageResult:
 
 
 def readiness_from_bundle(bundle: Path, plan_digest: str) -> CalibrationStageResult:
-    for report_name in ("screening", "freeze_b_search_config", "bct_execution"):
+    for report_name in (
+        "authority_transition",
+        "methods_lock",
+        "freeze_a",
+        "screening",
+        "freeze_b_search_config",
+        "bct_execution",
+    ):
         try:
             raw_report = read_regular_nofollow(
                 bundle / f"{report_name}_report.json", "EVIDENCE_READINESS_INVALID"

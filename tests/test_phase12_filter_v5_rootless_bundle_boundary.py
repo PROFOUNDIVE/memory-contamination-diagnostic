@@ -17,7 +17,18 @@ ROOTLESS_RECEIPT = {
 
 @pytest.mark.parametrize(
     ("report_name", "rootless_stage"),
-    (("screening", False), ("freeze_b_search_config", False), ("bct_execution", False), ("screening", True)),
+    tuple(
+        (report_name, rootless_stage)
+        for report_name in (
+            "authority_transition",
+            "methods_lock",
+            "freeze_a",
+            "screening",
+            "freeze_b_search_config",
+            "bct_execution",
+        )
+        for rootless_stage in (False, True)
+    ),
 )
 def test_readiness_bundle_rejects_rootless_reports_and_stage_payloads(
     tmp_path: Path,
@@ -27,7 +38,14 @@ def test_readiness_bundle_rejects_rootless_reports_and_stage_payloads(
 ) -> None:
     bundle = tmp_path / "bundle"
     bundle.mkdir()
-    for name in ("screening", "freeze_b_search_config", "bct_execution"):
+    for name in (
+        "authority_transition",
+        "methods_lock",
+        "freeze_a",
+        "screening",
+        "freeze_b_search_config",
+        "bct_execution",
+    ):
         (bundle / f"{name}_report.json").write_text("{}", encoding="utf-8")
     target = bundle / f"{report_name}_report.json"
     if rootless_stage:
