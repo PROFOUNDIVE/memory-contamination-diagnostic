@@ -14,6 +14,7 @@ from memcontam.experiment.phase12.filter_challenge.rootless_local_firewall impor
     ROOTLESS_PROFILE_FORBIDDEN,
     has_forbidden_rootless_profile,
 )
+from memcontam.experiment.phase12.filter_challenge.rootless_local_models import RootlessLocalReceipt
 from memcontam.experiment.phase12.filter_challenge.mft_state_models import JsonValue
 from memcontam.manifests.archive_validation import ArchiveValidationReport
 
@@ -74,12 +75,14 @@ class AdmissionDecision:
 
 
 def evaluate_scientific_admission(
-    request: ScientificRunRequest | Mapping[str, JsonValue],
+    request: ScientificRunRequest | RootlessLocalReceipt | Mapping[str, JsonValue],
     certificates: CertificateBundle,
     archive: ArchiveValidationReport,
     route_selection: ValidatedRouteSelection | None,
     exploratory_activation: ValidatedExploratoryActivation | None,
 ) -> AdmissionDecision:
+    if isinstance(request, RootlessLocalReceipt):
+        raise AdmissionDenied(ROOTLESS_PROFILE_FORBIDDEN)
     if isinstance(request, Mapping):
         if has_forbidden_rootless_profile(request):
             raise AdmissionDenied(ROOTLESS_PROFILE_FORBIDDEN)

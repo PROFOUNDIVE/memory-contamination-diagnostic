@@ -11,6 +11,7 @@ from memcontam.experiment.phase12.filter_challenge.rootless_local_firewall impor
     ROOTLESS_PROFILE_FORBIDDEN,
     has_forbidden_rootless_profile,
 )
+from memcontam.experiment.phase12.filter_challenge.rootless_local_models import RootlessLocalReceipt
 from memcontam.manifests.aggregate_manifest import AggregateManifest, AggregateManifestRow
 
 
@@ -53,16 +54,18 @@ class ClaimScopeLedger:
 
 
 def build_claim_scope(
-    claims: Sequence[ClaimScopeRow | Mapping[str, Any]], aggregate_manifest: AggregateManifest
+    claims: Sequence[ClaimScopeRow | RootlessLocalReceipt | Mapping[str, Any]],
+    aggregate_manifest: AggregateManifest,
 ) -> ClaimScopeLedger:
-    if any(
-        isinstance(claim, Mapping) and has_forbidden_rootless_profile(claim)
-        for claim in claims
-    ):
-        raise ClaimScopeError(ROOTLESS_PROFILE_FORBIDDEN)
     aggregates = _aggregate_rows(aggregate_manifest)
-    rows = tuple(_build_row(claim, aggregates) for claim in claims)
-    ledger = ClaimScopeLedger(rows)
+    rows: list[ClaimScopeRow] = []
+    for claim in claims:
+        if isinstance(claim, RootlessLocalReceipt):
+            raise ClaimScopeError(ROOTLESS_PROFILE_FORBIDDEN)
+        if isinstance(claim, Mapping) and has_forbidden_rootless_profile(claim):
+            raise ClaimScopeError(ROOTLESS_PROFILE_FORBIDDEN)
+        rows.append(_build_row(claim, aggregates))
+    ledger = ClaimScopeLedger(tuple(rows))
     validate_claim_scope(ledger, aggregate_manifest)
     return ledger
 

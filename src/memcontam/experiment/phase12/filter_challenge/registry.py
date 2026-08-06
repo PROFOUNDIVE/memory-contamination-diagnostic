@@ -20,6 +20,7 @@ from memcontam.experiment.phase12.filter_challenge.rootless_local_firewall impor
     ROOTLESS_PROFILE_FORBIDDEN,
     has_forbidden_rootless_profile,
 )
+from memcontam.experiment.phase12.filter_challenge.rootless_local_models import RootlessLocalReceipt
 
 
 class RegistryClosure(StrictRegistry):
@@ -68,15 +69,19 @@ def validate_registry_closure(
 
 
 def validate_stage(
-    search_config: SearchConfig | Mapping[str, JsonValue],
-    selected_policy: SelectedPolicy | Mapping[str, JsonValue] | None = None,
+    search_config: SearchConfig | RootlessLocalReceipt | Mapping[str, JsonValue],
+    selected_policy: SelectedPolicy | RootlessLocalReceipt | Mapping[str, JsonValue] | None = None,
     *,
     stage: Literal["build", "pilot_b", "main"],
 ) -> StageGateResult:
+    if isinstance(search_config, RootlessLocalReceipt):
+        raise RegistryValidationError(ROOTLESS_PROFILE_FORBIDDEN)
     if isinstance(search_config, Mapping):
         if has_forbidden_rootless_profile(search_config):
             raise RegistryValidationError(ROOTLESS_PROFILE_FORBIDDEN)
         search_config = SearchConfig.model_validate(search_config)
+    if isinstance(selected_policy, RootlessLocalReceipt):
+        raise RegistryValidationError(ROOTLESS_PROFILE_FORBIDDEN)
     if isinstance(selected_policy, Mapping):
         selected_policy = parse_selected_policy(selected_policy)
     if stage == "main" and selected_policy is None:
@@ -86,7 +91,9 @@ def validate_stage(
     return StageGateResult(stage=stage, reason_code=None)
 
 
-def parse_selected_policy(payload: Mapping[str, JsonValue]) -> SelectedPolicy:
+def parse_selected_policy(
+    payload: RootlessLocalReceipt | Mapping[str, JsonValue],
+) -> SelectedPolicy:
     if has_forbidden_rootless_profile(payload):
         raise RegistryValidationError(ROOTLESS_PROFILE_FORBIDDEN)
     return SelectedPolicy.model_validate(payload)

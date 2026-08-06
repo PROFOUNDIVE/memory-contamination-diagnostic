@@ -14,6 +14,7 @@ from memcontam.experiment.phase12.filter_challenge.rootless_local_firewall impor
     ROOTLESS_PROFILE_FORBIDDEN,
     has_forbidden_rootless_profile,
 )
+from memcontam.experiment.phase12.filter_challenge.rootless_local_models import RootlessLocalReceipt
 from memcontam.experiment.phase12.filter_challenge.registry_common import (
     NonNegativeInt,
     StrictRegistry,
@@ -329,7 +330,11 @@ def _validate_bct_family(evidence: BCTEvidence) -> None:
         raise BCTContractError("BCT_NONAPPLICABLE_RESULT_PRESENT")
 
 
-def validate_bct_evidence(evidence: BCTEvidence | Mapping[str, JsonValue]) -> BCTEvidence:
+def validate_bct_evidence(
+    evidence: BCTEvidence | RootlessLocalReceipt | Mapping[str, JsonValue],
+) -> BCTEvidence:
+    if isinstance(evidence, RootlessLocalReceipt):
+        raise BCTContractError(ROOTLESS_PROFILE_FORBIDDEN)
     if isinstance(evidence, Mapping):
         if has_forbidden_rootless_profile(evidence):
             raise BCTContractError(ROOTLESS_PROFILE_FORBIDDEN)
@@ -470,14 +475,18 @@ _Client = TypeVar("_Client")
 
 
 def authorize_client_construction(
-    software: SoftwareInterfaceReadiness | Mapping[str, JsonValue],
-    execution: ExecutionPreflight | Mapping[str, JsonValue],
+    software: SoftwareInterfaceReadiness | RootlessLocalReceipt | Mapping[str, JsonValue],
+    execution: ExecutionPreflight | RootlessLocalReceipt | Mapping[str, JsonValue],
     client_factory: Callable[[Literal["build", "pilot_b", "main"]], _Client],
 ) -> _Client:
+    if isinstance(software, RootlessLocalReceipt):
+        raise BCTAuthorizationError(ROOTLESS_PROFILE_FORBIDDEN)
     if isinstance(software, Mapping):
         if has_forbidden_rootless_profile(software):
             raise BCTAuthorizationError(ROOTLESS_PROFILE_FORBIDDEN)
         software = SoftwareInterfaceReadiness.model_validate(software)
+    if isinstance(execution, RootlessLocalReceipt):
+        raise BCTAuthorizationError(ROOTLESS_PROFILE_FORBIDDEN)
     if isinstance(execution, Mapping):
         if has_forbidden_rootless_profile(execution):
             raise BCTAuthorizationError(ROOTLESS_PROFILE_FORBIDDEN)
