@@ -482,17 +482,26 @@ def write_rootless_task_qa(
             raise ValueError("ROOTLESS_TASK_QA_DESTINATION_INVALID")
         final = _optional_artifact(directory, destination.name)
         temporary = _optional_artifact(directory, temporary_name)
+        if final is None:
+            if temporary is not None and temporary[1].st_nlink != 1:
+                raise ValueError("ROOTLESS_TASK_QA_EXISTING_INVALID")
+        elif temporary is None:
+            if final[1].st_nlink != 1:
+                raise ValueError("ROOTLESS_TASK_QA_EXISTING_INVALID")
+        elif (
+            final[1].st_nlink != 2
+            or temporary[1].st_nlink != 2
+            or temporary[1].st_dev != final[1].st_dev
+            or temporary[1].st_ino != final[1].st_ino
+        ):
+            raise ValueError("ROOTLESS_TASK_QA_EXISTING_INVALID")
         if final is not None:
-            final_raw, final_info = final
+            final_raw = final[0]
             _validate_task_payload(final_raw, role, command_result, passed_assertion_ids)
             if temporary is not None:
-                temporary_raw, temporary_info = temporary
+                temporary_raw = temporary[0]
                 _validate_task_payload(temporary_raw, role, command_result, passed_assertion_ids)
-                if (
-                    temporary_raw != final_raw
-                    or temporary_info.st_dev != final_info.st_dev
-                    or temporary_info.st_ino != final_info.st_ino
-                ):
+                if temporary_raw != final_raw:
                     raise ValueError("ROOTLESS_TASK_QA_EXISTING_INVALID")
                 os.unlink(temporary_name, dir_fd=directory)
                 os.fsync(directory)
