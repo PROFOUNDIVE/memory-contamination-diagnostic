@@ -90,8 +90,10 @@ def _absolute(path: Path) -> Path:
     return candidate
 
 
-def _safe_directory(info: os.stat_result, current_uid: int) -> None:
+def _safe_directory(info: os.stat_result, current_uid: int, require_private: bool = True) -> None:
     if not stat.S_ISDIR(info.st_mode) or info.st_uid not in {0, current_uid}:
+        _fail("ROOTLESS_LEGACY_PATH_UNSAFE")
+    if require_private and stat.S_IMODE(info.st_mode) & 0o022:
         _fail("ROOTLESS_LEGACY_PATH_UNSAFE")
 
 
@@ -103,7 +105,7 @@ def _read_regular(path: Path, required_mode: int | None, current_uid_only: bool)
         _fail("ROOTLESS_LEGACY_PATH_INVALID")
     directory = os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
     try:
-        _safe_directory(os.fstat(directory), current_uid)
+        _safe_directory(os.fstat(directory), current_uid, False)
         for component in parts[:-1]:
             next_directory = os.open(
                 component,
@@ -112,7 +114,7 @@ def _read_regular(path: Path, required_mode: int | None, current_uid_only: bool)
             )
             os.close(directory)
             directory = next_directory
-            _safe_directory(os.fstat(directory), current_uid)
+            _safe_directory(os.fstat(directory), current_uid, False)
         file_descriptor = os.open(
             parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=directory
         )
@@ -272,7 +274,27 @@ def _git(repository_root: Path, *arguments: str) -> bytes:
             "-c",
             "core.untrackedCache=false",
             "-c",
+            "core.fileMode=true",
+            "-c",
+            "core.ignoreCase=false",
+            "-c",
+            "core.precomposeUnicode=false",
+            "-c",
             "core.hooksPath=/dev/null",
+            "-c",
+            "core.excludesFile=/dev/null",
+            "-c",
+            "core.attributesFile=/dev/null",
+            "-c",
+            "core.bare=false",
+            "-c",
+            f"core.worktree={repository_root}",
+            "-c",
+            "status.relativePaths=false",
+            "-c",
+            "submodule.recurse=false",
+            "-c",
+            "diff.ignoreSubmodules=none",
             *arguments,
         ],
         check=False,
@@ -281,6 +303,8 @@ def _git(repository_root: Path, *arguments: str) -> bytes:
             "LC_ALL": "C",
             "PATH": "/usr/bin:/bin",
             "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_ATTR_NOSYSTEM": "1",
+            "GIT_OPTIONAL_LOCKS": "0",
             "GIT_CONFIG_GLOBAL": "/dev/null",
             "GIT_CONFIG_SYSTEM": "/dev/null",
             "GIT_NO_REPLACE_OBJECTS": "1",
