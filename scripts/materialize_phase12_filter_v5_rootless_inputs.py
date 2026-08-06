@@ -8,6 +8,7 @@ import os
 import re
 import stat
 import subprocess
+import sys
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime
@@ -37,6 +38,7 @@ PROTECTED_PATHS: Final = (
     "data/phase12/filter_v5_bct_v1",
     "configs/phase12/filter_v5_bct_calibration.yaml",
 )
+GIT_CONTEXT_VALIDATOR: Final = Path(__file__).with_name("validate_phase12_filter_v5_rootless_git_context.py")
 JsonValue: TypeAlias = str | int | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
 
 
@@ -211,6 +213,15 @@ def _require_id(value: JsonValue) -> str:
     return result
 
 
+def _require_txt256(value: JsonValue) -> str:
+    result = _require_string(value)
+    if not 1 <= len(result) <= 256 or unicodedata.normalize("NFC", result) != result or any(
+        0xD800 <= ord(character) <= 0xDFFF for character in result
+    ):
+        _fail("ROOTLESS_REVIEW_METADATA_INVALID")
+    return result
+
+
 def _require_timestamp(value: JsonValue) -> None:
     timestamp = _require_string(value)
     if TIMESTAMP_PATTERN.fullmatch(timestamp) is None:
@@ -263,6 +274,14 @@ def _verify_manifest(repository_root: Path) -> str:
 
 
 def _git(repository_root: Path, *arguments: str) -> bytes:
+    validation = subprocess.run(
+        [sys.executable, "-B", "-I", "-S", str(GIT_CONTEXT_VALIDATOR), "--repo-root", str(repository_root)],
+        check=False,
+        capture_output=True,
+        env={"LC_ALL": "C", "PATH": "/usr/bin:/bin"},
+    )
+    if validation.returncode != 0:
+        _fail("ROOTLESS_LEGACY_GIT_INVALID")
     result = subprocess.run(
         [
             "git",
@@ -450,8 +469,9 @@ def validate_reviewed_plan(plan_source: Path, descriptor_path: Path, metadata_pa
     number, prefix = match.groups()
     if _require_id(metadata["momus_launch_id"]) != f"momus-r{number}-{prefix}" or _require_id(metadata["oracle_launch_id"]) != f"oracle-r{number}-{prefix}":
         _fail("ROOTLESS_REVIEW_METADATA_INVALID")
-    if not _require_string(metadata["momus_session_id"]) or not _require_string(metadata["oracle_session_id"]):
-        _fail("ROOTLESS_REVIEW_METADATA_INVALID")
+    _require_txt256(metadata["round_id"])
+    _require_txt256(metadata["momus_session_id"])
+    _require_txt256(metadata["oracle_session_id"])
     _require_timestamp(metadata["created_at"])
     return digest
 

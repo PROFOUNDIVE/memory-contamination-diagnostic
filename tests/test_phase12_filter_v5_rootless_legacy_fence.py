@@ -87,6 +87,11 @@ def _make_clean_fixture(tmp_path: Path) -> Path:
     fixture = tmp_path / "fixture-repository"
     cloned = _run(["git", "clone", "--no-local", "--quiet", str(ROOT), str(fixture)], ROOT)
     assert cloned.returncode == 0, cloned.stderr
+    os.chmod(fixture, 0o755)
+    os.chmod(fixture / ".git", 0o700)
+    os.chmod(fixture / ".git" / "info", 0o700)
+    os.chmod(fixture / ".git" / "config", 0o600)
+    os.chmod(fixture / ".git" / "info" / "exclude", 0o600)
     manifest_path = fixture / MANIFEST.relative_to(ROOT)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_bytes(_manifest_bytes())
@@ -99,6 +104,8 @@ def _make_clean_fixture(tmp_path: Path) -> Path:
     )
     ignore_path = fixture / ".gitignore"
     ignore_path.write_bytes((ROOT / ".gitignore").read_bytes())
+    os.chmod(fixture / ".omo", 0o700)
+    os.chmod(fixture / ".omo" / "plans", 0o700)
     committed = _run(
         [
             "git",
@@ -121,7 +128,7 @@ def _make_clean_fixture(tmp_path: Path) -> Path:
 
 def _external_sources(tmp_path: Path) -> tuple[Path, Path, Path]:
     if not PRIMARY_CHECKOUT.is_dir():
-        pytest.skip("detached T1 historical inputs were not supplied to this clone")
+        raise RuntimeError("ROOTLESS_T1_INPUT_SOURCE_MISSING")
     source_root = tmp_path / "external-inputs"
     source_paths: list[Path] = []
     for _, destination, _, _ in INPUTS:
@@ -373,7 +380,7 @@ def test_task_qa_writer_binds_only_the_fixed_t1_command_and_assertions(
         "tests/test_phase12_filter_v5_evidence_security.py",
         "-q",
     )
-    command = writer.CommandResult(argv, 0, b"5 passed\n", b"", 0, 0)
+    command = writer.CommandResult(argv, 0, b"5 passed\n", b"", 0, 0, writer.ROLE_TESTS["t1"])
 
     # When: the writer seals the fixed command and ordered assertions.
     writer.write_rootless_task_qa("t1", command, writer.ROLE_ASSERTIONS["t1"], destination)
@@ -389,15 +396,15 @@ def test_task_qa_writer_binds_only_the_fixed_t1_command_and_assertions(
         writer.write_rootless_task_qa("t1", command, writer.ROLE_ASSERTIONS["t1"], destination)
 
 
-def test_external_source_boundary_skips_only_happy_materialization_when_detached_inputs_absent(
+def test_external_source_boundary_rejects_happy_materialization_when_detached_inputs_absent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Given: a fresh clone without the optional detached historical-input checkout.
     monkeypatch.setattr(sys.modules[__name__], "PRIMARY_CHECKOUT", tmp_path / "absent-checkout")
 
     # When: the happy-path fixture asks for detached bytes.
-    # Then: only that fixture boundary skips instead of asserting a machine-specific sibling path.
-    with pytest.raises(pytest.skip.Exception):
+    # Then: the missing detached authority is a nonzero setup failure, never a skip.
+    with pytest.raises(RuntimeError, match="ROOTLESS_T1_INPUT_SOURCE_MISSING"):
         _external_sources(tmp_path)
 
 
@@ -407,8 +414,9 @@ def test_git_wrapper_sets_closed_t1_controls(monkeypatch: pytest.MonkeyPatch) ->
     observed: dict[str, object] = {}
 
     def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
-        observed["command"] = command
-        observed["environment"] = kwargs["env"]
+        if command[0] == "git":
+            observed["command"] = command
+            observed["environment"] = kwargs["env"]
         return subprocess.CompletedProcess(command, 0, b"", b"")
 
     monkeypatch.setattr(module.subprocess, "run", fake_run)

@@ -99,6 +99,7 @@ class CommandResult:
     stderr_bytes: bytes
     provider_calls_before: int
     provider_calls_after: int
+    completed_tests: tuple[str, ...]
 
 
 def _canonical_json(value: dict[str, str | int | list[dict[str, str | bool] | str]]) -> bytes:
@@ -137,7 +138,7 @@ def write_rootless_task_qa(
     expected_destination = ROOT / "runs" / "phase12-filter-v5-rootless-qa" / filename
     if destination != expected_destination:
         raise ValueError("ROOTLESS_TASK_QA_DESTINATION_INVALID")
-    if command_result.argv != _expected_argv(role) or command_result.exit_code != 0:
+    if command_result.argv != _expected_argv(role) or command_result.exit_code != 0 or command_result.completed_tests != ROLE_TESTS[role]:
         raise ValueError("ROOTLESS_TASK_QA_COMMAND_INVALID")
     if command_result.provider_calls_before != 0 or command_result.provider_calls_after != 0:
         raise ValueError("ROOTLESS_TASK_QA_PROVIDER_COUNT_INVALID")
@@ -164,7 +165,7 @@ def write_rootless_task_qa(
     try:
         try:
             fd = os.open(
-                destination.name,
+                f".{destination.name}.tmp",
                 os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
                 0o600,
                 dir_fd=descriptor,
@@ -178,6 +179,12 @@ def write_rootless_task_qa(
             os.fsync(fd)
         finally:
             os.close(fd)
+        try:
+            os.link(f".{destination.name}.tmp", destination.name, src_dir_fd=descriptor, dst_dir_fd=descriptor, follow_symlinks=False)
+        except FileExistsError as error:
+            raise ValueError("ROOTLESS_TASK_QA_DESTINATION_EXISTS") from error
+        os.fsync(descriptor)
+        os.unlink(f".{destination.name}.tmp", dir_fd=descriptor)
         os.fsync(descriptor)
     finally:
         os.close(descriptor)
