@@ -5,6 +5,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 *.egg-info/
+.omo/
 .env
 
 # Local agent/session state. These must stay untracked; see tests/test_gitignore_contract.py.
@@ -16,3 +17,5 @@ opencode.json
 # Generated run artifacts; keep only the directory placeholder.
 runs/*
 !runs/.gitkeep
+
+/docs/evidence/phase12-filter-v5-rootless-local/rehearsal-publication.json
