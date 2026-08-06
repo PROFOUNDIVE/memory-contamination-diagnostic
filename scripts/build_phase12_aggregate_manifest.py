@@ -18,10 +18,17 @@ from memcontam.manifests.claim_scope import (
     write_claim_scope,
 )
 from memcontam.manifests.run_manifest import read_run_manifest
+from memcontam.experiment.phase12.filter_challenge.rootless_local_firewall import (
+    ROOTLESS_PROFILE_FORBIDDEN,
+    has_forbidden_rootless_profile,
+)
 
 
 def _records(path: Path) -> list[dict[str, Any]]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    raw = path.read_bytes()
+    if has_forbidden_rootless_profile(raw):
+        raise ValueError(ROOTLESS_PROFILE_FORBIDDEN)
+    payload = json.loads(raw)
     if isinstance(payload, dict):
         payload = payload.get("rows", payload.get("aggregates", payload.get("claims")))
     if not isinstance(payload, list) or any(not isinstance(record, dict) for record in payload):
