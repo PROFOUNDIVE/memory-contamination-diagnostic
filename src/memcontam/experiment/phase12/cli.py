@@ -394,9 +394,10 @@ def _load_admission_evidence(
     try:
         from memcontam.readiness.phase12_certificate import load_p12i
 
-        payload = json.loads(args.admission_bundle.read_text(encoding="utf-8"))
-        if isinstance(payload, dict) and has_forbidden_rootless_profile(payload):
+        raw = args.admission_bundle.read_bytes()
+        if has_forbidden_rootless_profile(raw):
             raise AdmissionDenied(ROOTLESS_PROFILE_FORBIDDEN)
+        payload = json.loads(raw)
         request = ScientificRunRequest(
             args.run_family,
             args.candidate,

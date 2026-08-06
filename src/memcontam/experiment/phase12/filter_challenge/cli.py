@@ -46,6 +46,10 @@ from memcontam.experiment.phase12.filter_challenge.registry_search import (
     SearchConfig,
     SelectedPolicy,
 )
+from memcontam.experiment.phase12.filter_challenge.rootless_local_firewall import (
+    ROOTLESS_PROFILE_FORBIDDEN,
+    has_forbidden_rootless_profile,
+)
 
 
 Stage: TypeAlias = Literal["build", "pilot_b", "main"]
@@ -249,6 +253,9 @@ def _load_search(path: Path) -> SearchConfig:
 
 
 def _load_policy(path: Path) -> SelectedPolicy:
+    raw = path.read_bytes()
+    if has_forbidden_rootless_profile(raw):
+        raise RegistryValidationError(ROOTLESS_PROFILE_FORBIDDEN)
     payload = _load_yaml(path)
     if isinstance(payload, dict):
         return parse_selected_policy(payload)
