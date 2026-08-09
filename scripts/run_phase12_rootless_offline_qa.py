@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# allow: SIZE_OK — one audit-hook authority owns all seven closed process policies.
+
 import argparse
 import base64
 import csv
