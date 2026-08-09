@@ -122,6 +122,19 @@ def _network_probes() -> None:
         raise OfflineQADenied("network probe reached syscall")
 
 
+def _seed_tokenizer_cache(temporary: Path) -> None:
+    source = Path("/tmp/data-gym-cache")
+    destination = temporary / "data-gym-cache"
+    if not source.is_dir() or source.is_symlink():
+        return
+    destination.mkdir(mode=0o700)
+    for path in source.iterdir():
+        if path.is_file() and not path.is_symlink():
+            target = destination / path.name
+            target.write_bytes(path.read_bytes())
+            target.chmod(0o600)
+
+
 def _ruff_executable() -> tuple[Path, str]:
     distribution = metadata.distribution("ruff")
     record = distribution.locate_file(f"{distribution.metadata['Name'].replace('-', '_')}-{distribution.version}.dist-info/RECORD")
@@ -206,6 +219,7 @@ def _run(arguments: argparse.Namespace) -> int:
     role_root.mkdir(mode=0o700, parents=True, exist_ok=False)
     pytest_root.mkdir(mode=0o700)
     temporary.mkdir(mode=0o700)
+    _seed_tokenizer_cache(temporary)
     digest: str | None = None
     policy = ProcessPolicy.DENY_ALL
     try:
