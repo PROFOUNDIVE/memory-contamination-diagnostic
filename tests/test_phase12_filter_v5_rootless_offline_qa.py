@@ -56,3 +56,22 @@ def test_fixed_ruff_policy_allows_exactly_one_bound_executable(tmp_path: Path) -
 
     with pytest.raises(module.OfflineQADenied):
         policy("subprocess.Popen", (str(executable), argv, str(tmp_path), {"LC_ALL": "C", "PATH": "/usr/bin:/bin"}))
+
+
+def test_scrubbed_pytest_policy_allows_local_children_without_provider_environment(
+    tmp_path: Path,
+) -> None:
+    module = _module()
+    policy = module.AuditPolicy(
+        module.ProcessPolicy.SCRUBBED_TEST_EXEC,
+        None,
+        tmp_path.resolve(),
+    )
+
+    policy("subprocess.Popen", ("git", ("git", "status"), tmp_path, None))
+
+    with pytest.raises(module.OfflineQADenied):
+        policy(
+            "subprocess.Popen",
+            ("python", ("python", "probe.py"), tmp_path, {"OPENAI_API_KEY": "forbidden"}),
+        )

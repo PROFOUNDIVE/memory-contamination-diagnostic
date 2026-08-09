@@ -25,6 +25,15 @@ _EMPTY_ENV: Final = {"LC_ALL": "C", "PATH": "/usr/bin:/bin"}
 _SENTINEL_ROLES: Final = frozenset(
     {"f1-pytest", "f2-pytest", "f3-pytest", "f4-rootless-pytest", "f4-ruff", "f4-validate-config", "f4-replay-pytest"}
 )
+_BASETEMP_ROLES: Final = {
+    "f1-pytest": "f1",
+    "f2-pytest": "f2",
+    "f3-pytest": "f3",
+    "f4-rootless-pytest": "f4-rootless",
+    "f4-ruff": "f4-ruff",
+    "f4-validate-config": "f4-validate-config",
+    "f4-replay-pytest": "f4-replay",
+}
 _FORBIDDEN_ENV: Final = frozenset(
     {"OPENAI_API_KEY", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy"}
 )
@@ -36,6 +45,7 @@ class OfflineQADenied(RuntimeError):
 
 class ProcessPolicy(StrEnum):
     DENY_ALL = "deny_all"
+    SCRUBBED_TEST_EXEC = "scrubbed_test_exec"
     FIXED_RUFF_EXEC = "fixed_ruff_exec"
 
 
@@ -57,7 +67,21 @@ class AuditPolicy:
             if family in {socket.AF_INET, socket.AF_INET6}:
                 raise OfflineQADenied("network denied")
         if event == "subprocess.Popen":
-            if self.process_policy is ProcessPolicy.DENY_ALL or self.process_count or self.ruff_executable is None:
+            if self.process_policy is ProcessPolicy.DENY_ALL:
+                raise OfflineQADenied("process denied")
+            if self.process_policy is ProcessPolicy.SCRUBBED_TEST_EXEC:
+                cwd = self.repository if arguments[2] is None else Path(arguments[2]).resolve(strict=True)
+                environment = arguments[3]
+                if (
+                    self.repository is None
+                    or not cwd.is_relative_to(self.repository)
+                    or environment is not None
+                    and any(environment.get(name) for name in _FORBIDDEN_ENV)
+                ):
+                    raise OfflineQADenied("process denied")
+                self.process_count += 1
+                return
+            if self.process_count or self.ruff_executable is None:
                 raise OfflineQADenied("process denied")
             executable = Path(os.fsdecode(arguments[0])).resolve(strict=True)
             expected_argv = (
@@ -175,9 +199,10 @@ def _run(arguments: argparse.Namespace) -> int:
         raise OfflineQADenied("argument denied")
     validate_environment(repository)
     os.chdir(repository)
-    role_root = repository / "runs/phase12-filter-v5-rootless-qa/basetemp" / arguments.sentinel_role
+    role_root = repository / "runs/phase12-filter-v5-rootless-qa/basetemp" / _BASETEMP_ROLES[arguments.sentinel_role]
     pytest_root = role_root / "pytest"
     temporary = role_root / "tmp"
+    previous_umask = os.umask(0o077)
     role_root.mkdir(mode=0o700, parents=True, exist_ok=False)
     pytest_root.mkdir(mode=0o700)
     temporary.mkdir(mode=0o700)
@@ -192,6 +217,8 @@ def _run(arguments: argparse.Namespace) -> int:
                 raise OfflineQADenied("ruff arguments denied")
             executable, digest = _ruff_executable()
             policy = ProcessPolicy.FIXED_RUFF_EXEC
+        elif arguments.module == "pytest":
+            policy = ProcessPolicy.SCRUBBED_TEST_EXEC
         audit = AuditPolicy(policy, executable, repository, digest)
         sys.addaudithook(audit)
         _network_probes()
@@ -228,6 +255,7 @@ def _run(arguments: argparse.Namespace) -> int:
             raise OfflineQADenied("module denied")
     finally:
         shutil.rmtree(role_root)
+        os.umask(previous_umask)
     if result == 0:
         _remove_residue(repository)
         _sentinel(repository, arguments.sentinel_role, arguments.module, policy, digest)

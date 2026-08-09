@@ -16,7 +16,7 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-TRUSTED_INPUT_ROOT = ROOT.parent / "memory-contamination-diagnostic-filter-v5"
+TRUSTED_INPUT_ROOT = ROOT
 IGNORED_INPUT_ROOT = ROOT
 MATERIALIZER = ROOT / "scripts" / "materialize_phase12_filter_v5_rootless_inputs.py"
 SETUP = ROOT / "scripts" / "setup_phase12_filter_v5_rootless_t1_inputs.py"
