@@ -8,6 +8,10 @@ This repository covers implementation contracts, deterministic replay QA, and bu
 evidence only. It provides no scientific, benchmark, manuscript, causal, production,
 paid-provider, Pilot-A, Pilot-B, or main-run evidence.
 
+The no-paid-provider statement applies to the historical and canonical evidence indexed here.
+Separately labeled, redacted `local_rootless_non_authoritative` rehearsal receipts may record an
+optional paid local call count, but they are excluded from scientific and authoritative evidence.
+
 ## Study Scope and Supported Research Question
 
 This repository is a bounded diagnostic harness for studying how controlled erroneous external
