@@ -117,6 +117,11 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
     from memcontam.experiment.phase12.filter_challenge.bct_live import add_calibration_parsers
 
     add_filter_v5_parser(commands)
+    from memcontam.experiment.phase12.filter_challenge.rootless_local_bootstrap_cli import (
+        add_parser as add_rootless_parser,
+    )
+
+    add_rootless_parser(commands)
     filter_v5 = commands.choices["filter-v5"]
     filter_v5_actions = [
         action for action in filter_v5._actions if isinstance(action, argparse._SubParsersAction)
@@ -199,6 +204,12 @@ def run(args: argparse.Namespace) -> None:
             run_calibration_command(args)
         else:
             run_filter_v5(args)
+    elif args.phase12_command == "filter-v5-rootless":
+        from memcontam.experiment.phase12.filter_challenge.rootless_local_bootstrap_cli import (
+            run as run_rootless,
+        )
+
+        run_rootless(args)
     elif args.phase12_command == "validate":
         _validate_config(args.config)
         print(f"valid phase12 config: {args.config}")

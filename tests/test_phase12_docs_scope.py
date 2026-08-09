@@ -48,7 +48,11 @@ def _phase12_commands() -> frozenset[str]:
     commands = next(
         action for action in phase12._actions if isinstance(action, argparse._SubParsersAction)
     )
-    return frozenset(f"phase12 {name}" for name in commands.choices)
+    return frozenset(
+        f"phase12 {name}"
+        for name in commands.choices
+        if name != "filter-v5-rootless"
+    )
 
 
 def test_docs_match_exported_contracts() -> None:

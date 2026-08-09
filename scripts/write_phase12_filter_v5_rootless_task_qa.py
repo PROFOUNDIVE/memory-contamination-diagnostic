@@ -72,6 +72,13 @@ ROLE_TESTS: Final[dict[str, tuple[str, ...]]] = {
         "tests/test_phase12_claim_scope.py",
         "tests/test_phase12_scientific_admission.py",
     ),
+    "t3": (
+        "tests/test_dependency_lock.py",
+        "tests/test_phase12_canonical_configs.py",
+        "tests/test_phase12_docs_scope.py",
+        "tests/test_phase12_filter_v5_rootless_binding.py",
+        "tests/test_phase12_filter_v5_rootless_external_authority.py",
+    ),
     "t4": (
         "tests/test_phase12_filter_v5_rootless_broker.py",
         "tests/test_phase12_filter_v5_rootless_ledger.py",
@@ -94,6 +101,7 @@ ROLE_TESTS: Final[dict[str, tuple[str, ...]]] = {
 ROLE_FILENAMES: Final[dict[str, str]] = {
     "t1": "t1-legacy-fence.json",
     "t2": "t2-firewall.json",
+    "t3": "t3-rootless-binding.json",
     "t4": "t4-broker-ledger.json",
     "t5": "t5-screening-bct.json",
     "t6": "t6-operator-claims.json",
@@ -275,7 +283,11 @@ def run_rootless_task_qa(role: str) -> CommandResult:
     try:
         environment = {
             "LC_ALL": "C",
-            "PATH": "/usr/bin:/bin",
+            "PATH": (
+                f"{Path(sys.executable).parent}:/usr/bin:/bin"
+                if role == "t3"
+                else "/usr/bin:/bin"
+            ),
             "PYTHONDONTWRITEBYTECODE": "1",
             "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
             "PYTEST_PLUGINS": "scripts.write_phase12_filter_v5_rootless_task_qa",
@@ -374,6 +386,62 @@ def _task_payload(
         ],
         "provider_calls_before": 0,
         "provider_calls_after": 0,
+        "created_at": created_at,
+    }
+
+
+def build_rootless_t3_binding_payload(
+    command_result: CommandResult,
+    runtime_manifest: dict[str, JsonValue],
+    *,
+    runtime_manifest_sha256: str,
+    created_at: str,
+) -> dict[str, JsonValue]:
+    required_runtime = {
+        "bootstrap_index_url",
+        "bootstrap_egress_policy",
+        "distribution_record_sha256",
+        "native_extension_hashes",
+        "editable_direct_url_sha256",
+        "top_p_parameter_sent",
+        "tokenizer_name",
+        "tokenizer_source_sha256",
+        "normalized_repo_mode_bits",
+    }
+    if not required_runtime <= runtime_manifest.keys():
+        raise ValueError("ROOTLESS_T3_QA_RUNTIME_INVALID")
+    native_hashes = runtime_manifest["native_extension_hashes"]
+    if not isinstance(native_hashes, list):
+        raise ValueError("ROOTLESS_T3_QA_RUNTIME_INVALID")
+    return {
+        "schema_version": "rootless_t3_binding_qa_v1",
+        "profile": PROFILE,
+        "kind": "t3_rootless_binding",
+        "command": {
+            "argv": list(command_result.argv),
+            "exit_code": command_result.exit_code,
+            "stdout_sha256": hashlib.sha256(command_result.stdout_bytes).hexdigest(),
+            "stderr_sha256": hashlib.sha256(command_result.stderr_bytes).hexdigest(),
+        },
+        "external_path_span_passed": True,
+        "signature_domain_vectors_passed": True,
+        "rate_freshness_passed": True,
+        "bootstrap_index_url": runtime_manifest["bootstrap_index_url"],
+        "bootstrap_egress_policy": runtime_manifest["bootstrap_egress_policy"],
+        "distribution_record_sha256": runtime_manifest["distribution_record_sha256"],
+        "native_extension_hashes": native_hashes,
+        "editable_direct_url_sha256": runtime_manifest["editable_direct_url_sha256"],
+        "top_p_parameter_sent": runtime_manifest["top_p_parameter_sent"],
+        "tokenizer_name": runtime_manifest["tokenizer_name"],
+        "tokenizer_source_sha256": runtime_manifest["tokenizer_source_sha256"],
+        "normalized_repo_mode_bits": runtime_manifest["normalized_repo_mode_bits"],
+        "runtime_manifest_sha256": runtime_manifest_sha256,
+        "mountinfo_longest_prefix_passed": True,
+        "mountinfo_octal_escape_passed": True,
+        "fstatvfs_read_only_passed": True,
+        "external_identity_recheck_passed": True,
+        "provider_calls_before": command_result.provider_calls_before,
+        "provider_calls_after": command_result.provider_calls_after,
         "created_at": created_at,
     }
 
@@ -524,6 +592,76 @@ def write_rootless_task_qa(
         os.fsync(directory)
         os.unlink(temporary_name, dir_fd=directory)
         os.fsync(directory)
+        _VERIFIED_RESULTS.pop(id(command_result), None)
+    finally:
+        os.close(directory)
+
+
+def write_rootless_t3_binding_qa(
+    command_result: CommandResult,
+    runtime_manifest: dict[str, JsonValue],
+    runtime_manifest_sha256: str,
+    destination: Path,
+) -> None:
+    if _VERIFIED_RESULTS.get(id(command_result)) is not command_result:
+        raise ValueError("ROOTLESS_TASK_QA_COMPLETION_INVALID")
+    expected = ROOT / "runs" / "phase12-filter-v5-rootless-qa" / "t3-rootless-binding.json"
+    if destination != expected or command_result.argv != _expected_argv("t3"):
+        raise ValueError("ROOTLESS_TASK_QA_DESTINATION_INVALID")
+    if command_result.exit_code != 0 or command_result.provider_calls_before != 0 or command_result.provider_calls_after != 0:
+        raise ValueError("ROOTLESS_TASK_QA_COMMAND_INVALID")
+    if not re.fullmatch(r"[0-9a-f]{64}", runtime_manifest_sha256):
+        raise ValueError("ROOTLESS_T3_QA_RUNTIME_INVALID")
+    role_root = ROOT / "runs" / "phase12-filter-v5-rootless-qa" / "basetemp" / "t3"
+    if role_root.exists() or role_root.is_symlink():
+        raise ValueError("ROOTLESS_TASK_QA_BASETEMP_INVALID")
+    created_at = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    payload = build_rootless_t3_binding_payload(
+        command_result,
+        runtime_manifest,
+        runtime_manifest_sha256=runtime_manifest_sha256,
+        created_at=created_at,
+    )
+    raw = _canonical_json(payload)
+    directory = os.open(destination.parent, DIRECTORY_FLAGS)
+    try:
+        info = os.fstat(directory)
+        if info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o700:
+            raise ValueError("ROOTLESS_TASK_QA_DESTINATION_INVALID")
+        try:
+            descriptor = os.open(
+                destination.name,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
+                0o600,
+                dir_fd=directory,
+            )
+        except FileExistsError:
+            existing = _optional_artifact(directory, destination.name)
+            if existing is None:
+                raise ValueError("ROOTLESS_TASK_QA_EXISTING_INVALID")
+            parsed = json.loads(existing[0], object_pairs_hook=_reject_pairs, parse_float=lambda _: None)
+            if not isinstance(parsed, dict):
+                raise ValueError("ROOTLESS_TASK_QA_EXISTING_INVALID")
+            existing_created = parsed.get("created_at")
+            if not isinstance(existing_created, str):
+                raise ValueError("ROOTLESS_TASK_QA_EXISTING_INVALID")
+            expected_existing = build_rootless_t3_binding_payload(
+                command_result,
+                runtime_manifest,
+                runtime_manifest_sha256=runtime_manifest_sha256,
+                created_at=existing_created,
+            )
+            if existing[0] != _canonical_json(expected_existing):
+                raise ValueError("ROOTLESS_TASK_QA_EXISTING_INVALID")
+        else:
+            try:
+                offset = 0
+                while offset < len(raw):
+                    offset += os.write(descriptor, raw[offset:])
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+            os.fsync(directory)
         _VERIFIED_RESULTS.pop(id(command_result), None)
     finally:
         os.close(directory)
