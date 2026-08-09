@@ -64,6 +64,9 @@ def test_dependency_policy_keeps_bounded_dependencies_and_includes_unsafe_closur
     assert project["version"] == "0.1.0"
     assert project["requires-python"] == ">=3.11,<3.14"
     assert project["dependencies"] == [
+        "anyio>=4,<5",
+        "cryptography>=42,<46",
+        "httpx>=0.27,<0.29",
         "openai>=1.0,<3",
         "pydantic>=2.0,<3",
         "pyyaml>=6.0,<7",
@@ -77,6 +80,28 @@ def test_dependency_policy_keeps_bounded_dependencies_and_includes_unsafe_closur
         "pip-tools==7.6.0",
     ]
     assert _metadata()["tool"]["pip-tools"]["compile"]["allow-unsafe"] is True
+
+
+def test_locks_forbid_requirement_source_directives() -> None:
+    forbidden = (
+        "--index-url",
+        "--extra-index-url",
+        "--find-links",
+        "--trusted-host",
+        " @ ",
+        "git+",
+        "file:",
+        "-e ",
+        "--editable",
+    )
+
+    requirements = (
+        line
+        for path in LOCKS.values()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line and not line.startswith("#")
+    )
+    assert all(not any(token in line for token in forbidden) for line in requirements)
 
 
 def test_committed_locks_are_exact_hash_pinned_dependency_closures() -> None:
