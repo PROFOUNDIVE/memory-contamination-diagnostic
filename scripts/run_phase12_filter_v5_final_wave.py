@@ -395,6 +395,7 @@ def run(repository: Path) -> int:
             ("f4-rootless-pytest", "f4-ruff", "f4-validate-config", "f4-replay-pytest")))),
     )
     for filename, envelope in envelopes:
+        (repository / FINAL_REL / filename).unlink(missing_ok=True)
         write_json(repository / FINAL_REL / filename, envelope)
     manifest = repository / "configs/phase12/filter_v5_rootless_local/external_inputs.json"
     legacy_hash = hashlib.sha256(manifest.read_bytes()).hexdigest()
@@ -404,7 +405,9 @@ def run(repository: Path) -> int:
         final_paths=final_paths, execution_commit=execution_commit,
         legacy_input_manifest_sha256=legacy_hash, created_at=created_at,
     )
+    (repository / FINAL_REL / "final-verification-index.json").unlink(missing_ok=True)
     write_json(repository / FINAL_REL / "final-verification-index.json", index)
+    (repository / "docs/evidence/phase12-filter-v5-rootless-local/final-verification-index.json").unlink(missing_ok=True)
     write_json(repository / "docs/evidence/phase12-filter-v5-rootless-local/final-verification-index.json", index)
     scenario_root = repository / FINAL_REL / "index-fixtures"
     scenarios = (("paid", fixtures.paid, 4), ("p0", fixtures.skipped, 1),
