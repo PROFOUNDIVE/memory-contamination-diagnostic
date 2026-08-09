@@ -36,6 +36,9 @@ from memcontam.experiment.phase12.filter_challenge.rootless_local_state import (
     cache_tokenizer_source,
     initialize_state,
 )
+from memcontam.experiment.phase12.filter_challenge.rootless_local_execution import (
+    write_request_goldens,
+)
 
 PROFILE: Final = "local_rootless_non_authoritative"
 _STUBS: Final = {
@@ -153,6 +156,7 @@ def add_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     broker.add_argument("--stage", choices=("screening", "bct"), required=True)
     broker.add_argument("--authority", type=Path, required=True)
     broker.add_argument("--worker-fd", type=int, choices=(3,), required=True)
+    subcommands.add_parser("materialize-request-goldens")
 
 
 def _root(arguments: argparse.Namespace) -> Path:
@@ -397,6 +401,10 @@ def run(arguments: argparse.Namespace) -> None:
         return
     if command == "broker-runtime":
         _broker_runtime(arguments)
+        return
+    if command == "materialize-request-goldens":
+        digest = write_request_goldens(arguments.repo_root)
+        _status(arguments, "request_goldens", digest)
         return
     if command == "preflight":
         _status(arguments, None, None)
