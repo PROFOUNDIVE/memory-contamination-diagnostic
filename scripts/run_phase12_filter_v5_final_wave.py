@@ -309,7 +309,31 @@ def _final_paths(repository: Path, *, paid: bool) -> tuple[tuple[str, str], ...]
 
 
 def _clean_outputs(repository: Path) -> None:
-    shutil.rmtree(repository / FINAL_REL, ignore_errors=True)
+    tracked_final = tuple(
+        repository / FINAL_REL / name
+        for name in (
+            "f1-plan-compliance.json",
+            "f2-broker-security.json",
+            "f3-cli-rehearsal.json",
+            "f4-claim-scope-regression.json",
+            "final-verification-index.json",
+        )
+    )
+    subprocess.run(
+        ("/usr/bin/git", "checkout", "--", *(path.relative_to(repository).as_posix() for path in tracked_final)),
+        cwd=repository,
+        env={"LC_ALL": "C", "PATH": "/usr/bin:/bin"},
+        capture_output=True,
+        check=False,
+        close_fds=True,
+    )
+    for relative in (
+        f"{QA_REL.as_posix()}/basetemp",
+        f"{QA_REL.as_posix()}/final/fixtures",
+        f"{QA_REL.as_posix()}/final/index-fixtures",
+        f"{QA_REL.as_posix()}/final/sentinels",
+    ):
+        shutil.rmtree(repository / relative, ignore_errors=True)
     for path in (
         repository / QA_REL / "pre-egress/execution-anchor.json",
         repository / QA_REL / "pre-egress/f1-plan-compliance.json",
@@ -326,6 +350,7 @@ def _clean_outputs(repository: Path) -> None:
 
 def run(repository: Path) -> int:
     repository = repository.resolve(strict=True)
+    os.umask(0o022)
     created_at = datetime.now(UTC).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
     execution_commit = subprocess.run(
         ("/usr/bin/git", "rev-parse", "HEAD"), cwd=repository,
@@ -333,6 +358,10 @@ def run(repository: Path) -> int:
         text=True, check=True, close_fds=True,
     ).stdout.strip()
     _clean_outputs(repository)
+    (repository / QA_REL / "basetemp").mkdir(mode=0o700, parents=True, exist_ok=True)
+    final_dir = repository / FINAL_REL
+    if final_dir.is_dir():
+        final_dir.chmod(0o755)
     _prepare_pre_egress(repository, execution_commit, created_at)
     fixtures = build_synthetic_task7_fixtures(
         repository, execution_commit=execution_commit, created_at=created_at
