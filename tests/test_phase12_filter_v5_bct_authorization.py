@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import subprocess
+import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -153,7 +154,7 @@ def test_screening_cost_preview_serializes_a_schedule_digest(tmp_path: Path) -> 
 
     result = subprocess.run(
         [
-            "python",
+            sys.executable,
             "-m",
             "memcontam.cli",
             "phase12",
@@ -164,7 +165,7 @@ def test_screening_cost_preview_serializes_a_schedule_digest(tmp_path: Path) -> 
             "--freeze-a",
             str(FREEZE_A),
             "--ledger",
-            "runs/phase12-filter-v5-bct-live-v1/budget-ledger.jsonl",
+            str(registry_calibration.ARTIFACT_ROOT / "budget-ledger.jsonl"),
             "--output",
             str(output),
         ],

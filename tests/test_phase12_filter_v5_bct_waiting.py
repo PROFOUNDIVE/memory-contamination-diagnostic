@@ -115,6 +115,7 @@ def test_bct_waiting_branch_uses_raw_screening_terminal_and_seals_reports(
         expected_authorization_sha256=None,
         authorization_request=tmp_path / "not-created-bct-authorization-request.json",
     )
+    monkeypatch.setattr(registry_calibration, "ARTIFACT_ROOT", LIVE_ROOT)
     monkeypatch.setattr(bct_live, "_build_live_factory", pytest.fail)
 
     # When: the BCT CLI stage is reached without authorization.

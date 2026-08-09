@@ -57,6 +57,7 @@ def test_scope_rejects_actual_pilot_a_and_core_path_families(
 ) -> None:
     fixture = _fixture(tmp_path)
     repository = fixture.evidence.repository_root
+    _configure_identity(repository)
     _git(repository, "reset", "--hard", fixture.base_commit)
     target = repository / forbidden_path
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -125,6 +126,7 @@ def _scope_transition_repository(
 ) -> tuple[Path, Path, str, str]:
     fixture = _fixture(tmp_path)
     repository = fixture.evidence.repository_root
+    _configure_identity(repository)
     for path in paths:
         target = repository / path
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -155,6 +157,11 @@ def _git(root: Path, *arguments: str) -> str:
     return subprocess.run(
         ["git", *arguments], cwd=root, check=True, capture_output=True, text=True
     ).stdout.strip()
+
+
+def _configure_identity(repository: Path) -> None:
+    _git(repository, "config", "user.name", "Rootless QA")
+    _git(repository, "config", "user.email", "rootless-qa@example.invalid")
 
 
 def _git_bytes(commit: str, path: str) -> bytes:
