@@ -39,20 +39,23 @@ from memcontam.experiment.phase12.filter_challenge.rootless_local_state import (
 from memcontam.experiment.phase12.filter_challenge.rootless_local_execution import (
     write_request_goldens,
 )
+from memcontam.experiment.phase12.filter_challenge.rootless_local_operator import (
+    acquire_attempt_lock,
+    finalize_preclaim,
+    publish,
+    qa_root,
+    read_canonical,
+    record_t7,
+    seal_final_from_stage,
+    state_root,
+    write_anchor,
+)
+from memcontam.experiment.phase12.filter_challenge.rootless_local_pre_egress import (
+    run_pre_egress,
+    verify_pre_egress,
+)
 
 PROFILE: Final = "local_rootless_non_authoritative"
-_STUBS: Final = {
-    "finalize-zero-call-preclaim",
-    "record-t7-qa",
-    "publish-receipt",
-    "reconcile-attempt",
-    "write-execution-anchor",
-    "continue-after-screening",
-    "seal-post-screening-block",
-    "finalize-after-stage-exit",
-    "run-pre-egress-qa",
-    "verify-pre-egress-qa",
-}
 
 
 def _attempt(parser: argparse.ArgumentParser) -> None:
@@ -188,6 +191,132 @@ def _status(arguments: argparse.Namespace, role: str | None, digest: str | None)
         "exit_code": 0,
     }
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
+
+
+def _exit_status(
+    arguments: argparse.Namespace,
+    exit_code: int,
+    reason: str | None,
+    role: str | None = None,
+    digest: str | None = None,
+) -> None:
+    payload = {
+        "schema_version": "rootless_cli_status_v1",
+        "profile": PROFILE,
+        "command": arguments.rootless_command,
+        "outcome": "ok" if exit_code == 0 else "blocked",
+        "next_action": "continue" if exit_code == 0 else "publish_and_stop" if exit_code == 69 else "stop",
+        "reason_code": reason,
+        "attempt_id": getattr(arguments, "attempt_id", None),
+        "artifact_role": role,
+        "artifact_sha256": digest,
+        "provider_calls_issued": 0,
+        "exit_code": exit_code,
+    }
+    print(json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
+    if exit_code:
+        raise SystemExit(exit_code)
+
+
+def _administrative(arguments: argparse.Namespace) -> None:
+    command = arguments.rootless_command
+    repository = arguments.repo_root
+    if command == "write-execution-anchor":
+        _status(arguments, "execution_anchor", write_anchor(repository, arguments.execution_commit))
+        return
+    if command == "finalize-zero-call-preclaim":
+        digest = finalize_preclaim(
+            repository, arguments.state_home, arguments.attempt_id, arguments.execution_commit,
+            arguments.failed_command, arguments.observed_exit, _timestamp(),
+        )
+        _status(arguments, "zero_call_skip", digest)
+        return
+    if command == "record-t7-qa":
+        _status(arguments, "t7_attempt_qa", record_t7(repository, arguments.state_home))
+        return
+    if command == "publish-receipt":
+        _status(arguments, "publication_receipt", publish(repository, arguments.state_home, arguments.attempt_id, _timestamp()))
+        return
+    if command == "run-pre-egress-qa":
+        digest = run_pre_egress(repository, arguments.role, arguments.execution_commit, _timestamp())
+        _status(arguments, "pre_egress_qa", digest)
+        return
+    if command == "verify-pre-egress-qa":
+        verify_pre_egress(repository, arguments.execution_commit)
+        _status(arguments, None, None)
+        return
+    root = state_root(arguments.state_home)
+    if command == "reconcile-attempt":
+        skip = qa_root(repository) / "pre-egress/zero-call-skip.json"
+        publication = repository / "docs/evidence/phase12-filter-v5-rootless-local/rehearsal-publication.json"
+        if skip.is_file():
+            record_t7(repository, arguments.state_home)
+            _exit_status(arguments, 65, str(read_canonical(skip)["reason"]), "zero_call_skip", hashlib.sha256(skip.read_bytes()).hexdigest())
+        if publication.is_file():
+            record_t7(repository, arguments.state_home)
+            _exit_status(arguments, 69, "BCT_COMPLETED_REVIEW_REQUIRED", "publication_receipt", hashlib.sha256(publication.read_bytes()).hexdigest())
+        if not root.exists():
+            _status(arguments, None, None)
+            return
+        try:
+            descriptor = acquire_attempt_lock(root)
+        except (FileNotFoundError, RootlessContractError):
+            digest = finalize_preclaim(repository, arguments.state_home, arguments.attempt_id, arguments.execution_commit, "orchestration_interrupted", 70, _timestamp())
+            record_t7(repository, arguments.state_home)
+            _exit_status(arguments, 65, "ROOTLESS_PRECLAIM_ADMIN_FAILED", "zero_call_skip", digest)
+        try:
+            claim = (root / "live-attempt-claim.json").is_file() or (root / f"claims/{arguments.attempt_id}.json").is_file()
+            attempt_markers = (
+                root / f"bindings/{arguments.attempt_id}",
+                root / f"authorities/{arguments.attempt_id}",
+                root / f"acknowledgements/plan/{arguments.attempt_id}",
+                root / f"acknowledgements/rate/{arguments.attempt_id}.json",
+                root / f"terminals/{arguments.attempt_id}",
+                root / f"attempts/{arguments.attempt_id}",
+            )
+            if not claim and any(path.exists() for path in attempt_markers):
+                digest = finalize_preclaim(repository, arguments.state_home, arguments.attempt_id, arguments.execution_commit, "orchestration_interrupted", 70, _timestamp())
+                record_t7(repository, arguments.state_home)
+                _exit_status(arguments, 65, "ROOTLESS_PRECLAIM_ADMIN_FAILED", "zero_call_skip", digest)
+            _status(arguments, None, None)
+            return
+        finally:
+            os.close(descriptor)
+    descriptor = acquire_attempt_lock(root)
+    try:
+        claim = (root / "live-attempt-claim.json").is_file() or (root / f"claims/{arguments.attempt_id}.json").is_file()
+        if command == "continue-after-screening":
+            terminal = read_canonical(root / f"terminals/{arguments.attempt_id}/screening.json")
+            status = terminal.get("status")
+            if status == "completed_estimable":
+                _status(arguments, "stage_terminal", hashlib.sha256(canonical_json_file(terminal)).hexdigest())
+                return
+            if status in {"not_estimable", "blocked", "interrupted"}:
+                final_status = "not_estimable" if status == "not_estimable" else str(status)
+                seal_final_from_stage(root, arguments.attempt_id, "screening", final_status, str(terminal.get("reason_code")), str(terminal["created_at"]))
+                publish(repository, arguments.state_home, arguments.attempt_id, _timestamp())
+                record_t7(repository, arguments.state_home)
+                _exit_status(arguments, 69, str(terminal.get("reason_code")))
+            _exit_status(arguments, 67, "ROOTLESS_ARCHIVE_INVALID")
+        if command == "seal-post-screening-block":
+            seal_final_from_stage(root, arguments.attempt_id, "screening", "blocked", arguments.reason, _timestamp())
+            _status(arguments, "attempt_terminal", hashlib.sha256((root / f"terminals/{arguments.attempt_id}/final.json").read_bytes()).hexdigest())
+            return
+        if command == "finalize-after-stage-exit":
+            if not claim:
+                _exit_status(arguments, 65, "ROOTLESS_PRECLAIM_ADMIN_FAILED")
+            stage_path = root / f"terminals/{arguments.attempt_id}/{arguments.stage}.json"
+            if not stage_path.is_file():
+                raise RootlessContractError("ROOTLESS_STAGE_PREFIX_INVALID")
+            terminal = read_canonical(stage_path)
+            status = str(terminal.get("status"))
+            final_status = "not_estimable" if status == "not_estimable" else "review_required" if status == "review_required" else "interrupted" if status == "interrupted" else "blocked"
+            seal_final_from_stage(root, arguments.attempt_id, arguments.stage, final_status, str(terminal.get("reason_code")), str(terminal["created_at"]))
+            _status(arguments, "attempt_terminal", hashlib.sha256((root / f"terminals/{arguments.attempt_id}/final.json").read_bytes()).hexdigest())
+            return
+    finally:
+        os.close(descriptor)
+    raise RootlessContractError("ROOTLESS_ADMIN_COMMAND_INVALID")
 
 
 def _read(path: Path) -> dict[str, JsonValue]:
@@ -409,6 +538,11 @@ def run(arguments: argparse.Namespace) -> None:
     if command == "preflight":
         _status(arguments, None, None)
         return
-    if command in _STUBS:
-        raise SystemExit(64)
+    if command in {
+        "finalize-zero-call-preclaim", "record-t7-qa", "publish-receipt", "reconcile-attempt",
+        "write-execution-anchor", "continue-after-screening", "seal-post-screening-block",
+        "finalize-after-stage-exit", "run-pre-egress-qa", "verify-pre-egress-qa",
+    }:
+        _administrative(arguments)
+        return
     raise RootlessContractError("ROOTLESS_ADMIN_COMMAND_INVALID")
