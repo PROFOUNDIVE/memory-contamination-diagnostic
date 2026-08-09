@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import platform
+import socket
 import stat
 import sys
 from datetime import UTC, datetime
@@ -147,6 +148,11 @@ def add_parser(commands: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     qa.add_argument("--execution-commit", required=True)
     verify_qa = subcommands.add_parser("verify-pre-egress-qa")
     verify_qa.add_argument("--execution-commit", required=True)
+    broker = subcommands.add_parser("broker-runtime")
+    _attempt(broker)
+    broker.add_argument("--stage", choices=("screening", "bct"), required=True)
+    broker.add_argument("--authority", type=Path, required=True)
+    broker.add_argument("--worker-fd", type=int, choices=(3,), required=True)
 
 
 def _root(arguments: argparse.Namespace) -> Path:
@@ -327,6 +333,34 @@ def _authority(arguments: argparse.Namespace) -> None:
     _status(arguments, "execution_authority", digest)
 
 
+def _broker_runtime(arguments: argparse.Namespace) -> None:
+    if arguments.worker_fd != 3:
+        raise RootlessContractError("ROOTLESS_BROKER_FD_INVALID")
+    authority = _read(arguments.authority)
+    if (
+        authority.get("schema_version") != "rootless_stage_execution_authority_v1"
+        or authority.get("attempt_id") != arguments.attempt_id
+        or authority.get("stage") != arguments.stage
+    ):
+        raise RootlessContractError("ROOTLESS_EXECUTION_AUTHORITY_INVALID")
+    broker_socket, worker_socket = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+    process = os.fork()
+    if process == 0:
+        broker_socket.close()
+        os.dup2(worker_socket.fileno(), 3)
+        worker_socket.close()
+        for descriptor in range(4, 256):
+            try:
+                os.close(descriptor)
+            except OSError:
+                continue
+        os._exit(64)
+    worker_socket.close()
+    broker_socket.close()
+    _, status = os.waitpid(process, 0)
+    raise SystemExit(os.waitstatus_to_exitcode(status))
+
+
 def run(arguments: argparse.Namespace) -> None:
     command = arguments.rootless_command
     if command == "verify-bootstrap-runtime":
@@ -360,6 +394,9 @@ def run(arguments: argparse.Namespace) -> None:
         return
     if command == "build-execution-authority":
         _authority(arguments)
+        return
+    if command == "broker-runtime":
+        _broker_runtime(arguments)
         return
     if command == "preflight":
         _status(arguments, None, None)
