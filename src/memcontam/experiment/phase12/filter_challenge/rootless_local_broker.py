@@ -185,6 +185,8 @@ class BrokerRequest:
     compiled_input_tokens: int
     side: Literal["control", "challenge"]
     created_at: str
+    scientific_replicate: Literal[1, 2] | None = None
+    executor_replicate_id: Literal[0, 1] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -503,8 +505,8 @@ class FakeBroker:
                 "stage": self.stage,
                 "slot_id": request.slot_id,
                 "idempotency_key": request.idempotency_key,
-                "scientific_replicate": None,
-                "executor_replicate_id": None,
+                "scientific_replicate": request.scientific_replicate,
+                "executor_replicate_id": request.executor_replicate_id,
                 "issued": True,
                 "compiler_sha256": request.compiler_sha256,
                 "static_input_sha256": request.static_input_sha256,
