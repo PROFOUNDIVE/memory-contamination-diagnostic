@@ -7,6 +7,7 @@ import hashlib
 import os
 import re
 from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final, Literal, TypeAlias
 
@@ -37,16 +38,20 @@ from memcontam.experiment.phase12.filter_challenge.rootless_local_contract impor
     canonical_json_file,
     canonical_json_value,
     parse_canonical_object,
+    public_key_from_seed,
     sign_object,
 )
 from memcontam.experiment.phase12.filter_challenge.rootless_local_ledger import (
     LedgerReservation,
     Stage,
 )
+from memcontam.experiment.phase12.filter_challenge.rootless_local_native_capture import (
+    NativePredecessorParseError,
+    capture_native_messages,
+)
 
 PROFILE: Final = "local_rootless_non_authoritative"
 MODEL: Final = "gpt-4o-2024-11-20"
-NOW: Final = "2026-08-09T12:00:00Z"
 RENDERER_VERSIONS: Final = (
     "full-history-generate=rootless-adapter-v1",
     "rag-generate=rootless-adapter-v1",
@@ -499,34 +504,60 @@ async def execute_fake_stage(
         for original in slots:
             predecessor_id = original.predecessor_slot_ids[0] if original.predecessor_slot_ids else None
             predecessor_hash = receipt_hashes.get(predecessor_id) if predecessor_id is not None else None
-            if predecessor_id is not None and predecessor_id not in outputs:
+            if (
+                predecessor_id is not None
+                and original.request is None
+                and predecessor_id not in outputs
+            ):
                 receipt = _blocked_receipt(broker, original, predecessor_hash)
                 receipts.append(receipt)
                 receipt_hashes[original.slot_id] = _hash_file(receipt)
                 blocked += 1
                 continue
-            slot = (
-                _materialize_dynamic(original, outputs[predecessor_id])
-                if original.request is None and predecessor_id is not None
-                else original
-            )
+            try:
+                slot = (
+                    _materialize_dynamic(original, outputs[predecessor_id])
+                    if original.request is None and predecessor_id is not None
+                    else original
+                )
+            except NativePredecessorParseError:
+                receipt = _blocked_receipt(
+                    broker,
+                    original,
+                    predecessor_hash,
+                    "DOWNSTREAM_NOT_ISSUED_AFTER_PARSE_FAILURE",
+                )
+                receipts.append(receipt)
+                receipt_hashes[original.slot_id] = _hash_file(receipt)
+                blocked += 1
+                continue
             if slot.request is None or slot.compiled_input_tokens is None:
                 raise RootlessContractError("ROOTLESS_COMPILATION_INVALID")
-            outcome = await broker.dispatch(
-                BrokerRequest(
-                    slot.slot_id,
-                    f"idem-{slot.slot_id}",
-                    slot.compiler_sha256,
-                    slot.static_input_sha256,
-                    predecessor_hash,
-                    slot.request,
-                    slot.compiled_input_tokens,
-                    slot.side,
-                    NOW,
-                    slot.scientific_replicate,
-                    slot.executor_replicate_id,
+            request = BrokerRequest(
+                    slot_id=slot.slot_id,
+                    idempotency_key=_idempotency_key(slot.attempt_id, slot.slot_id),
+                    compiler_sha256=slot.compiler_sha256,
+                    static_input_sha256=slot.static_input_sha256,
+                    predecessor_receipt_sha256=predecessor_hash,
+                    request=slot.request,
+                    compiled_input_tokens=slot.compiled_input_tokens,
+                    side=slot.side,
+                    created_at=_utc_timestamp(),
+                    task=slot.task,
+                    baseline=slot.baseline,
+                    probe_id=slot.probe_id,
+                    native_stage=slot.native_stage,
+                    candidate_class=slot.candidate_class,
+                    scientific_replicate=slot.scientific_replicate,
+                    executor_replicate_id=slot.executor_replicate_id,
                 )
-            )
+            if len(request.request) > 262_144 or request.compiled_input_tokens > 3072:
+                receipt = broker.account_input_cap(request)
+                receipts.append(receipt)
+                receipt_hashes[slot.slot_id] = _hash_file(receipt)
+                blocked += 1
+                break
+            outcome = await broker.dispatch(request)
             issued += 1
             receipts.append(outcome.receipt)
             outcomes.append(outcome.typed_outcome)
@@ -579,15 +610,15 @@ def _method(baseline: Baseline, native: str) -> MethodStage:
 def _render_messages(
     call: ScheduledCall, method: MethodStage, predecessor_text: str | None
 ) -> tuple[CapturedMessage, ...]:
-    system = CapturedMessage("system", f"{method}:rootless-adapter-v1")
-    user_value: dict[str, JsonValue] = {
-        "task": call.task,
-        "probe_id": call.probe_id,
-        "side": call.side,
-        "candidate_class": call.candidate_class,
-        "predecessor_output": predecessor_text,
-    }
-    return system, CapturedMessage("user", canonical_json_value(user_value).decode("utf-8"))
+    del method
+    messages: list[CapturedMessage] = []
+    for role, content in capture_native_messages(call, predecessor_text):
+        match role:
+            case "system":
+                messages.append(CapturedMessage("system", content))
+            case "user":
+                messages.append(CapturedMessage("user", content))
+    return tuple(messages)
 
 
 def _request_values(
@@ -609,6 +640,8 @@ def _request_values(
         "max_output_tokens": 512,
         "model": MODEL,
         "service_tier": "default",
+        "store": False,
+        "stream": False,
         "temperature": 0,
     }
     request = canonical_json_value(request_value)
@@ -683,12 +716,17 @@ def _response_body(status: str, content: list[JsonValue]) -> bytes:
     return canonical_json_value(value)
 
 
-def _blocked_receipt(broker, slot: SlotCompilation, predecessor_hash: str | None) -> dict[str, JsonValue]:
+def _blocked_receipt(
+    broker,
+    slot: SlotCompilation,
+    predecessor_hash: str | None,
+    reason: str = "DOWNSTREAM_NOT_ISSUED_AFTER_PREDECESSOR_FAILURE",
+) -> dict[str, JsonValue]:
     if predecessor_hash is None:
         raise RootlessContractError("ROOTLESS_COMPILATION_INVALID")
     request = LedgerReservation(
         slot.slot_id,
-        f"idem-{slot.slot_id}",
+        _idempotency_key(slot.attempt_id, slot.slot_id),
         slot.compiler_sha256,
         slot.static_input_sha256,
         predecessor_hash,
@@ -698,8 +736,8 @@ def _blocked_receipt(broker, slot: SlotCompilation, predecessor_hash: str | None
     )
     append = broker.ledger.not_issued(
         request,
-        "DOWNSTREAM_NOT_ISSUED_AFTER_PREDECESSOR_FAILURE",
-        NOW,
+        reason,
+        _utc_timestamp(),
         compile_status="blocked_predecessor",
         include_request=False,
     )
@@ -710,7 +748,7 @@ def _blocked_receipt(broker, slot: SlotCompilation, predecessor_hash: str | None
         "attempt_id": broker.attempt_id,
         "stage": slot.stage,
         "slot_id": slot.slot_id,
-        "idempotency_key": f"idem-{slot.slot_id}",
+        "idempotency_key": _idempotency_key(slot.attempt_id, slot.slot_id),
         "scientific_replicate": slot.scientific_replicate,
         "executor_replicate_id": slot.executor_replicate_id,
         "issued": False,
@@ -742,10 +780,10 @@ def _blocked_receipt(broker, slot: SlotCompilation, predecessor_hash: str | None
         "parsed_response_source_call_id": None,
         "parser_result_id": None,
         "verifier_result_id": None,
-        "behavioral_reason": "DOWNSTREAM_NOT_ISSUED_AFTER_PREDECESSOR_FAILURE",
+        "behavioral_reason": reason,
         "operational_reason": None,
-        "created_at": NOW,
-        "key_fingerprint": hashlib.sha256(broker.seed).hexdigest(),
+        "created_at": _utc_timestamp(),
+        "key_fingerprint": hashlib.sha256(public_key_from_seed(broker.seed)).hexdigest(),
     }
     payload["signature"] = sign_object(broker.seed, "local-call-receipt-v1", payload)
     slot_root = broker.root / "attempts" / broker.attempt_id / slot.stage / "slots" / slot.slot_id
@@ -758,6 +796,15 @@ def _blocked_receipt(broker, slot: SlotCompilation, predecessor_hash: str | None
     finally:
         os.close(descriptor)
     return payload
+
+
+def _idempotency_key(attempt_id: str, slot_id: str) -> str:
+    digest = hashlib.sha256(attempt_id.encode() + b"\0" + slot_id.encode()).hexdigest()
+    return f"i-{digest[:32]}"
+
+
+def _utc_timestamp() -> str:
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _golden_entry(call: ScheduledCall) -> dict[str, JsonValue]:

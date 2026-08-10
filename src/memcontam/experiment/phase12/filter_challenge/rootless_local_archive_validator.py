@@ -36,15 +36,15 @@ class RootlessArchiveValidation:
 
 
 def validate_rootless_screening_archive(
-    root: Path, slots: tuple[SlotCompilation, ...]
+    root: Path, slots: tuple[SlotCompilation, ...], *, seed: bytes | None = None
 ) -> RootlessArchiveValidation:
-    return _validate(root, slots, "screening")
+    return _validate(root, slots, "screening", seed)
 
 
 def validate_rootless_bct_archive(
-    root: Path, slots: tuple[SlotCompilation, ...]
+    root: Path, slots: tuple[SlotCompilation, ...], *, seed: bytes | None = None
 ) -> RootlessArchiveValidation:
-    return _validate(root, slots, "bct")
+    return _validate(root, slots, "bct", seed)
 
 
 def reject_rootless_at_legacy_seam(raw: bytes | str) -> None:
@@ -56,14 +56,15 @@ def _validate(
     root: Path,
     slots: tuple[SlotCompilation, ...],
     stage: Literal["screening", "bct"],
+    seed: bytes | None,
 ) -> RootlessArchiveValidation:
     try:
         if not slots or any(slot.stage != stage for slot in slots):
             raise RootlessContractError("ROOTLESS_ARCHIVE_INVALID")
         attempt_id = slots[0].attempt_id
         fixture_id = root.name
-        seed = hashlib.sha256(f"rootless-fixture:{fixture_id}".encode()).digest()
-        public_key = public_key_from_seed(seed)
+        archive_seed = seed or hashlib.sha256(f"rootless-fixture:{fixture_id}".encode()).digest()
+        public_key = public_key_from_seed(archive_seed)
         slot_root = root / "attempts" / attempt_id / stage / "slots"
         observed_names = {path.name for path in slot_root.iterdir()}
         if observed_names != {slot.slot_id for slot in slots}:
@@ -97,10 +98,20 @@ def _validate(
                 _validate_issued(directory, receipt, public_key)
             elif receipt.get("issued") is False:
                 not_issued += 1
-                if (
-                    receipt.get("compile_status") != "blocked_predecessor"
-                    or predecessor_hash is None
-                    or receipt.get("not_issued_record_sha256") is None
+                blocked = (
+                    receipt.get("compile_status") == "blocked_predecessor"
+                    and predecessor_hash is not None
+                    and receipt.get("request_sha256") is None
+                    and receipt.get("compiled_input_tokens") is None
+                )
+                input_cap = (
+                    receipt.get("compile_status") == "compiled"
+                    and receipt.get("operational_reason") == "ROOTLESS_INPUT_CAP_EXCEEDED"
+                    and receipt.get("request_sha256") == slot.request_sha256
+                    and receipt.get("compiled_input_tokens") == slot.compiled_input_tokens
+                )
+                if not (blocked or input_cap) or (
+                    receipt.get("not_issued_record_sha256") is None
                     or receipt.get("typed_outcome_sha256") is not None
                 ):
                     raise RootlessContractError("ROOTLESS_ARCHIVE_INVALID")
@@ -112,9 +123,8 @@ def _validate(
                 slot.slot_id.encode("utf-8") + b"\0" + bytes.fromhex(receipt_hash)
             ).digest()
             ordered_leaves.extend(leaf)
-        ledger = GlobalLedger(root, seed, attempt_id, stage)
-        snapshot = ledger.snapshot()
-        if snapshot.cumulative_issued != issued or snapshot.cumulative_not_issued != not_issued:
+        ledger = GlobalLedger(root, archive_seed, attempt_id, stage)
+        if ledger.stage_counts() != (issued, not_issued):
             raise RootlessContractError("ROOTLESS_ARCHIVE_INVALID")
         _validate_ledger_references(root, receipts)
         return RootlessArchiveValidation(
@@ -148,9 +158,22 @@ def _validate_issued(
     archive = _verified(archive_raw, public_key, "raw-archive-manifest-v1")
     outcome = _verified(outcome_raw, public_key, "typed-call-outcome-v1")
     if (
-        receipt.get("archive_manifest_sha256") != hashlib.sha256(archive_raw).hexdigest()
+        archive.get("profile") != PROFILE
+        or archive.get("kind") != "raw_archive_manifest"
+        or archive.get("attempt_id") != receipt.get("attempt_id")
+        or archive.get("stage") != receipt.get("stage")
+        or archive.get("slot_id") != receipt.get("slot_id")
+        or outcome.get("profile") != PROFILE
+        or outcome.get("kind") != "typed_call_outcome"
+        or outcome.get("attempt_id") != receipt.get("attempt_id")
+        or outcome.get("stage") != receipt.get("stage")
+        or outcome.get("slot_id") != receipt.get("slot_id")
+        or outcome.get("reservation_record_sha256")
+        != receipt.get("reservation_record_sha256")
+        or receipt.get("archive_manifest_sha256") != hashlib.sha256(archive_raw).hexdigest()
         or receipt.get("typed_outcome_sha256") != hashlib.sha256(outcome_raw).hexdigest()
         or outcome.get("archive_manifest_sha256") != hashlib.sha256(archive_raw).hexdigest()
+        or outcome.get("provider_status") != receipt.get("provider_status")
         or archive.get("request_sha256") != hashlib.sha256(
             _read_regular(directory / "request.bin")
         ).hexdigest()
@@ -193,6 +216,18 @@ def _validate_ledger_references(root: Path, receipts: list[dict[str, JsonValue]]
             if (
                 reservation is None
                 or reservation.get("record_kind") != "reservation"
+                or reservation.get("attempt_id") != receipt.get("attempt_id")
+                or reservation.get("stage") != receipt.get("stage")
+                or reservation.get("slot_id") != receipt.get("slot_id")
+                or reservation.get("idempotency_key") != receipt.get("idempotency_key")
+                or reservation.get("compiler_sha256") != receipt.get("compiler_sha256")
+                or reservation.get("static_input_sha256") != receipt.get("static_input_sha256")
+                or reservation.get("predecessor_receipt_sha256")
+                != receipt.get("predecessor_receipt_sha256")
+                or reservation.get("request_sha256") != receipt.get("request_sha256")
+                or reservation.get("request_bytes") != receipt.get("request_bytes")
+                or reservation.get("compiled_input_tokens")
+                != receipt.get("compiled_input_tokens")
                 or heads.get(str(receipt.get("reservation_head_sha256")), {}).get(
                     "record_sha256"
                 )
@@ -221,6 +256,18 @@ def _validate_ledger_references(root: Path, receipts: list[dict[str, JsonValue]]
             if (
                 not_issued is None
                 or not_issued.get("record_kind") != "not_issued"
+                or not_issued.get("attempt_id") != receipt.get("attempt_id")
+                or not_issued.get("stage") != receipt.get("stage")
+                or not_issued.get("slot_id") != receipt.get("slot_id")
+                or not_issued.get("compiler_sha256") != receipt.get("compiler_sha256")
+                or not_issued.get("static_input_sha256") != receipt.get("static_input_sha256")
+                or not_issued.get("predecessor_receipt_sha256")
+                != receipt.get("predecessor_receipt_sha256")
+                or not_issued.get("request_sha256") != receipt.get("request_sha256")
+                or not_issued.get("request_bytes") != receipt.get("request_bytes")
+                or not_issued.get("compiled_input_tokens")
+                != receipt.get("compiled_input_tokens")
+                or not_issued.get("reason") != receipt.get("operational_reason")
                 or heads.get(str(receipt.get("not_issued_head_sha256")), {}).get(
                     "record_sha256"
                 )

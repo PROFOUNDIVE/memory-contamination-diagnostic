@@ -3,6 +3,8 @@ from __future__ import annotations
 # allow: SIZE_OK — Task 4 fixes the complete broker matrix in this one QA module.
 
 import base64
+import hashlib
+import inspect
 import os
 import argparse
 from dataclasses import dataclass, replace
@@ -14,6 +16,7 @@ import pytest
 
 from memcontam.experiment.phase12.filter_challenge.rootless_local_binding import (
     build_fake_stage_binding,
+    build_stage_binding,
 )
 from memcontam.experiment.phase12.filter_challenge.rootless_local_broker import (
     BrokerRequest,
@@ -27,6 +30,7 @@ from memcontam.experiment.phase12.filter_challenge.rootless_local_broker import 
     load_provider_key,
     revalidate_external_authority,
     select_ready_slots,
+    _establish_live_claim,
 )
 from memcontam.experiment.phase12.filter_challenge.rootless_local_contract import (
     RootlessContractError,
@@ -131,9 +135,10 @@ class StaticFixtureTransport(FixtureTransport):
 
 def _request() -> BrokerRequest:
     raw = b'{"input":[{"content":"hello","role":"user"}],"model":"gpt-4o-2024-11-20"}'
+    digest = hashlib.sha256(b"fixture-1\0slot-001").hexdigest()
     return BrokerRequest(
         slot_id="slot-001",
-        idempotency_key="idem-slot-001",
+        idempotency_key=f"i-{digest[:32]}",
         compiler_sha256="3" * 64,
         static_input_sha256="6" * 64,
         predecessor_receipt_sha256=None,
@@ -141,6 +146,11 @@ def _request() -> BrokerRequest:
         compiled_input_tokens=5,
         side="control",
         created_at=NOW,
+        task="game24",
+        baseline="full_history",
+        probe_id="fv5-cal-game24-001",
+        native_stage="answer",
+        candidate_class=None,
     )
 
 
@@ -193,7 +203,7 @@ def test_unsigned_wire_frame_and_closed_branch_state_machine() -> None:
         "attempt_id": "attempt-001",
         "stage": "screening",
         "slot_id": "slot-001",
-        "message_sequence": 1,
+        "message_sequence": 0,
         "reservation_record_sha256": "1" * 64,
         "reservation_head_sha256": "2" * 64,
         "request_sha256": "3" * 64,
@@ -250,20 +260,136 @@ def test_valid_completed_response_is_archived_settled_and_receipted(tmp_path: Pa
 
 
 @pytest.mark.parametrize("provider_status", ["failed", "cancelled", "incomplete"])
-def test_valid_usage_behavioral_provider_failures_retain_reservation(
+def test_valid_usage_behavioral_provider_failures_settle_and_continue(
     tmp_path: Path, provider_status: str
 ) -> None:
     # Given/When: HTTP 200 carries a terminal provider failure with valid usage.
     outcome = _dispatch(tmp_path, _exchange(body=_response(provider_status=provider_status)))
 
-    # Then: the literal status is preserved without releasing the reservation or receipt usage.
+    # Then: the literal status is preserved and its valid paid usage settles normally.
     assert outcome.provider_status == provider_status
     assert outcome.operational_reason is None
-    assert outcome.reservation_retained is True
+    assert outcome.reservation_retained is False
     assert outcome.receipt["behavioral_reason"] == "CONTROL_PROVIDER_FAILURE"
-    assert outcome.receipt["settlement_record_sha256"] is None
-    assert outcome.receipt["usage_input_tokens"] is None
-    assert outcome.receipt["actual_nanousd"] is None
+    assert outcome.receipt["settlement_record_sha256"] is not None
+    assert outcome.receipt["usage_input_tokens"] == 100
+    assert outcome.receipt["actual_nanousd"] == 300_000
+
+
+def test_broker_request_requires_compilation_identity() -> None:
+    # Given: the typed broker admission boundary.
+    signature = inspect.signature(BrokerRequest)
+
+    # When/Then: task, probe, and native stage cannot be omitted or defaulted.
+    for field in ("task", "probe_id", "native_stage"):
+        assert signature.parameters[field].default is inspect.Parameter.empty
+
+
+def test_broker_rejects_noncanonical_idempotency_key(tmp_path: Path) -> None:
+    # Given: a compiled request with a caller-selected idempotency key.
+    broker = build_fake_broker_for_tests(
+        _binding(), StaticFixtureTransport(_exchange()), _root(tmp_path)
+    )
+
+    # When/Then: admission rejects it before reservation or transport.
+    try:
+        with pytest.raises(RootlessContractError, match="ROOTLESS_BINDING_INVALID"):
+            anyio.run(broker.dispatch, replace(_request(), idempotency_key="caller-selected"))
+    finally:
+        broker.close()
+
+
+def test_live_claim_and_runtime_checkpoint_precede_admission(tmp_path: Path) -> None:
+    # Given: a validated live binding and its private signing seed.
+    root = tmp_path / "live-state"
+    (root / "keys").mkdir(mode=0o700, parents=True)
+    seed = bytes(range(32))
+    binding = build_stage_binding(
+        attempt_id="attempt-001",
+        stage="screening",
+        plan_binding_sha256="1" * 64,
+        trusted_base_commit="a" * 40,
+        execution_commit="b" * 40,
+        decoding_authority_sha256="2" * 64,
+        rate_card_sha256="3" * 64,
+        source_manifest_sha256="4" * 64,
+        runtime_manifest_sha256="5" * 64,
+        input_manifest_sha256="6" * 64,
+        compiler_sha256="7" * 64,
+        schedule_sha256="8" * 64,
+        registered_slots=90,
+        stage_cap_nanousd=2_000_000_000,
+        created_at=NOW,
+    )
+
+    # When: the live broker establishes its first-admission continuity prefix.
+    _establish_live_claim(root, binding, seed)
+
+    # Then: claim and checkpoint are signed, commit-bound, and durable before transport use.
+    claim = __import__("json").loads((root / "live-attempt-claim.json").read_bytes())
+    checkpoints = tuple((root / "runtime-clock").glob("*.json"))
+    assert claim["schema_version"] == "rootless_live_attempt_claim_v1"
+    assert claim["execution_commit"] == "b" * 40
+    assert claim["plan_binding_sha256"] == "1" * 64
+    assert len(checkpoints) == 1
+    checkpoints[0].unlink()
+    with pytest.raises(RootlessContractError, match="ROOTLESS_INTERRUPTED_UNCLEAN"):
+        _establish_live_claim(root, binding, seed)
+
+
+def test_live_claim_is_reused_across_stage_specific_clock_checkpoints(tmp_path: Path) -> None:
+    from memcontam.experiment.phase12.filter_challenge.rootless_local_broker import (
+        _start_stage_clock,
+    )
+
+    # Given: one attempt with separately bound screening and BCT stages.
+    root = tmp_path / "live-state"
+    root.mkdir(mode=0o700)
+    common = {
+        "attempt_id": "attempt-001",
+        "plan_binding_sha256": "1" * 64,
+        "trusted_base_commit": "a" * 40,
+        "execution_commit": "b" * 40,
+        "decoding_authority_sha256": "2" * 64,
+        "rate_card_sha256": "3" * 64,
+        "source_manifest_sha256": "4" * 64,
+        "runtime_manifest_sha256": "5" * 64,
+        "input_manifest_sha256": "6" * 64,
+        "compiler_sha256": "7" * 64,
+        "schedule_sha256": "8" * 64,
+    }
+    screening = build_stage_binding(
+        **common,
+        stage="screening",
+        registered_slots=90,
+        stage_cap_nanousd=2_000_000_000,
+        created_at="2026-08-09T12:00:00Z",
+    )
+    bct = build_stage_binding(
+        **common,
+        stage="bct",
+        predecessor_terminal_sha256="9" * 64,
+        freeze_b_sha256="a" * 64,
+        registered_slots=480,
+        stage_cap_nanousd=8_000_000_000,
+        created_at="2026-08-09T12:01:00Z",
+    )
+    seed = bytes(range(32))
+
+    # When: the screening claim/checkpoint is followed by BCT setup and its checkpoint.
+    _establish_live_claim(root, screening, seed)
+    claim_created_at = __import__("json").loads((root / "live-attempt-claim.json").read_bytes())["created_at"]
+    assert isinstance(claim_created_at, str)
+    _start_stage_clock(root, "attempt-001", "screening", claim_created_at, seed)
+    _establish_live_claim(root, bct, seed)
+    _start_stage_clock(root, "attempt-001", "bct", claim_created_at, seed)
+
+    # Then: the claim remains unique and both stage checkpoints are chained by sequence.
+    checkpoints = tuple(sorted((root / "runtime-clock").glob("*.json")))
+    values = tuple(__import__("json").loads(path.read_bytes()) for path in checkpoints)
+    assert len(tuple(root.glob("live-attempt-claim.json"))) == 1
+    assert [value["stage"] for value in values] == [None, "screening", "bct"]
+    assert [value["sequence"] for value in values] == [0, 1, 2]
 
 
 @pytest.mark.parametrize("provider_status", ["queued", "in_progress"])
@@ -474,6 +600,19 @@ def test_fake_and_live_constructors_reject_schema_transport_and_root_swaps(tmp_p
     assert not (fake_root / "live-attempt-claim.json").exists()
 
 
+def test_broker_constructors_reject_root_execution(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Given: an otherwise valid disposable fake boundary under effective UID zero.
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+
+    # When/Then: root cannot instantiate either execution broker class.
+    with pytest.raises(RootlessContractError, match="ROOTLESS_ROOT_EXECUTION_FORBIDDEN"):
+        build_fake_broker_for_tests(
+            _binding(), StaticFixtureTransport(_exchange()), _root(tmp_path)
+        )
+
+
 def test_recursive_bot_not_issued_frames_account_each_descendant() -> None:
     # Given: a typed-output BoT chain after a parse-failed predecessor.
     protocol = WireProtocol()
@@ -487,9 +626,9 @@ def test_recursive_bot_not_issued_frames_account_each_descendant() -> None:
     # When: each descendant receives its own dispatch/accounted branch.
     for sequence, slot in enumerate(("bot-solve", "bot-descendant")):
         protocol.accept({**base, "message_type": "dispatch", "slot_id": slot,
-                         "message_sequence": sequence * 2, "predecessor_receipt_sha256s": ["1" * 64]})
+                         "message_sequence": sequence, "predecessor_receipt_sha256s": ["1" * 64]})
         protocol.accept({**base, "message_type": "accounted", "slot_id": slot,
-                         "message_sequence": sequence * 2 + 1, "call_receipt_sha256": "2" * 64,
+                         "message_sequence": sequence, "call_receipt_sha256": "2" * 64,
                          "not_issued_record_sha256": "3" * 64, "not_issued_head_sha256": "4" * 64,
                          "ledger_head_sha256": "5" * 64})
 
@@ -548,6 +687,24 @@ def test_scheduler_is_work_conserving_and_obeys_concurrency_rpm_tpm() -> None:
     assert [slot.slot_id for slot in selected] == ["slot-0", "slot-1", "slot-2", "slot-3"]
     saturated = replace(state, recent_dispatch_monotonic_ns=(1, 2, 3, 4, 5, 6))
     assert select_ready_slots(slots, saturated) == ()
+
+
+def test_scheduler_refuses_a_refill_that_exceeds_reserved_tpm() -> None:
+    # Given: one available worker but nearly all 60-second reserved token capacity is retained.
+    state = SchedulerState(
+        active_calls=4,
+        recent_dispatch_monotonic_ns=(1,),
+        now_monotonic_ns=10,
+        accounted_receipt_sha256s=frozenset(),
+        recent_reserved_tokens=((1, 28_000),),
+    )
+    slot = ReadySlot("slot-001", None, 4736)
+
+    # When: completion would otherwise refill the fifth worker.
+    selected = select_ready_slots((slot,), state)
+
+    # Then: the deterministic reservation window blocks the refill before dispatch.
+    assert selected == ()
 
 
 def test_broker_reuses_t3_external_authority_predicate_before_and_after_claim(
