@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -10,6 +11,13 @@ import sys
 import pytest
 
 from memcontam.experiment.phase12.filter_challenge import rootless_local_bootstrap_cli
+from memcontam.experiment.phase12.filter_challenge.rootless_local_binding import (
+    build_stage_binding,
+)
+from memcontam.experiment.phase12.filter_challenge.rootless_local_contract import (
+    canonical_json_file,
+    canonical_json_value,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -89,3 +97,67 @@ def test_provisioner_writes_exact_private_secret_without_output(tmp_path: Path, 
 
     assert module.provision(source, checkout) == 64
     assert target.read_bytes() == f"OPENAI_API_KEY={secret}\n".encode()
+
+
+def test_stage_acknowledgement_hash_matches_execution_authority_binding_digest(
+    tmp_path: Path,
+) -> None:
+    # Given: a private state root containing one canonical screening binding.
+    state_home = tmp_path / "state"
+    root = state_home / "memcontam" / "phase12-filter-v5-rootless-local"
+    binding_root = root / "bindings" / "attempt-001"
+    key_root = root / "keys"
+    binding_root.mkdir(mode=0o700, parents=True)
+    key_root.mkdir(mode=0o700)
+    state_home.chmod(0o700)
+    (root / "plan-bind.md").write_bytes(b"reviewed plan\n")
+    (key_root / "ed25519-private.key").write_bytes(bytes(range(32)))
+    binding = build_stage_binding(
+        attempt_id="attempt-001",
+        stage="screening",
+        plan_binding_sha256="1" * 64,
+        trusted_base_commit="a" * 40,
+        execution_commit="b" * 40,
+        decoding_authority_sha256="2" * 64,
+        rate_card_sha256="3" * 64,
+        source_manifest_sha256="4" * 64,
+        runtime_manifest_sha256="5" * 64,
+        input_manifest_sha256="6" * 64,
+        compiler_sha256="7" * 64,
+        schedule_sha256="8" * 64,
+        registered_slots=90,
+        stage_cap_nanousd=2_000_000_000,
+        created_at="2026-08-09T12:00:00Z",
+    )
+    (binding_root / "screening.json").write_bytes(canonical_json_file(binding))
+    for path in (root / "plan-bind.md", key_root / "ed25519-private.key", binding_root / "screening.json"):
+        path.chmod(0o600)
+    arguments = _parse(
+        "--state-home",
+        os.fspath(state_home),
+        "acknowledge-stage",
+        "--attempt-id",
+        "attempt-001",
+        "--set-id",
+        "screening",
+        "--operator-index",
+        "1",
+        "--operator-label",
+        "operator-1",
+        "--stage",
+        "screening",
+    )
+
+    # When: the administrative CLI signs the stage acknowledgement.
+    rootless_local_bootstrap_cli.run(arguments)
+
+    # Then: its binding digest uses the authority builder's no-file-LF representation.
+    acknowledgement = json.loads(
+        (
+            root
+            / "acknowledgements/stage/attempt-001/screening/screening/operator-1.json"
+        ).read_bytes()
+    )
+    assert acknowledgement["stage_binding_sha256"] == hashlib.sha256(
+        canonical_json_value(binding)
+    ).hexdigest()

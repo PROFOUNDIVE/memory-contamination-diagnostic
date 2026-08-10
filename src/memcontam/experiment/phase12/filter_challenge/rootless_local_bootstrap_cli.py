@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib
 import json
 import os
 import platform
-import socket
 import stat
 import sys
 from datetime import UTC, datetime
@@ -29,6 +29,7 @@ from memcontam.experiment.phase12.filter_challenge.rootless_local_contract impor
     JsonValue,
     RootlessContractError,
     canonical_json_file,
+    canonical_json_value,
     parse_canonical_object,
 )
 from memcontam.experiment.phase12.filter_challenge.rootless_local_state import (
@@ -39,6 +40,8 @@ from memcontam.experiment.phase12.filter_challenge.rootless_local_state import (
 from memcontam.experiment.phase12.filter_challenge.rootless_local_execution import (
     write_request_goldens,
 )
+from memcontam.experiment.phase12.filter_challenge.rootless_local_broker import build_live_broker
+from memcontam.experiment.phase12.filter_challenge.rootless_local_state import read_private_file
 from memcontam.experiment.phase12.filter_challenge.rootless_local_operator import (
     acquire_attempt_lock,
     finalize_preclaim,
@@ -258,6 +261,7 @@ def _administrative(arguments: argparse.Namespace) -> None:
         if not root.exists():
             _status(arguments, None, None)
             return
+        descriptor: int | None = None
         try:
             descriptor = acquire_attempt_lock(root)
         except (FileNotFoundError, RootlessContractError):
@@ -281,7 +285,8 @@ def _administrative(arguments: argparse.Namespace) -> None:
             _status(arguments, None, None)
             return
         finally:
-            os.close(descriptor)
+            if descriptor is not None:
+                os.close(descriptor)
     descriptor = acquire_attempt_lock(root)
     try:
         claim = (root / "live-attempt-claim.json").is_file() or (root / f"claims/{arguments.attempt_id}.json").is_file()
@@ -392,7 +397,9 @@ def _acknowledge(arguments: argparse.Namespace) -> None:
             operator_label=arguments.operator_label,
             operator_index=arguments.operator_index,
             plan_binding_sha256=plan_hash,
-            stage_binding_sha256=hashlib.sha256(binding_path.read_bytes()).hexdigest(),
+            stage_binding_sha256=hashlib.sha256(
+                canonical_json_value(_read(binding_path))
+            ).hexdigest(),
             nonce=nonce,
             seed=seed,
             clock=clock,
@@ -467,31 +474,45 @@ def _authority(arguments: argparse.Namespace) -> None:
 
 
 def _broker_runtime(arguments: argparse.Namespace) -> None:
+    runtime = importlib.import_module(
+        "memcontam.experiment.phase12.filter_challenge.rootless_local_runtime"
+    )
+    compilation_loader = importlib.import_module(
+        "memcontam.experiment.phase12.filter_challenge.rootless_local_compilation"
+    )
+    authority_validator = importlib.import_module(
+        "memcontam.experiment.phase12.filter_challenge.rootless_local_authority"
+    )
     if arguments.worker_fd != 3:
         raise RootlessContractError("ROOTLESS_BROKER_FD_INVALID")
-    authority = _read(arguments.authority)
+    root = _root(arguments)
+    authority_path = root / "authorities" / arguments.attempt_id / f"{arguments.stage}.json"
+    if arguments.authority != authority_path:
+        raise RootlessContractError("ROOTLESS_EXECUTION_AUTHORITY_INVALID")
+    authority = parse_canonical_object(read_private_file(authority_path))
+    binding = parse_canonical_object(
+        read_private_file(root / "bindings" / arguments.attempt_id / f"{arguments.stage}.json")
+    )
     if (
-        authority.get("schema_version") != "rootless_stage_execution_authority_v1"
-        or authority.get("attempt_id") != arguments.attempt_id
+        authority.get("attempt_id") != arguments.attempt_id
         or authority.get("stage") != arguments.stage
     ):
         raise RootlessContractError("ROOTLESS_EXECUTION_AUTHORITY_INVALID")
-    broker_socket, worker_socket = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
-    process = os.fork()
-    if process == 0:
-        broker_socket.close()
-        os.dup2(worker_socket.fileno(), 3)
-        worker_socket.close()
-        for descriptor in range(4, 256):
-            try:
-                os.close(descriptor)
-            except OSError:
-                continue
-        os._exit(64)
-    worker_socket.close()
-    broker_socket.close()
-    _, status = os.waitpid(process, 0)
-    raise SystemExit(os.waitstatus_to_exitcode(status))
+    public_key = authority_validator.load_public_key(root)
+    authority_validator.validate_execution_authority(
+        authority,
+        binding,
+        public_key,
+    )
+    compilation = compilation_loader.load_live_stage_compilation(
+        binding, root, arguments.repo_root, public_key
+    )
+    exit_code = runtime.run_stage_process(
+        compilation.slots,
+        lambda: build_live_broker(binding, root, arguments.repo_root),
+    )
+    if exit_code:
+        raise SystemExit(exit_code)
 
 
 def run(arguments: argparse.Namespace) -> None:
