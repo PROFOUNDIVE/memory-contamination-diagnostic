@@ -93,12 +93,12 @@ def test_preflight_observes_bound_authority_on_synthetic_success(
 def test_preflight_maps_synthetic_hash_drift_to_external_input_stop(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # Given: a bound synthetic collection whose authority-agents source no longer matches its hash.
+    # Given: a bound synthetic collection whose Phase 13 experiment source no longer matches its hash.
     arguments = _arguments(tmp_path, "preflight-authority-drift")
     _isolate_local_preflight(monkeypatch)
 
     def observe(source: dict[str, JsonValue]) -> dict[str, JsonValue]:
-        if source["role"] == "authority-agents":
+        if source["role"] == "phase13-experiment-design":
             raise RootlessContractError("ROOTLESS_EXTERNAL_AUTHORITY_HASH_MISMATCH")
         return {"role": source["role"]}
 
@@ -112,7 +112,7 @@ def test_preflight_maps_synthetic_hash_drift_to_external_input_stop(
     status = json.loads(capsys.readouterr().out)
     assert raised.value.code == 65
     assert status["reason_code"] == "ROOTLESS_MISSING_EXTERNAL_INPUT"
-    assert status["missing_input_role"] == "ROOTLESS_THEORETICAL_AUTHORITY_AGENTS"
+    assert status["missing_input_role"] == "ROOTLESS_THEORETICAL_PHASE13_EXPERIMENT_DESIGN"
     assert status["external_authority_diagnostic"] == "ROOTLESS_EXTERNAL_AUTHORITY_HASH_MISMATCH"
 
 

@@ -320,7 +320,7 @@ def test_runtime_manifest_binds_installation_and_external_observations() -> None
         verify_object_signature,
     )
 
-    # Given: verified installation evidence and three ordered external observations.
+    # Given: verified installation evidence and four ordered external observations.
     seed = bytes(range(32))
     evidence = RuntimeInstallationEvidence(
         python_path="/state/venvs/phase12-filter-v5-rootless-local/bin/python",
@@ -339,7 +339,13 @@ def test_runtime_manifest_binds_installation_and_external_observations() -> None
     observations: list[JsonValue] = [
         {"role": role, "full_sha256": str(index) * 64}
         for index, role in enumerate(
-            ("experiment-design", "filter-v5-amendment", "authority-agents"), start=6
+            (
+                "phase13-theory",
+                "phase13-baseline-filter",
+                "phase13-contamination-protocol",
+                "phase13-experiment-design",
+            ),
+            start=6,
         )
     ]
 

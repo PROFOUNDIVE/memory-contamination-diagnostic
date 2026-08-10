@@ -30,7 +30,7 @@ def _mountinfo(path: Path, *, options: bytes = b"ro", mount_id: int = 7) -> byte
 def _source(path: Path) -> dict[str, JsonValue]:
     raw = path.read_bytes()
     return {
-        "role": "experiment-design",
+        "role": "phase13-experiment-design",
         "absolute_path": os.fspath(path),
         "full_sha256": sha256(raw).hexdigest(),
         "ordered_spans": [{"start_line": 2, "end_line": 2, "sha256": sha256(b"two\n").hexdigest()}],
@@ -178,7 +178,7 @@ def test_external_observation_preserves_six_distinct_diagnostics(tmp_path: Path)
 
     # When/Then: pre-read failures retain their exact diagnostic identity.
     with pytest.raises(RootlessContractError, match="ROOTLESS_EXTERNAL_AUTHORITY_REVIEW_BINDING_MISSING"):
-        observe_external_authority({"role": "experiment-design"})
+        observe_external_authority({"role": "phase13-experiment-design"})
     with pytest.raises(RootlessContractError, match="ROOTLESS_EXTERNAL_AUTHORITY_PATH_MISMATCH"):
         observe_external_authority(source, requested_path=os.fspath(source_path) + "-other")
     with pytest.raises(RootlessContractError, match="ROOTLESS_EXTERNAL_AUTHORITY_DESCRIPTOR_UNSAFE"):
@@ -189,7 +189,7 @@ def test_external_observation_preserves_six_distinct_diagnostics(tmp_path: Path)
         )
 
 
-def test_real_external_authority_hash_drift_is_reported_without_mutation() -> None:
+def test_real_external_authority_binds_phase13_canonical_stack_without_mutation() -> None:
     from memcontam.experiment.phase12.filter_challenge.rootless_local_binding import (
         observe_external_authorities,
     )
@@ -197,7 +197,7 @@ def test_real_external_authority_hash_drift_is_reported_without_mutation() -> No
         parse_canonical_object,
     )
 
-    # Given: exact metadata snapshots for the three configured external sources.
+    # Given: exact metadata snapshots for the four Phase 13 canonical sources.
     config = parse_canonical_object(
         Path("configs/phase12/filter_v5_rootless_local/decoding_authority.json").read_bytes()
     )
@@ -210,13 +210,16 @@ def test_real_external_authority_hash_drift_is_reported_without_mutation() -> No
     before = [(path.stat(), sha256(path.read_bytes()).hexdigest()) for path in paths]
 
     # When: the production two-snapshot predicate observes the current mount namespace.
-    with pytest.raises(RootlessContractError) as raised:
-        observe_external_authorities(config)
+    observations = observe_external_authorities(config)
 
-    # Then: the current hash drift identifies its exact bound role without changing any authority.
+    # Then: the canonical stack is accepted without changing any authority.
     after = [(path.stat(), sha256(path.read_bytes()).hexdigest()) for path in paths]
-    assert raised.value.code == "ROOTLESS_EXTERNAL_AUTHORITY_HASH_MISMATCH"
-    assert getattr(raised.value, "missing_input_role", None) == "ROOTLESS_THEORETICAL_AUTHORITY_AGENTS"
+    assert [observation["role"] for observation in observations] == [
+        "phase13-theory",
+        "phase13-baseline-filter",
+        "phase13-contamination-protocol",
+        "phase13-experiment-design",
+    ]
     assert [
         (item.st_dev, item.st_ino, item.st_mode, item.st_nlink, item.st_size, digest)
         for item, digest in before

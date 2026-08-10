@@ -33,7 +33,7 @@ _ID: Final = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}\Z")
 _DIR_FLAGS: Final = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 _FILE_FLAGS: Final = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC
 _CONFIG_DIGESTS: Final = {
-    "decoding_authority": "d2cbe904e95cfb2892887b35493ca18158b7b15130744e7d7b086520ef95dc36",
+    "decoding_authority": "c7c60e41ea0f4a69aa905dca32aa78d20d2bff1017fc03220fbaf1dbcf1f0304",
     "rate_card": "1d339d378bbc0a22bc52dc6eafba336521967135ae395023b78883a342354493",
     "screening": "92fe6bfb97abb8b5a4124388184f09528d6189588c2baf202a404a9b6976c485",
     "bct": "59669e0127eb1e904f3744386328209ae0640c38237a00feee9b517c5512ea06",
@@ -44,11 +44,17 @@ _CONFIG_FILENAMES: Final = {
     "screening": "screening.yaml",
     "bct": "bct.yaml",
 }
-_EXTERNAL_ROLES: Final = ("experiment-design", "filter-v5-amendment", "authority-agents")
+_EXTERNAL_ROLES: Final = (
+    "phase13-theory",
+    "phase13-baseline-filter",
+    "phase13-contamination-protocol",
+    "phase13-experiment-design",
+)
 _EXTERNAL_INPUT_ROLES: Final = {
-    "experiment-design": "ROOTLESS_THEORETICAL_EXPERIMENT_DESIGN",
-    "filter-v5-amendment": "ROOTLESS_THEORETICAL_FILTER_V5_AMENDMENT",
-    "authority-agents": "ROOTLESS_THEORETICAL_AUTHORITY_AGENTS",
+    "phase13-theory": "ROOTLESS_THEORETICAL_PHASE13_THEORY",
+    "phase13-baseline-filter": "ROOTLESS_THEORETICAL_PHASE13_BASELINE_FILTER",
+    "phase13-contamination-protocol": "ROOTLESS_THEORETICAL_PHASE13_CONTAMINATION_PROTOCOL",
+    "phase13-experiment-design": "ROOTLESS_THEORETICAL_PHASE13_EXPERIMENT_DESIGN",
 }
 _ESCAPES: Final = {b"040": b" ", b"011": b"\t", b"012": b"\n", b"134": b"\\"}
 
@@ -355,7 +361,7 @@ def observe_external_authorities(
     decoding_authority: Mapping[str, JsonValue],
 ) -> list[JsonValue]:
     sources = decoding_authority.get("ordered_sources")
-    if not isinstance(sources, list) or len(sources) != 3:
+    if not isinstance(sources, list) or len(sources) != len(_EXTERNAL_ROLES):
         raise _external_error("ROOTLESS_EXTERNAL_AUTHORITY_REVIEW_BINDING_MISSING")
     observations: list[JsonValue] = []
     for expected_role, source in zip(_EXTERNAL_ROLES, sources, strict=True):
@@ -531,7 +537,10 @@ def build_runtime_manifest(
     created_at: str,
 ) -> dict[str, JsonValue]:
     parse_timestamp(created_at)
-    if evidence.repo_root_mode_bits != 0o755 or len(ordered_external_authorities) != 3:
+    if (
+        evidence.repo_root_mode_bits != 0o755
+        or len(ordered_external_authorities) != len(_EXTERNAL_ROLES)
+    ):
         raise RootlessContractError("ROOTLESS_RUNTIME_MANIFEST_INVALID")
     roles = [entry.get("role") if isinstance(entry, dict) else None for entry in ordered_external_authorities]
     if roles != list(_EXTERNAL_ROLES):
