@@ -62,7 +62,7 @@ def test_f4_rootless_glob_is_sorted_and_excludes_only_process_races() -> None:
     assert "tests/test_phase12_filter_v5_final_wave.py" in rootless
 
 
-def test_synthetic_paid_and_skip_lineages_are_hash_bound_and_zero_egress(
+def test_synthetic_skip_lineage_is_hash_bound_and_zero_egress(
     tmp_path: Path,
 ) -> None:
     module = _module()
@@ -75,19 +75,32 @@ def test_synthetic_paid_and_skip_lineages_are_hash_bound_and_zero_egress(
         created_at="2026-08-09T00:00:00Z",
     )
 
-    paid = module.validate_fixture_lineage(fixtures.paid)
     skipped = module.validate_fixture_lineage(fixtures.skipped)
-    publication = json.loads(fixtures.paid.source.read_bytes())
     skip = json.loads(fixtures.skipped.source.read_bytes())
 
-    assert paid.outcome == "paid_attempt"
-    assert paid.provider_calls_issued == 2
-    assert publication["transport_mode"] == "fake"
-    assert publication["terminal"] == "LOCAL_ROOTLESS_BCT_REVIEW_REQUIRED"
     assert skipped.outcome == "zero_call_skip"
     assert skipped.provider_calls_issued == 0
     assert skip["reason"] == "ROOTLESS_MISSING_SECRET"
     assert skip["missing_input_role"] == "OPENAI_API_KEY"
+
+
+def test_synthetic_fixture_does_not_record_t7_or_create_canonical_publication(tmp_path: Path) -> None:
+    module = _module()
+    repository = tmp_path / "repo"
+    repository.mkdir(mode=0o700)
+
+    assert not hasattr(module, "record_t7")
+    fixtures = module.build_synthetic_task7_fixtures(
+        repository,
+        execution_commit="a" * 40,
+        created_at="2026-08-09T00:00:00Z",
+    )
+
+    assert fixtures.skipped.outcome == "zero_call_skip"
+    assert not (
+        repository
+        / "docs/evidence/phase12-filter-v5-rootless-local/rehearsal-publication.json"
+    ).exists()
 
 
 def test_evidence_envelopes_and_index_preserve_closed_array_order(tmp_path: Path) -> None:

@@ -14,23 +14,12 @@ import subprocess
 import sys
 from typing import Final, Literal
 
-import anyio
-
-from memcontam.experiment.phase12.filter_challenge.registry_calibration import TASKS
 from memcontam.experiment.phase12.filter_challenge.rootless_local_acknowledgement import (
     create_skip_receipt,
 )
 from memcontam.experiment.phase12.filter_challenge.rootless_local_contract import JsonValue
-from memcontam.experiment.phase12.filter_challenge.rootless_local_execution import (
-    CompileContext,
-    FakeResponse,
-    build_bct_compilation,
-    build_screening_compilation,
-    execute_fake_stage,
-)
 from memcontam.experiment.phase12.filter_challenge.rootless_local_operator import (
     PROFILE,
-    record_t7,
     write_anchor,
     write_new_or_same,
 )
@@ -56,21 +45,20 @@ class SentinelSpec:
 
 @dataclass(frozen=True, slots=True)
 class FixtureLineage:
-    outcome: Literal["paid_attempt", "zero_call_skip"]
+    outcome: Literal["zero_call_skip"]
     source: Path
     locator: Path
-    t7: Path
+    report: Path
 
 
 @dataclass(frozen=True, slots=True)
 class FixtureSet:
-    paid: FixtureLineage
     skipped: FixtureLineage
 
 
 @dataclass(frozen=True, slots=True)
 class LineageValidation:
-    outcome: Literal["paid_attempt", "zero_call_skip"]
+    outcome: Literal["zero_call_skip"]
     provider_calls_issued: int
 
 
@@ -137,83 +125,59 @@ def evidence_envelope(wave_role: str, inputs: tuple[dict[str, JsonValue], ...],
     }
 
 
-def _fixture_repository(root: Path, source: dict[str, JsonValue], *, paid: bool,
-                        state_home: Path | None = None) -> tuple[dict[str, JsonValue], dict[str, JsonValue]]:
-    if paid:
-        write_json(root / "docs/evidence/phase12-filter-v5-rootless-local/rehearsal-publication.json", source)
-    else:
-        write_json(root / QA_REL / "pre-egress/zero-call-skip.json", source)
-    record_t7(root, state_home)
-    return (
-        json.loads((root / QA_REL / "f3-state-locator.json").read_bytes()),
-        json.loads((root / QA_REL / "t7-real-attempt.json").read_bytes()),
-    )
-
-
 def build_synthetic_task7_fixtures(repository: Path, *, execution_commit: str,
-                                   created_at: str) -> FixtureSet:
-    qa = repository / QA_REL
-    fixtures = qa / "final/fixtures"
-    scratch = qa / "basetemp/final-fixtures"
-    scratch.mkdir(mode=0o700, parents=True, exist_ok=True)
-    probes = {task: tuple(f"{task}-probe-{index}" for index in range(6)) for task in TASKS}
-    selected = {task: values[:2] for task, values in probes.items()}
-    screening_context = CompileContext(
-        "final-wave-paid-fixture", "screening", "1" * 64, "2" * 64, "3" * 64
-    )
-    bct_context = CompileContext(
-        "final-wave-paid-fixture", "bct", "1" * 64, "2" * 64, "3" * 64
-    )
-    screening = build_screening_compilation(screening_context, probes).slots[:1]
-    bct = build_bct_compilation(bct_context, selected).slots[:1]
-    response = FakeResponse.completed(("fixture response",))
-    screening_result = anyio.run(execute_fake_stage, screening, response, scratch / "execution-screening")
-    bct_result = anyio.run(execute_fake_stage, bct, response, scratch / "execution-bct")
-    paid_source: dict[str, JsonValue] = {
-        "schema_version": "rootless_synthetic_publication_fixture_v1", "profile": PROFILE,
-        "kind": "publication_receipt", "attempt_id": "final-wave-paid-fixture",
-        "execution_commit": execution_commit, "plan_binding_sha256": "4" * 64,
-        "final_terminal_sha256": "5" * 64, "screening_terminal_sha256": "6" * 64,
-        "bct_terminal_sha256": "7" * 64, "bct_result_manifest_sha256": "8" * 64,
-        "state_inventory_sha256": "9" * 64, "published_at": created_at,
-        "transport_mode": "fake", "terminal": "LOCAL_ROOTLESS_BCT_REVIEW_REQUIRED",
-        "provider_calls_issued": screening_result.provider_calls_issued + bct_result.provider_calls_issued,
-    }
+                                    created_at: str) -> FixtureSet:
+    fixtures = repository / QA_REL / "final/fixtures"
     skip_source = create_skip_receipt(
         reason="ROOTLESS_MISSING_SECRET", missing_input_role="OPENAI_API_KEY",
         attempt_id="final-wave-skip-fixture", reviewed_plan_sha256="4" * 64,
         created_at=created_at, seed=None,
     )
-    paid_root, skip_root = scratch / "paid-repo", scratch / "skip-repo"
-    paid_locator, paid_t7 = _fixture_repository(paid_root, paid_source, paid=True,
-                                                  state_home=scratch / "paid-state-home")
-    skip_locator, skip_t7 = _fixture_repository(skip_root, skip_source, paid=False)
-    paid_source_path = repository / "docs/evidence/phase12-filter-v5-rootless-local/rehearsal-publication.json"
-    skip_source_path = qa / "pre-egress/zero-call-skip.json"
-    write_json(paid_source_path, paid_source)
-    write_json(skip_source_path, skip_source)
-    for name, value in (("paid/f3-state-locator.json", paid_locator), ("paid/t7-real-attempt.json", paid_t7),
-                        ("skip/f3-state-locator.json", skip_locator), ("skip/t7-real-attempt.json", skip_t7)):
-        write_json(fixtures / name, value)
-    write_json(qa / "f3-state-locator.json", skip_locator)
-    write_json(qa / "t7-real-attempt.json", skip_t7)
-    shutil.rmtree(scratch)
-    return FixtureSet(
-        FixtureLineage("paid_attempt", paid_source_path, fixtures / "paid/f3-state-locator.json", fixtures / "paid/t7-real-attempt.json"),
-        FixtureLineage("zero_call_skip", skip_source_path, fixtures / "skip/f3-state-locator.json", fixtures / "skip/t7-real-attempt.json"),
+    source = fixtures / "zero-call-skip.json"
+    source_hash = write_json(source, skip_source)
+    locator = fixtures / "zero-call-fixture-locator.json"
+    locator_hash = write_json(
+        locator,
+        {
+            "schema_version": "rootless_final_wave_fixture_locator_v1",
+            "profile": PROFILE,
+            "kind": "zero_call_fixture_locator",
+            "outcome": "zero_call_skip",
+            "source_sha256": source_hash,
+        },
     )
+    report = fixtures / "zero-call-fixture-report.json"
+    write_json(
+        report,
+        {
+            "schema_version": "rootless_final_wave_fixture_report_v1",
+            "profile": PROFILE,
+            "kind": "zero_call_fixture_report",
+            "outcome": "zero_call_skip",
+            "source_sha256": source_hash,
+            "locator_sha256": locator_hash,
+            "provider_calls_issued": 0,
+            "execution_commit": execution_commit,
+        },
+    )
+    return FixtureSet(FixtureLineage("zero_call_skip", source, locator, report))
 
 
 def validate_fixture_lineage(lineage: FixtureLineage) -> LineageValidation:
-    source, locator, t7 = (json.loads(path.read_bytes()) for path in (lineage.source, lineage.locator, lineage.t7))
+    source, locator, report = (
+        json.loads(path.read_bytes()) for path in (lineage.source, lineage.locator, lineage.report)
+    )
     source_hash = hashlib.sha256(lineage.source.read_bytes()).hexdigest()
     locator_hash = hashlib.sha256(lineage.locator.read_bytes()).hexdigest()
-    hash_field = "publication_receipt_sha256" if lineage.outcome == "paid_attempt" else "zero_call_skip_sha256"
-    if locator["outcome"] != lineage.outcome or t7["outcome"] != lineage.outcome:
+    if locator["outcome"] != lineage.outcome or report["outcome"] != lineage.outcome:
         raise ValueError("fixture outcome mismatch")
-    if locator[hash_field] != source_hash or t7[hash_field] != source_hash or t7["f3_state_locator_sha256"] != locator_hash:
+    if (
+        locator["source_sha256"] != source_hash
+        or report["source_sha256"] != source_hash
+        or report["locator_sha256"] != locator_hash
+    ):
         raise ValueError("fixture hash mismatch")
-    return LineageValidation(lineage.outcome, int(t7["provider_calls_issued"]))
+    return LineageValidation(lineage.outcome, int(report["provider_calls_issued"]))
 
 
 def final_index_fixture(repository: Path, lineage: FixtureLineage, *,
@@ -222,14 +186,13 @@ def final_index_fixture(repository: Path, lineage: FixtureLineage, *,
                         legacy_input_manifest_sha256: str, created_at: str) -> dict[str, JsonValue]:
     source = json.loads(lineage.source.read_bytes())
     source_hash = hashlib.sha256(lineage.source.read_bytes()).hexdigest()
-    paid = lineage.outcome == "paid_attempt"
     return {
         "schema_version": "rootless_final_verification_index_v1", "profile": PROFILE,
-        "plan_binding_sha256": source.get("plan_binding_sha256") if paid else source.get("reviewed_plan_sha256"),
+        "plan_binding_sha256": source.get("reviewed_plan_sha256"),
         "execution_commit": execution_commit, "outcome": lineage.outcome,
-        "publication_receipt_sha256": source_hash if paid else None,
-        "zero_call_skip_sha256": None if paid else source_hash,
-        "state_inventory_sha256": source.get("state_inventory_sha256") if paid else None,
+        "publication_receipt_sha256": None,
+        "zero_call_skip_sha256": source_hash,
+        "state_inventory_sha256": None,
         "ordered_pre_egress_evidence": [evidence(repository, role, repository / path)
                                          for role, path in sorted(pre_egress_paths, key=lambda item: item[0].encode())],
         "ordered_final_evidence": [evidence(repository, role, repository / path)
@@ -288,10 +251,8 @@ def _run_sentinel(repository: Path, spec: SentinelSpec) -> SentinelResult:
     return result
 
 
-def _final_paths(repository: Path, *, paid: bool) -> tuple[tuple[str, str], ...]:
+def _final_paths(repository: Path) -> tuple[tuple[str, str], ...]:
     paths = [
-        ("f3-state-locator", f"{QA_REL.as_posix()}/f3-state-locator.json"),
-        ("t7-real-attempt", f"{QA_REL.as_posix()}/t7-real-attempt.json"),
         ("final-f1-plan-compliance", f"{FINAL_REL.as_posix()}/f1-plan-compliance.json"),
         ("final-f2-broker-security", f"{FINAL_REL.as_posix()}/f2-broker-security.json"),
         ("final-f3-cli-rehearsal", f"{FINAL_REL.as_posix()}/f3-cli-rehearsal.json"),
@@ -301,10 +262,7 @@ def _final_paths(repository: Path, *, paid: bool) -> tuple[tuple[str, str], ...]
         (f"network-sentinel-{spec.role}", f"{FINAL_REL.as_posix()}/sentinels/{spec.role}.json")
         for spec in SENTINEL_SPECS
     )
-    paths.append(
-        ("rehearsal-publication", "docs/evidence/phase12-filter-v5-rootless-local/rehearsal-publication.json")
-        if paid else ("zero-call-skip", f"{QA_REL.as_posix()}/pre-egress/zero-call-skip.json")
-    )
+    paths.append(("zero-call-fixture", f"{FINAL_REL.as_posix()}/fixtures/zero-call-skip.json"))
     return tuple(paths)
 
 
@@ -340,10 +298,6 @@ def _clean_outputs(repository: Path) -> None:
         repository / QA_REL / "pre-egress/f2-broker-security.json",
         repository / QA_REL / "pre-egress/f3-cli-rehearsal.json",
         repository / QA_REL / "pre-egress/zero-call-skip.json",
-        repository / QA_REL / "f3-state-locator.json",
-        repository / QA_REL / "t7-real-attempt.json",
-        repository / "docs/evidence/phase12-filter-v5-rootless-local/rehearsal-publication.json",
-        repository / "docs/evidence/phase12-filter-v5-rootless-local/final-verification-index.json",
     ):
         path.unlink(missing_ok=True)
 
@@ -366,7 +320,6 @@ def run(repository: Path) -> int:
     fixtures = build_synthetic_task7_fixtures(
         repository, execution_commit=execution_commit, created_at=created_at
     )
-    validate_fixture_lineage(fixtures.paid)
     validate_fixture_lineage(fixtures.skipped)
     results = tuple(_run_sentinel(repository, spec) for spec in SENTINEL_SPECS)
     by_role = {result.role: result for result in results}
@@ -377,9 +330,6 @@ def run(repository: Path) -> int:
     f3_inputs = tuple(
         evidence(repository, role, path) for role, path in (
             ("network-sentinel-f3-pytest", sentinel_path("f3-pytest")),
-            ("f3-state-locator", repository / QA_REL / "f3-state-locator.json"),
-            ("t7-real-attempt", repository / QA_REL / "t7-real-attempt.json"),
-            ("rehearsal-publication-fixture", fixtures.paid.source),
             ("zero-call-skip-fixture", fixtures.skipped.source),
         )
     )
@@ -399,7 +349,7 @@ def run(repository: Path) -> int:
         write_json(repository / FINAL_REL / filename, envelope)
     manifest = repository / "configs/phase12/filter_v5_rootless_local/external_inputs.json"
     legacy_hash = hashlib.sha256(manifest.read_bytes()).hexdigest()
-    final_paths = _final_paths(repository, paid=False)
+    final_paths = _final_paths(repository)
     index = final_index_fixture(
         repository, fixtures.skipped, pre_egress_paths=PRE_EGRESS_PATHS,
         final_paths=final_paths, execution_commit=execution_commit,
@@ -407,18 +357,15 @@ def run(repository: Path) -> int:
     )
     (repository / FINAL_REL / "final-verification-index.json").unlink(missing_ok=True)
     write_json(repository / FINAL_REL / "final-verification-index.json", index)
-    (repository / "docs/evidence/phase12-filter-v5-rootless-local/final-verification-index.json").unlink(missing_ok=True)
-    write_json(repository / "docs/evidence/phase12-filter-v5-rootless-local/final-verification-index.json", index)
     scenario_root = repository / FINAL_REL / "index-fixtures"
-    scenarios = (("paid", fixtures.paid, 4), ("p0", fixtures.skipped, 1),
-                 ("p1", fixtures.skipped, 2), ("p2", fixtures.skipped, 3),
+    scenarios = (("p0", fixtures.skipped, 1), ("p1", fixtures.skipped, 2), ("p2", fixtures.skipped, 3),
                  ("p3", fixtures.skipped, 4), ("orchestration-interrupted", fixtures.skipped, 3))
     for name, lineage, prefix in scenarios:
         write_json(
             scenario_root / f"{name}.json",
             final_index_fixture(
                 repository, lineage, pre_egress_paths=PRE_EGRESS_PATHS[:prefix],
-                final_paths=_final_paths(repository, paid=lineage.outcome == "paid_attempt"),
+                final_paths=_final_paths(repository),
                 execution_commit=execution_commit, legacy_input_manifest_sha256=legacy_hash,
                 created_at=created_at,
             ),
