@@ -161,3 +161,57 @@ def test_stage_acknowledgement_hash_matches_execution_authority_binding_digest(
     assert acknowledgement["stage_binding_sha256"] == hashlib.sha256(
         canonical_json_value(binding)
     ).hexdigest()
+
+
+def test_preflight_blocks_missing_frozen_inputs_without_writing_artifacts(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Given: no frozen local inputs are supplied to the direct preflight handler.
+    repository = tmp_path / "repository"
+    repository.mkdir(mode=0o700)
+    arguments = _parse("preflight", "--attempt-id", "preflight-missing-inputs")
+    arguments.repo_root = repository
+
+    # When: preflight runs before any anchor or provider path is available.
+    with pytest.raises(SystemExit) as raised:
+        rootless_local_bootstrap_cli.run(arguments)
+
+    # Then: it returns a typed zero-call stop without materializing canonical output.
+    status = json.loads(capsys.readouterr().out)
+    assert raised.value.code == 65
+    assert status == {
+        "schema_version": "rootless_cli_status_v1",
+        "profile": PROFILE,
+        "command": "preflight",
+        "outcome": "blocked",
+        "next_action": "stop",
+        "reason_code": "ROOTLESS_MISSING_EXTERNAL_INPUT",
+        "attempt_id": "preflight-missing-inputs",
+        "artifact_role": None,
+        "artifact_sha256": None,
+        "provider_calls_issued": 0,
+        "exit_code": 65,
+    }
+    assert tuple(repository.iterdir()) == ()
+
+
+def test_preflight_maps_missing_state_home_to_typed_zero_call_stop(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir(mode=0o700)
+    arguments = _parse(
+        "--state-home",
+        os.fspath(tmp_path / "missing-state-home"),
+        "preflight",
+        "--attempt-id",
+        "preflight-missing-state-home",
+    )
+    arguments.repo_root = repository
+
+    with pytest.raises(SystemExit) as raised:
+        rootless_local_bootstrap_cli.run(arguments)
+
+    assert raised.value.code == 65
+    assert json.loads(capsys.readouterr().out)["reason_code"] == "ROOTLESS_MISSING_EXTERNAL_INPUT"
+    assert tuple(repository.iterdir()) == ()

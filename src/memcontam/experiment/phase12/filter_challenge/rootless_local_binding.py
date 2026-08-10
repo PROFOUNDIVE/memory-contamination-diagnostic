@@ -45,6 +45,11 @@ _CONFIG_FILENAMES: Final = {
     "bct": "bct.yaml",
 }
 _EXTERNAL_ROLES: Final = ("experiment-design", "filter-v5-amendment", "authority-agents")
+_EXTERNAL_INPUT_ROLES: Final = {
+    "experiment-design": "ROOTLESS_THEORETICAL_EXPERIMENT_DESIGN",
+    "filter-v5-amendment": "ROOTLESS_THEORETICAL_FILTER_V5_AMENDMENT",
+    "authority-agents": "ROOTLESS_THEORETICAL_AUTHORITY_AGENTS",
+}
 _ESCAPES: Final = {b"040": b" ", b"011": b"\t", b"012": b"\n", b"134": b"\\"}
 
 
@@ -74,6 +79,12 @@ class RuntimeInstallationEvidence:
     requirements_dev_lock_sha256: str
     tiktoken_version: str
     tokenizer_source_sha256: str
+
+
+class ExternalAuthorityObservationError(RootlessContractError):
+    def __init__(self, code: str, missing_input_role: str) -> None:
+        super().__init__(code)
+        self.missing_input_role = missing_input_role
 
 
 def _external_error(code: str = "ROOTLESS_EXTERNAL_AUTHORITY_MOUNT_NOT_READ_ONLY") -> RootlessContractError:
@@ -350,7 +361,12 @@ def observe_external_authorities(
     for expected_role, source in zip(_EXTERNAL_ROLES, sources, strict=True):
         if not isinstance(source, dict) or source.get("role") != expected_role:
             raise _external_error("ROOTLESS_EXTERNAL_AUTHORITY_REVIEW_BINDING_MISSING")
-        observations.append(observe_external_authority(source))
+        try:
+            observations.append(observe_external_authority(source))
+        except RootlessContractError as error:
+            raise ExternalAuthorityObservationError(
+                error.code, _EXTERNAL_INPUT_ROLES[expected_role]
+            ) from error
     return observations
 
 
@@ -407,7 +423,12 @@ def build_stage_binding(
         schedule_sha256,
     ):
         _require_hash(value)
-    if _GIT_SHA.fullmatch(trusted_base_commit) is None or _GIT_SHA.fullmatch(execution_commit) is None:
+    if (
+        _GIT_SHA.fullmatch(trusted_base_commit) is None
+        or _GIT_SHA.fullmatch(execution_commit) is None
+        or trusted_base_commit == "0" * 40
+        or execution_commit == "0" * 40
+    ):
         raise RootlessContractError("ROOTLESS_BINDING_INVALID")
     if stage == "screening" and (predecessor_terminal_sha256 is not None or freeze_b_sha256 is not None):
         raise RootlessContractError("ROOTLESS_BINDING_INVALID")
@@ -723,6 +744,7 @@ def revalidate_runtime_observations(
 
 
 __all__ = (
+    "ExternalAuthorityObservationError",
     "MountRecord",
     "RuntimeInstallationEvidence",
     "build_fake_stage_binding",

@@ -252,6 +252,38 @@ def test_acknowledgements_and_execution_authority_use_closed_schemas(tmp_path: P
     assert isinstance(plan_hashes, list) and len(plan_hashes) == 2
 
 
+def test_live_stage_binding_rejects_zero_commit_placeholders() -> None:
+    from memcontam.experiment.phase12.filter_challenge.rootless_local_binding import (
+        build_stage_binding,
+    )
+    from memcontam.experiment.phase12.filter_challenge.rootless_local_contract import (
+        RootlessContractError,
+    )
+
+    # Given: every required hash but placeholder Git identities.
+    arguments = {
+        "attempt_id": "attempt-001",
+        "stage": "screening",
+        "plan_binding_sha256": "1" * 64,
+        "trusted_base_commit": "0" * 40,
+        "execution_commit": "0" * 40,
+        "decoding_authority_sha256": "2" * 64,
+        "rate_card_sha256": "3" * 64,
+        "source_manifest_sha256": "4" * 64,
+        "runtime_manifest_sha256": "5" * 64,
+        "input_manifest_sha256": "6" * 64,
+        "compiler_sha256": "7" * 64,
+        "schedule_sha256": "8" * 64,
+        "registered_slots": 90,
+        "stage_cap_nanousd": 2_000_000_000,
+        "created_at": "2026-08-09T12:00:00Z",
+    }
+
+    # When/Then: no live binding can encode an unbound commit placeholder.
+    with pytest.raises(RootlessContractError, match="ROOTLESS_BINDING_INVALID"):
+        build_stage_binding(**arguments)
+
+
 def test_rate_acknowledgement_rejects_stale_observation() -> None:
     from memcontam.experiment.phase12.filter_challenge.rootless_local_acknowledgement import (
         AcknowledgementClock,

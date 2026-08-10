@@ -189,7 +189,7 @@ def test_external_observation_preserves_six_distinct_diagnostics(tmp_path: Path)
         )
 
 
-def test_real_external_authorities_are_observed_without_mutation() -> None:
+def test_real_external_authority_hash_drift_is_reported_without_mutation() -> None:
     from memcontam.experiment.phase12.filter_challenge.rootless_local_binding import (
         observe_external_authorities,
     )
@@ -210,17 +210,13 @@ def test_real_external_authorities_are_observed_without_mutation() -> None:
     before = [(path.stat(), sha256(path.read_bytes()).hexdigest()) for path in paths]
 
     # When: the production two-snapshot predicate observes the current mount namespace.
-    observations = observe_external_authorities(config)
+    with pytest.raises(RootlessContractError) as raised:
+        observe_external_authorities(config)
 
-    # Then: all authority bytes and descriptor metadata remain unchanged.
+    # Then: the current hash drift identifies its exact bound role without changing any authority.
     after = [(path.stat(), sha256(path.read_bytes()).hexdigest()) for path in paths]
-    observation_objects = [entry for entry in observations if isinstance(entry, dict)]
-    assert len(observation_objects) == 3
-    assert [entry["role"] for entry in observation_objects] == [
-        "experiment-design",
-        "filter-v5-amendment",
-        "authority-agents",
-    ]
+    assert raised.value.code == "ROOTLESS_EXTERNAL_AUTHORITY_HASH_MISMATCH"
+    assert getattr(raised.value, "missing_input_role", None) == "ROOTLESS_THEORETICAL_AUTHORITY_AGENTS"
     assert [
         (item.st_dev, item.st_ino, item.st_mode, item.st_nlink, item.st_size, digest)
         for item, digest in before
