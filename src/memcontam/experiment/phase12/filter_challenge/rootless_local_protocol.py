@@ -108,9 +108,10 @@ def validate_message(message: dict[str, JsonValue]) -> None:
 
 @dataclass(slots=True)
 class WireProtocol:
-    """Validates each per-slot branch and global message sequence exactly once."""
+    """Validates each per-slot branch and each direction's message sequence."""
 
-    _next_sequence: int = 0
+    _next_dispatch_sequence: int = 0
+    _next_result_sequence: int = 0
     _states: dict[str, str] = field(default_factory=dict)
     _closed: set[str] = field(default_factory=set)
 
@@ -123,11 +124,16 @@ class WireProtocol:
         sequence = message["message_sequence"]
         slot = message["slot_id"]
         message_type = message["message_type"]
+        expected_sequence = (
+            self._next_dispatch_sequence
+            if message_type == "dispatch"
+            else self._next_result_sequence
+        )
         if (
             not isinstance(sequence, int)
             or not isinstance(slot, str)
             or not isinstance(message_type, str)
-            or sequence != self._next_sequence
+            or sequence != expected_sequence
             or slot in self._closed
         ):
             raise RootlessContractError("ROOTLESS_WIRE_INVALID")
@@ -147,7 +153,10 @@ class WireProtocol:
                 self._closed.add(slot)
             case _:
                 raise RootlessContractError("ROOTLESS_WIRE_INVALID")
-        self._next_sequence += 1
+        if message_type == "dispatch":
+            self._next_dispatch_sequence += 1
+        else:
+            self._next_result_sequence += 1
 
 
 __all__ = ("WireProtocol", "decode_frame", "encode_frame", "validate_message")

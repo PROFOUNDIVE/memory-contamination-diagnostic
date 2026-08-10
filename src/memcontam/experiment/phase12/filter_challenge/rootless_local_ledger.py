@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Literal
@@ -34,6 +35,7 @@ CUMULATIVE_CAP_NANOUSD: Final = 10_000_000_000
 SCREENING_CALL_CAP: Final = 90
 BCT_CALL_CAP: Final = 480
 CUMULATIVE_CALL_CAP: Final = SCREENING_CALL_CAP + BCT_CALL_CAP
+_MAX_LEDGER_ENTRIES: Final = CUMULATIVE_CALL_CAP * 2 + 2
 _HEX: Final = re.compile(r"[0-9a-f]{64}\Z")
 _ID: Final = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}\Z")
 _FILE_FLAGS: Final = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC
@@ -120,7 +122,7 @@ class GlobalLedger:
         self.root = root
         self.seed = seed
         self.attempt_id = attempt_id
-        self.stage = stage
+        self.stage: Stage = stage
         self.records_root = root / "ledger" / "global" / "records"
         self.heads_root = root / "ledger" / "global" / "heads"
         self.records_root.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -137,8 +139,20 @@ class GlobalLedger:
         settled_records = [record for record in self._records if record["record_kind"] == "settlement"]
         settled = sum((self._settlement_cost(record) for record in settled_records), start=0)
         active = self._active_unsettled_nanousd()
-        terminal = bool(self._records and self._records[-1]["record_kind"] in {"terminal", "interruption"})
+        terminal = self._closed_for_stage()
         return LedgerSnapshot(issued, not_issued, settled, active, active, terminal)
+
+    def stage_counts(self) -> tuple[int, int]:
+        return (
+            sum(
+                record["record_kind"] == "reservation" and record["stage"] == self.stage
+                for record in self._records
+            ),
+            sum(
+                record["record_kind"] == "not_issued" and record["stage"] == self.stage
+                for record in self._records
+            ),
+        )
 
     def reserve(self, request: LedgerReservation, created_at: str) -> LedgerAppend:
         self._ensure_open()
@@ -203,11 +217,13 @@ class GlobalLedger:
             )
             if record["record_kind"] == "reservation"
         }
-        settled = {
-            record["reservation_record_sha256"]
-            for record in self._records
-            if record["record_kind"] == "settlement"
-        }
+        settled: set[str] = set()
+        for record in self._records:
+            settlement_reference = record.get("reservation_record_sha256")
+            if record["record_kind"] == "settlement" and isinstance(
+                settlement_reference, str
+            ):
+                settled.add(settlement_reference)
         if reservation_record_sha256 not in reservation_hashes or reservation_record_sha256 in settled:
             raise RootlessContractError("ROOTLESS_LEDGER_INVALID")
         cost = actual_cost_nanousd(usage)
@@ -236,8 +252,11 @@ class GlobalLedger:
         include_request: bool,
     ) -> LedgerAppend:
         self._ensure_open()
-        self._validate_reservation(request)
         input_cap = reason == "ROOTLESS_INPUT_CAP_EXCEEDED"
+        if input_cap:
+            self._validate_input_cap_not_issued(request)
+        else:
+            self._validate_reservation(request)
         if input_cap != include_request or input_cap != (compile_status == "compiled"):
             raise RootlessContractError("ROOTLESS_LEDGER_INVALID")
         if not input_cap and request.predecessor_receipt_sha256 is None:
@@ -280,7 +299,14 @@ class GlobalLedger:
             ):
                 return self._append_value(record_path, head_path, record, self._heads[-1])
             raise RootlessContractError("ROOTLESS_LEDGER_TERMINAL")
-        snapshot = self.snapshot()
+        stage_issued = sum(
+            record["record_kind"] == "reservation" and record["stage"] == self.stage
+            for record in self._records
+        )
+        stage_not_issued = sum(
+            record["record_kind"] == "not_issued" and record["stage"] == self.stage
+            for record in self._records
+        )
         return self._append(
             "interruption" if terminal_status == "interrupted" else "terminal",
             created_at,
@@ -289,10 +315,10 @@ class GlobalLedger:
                 "terminal_status": terminal_status,
                 "reason_code": reason_code,
                 "registered_slots": registered_slots,
-                "issued_slots": snapshot.cumulative_issued,
-                "not_issued_slots": snapshot.cumulative_not_issued,
-                "settled_nanousd": snapshot.cumulative_settled_nanousd,
-                "retained_nanousd": snapshot.active_unsettled_nanousd,
+                "issued_slots": stage_issued,
+                "not_issued_slots": stage_not_issued,
+                "settled_nanousd": self._stage_settled(self.stage),
+                "retained_nanousd": self._active_unsettled_nanousd(self.stage),
             },
         )
 
@@ -366,9 +392,17 @@ class GlobalLedger:
         previous_head: str | None = None
         for sequence, (path, record) in enumerate(zip(record_paths, records, strict=True)):
             if (
-                record.get("sequence") != sequence
+                record.get("schema_version") != "rootless_ledger_record_v1"
+                or record.get("profile") != PROFILE
+                or record.get("kind") != "ledger_record"
+                or record.get("record_kind")
+                not in {"reservation", "settlement", "not_issued", "terminal", "interruption"}
+                or record.get("sequence") != sequence
                 or record.get("previous_record_sha256") != previous_record
                 or record.get("attempt_id") != self.attempt_id
+                or record.get("stage") not in {"screening", "bct"}
+                or record.get("key_fingerprint")
+                != hashlib.sha256(public_key_from_seed(self.seed)).hexdigest()
             ):
                 raise RootlessContractError("ROOTLESS_LEDGER_INVALID")
             previous_record = self._artifact_hash(path)
@@ -376,9 +410,15 @@ class GlobalLedger:
             raise RootlessContractError("ROOTLESS_LEDGER_INVALID")
         for sequence, (path, head) in enumerate(zip(head_paths, heads, strict=True)):
             if (
-                head.get("sequence") != sequence
+                head.get("schema_version") != "rootless_ledger_head_v1"
+                or head.get("profile") != PROFILE
+                or head.get("kind") != "ledger_head"
+                or head.get("attempt_id") != self.attempt_id
+                or head.get("sequence") != sequence
                 or head.get("previous_head_sha256") != previous_head
                 or head.get("record_sha256") != self._artifact_hash(record_paths[sequence])
+                or head.get("key_fingerprint")
+                != hashlib.sha256(public_key_from_seed(self.seed)).hexdigest()
             ):
                 raise RootlessContractError("ROOTLESS_LEDGER_INVALID")
             previous_head = self._artifact_hash(path)
@@ -439,9 +479,10 @@ class GlobalLedger:
 
     def _active_unsettled_nanousd(self, stage: Stage | None = None) -> int:
         settled_reservations = {
-            record["reservation_record_sha256"]
+            value
             for record in self._records
             if record["record_kind"] == "settlement"
+            and isinstance((value := record.get("reservation_record_sha256")), str)
         }
         active_reservations = sum(
             1
@@ -462,11 +503,18 @@ class GlobalLedger:
         return value
 
     def _validate_reservation(self, request: LedgerReservation) -> None:
+        self._validate_request_identity(request)
+        if request.request_bytes > 262_144:
+            raise RootlessContractError("ROOTLESS_LEDGER_INVALID")
+
+    def _validate_input_cap_not_issued(self, request: LedgerReservation) -> None:
+        self._validate_request_identity(request)
+
+    def _validate_request_identity(self, request: LedgerReservation) -> None:
         if (
             _ID.fullmatch(request.slot_id) is None
             or _ID.fullmatch(request.idempotency_key) is None
             or request.request_bytes < 0
-            or request.request_bytes > 262_144
             or request.compiled_input_tokens < 0
         ):
             raise RootlessContractError("ROOTLESS_LEDGER_INVALID")
@@ -488,6 +536,17 @@ class GlobalLedger:
     def _ensure_open(self) -> None:
         if self.snapshot().terminal:
             raise RootlessContractError("ROOTLESS_LEDGER_TERMINAL")
+
+    def _closed_for_stage(self) -> bool:
+        if not self._records or self._records[-1]["record_kind"] not in {"terminal", "interruption"}:
+            return False
+        terminal = self._records[-1]
+        return not (
+            self.stage == "bct"
+            and terminal.get("stage") == "screening"
+            and terminal.get("terminal_status") == "completed_estimable"
+            and terminal.get("reason_code") == "SCREENING_ESTIMABLE"
+        )
 
     def _signed(self, payload: dict[str, JsonValue], domain: str) -> dict[str, JsonValue]:
         result = dict(payload)
@@ -511,6 +570,8 @@ class GlobalLedger:
     @staticmethod
     def _paths(root: Path) -> list[Path]:
         paths = sorted(root.iterdir(), key=lambda path: path.name.encode())
+        if len(paths) > _MAX_LEDGER_ENTRIES:
+            raise RootlessContractError("ROOTLESS_LEDGER_INVALID")
         for sequence, path in enumerate(paths):
             if not path.name.startswith(f"{sequence:06d}-"):
                 raise RootlessContractError("ROOTLESS_LEDGER_INVALID")
@@ -528,8 +589,19 @@ class GlobalLedger:
 
     @staticmethod
     def _read_regular(path: Path) -> bytes:
-        descriptor = os.open(path, _FILE_FLAGS)
         try:
+            descriptor = os.open(path, _FILE_FLAGS)
+        except OSError as error:
+            raise RootlessContractError("ROOTLESS_LEDGER_INVALID") from error
+        try:
+            info = os.fstat(descriptor)
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.getuid()
+                or info.st_nlink != 1
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RootlessContractError("ROOTLESS_LEDGER_INVALID")
             chunks: list[bytes] = []
             while chunk := os.read(descriptor, 1_048_576):
                 chunks.append(chunk)

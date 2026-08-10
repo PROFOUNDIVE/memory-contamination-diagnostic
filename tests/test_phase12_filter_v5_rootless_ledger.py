@@ -9,7 +9,9 @@ import pytest
 
 from memcontam.experiment.phase12.filter_challenge.rootless_local_contract import (
     RootlessContractError,
+    canonical_json_file,
     public_key_from_seed,
+    sign_object,
     verify_object_signature,
 )
 from memcontam.experiment.phase12.filter_challenge.rootless_local_ledger import (
@@ -18,8 +20,11 @@ from memcontam.experiment.phase12.filter_challenge.rootless_local_ledger import 
     RESERVATION_NANOUSD,
     SCREENING_CAP_NANOUSD,
     GlobalLedger,
+    CompileStatus,
     LedgerReservation,
+    NotIssuedReason,
     ProviderUsage,
+    Stage,
     actual_cost_nanousd,
 )
 
@@ -41,7 +46,7 @@ def _reservation(slot_id: str = "slot-001") -> LedgerReservation:
     )
 
 
-def _ledger(root: Path, *, stage: str = "screening") -> GlobalLedger:
+def _ledger(root: Path, *, stage: Stage = "screening") -> GlobalLedger:
     root.mkdir(mode=0o700)
     return GlobalLedger(root, SEED, "attempt-001", stage)
 
@@ -133,7 +138,7 @@ def test_invalid_usage_cannot_settle_a_reservation(tmp_path: Path, usage: Provid
     ],
 )
 def test_not_issued_branches_are_accounted_without_reservation(
-    tmp_path: Path, reason: str, compile_status: str, has_request: bool
+    tmp_path: Path, reason: NotIssuedReason, compile_status: CompileStatus, has_request: bool
 ) -> None:
     # Given: an empty ledger and one scheduled slot.
     ledger = _ledger(tmp_path / reason)
@@ -155,6 +160,30 @@ def test_not_issued_branches_are_accounted_without_reservation(
     assert result.record["reserved_nanousd"] == 0
     assert result.head["cumulative_not_issued"] == 1
     assert ledger.snapshot().active_unsettled_nanousd == 0
+
+
+def test_input_cap_not_issued_persists_an_oversized_compilation_without_reservation(
+    tmp_path: Path,
+) -> None:
+    # Given: a compiled request exceeds both frozen issuance caps.
+    ledger = _ledger(tmp_path / "state")
+    request = replace(_reservation(), request_bytes=262_145, compiled_input_tokens=3073)
+
+    # When: pre-dispatch accounting records the cap refusal.
+    result = ledger.not_issued(
+        request,
+        "ROOTLESS_INPUT_CAP_EXCEEDED",
+        NOW,
+        compile_status="compiled",
+        include_request=True,
+    )
+
+    # Then: the exact compiled identity persists as a zero-cost, non-issued ledger head.
+    assert result.record["request_sha256"] == request.request_sha256
+    assert result.record["request_bytes"] == 262_145
+    assert result.record["compiled_input_tokens"] == 3073
+    assert result.record["reserved_nanousd"] == result.record["actual_nanousd"] == 0
+    assert result.head["record_sha256"] == result.record_sha256
 
 
 def test_terminal_record_closes_stage_and_is_idempotently_recovered(tmp_path: Path) -> None:
@@ -198,6 +227,75 @@ def test_terminal_record_closes_stage_and_is_idempotently_recovered(tmp_path: Pa
         recovered.reserve(_reservation("slot-003"), NOW)
 
 
+def test_completed_estimable_screening_terminal_permits_bct_stage(tmp_path: Path) -> None:
+    # Given: screening is scientifically complete but the attempt is not final.
+    root = tmp_path / "state"
+    screening = _ledger(root)
+    screening.terminal(
+        terminal_status="completed_estimable",
+        reason_code="SCREENING_ESTIMABLE",
+        registered_slots=0,
+        created_at=NOW,
+    )
+
+    # When: BCT opens the same global ledger and reserves its first slot.
+    bct = GlobalLedger(root, SEED, "attempt-001", "bct")
+    reservation = bct.reserve(_reservation("bct-slot-001"), NOW)
+
+    # Then: the screening terminal remains immutable and BCT appends after it.
+    assert reservation.record["stage"] == "bct"
+    assert reservation.record["previous_record_sha256"] is not None
+
+
+def test_stage_terminal_counts_are_local_while_head_counts_are_cumulative(tmp_path: Path) -> None:
+    # Given: one settled screening call followed by one settled BCT call.
+    root = tmp_path / "state"
+    screening = _ledger(root)
+    first = screening.reserve(_reservation("screening-slot"), NOW)
+    screening.settle(first.record_sha256, "4" * 64, "5" * 64, ProviderUsage(1, 0, 1, 2), NOW)
+    screening.terminal(
+        terminal_status="completed_estimable",
+        reason_code="SCREENING_ESTIMABLE",
+        registered_slots=1,
+        created_at=NOW,
+    )
+    bct = GlobalLedger(root, SEED, "attempt-001", "bct")
+    second = bct.reserve(_reservation("bct-slot"), NOW)
+    bct.settle(second.record_sha256, "6" * 64, "7" * 64, ProviderUsage(1, 0, 1, 2), NOW)
+
+    # When: BCT appends its stage terminal.
+    terminal = bct.terminal(
+        terminal_status="review_required",
+        reason_code="BCT_COMPLETED_REVIEW_REQUIRED",
+        registered_slots=1,
+        created_at=NOW,
+    )
+
+    # Then: the record is stage-local while its resulting head remains cumulative.
+    assert terminal.record["issued_slots"] == 1
+    assert terminal.record["not_issued_slots"] == 0
+    assert terminal.record["settled_nanousd"] == 12_500
+    assert terminal.head["cumulative_issued"] == 2
+    assert terminal.head["cumulative_settled_nanousd"] == 25_000
+
+
+def test_attempt_final_screening_terminal_rejects_bct_stage(tmp_path: Path) -> None:
+    # Given: screening has ended the whole attempt.
+    root = tmp_path / "state"
+    screening = _ledger(root)
+    screening.terminal(
+        terminal_status="not_estimable",
+        reason_code="SCREENING_NOT_ESTIMABLE",
+        registered_slots=0,
+        created_at=NOW,
+    )
+
+    # When/Then: BCT cannot append to the globally terminal attempt.
+    bct = GlobalLedger(root, SEED, "attempt-001", "bct")
+    with pytest.raises(RootlessContractError, match="ROOTLESS_LEDGER_TERMINAL"):
+        bct.reserve(_reservation("bct-slot-001"), NOW)
+
+
 def test_missing_head_is_reconstructed_but_tampered_record_is_rejected(tmp_path: Path) -> None:
     # Given: one record whose derived head was lost at an atomic boundary.
     root = tmp_path / "state"
@@ -212,5 +310,30 @@ def test_missing_head_is_reconstructed_but_tampered_record_is_rejected(tmp_path:
     assert recovered.head_sha256 == result.head_sha256
     raw = result.record_path.read_bytes()
     result.record_path.write_bytes(raw.replace(b'"request_bytes":128', b'"request_bytes":129'))
+    with pytest.raises(RootlessContractError, match="ROOTLESS_LEDGER_INVALID"):
+        GlobalLedger(root, SEED, "attempt-001", "screening")
+
+
+def test_recovery_rejects_resigned_record_envelope_drift(tmp_path: Path) -> None:
+    root = tmp_path / "state"
+    ledger = _ledger(root)
+    result = ledger.reserve(_reservation(), NOW)
+    record = dict(result.record)
+    record["profile"] = "other-profile"
+    del record["signature"]
+    record["signature"] = sign_object(SEED, "ledger-record-v1", record)
+    result.record_path.write_bytes(canonical_json_file(record))
+
+    with pytest.raises(RootlessContractError, match="ROOTLESS_LEDGER_INVALID"):
+        GlobalLedger(root, SEED, "attempt-001", "screening")
+
+
+def test_recovery_rejects_symlinked_ledger_entry(tmp_path: Path) -> None:
+    root = tmp_path / "state"
+    ledger = _ledger(root)
+    result = ledger.reserve(_reservation(), NOW)
+    result.record_path.unlink()
+    result.record_path.symlink_to(tmp_path / "replacement")
+
     with pytest.raises(RootlessContractError, match="ROOTLESS_LEDGER_INVALID"):
         GlobalLedger(root, SEED, "attempt-001", "screening")
