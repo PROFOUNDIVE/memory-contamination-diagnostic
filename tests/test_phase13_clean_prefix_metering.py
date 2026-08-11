@@ -88,6 +88,28 @@ def test_metered_client_uses_utf8_byte_bound_before_dispatch() -> None:
     assert client.calls == 0
 
 
+def test_metered_client_uses_registered_output_limit_when_stage_omits_one() -> None:
+    class _CountingClient:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def chat(self, messages, model, config) -> LLMResponse:  # noqa: ANN001
+            del messages, model, config
+            self.calls += 1
+            return LLMResponse(
+                content="final: 24",
+                raw={"attempts": 1, "cost_usd": 0.0},
+                token_usage={"prompt_tokens": 1, "completion_tokens": 1},
+            )
+
+    client = _CountingClient()
+    metered = MeteredClient(client, load_clean_prefix_config(CONFIG))
+
+    metered.chat([{"role": "user", "content": "solve"}], "model", {})
+
+    assert client.calls == 1
+
+
 def test_metered_client_allows_low_cost_calls_under_lower_hard_ceiling() -> None:
     class _Client:
         def chat(self, messages, model, config) -> LLMResponse:  # noqa: ANN001

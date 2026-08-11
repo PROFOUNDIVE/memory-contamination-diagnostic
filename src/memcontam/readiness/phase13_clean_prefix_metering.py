@@ -48,7 +48,9 @@ class MeteredClient:
         )
         if projected_input_tokens > self.maximum_input_tokens_per_attempt:
             raise Phase13CalibrationError("CALIBRATION_INPUT_TOKEN_CEILING_EXCEEDED")
-        requested_output_tokens = config.get("max_output_tokens", config.get("max_tokens"))
+        requested_output_tokens = config.get(
+            "max_output_tokens", config.get("max_tokens", self.maximum_output_tokens_per_attempt)
+        )
         if (
             type(requested_output_tokens) is not int
             or requested_output_tokens < 0
