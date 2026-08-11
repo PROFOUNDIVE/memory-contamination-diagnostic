@@ -5,12 +5,13 @@ from dataclasses import dataclass, replace
 from typing import Mapping, Sequence
 
 from memcontam.baselines.contracts import BaselineExecutionOutcome
-from memcontam.experiment.phase12.game24_runner import Game24RuntimeContext, RuntimeIdentities
+from memcontam.experiment.phase12.game24_runner import (
+    MAIN_TASKS,
+    Game24RuntimeContext,
+    RuntimeIdentities,
+)
 from memcontam.experiment.phase12.live_branch import Arm, LiveBranchEvent, LiveThreeArmBranches
 from memcontam.experiment.phase12.runtime_registry import LIVE_BASELINE_REGISTRY, RuntimeEntry, RuntimeTrialResult
-
-
-_ARMS: tuple[Arm, ...] = ("clean", "contam", "filter")
 
 
 class LiveSuffixError(ValueError):
@@ -66,7 +67,10 @@ def run_live_matched_suffix(
     }
     if not memory_runs:
         raise LiveSuffixError("MEMORY_SUFFIX_REQUIRED")
-    nomem = _run_nomem_suffix(suffix_contexts, registry)
+    arm_orders = {tuple(run.arms) for run in branches_by_baseline.values()}
+    if len(arm_orders) != 1:
+        raise LiveSuffixError("ARM_SET_DRIFT")
+    nomem = _run_nomem_suffix(suffix_contexts, registry, next(iter(arm_orders)))
     return LiveMatchedSuffixResult(
         tuple(context.task.sample_id for context in suffix_contexts), memory_runs, nomem
     )
@@ -74,8 +78,9 @@ def run_live_matched_suffix(
 
 def _validate_contexts(contexts: Sequence[Game24RuntimeContext]) -> tuple[Game24RuntimeContext, ...]:
     suffix_contexts = tuple(contexts)
-    if not suffix_contexts or any(context.task.task_name != "game24" for context in suffix_contexts):
-        raise LiveSuffixError("GAME24_SUFFIX_REQUIRED")
+    task_names = {context.task.task_name for context in suffix_contexts}
+    if not suffix_contexts or len(task_names) != 1 or not task_names <= MAIN_TASKS:
+        raise LiveSuffixError("MAIN_TASK_SUFFIX_REQUIRED")
     if any(context.branch != "clean" for context in suffix_contexts):
         raise LiveSuffixError("CLEAN_SUFFIX_CONTEXT_REQUIRED")
     indices = tuple(context.identities.order_key for context in suffix_contexts)
@@ -105,7 +110,7 @@ def _run_memory_suffix(
     if branches.model != contexts[0].model or dict(branches.decoding) != dict(contexts[0].decoding):
         raise LiveSuffixError("SUFFIX_RUNTIME_DRIFT")
     trials: list[LiveSuffixTrial] = []
-    for arm in _ARMS:
+    for arm in branches.arms:
         state = deepcopy(branches.arms[arm].state)
         for context in contexts:
             trial_context = _arm_context(context, arm, branches.baseline)
@@ -129,7 +134,9 @@ def _run_memory_suffix(
 
 
 def _run_nomem_suffix(
-    contexts: tuple[Game24RuntimeContext, ...], registry: Mapping[str, RuntimeEntry]
+    contexts: tuple[Game24RuntimeContext, ...],
+    registry: Mapping[str, RuntimeEntry],
+    display_aliases: tuple[Arm, ...],
 ) -> LiveNoMemSuffixRun:
     entry = registry.get("nomem")
     if entry is None:
@@ -153,7 +160,7 @@ def _run_nomem_suffix(
                 result.outcome,
             )
         )
-    return LiveNoMemSuffixRun(len(contexts), tuple(trials), _ARMS)
+    return LiveNoMemSuffixRun(len(contexts), tuple(trials), display_aliases)
 
 
 def _arm_context(context: Game24RuntimeContext, arm: Arm, condition_id: str) -> Game24RuntimeContext:
