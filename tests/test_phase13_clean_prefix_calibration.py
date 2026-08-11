@@ -118,6 +118,15 @@ def test_prepare_clean_prefix_emits_exact_bounded_authorization_packet(tmp_path:
     assert "--allow-live-calls" in packet["execution_command"]
 
 
+def test_budget_accepts_operator_ceiling_below_full_envelope() -> None:
+    config = phase13_clean_prefix.load_clean_prefix_config(CONFIG)
+    config["budget"]["hard_ceiling_microusd"] = 15_000_000
+
+    budget = phase13_clean_prefix._budget(config, prefix_positions=44)
+
+    assert budget["hard_ceiling_microusd"] == 15_000_000
+
+
 def test_run_clean_prefix_denies_missing_authorization_before_provider_dispatch(
     tmp_path: Path,
 ) -> None:

@@ -181,11 +181,16 @@ def _budget(config: dict[str, Any], prefix_positions: int) -> dict[str, int]:
         "maximum_transport_attempts": attempts,
         "maximum_input_tokens": input_tokens,
         "maximum_output_tokens": output_tokens,
-        "hard_ceiling_microusd": microusd,
     }
-    if any(budget.get(key) != value for key, value in calculated.items()):
+    hard_ceiling = budget.get("hard_ceiling_microusd")
+    minimum_ceiling = microusd // maximum
+    if (
+        any(budget.get(key) != value for key, value in calculated.items())
+        or type(hard_ceiling) is not int
+        or not minimum_ceiling <= hard_ceiling <= microusd
+    ):
         raise Phase13CalibrationError("INVALID_CALIBRATION_BUDGET")
-    return calculated
+    return {**calculated, "hard_ceiling_microusd": hard_ceiling}
 
 
 def _input_artifacts(config: dict[str, Any]) -> dict[str, dict[str, str]]:
