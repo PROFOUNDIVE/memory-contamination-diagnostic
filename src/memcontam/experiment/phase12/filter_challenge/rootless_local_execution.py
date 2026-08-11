@@ -483,7 +483,7 @@ async def execute_fake_stage(
     stage = slots[0].stage
     fixture_id = slots[0].attempt_id
     root = temporary_root / "basetemp" / "t5" / "tmp" / "fake-state" / fixture_id
-    root.mkdir(mode=0o700, parents=True)
+    root.mkdir(mode=0o700, parents=True, exist_ok=stage == "bct")
     binding = build_fake_stage_binding(
         fixture_id=fixture_id,
         stage=stage,

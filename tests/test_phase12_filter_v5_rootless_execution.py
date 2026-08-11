@@ -10,6 +10,7 @@ import pytest
 
 from memcontam.experiment.phase12.filter_challenge.registry_calibration import BASELINES
 from memcontam.experiment.phase12.filter_challenge.rootless_local_contract import (
+    JsonValue,
     RootlessContractError,
     canonical_json_file,
     public_key_from_seed,
@@ -53,6 +54,39 @@ def _context(stage: Stage) -> CompileContext:
         input_manifest_sha256="2" * 64,
         compiler_sha256="3" * 64,
     )
+
+
+def prepare_fake_bct_predecessor(
+    temporary_root: Path, repository: Path, attempt_id: str = "fixture-t5"
+) -> None:
+    root = temporary_root / "basetemp/t5/tmp/fake-state" / attempt_id
+    root.mkdir(mode=0o700, parents=True)
+    lock = root / "runtime.lock"
+    lock.write_bytes(b"")
+    lock.chmod(0o600)
+    seed = hashlib.sha256(f"rootless-fixture:{attempt_id}".encode()).digest()
+    terminal: dict[str, JsonValue] = {
+        "attempt_id": attempt_id,
+        "status": "completed_estimable",
+        "reason_code": "SCREENING_ESTIMABLE",
+    }
+    terminal["signature"] = sign_object(seed, "stage-terminal-v1", terminal)
+    terminal_raw = canonical_json_file(terminal)
+    probes = _probes()
+    freeze: dict[str, JsonValue] = {
+        "attempt_id": attempt_id,
+        "screening_stage_terminal_sha256": hashlib.sha256(terminal_raw).hexdigest(),
+        **{f"selected_{task}_probe_ids": list(values[:2]) for task, values in probes.items()},
+    }
+    freeze["signature"] = sign_object(seed, "freeze-b-v1", freeze)
+    for relative, raw in (
+        (f"terminals/{attempt_id}/screening.json", terminal_raw),
+        (f"freeze/{attempt_id}/freeze_b.json", canonical_json_file(freeze)),
+    ):
+        path = root / relative
+        path.parent.mkdir(mode=0o700, parents=True)
+        path.write_bytes(raw)
+        path.chmod(0o600)
 
 
 def test_compiler_covers_exact_schedules_and_is_deterministic() -> None:
@@ -236,6 +270,7 @@ def test_bct_receipt_records_scientific_and_executor_replicates(tmp_path: Path) 
     # Given: one static R0 BCT provider slot.
     selected = {task: probes[:2] for task, probes in _probes().items()}
     slot = build_bct_compilation(_context("bct"), selected).slots[0]
+    prepare_fake_bct_predecessor(tmp_path, ROOT)
 
     # When: it is issued through the fake broker.
     result = anyio.run(execute_fake_stage, (slot,), FakeResponse.completed(("ok",)), tmp_path)
@@ -279,6 +314,7 @@ def test_bct_outcome_uses_the_closed_call_schema_without_synthetic_route_fields(
     )
     probe_manifest = json.loads(PROBES.read_bytes())
     answer = probe_manifest["probes"]["game24"][0]["certificate"]["expression"]
+    prepare_fake_bct_predecessor(tmp_path, ROOT)
 
     # When: control and challenge execute through the same production broker parser.
     result = anyio.run(execute_fake_stage, pair, FakeResponse.completed((answer,)), tmp_path)
@@ -373,6 +409,7 @@ def test_ordering_only_predecessor_accepts_accounted_failure(tmp_path: Path) -> 
         and slot.scientific_replicate == 1
         and slot.probe_id == selected["game24"][0]
     )
+    prepare_fake_bct_predecessor(tmp_path, ROOT)
 
     # When: both slots traverse a malformed fake response.
     result = anyio.run(execute_fake_stage, pair, FakeResponse.malformed(), tmp_path)
@@ -431,6 +468,7 @@ def test_full_fake_screening_and_bct_reconcile_exact_provider_slots(tmp_path: Pa
 
     # When: both stages run through independent disposable T4 fake brokers.
     screening_result = anyio.run(execute_fake_stage, screening.slots, response, tmp_path / "s")
+    prepare_fake_bct_predecessor(tmp_path / "b", ROOT)
     bct_result = anyio.run(execute_fake_stage, bct.slots, response, tmp_path / "b")
 
     # Then: all 90 and 480 provider slots are issued, archived, and ledger-reconciled.
