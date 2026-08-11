@@ -9,6 +9,7 @@ from memcontam.tasks.base import TaskInstance
 
 
 Branch = Literal["clean", "correct", "irrelevant", "contam", "filter"]
+MAIN_TASKS = frozenset({"game24", "math_equation_balancer", "word_sorting"})
 
 
 @dataclass(frozen=True)
@@ -45,8 +46,8 @@ class Game24RuntimeContext:
     maturity_horizon: int = 1
 
     def __post_init__(self) -> None:
-        if self.task.task_name != "game24":
-            raise ValueError("GAME24_TASK_REQUIRED")
+        if self.task.task_name not in MAIN_TASKS:
+            raise ValueError("MAIN_TASK_REQUIRED")
         if not self.model or not self.identities.run_id or not self.identities.trial_id:
             raise ValueError("RUNTIME_IDENTITIES_REQUIRED")
 
