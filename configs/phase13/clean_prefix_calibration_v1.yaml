@@ -87,7 +87,7 @@ budget:
   maximum_transport_attempts: 1584
   maximum_input_tokens: 6488064
   maximum_output_tokens: 3244032
-  hard_ceiling_microusd: 48660480
+  hard_ceiling_microusd: 15000000
   input_per_1m_tokens: 2.5
   cached_input_per_1m_tokens: 1.25
   output_per_1m_tokens: 10.0

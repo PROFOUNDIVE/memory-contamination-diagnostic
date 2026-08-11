@@ -113,7 +113,7 @@ def test_prepare_clean_prefix_emits_exact_bounded_authorization_packet(tmp_path:
         "maximum_transport_attempts": 1584,
         "maximum_input_tokens": 6488064,
         "maximum_output_tokens": 3244032,
-        "hard_ceiling_microusd": 48660480,
+        "hard_ceiling_microusd": 15000000,
     }
     assert "--allow-live-calls" in packet["execution_command"]
 
