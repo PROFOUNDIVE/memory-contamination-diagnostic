@@ -5,15 +5,19 @@ from __future__ import annotations
 import argparse
 import hashlib
 import importlib
+import importlib.metadata
 import json
 import os
 import platform
 import re
 import stat
+import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
+
+import memcontam
 
 from memcontam.experiment.phase12.filter_challenge.rootless_local_acknowledgement import (
     AcknowledgementClock,
@@ -23,7 +27,13 @@ from memcontam.experiment.phase12.filter_challenge.rootless_local_acknowledgemen
 )
 from memcontam.experiment.phase12.filter_challenge.rootless_local_binding import (
     ExternalAuthorityObservationError,
+    RuntimeInstallationEvidence,
+    build_compiler_manifest,
     build_execution_authority,
+    build_input_manifest,
+    build_runtime_manifest,
+    build_schedule_manifest,
+    build_source_manifest,
     build_stage_binding,
     observe_external_authorities,
     validate_rootless_configs,
@@ -39,16 +49,24 @@ from memcontam.experiment.phase12.filter_challenge.rootless_local_contract impor
 )
 from memcontam.experiment.phase12.filter_challenge.rootless_local_closure import (
     derive_freeze_b,
-    seal_bct_setup_failure,
 )
 from memcontam.experiment.phase12.filter_challenge.rootless_local_state import (
     InitStateRequest,
     _validate_reviewed_plan,
     cache_tokenizer_source,
     initialize_state,
+    write_canonical_new,
 )
 from memcontam.experiment.phase12.filter_challenge.rootless_local_execution import (
+    CompileContext,
+    build_bct_compilation,
+    build_screening_compilation,
+    load_probe_ids,
     write_request_goldens,
+)
+from memcontam.experiment.phase12.filter_challenge.ordinary_authority import (
+    OrdinaryAuthorityError,
+    validate_ordinary_authority,
 )
 from memcontam.experiment.phase12.filter_challenge.rootless_local_broker import build_live_broker
 from memcontam.experiment.phase12.filter_challenge.rootless_local_state import read_private_file
@@ -69,6 +87,7 @@ from memcontam.experiment.phase12.filter_challenge.rootless_local_pre_egress imp
 )
 
 PROFILE: Final = "local_rootless_non_authoritative"
+PAID_EGRESS_ACK: Final = "I_ACCEPT_LOCAL_ROOTLESS_NON_AUTHORITATIVE_UP_TO_USD_10"
 TRUSTED_BASE_COMMIT: Final = "c057fb1adf9571ef21cd19fa2733c5ac47b40798"
 _PREFLIGHT_ID: Final = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}\Z")
 _TOKENIZER_SOURCE_SHA256: Final = "446a9538cb6c348e3516120d7c08b09f57c36495e2acfffe59a5bf8b0cfb1a2d"
@@ -81,6 +100,18 @@ _PREFLIGHT_FILES: Final = (
     "historical_post_descriptor",
     "tokenizer_source",
 )
+_MANIFEST_INPUTS: Final = (
+    ("decoding-authority", "configs/phase12/filter_v5_rootless_local/decoding_authority.json"),
+    ("rate-card", "configs/phase12/filter_v5_rootless_local/rate_card.json"),
+    ("screening-config", "configs/phase12/filter_v5_rootless_local/screening.yaml"),
+    ("bct-config", "configs/phase12/filter_v5_rootless_local/bct.yaml"),
+    ("historical-probe-construction", "data/phase12/filter_v5_bct_v1/probe_construction_manifest_v1.json"),
+    ("historical-candidate-triplets", "data/phase12/filter_v5_bct_v1/candidate_triplets_v1.json"),
+    ("historical-checkpoints", "data/phase12/filter_v5_bct_v1/checkpoint_manifest_v1.json"),
+    ("historical-ordinary-route-false", "data/phase12/filter_v5_bct_v1/ordinary_route_false_manifest_v1.json"),
+    ("request-goldens", "data/phase12/filter_v5_rootless_local/request_goldens.json"),
+)
+_LOCK_ENTRY: Final = re.compile(r"^([A-Za-z0-9_.-]+)==([^ \\\n]+)", re.MULTILINE)
 
 
 def _attempt(parser: argparse.ArgumentParser) -> None:
@@ -203,6 +234,235 @@ def _root(arguments: argparse.Namespace) -> Path:
 
 def _timestamp() -> str:
     return datetime.now(UTC).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _manifest_git(repository: Path, *arguments: str) -> bytes:
+    validator = repository / "scripts/validate_phase12_filter_v5_rootless_git_context.py"
+    validated = subprocess.run(
+        [sys.executable, "-B", "-I", "-S", os.fspath(validator), "--repo-root", os.fspath(repository)],
+        check=False,
+        capture_output=True,
+        env={"LC_ALL": "C", "PATH": "/usr/bin:/bin"},
+    )
+    if validated.returncode or validated.stdout or validated.stderr:
+        raise RootlessContractError("ROOTLESS_GIT_CONTEXT_INVALID")
+    result = subprocess.run(
+        [
+            "/usr/bin/git", "--no-optional-locks", "-c", "core.fsmonitor=false", "-c",
+            "core.untrackedCache=false", "-c", "core.hooksPath=/dev/null", "-c",
+            "core.excludesFile=/dev/null", "-c", "core.attributesFile=/dev/null", "-C",
+            os.fspath(repository), *arguments,
+        ],
+        check=False,
+        capture_output=True,
+        env={
+            "LC_ALL": "C", "PATH": "/usr/bin:/bin", "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_ATTR_NOSYSTEM": "1", "GIT_OPTIONAL_LOCKS": "0",
+            "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_SYSTEM": "/dev/null",
+            "GIT_NO_REPLACE_OBJECTS": "1",
+        },
+    )
+    if result.returncode or result.stderr:
+        raise RootlessContractError("ROOTLESS_GIT_CONTEXT_INVALID")
+    return result.stdout
+
+
+def source_files(
+    repository: Path, execution_commit: str
+) -> tuple[list[JsonValue], list[str], list[str]]:
+    if _manifest_git(repository, "rev-parse", "HEAD").decode("ascii").strip() != execution_commit:
+        raise RootlessContractError("ROOTLESS_EXECUTION_COMMIT_INVALID")
+    raw_paths = _manifest_git(repository, "ls-files", "-z", "--", ":(glob)src/memcontam/**/*.py")
+    paths = tuple(Path(value.decode("utf-8")) for value in raw_paths.rstrip(b"\0").split(b"\0"))
+    if not paths or paths != tuple(sorted(paths, key=lambda value: os.fspath(value).encode())):
+        raise RootlessContractError("ROOTLESS_SOURCE_MANIFEST_INVALID")
+    entries: list[JsonValue] = []
+    roles: list[str] = []
+    hashes: list[str] = []
+    for relative in paths:
+        path = repository / relative
+        info = path.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise RootlessContractError("ROOTLESS_SOURCE_MANIFEST_INVALID")
+        raw = path.read_bytes()
+        digest = hashlib.sha256(raw).hexdigest()
+        role = f"src-{hashlib.sha256(os.fspath(relative).encode()).hexdigest()[:32]}"
+        entries.append({
+            "role": role, "repo_relative_path": os.fspath(relative),
+            "size_bytes": len(raw), "sha256": digest,
+        })
+        roles.append(role)
+        hashes.append(digest)
+    return entries, roles, hashes
+
+
+def _distribution_file(distribution: importlib.metadata.Distribution, filename: str) -> Path:
+    matches = tuple(
+        Path(str(distribution.locate_file(value)))
+        for value in distribution.files or ()
+        if value.name == filename and ".dist-info" in value.parts
+    )
+    if len(matches) != 1:
+        raise RootlessContractError("ROOTLESS_RUNTIME_MANIFEST_INVALID")
+    return matches[0]
+
+
+def collect_runtime_installation_evidence(
+    repository: Path, tokenizer_source_sha256: str
+) -> RuntimeInstallationEvidence:
+    lock = repository / "requirements.lock"
+    dev_lock = repository / "requirements-dev.lock"
+    locked = dict(_LOCK_ENTRY.findall(dev_lock.read_text(encoding="utf-8")))
+    records: list[tuple[str, bytes]] = []
+    native: list[tuple[str, str]] = []
+    for name, expected_version in sorted(locked.items(), key=lambda item: item[0].lower()):
+        try:
+            distribution = importlib.metadata.distribution(name)
+        except importlib.metadata.PackageNotFoundError as error:
+            raise RootlessContractError("ROOTLESS_RUNTIME_MANIFEST_INVALID") from error
+        if distribution.version != expected_version:
+            raise RootlessContractError("ROOTLESS_RUNTIME_MANIFEST_INVALID")
+        record = _distribution_file(distribution, "RECORD").read_bytes()
+        records.append((name.lower(), hashlib.sha256(record).digest()))
+        for value in distribution.files or ():
+            if value.suffix in {".so", ".pyd"}:
+                path = Path(str(distribution.locate_file(value)))
+                native.append((os.fspath(value), hashlib.sha256(path.read_bytes()).hexdigest()))
+    project = importlib.metadata.distribution("memory-contamination-diagnostic")
+    direct_raw = _distribution_file(project, "direct_url.json").read_bytes()
+    records.append((
+        "memory-contamination-diagnostic",
+        hashlib.sha256(_distribution_file(project, "RECORD").read_bytes()).digest(),
+    ))
+    if json.loads(direct_raw) != {"dir_info": {"editable": True}, "url": repository.as_uri()}:
+        raise RootlessContractError("ROOTLESS_RUNTIME_MANIFEST_INVALID")
+    imported = Path(memcontam.__file__).resolve(strict=True)
+    if not imported.is_relative_to(repository / "src/memcontam"):
+        raise RootlessContractError("ROOTLESS_RUNTIME_MANIFEST_INVALID")
+    return RuntimeInstallationEvidence(
+        os.path.realpath(sys.executable), platform.python_version(), importlib.metadata.version("pip"),
+        os.fspath(imported), stat.S_IMODE(repository.stat().st_mode),
+        hashlib.sha256(direct_raw).hexdigest(),
+        hashlib.sha256(b"".join(name.encode() + b"\0" + digest for name, digest in sorted(records))).hexdigest(),
+        tuple(value for _, value in sorted(native)), hashlib.sha256(lock.read_bytes()).hexdigest(),
+        hashlib.sha256(dev_lock.read_bytes()).hexdigest(), importlib.metadata.version("tiktoken"),
+        tokenizer_source_sha256,
+    )
+
+
+def _manifest_inputs(repository: Path) -> list[JsonValue]:
+    entries: list[JsonValue] = []
+    for role, relative in _MANIFEST_INPUTS:
+        path = repository / relative
+        raw = path.read_bytes()
+        parse_canonical_object(raw)
+        entries.append({
+            "role": role, "absolute_path": os.fspath(path),
+            "size_bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest(),
+        })
+    return entries
+
+
+def _tokenizer_hash(state: Path) -> str:
+    files = tuple((state / "tokenizer/cache").iterdir())
+    if len(files) != 1:
+        raise RootlessContractError("ROOTLESS_TOKENIZER_SOURCE_INVALID")
+    return hashlib.sha256(read_private_file(files[0])).hexdigest()
+
+
+def materialize_screening_prerequisites(
+    repository: Path, state: Path, attempt: str, execution_commit: str, created_at: str
+) -> None:
+    seed = read_private_file(state / "keys/ed25519-private.key")
+    configs = validate_rootless_configs(repository)
+    source_entries, source_roles, source_hashes = source_files(repository, execution_commit)
+    source = build_source_manifest(execution_commit, source_entries, seed=seed, created_at=created_at)
+    inputs = build_input_manifest(
+        _manifest_inputs(repository), configs["decoding_authority"], configs["rate_card"],
+        seed=seed, created_at=created_at,
+    )
+    compiler = build_compiler_manifest(
+        execution_commit, source_roles, source_hashes, seed=seed, created_at=created_at
+    )
+    decoding = parse_canonical_object((repository / _MANIFEST_INPUTS[0][1]).read_bytes())
+    runtime = build_runtime_manifest(
+        collect_runtime_installation_evidence(repository, _tokenizer_hash(state)),
+        observe_external_authorities(decoding), seed=seed, created_at=created_at,
+    )
+    source_hash = hashlib.sha256(canonical_json_file(source)).hexdigest()
+    input_hash = hashlib.sha256(canonical_json_file(inputs)).hexdigest()
+    compiler_hash = hashlib.sha256(canonical_json_file(compiler)).hexdigest()
+    compilation = build_screening_compilation(
+        CompileContext(attempt, "screening", source_hash, input_hash, compiler_hash),
+        load_probe_ids(repository),
+    )
+    schedule = build_schedule_manifest(
+        attempt, "screening", tuple(slot.manifest() for slot in compilation.slots),
+        seed=seed, created_at=created_at,
+    )
+    if schedule["slot_count"] != 90 or schedule["ordered_slot_root_sha256"] != compilation.ordered_slot_root_sha256:
+        raise RootlessContractError("ROOTLESS_SCHEDULE_MANIFEST_INVALID")
+    root = state / "manifests" / attempt
+    for name, value in (
+        ("source", source), ("runtime", runtime), ("input", inputs), ("compiler", compiler),
+        ("screening-schedule", schedule), ("decoding-authority", decoding),
+        ("rate-card", parse_canonical_object((repository / _MANIFEST_INPUTS[1][1]).read_bytes())),
+    ):
+        write_canonical_new(root / f"{name}.json", value)
+
+
+def materialize_bct_schedule(repository: Path, state: Path, attempt: str, created_at: str) -> None:
+    try:
+        validate_ordinary_authority(repository)
+    except OrdinaryAuthorityError as error:
+        raise RootlessContractError(error.code) from error
+    seed = read_private_file(state / "keys/ed25519-private.key")
+    terminal_path = state / "terminals" / attempt / "screening.json"
+    freeze_path = state / "freeze" / attempt / "freeze_b.json"
+    try:
+        terminal_raw = read_private_file(terminal_path)
+        freeze_raw = read_private_file(freeze_path)
+    except OSError as error:
+        raise RootlessContractError("ROOTLESS_BINDING_INVALID") from error
+    terminal = parse_canonical_object(terminal_raw)
+    freeze = parse_canonical_object(freeze_raw)
+    public_key = public_key_from_seed(seed)
+    for domain, value in (("stage-terminal-v1", terminal), ("freeze-b-v1", freeze)):
+        signature = value.get("signature")
+        if not isinstance(signature, str):
+            raise RootlessContractError("ROOTLESS_BINDING_INVALID")
+        unsigned = dict(value)
+        del unsigned["signature"]
+        verify_object_signature(public_key, domain, unsigned, signature)
+    if (
+        terminal.get("status") != "completed_estimable"
+        or terminal.get("reason_code") != "SCREENING_ESTIMABLE"
+        or freeze.get("screening_stage_terminal_sha256") != hashlib.sha256(terminal_raw).hexdigest()
+        or freeze.get("attempt_id") != attempt
+    ):
+        raise RootlessContractError("ROOTLESS_BINDING_INVALID")
+    selected: dict[str, tuple[str, ...]] = {}
+    for task in ("game24", "math_equation_balancer", "word_sorting"):
+        values = freeze.get(f"selected_{task}_probe_ids")
+        if not isinstance(values, list) or len(values) != 2 or not all(isinstance(value, str) for value in values):
+            raise RootlessContractError("ROOTLESS_BINDING_INVALID")
+        selected[task] = tuple(value for value in values if isinstance(value, str))
+    manifest_root = state / "manifests" / attempt
+    hashes = {
+        name: hashlib.sha256(read_private_file(manifest_root / f"{name}.json")).hexdigest()
+        for name in ("source", "input", "compiler")
+    }
+    compilation = build_bct_compilation(
+        CompileContext(attempt, "bct", hashes["source"], hashes["input"], hashes["compiler"]),
+        selected,
+    )
+    schedule = build_schedule_manifest(
+        attempt, "bct", tuple(slot.manifest() for slot in compilation.slots),
+        seed=seed, created_at=created_at,
+    )
+    if schedule["slot_count"] != 480 or schedule["ordered_slot_root_sha256"] != compilation.ordered_slot_root_sha256:
+        raise RootlessContractError("ROOTLESS_SCHEDULE_MANIFEST_INVALID")
+    write_canonical_new(manifest_root / "bct-schedule.json", schedule)
 
 
 def _status(arguments: argparse.Namespace, role: str | None, digest: str | None) -> None:
@@ -510,7 +770,7 @@ def _preflight(arguments: argparse.Namespace) -> None:
         or int(arguments.tpm_limit) < 30_000
     ):
         raise RootlessContractError("ROOTLESS_RATE_CAPABILITY_MISSING")
-    if not isinstance(arguments.paid_egress_ack, str) or not arguments.paid_egress_ack:
+    if arguments.paid_egress_ack != PAID_EGRESS_ACK:
         raise RootlessContractError("ROOTLESS_PAID_EGRESS_NOT_ENABLED")
     validate_rootless_configs(arguments.repo_root)
     authority_path = arguments.repo_root / "configs/phase12/filter_v5_rootless_local/decoding_authority.json"
@@ -589,14 +849,7 @@ def _bind(arguments: argparse.Namespace) -> None:
     stage = "screening" if arguments.rootless_command == "bind-screening" else "bct"
     attempt = arguments.attempt_id
     if stage == "bct":
-        digest = seal_bct_setup_failure(root, attempt, _seed(root))
-        _exit_status(
-            arguments,
-            69,
-            "ROOTLESS_BCT_SETUP_FAILED",
-            "attempt_terminal",
-            digest,
-        )
+        materialize_bct_schedule(arguments.repo_root, root, attempt, _timestamp())
     manifests = root / "manifests" / attempt
     configs = validate_rootless_configs(arguments.repo_root)
     names = {
@@ -741,6 +994,15 @@ def run(arguments: argparse.Namespace) -> None:
                 result.tokenizer_cache,
                 expected_rank_count=199_998,
             )
+        if not isinstance(arguments.execution_commit, str):
+            raise RootlessContractError("ROOTLESS_EXECUTION_COMMIT_INVALID")
+        materialize_screening_prerequisites(
+            arguments.repo_root,
+            result.state_root,
+            arguments.attempt_id,
+            arguments.execution_commit,
+            _timestamp(),
+        )
         _status(arguments, "plan_binding", hashlib.sha256(result.plan_binding.read_bytes()).hexdigest())
         return
     if command in {"acknowledge-plan", "acknowledge-stage", "acknowledge-rate-capability"}:

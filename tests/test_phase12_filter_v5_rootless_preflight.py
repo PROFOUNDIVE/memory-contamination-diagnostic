@@ -20,6 +20,7 @@ from memcontam.experiment.phase12.filter_challenge.rootless_local_operator impor
 
 
 ROOT = Path(__file__).resolve().parents[1]
+PAID_EGRESS_ACK = "I_ACCEPT_LOCAL_ROOTLESS_NON_AUTHORITATIVE_UP_TO_USD_10"
 
 
 def _arguments(tmp_path: Path, attempt_id: str) -> argparse.Namespace:
@@ -42,7 +43,7 @@ def _arguments(tmp_path: Path, attempt_id: str) -> argparse.Namespace:
         provider_account_label="provider-1",
         rpm_limit="6",
         tpm_limit="30000",
-        paid_egress_ack="acknowledged",
+        paid_egress_ack=PAID_EGRESS_ACK,
     )
 
 
@@ -88,6 +89,32 @@ def test_preflight_observes_bound_authority_on_synthetic_success(
     sources = authority["ordered_sources"]
     assert isinstance(sources, list)
     assert observed_roles == [source["role"] for source in sources if isinstance(source, dict)]
+
+
+@pytest.mark.parametrize(
+    "acknowledgement",
+    (
+        "",
+        "acknowledged",
+        "yes",
+        f" {PAID_EGRESS_ACK}",
+        f"{PAID_EGRESS_ACK} ",
+    ),
+)
+def test_preflight_rejects_every_nonexact_paid_egress_acknowledgement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    acknowledgement: str,
+) -> None:
+    # Given: every non-payment gate passes but the operator token is not exact.
+    arguments = _arguments(tmp_path, "preflight-paid-egress-token")
+    arguments.paid_egress_ack = acknowledgement
+    _isolate_local_preflight(monkeypatch)
+
+    # When/Then: preflight blocks before external authority observation or dispatch.
+    monkeypatch.setattr(rootless_local_bootstrap_cli, "observe_external_authorities", pytest.fail)
+    with pytest.raises(RootlessContractError, match="ROOTLESS_PAID_EGRESS_NOT_ENABLED"):
+        rootless_local_bootstrap_cli._preflight(arguments)
 
 
 def test_preflight_maps_synthetic_hash_drift_to_external_input_stop(

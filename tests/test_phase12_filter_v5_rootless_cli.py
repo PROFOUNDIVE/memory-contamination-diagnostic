@@ -15,6 +15,7 @@ from memcontam.experiment.phase12.filter_challenge.rootless_local_binding import
     build_stage_binding,
 )
 from memcontam.experiment.phase12.filter_challenge.rootless_local_contract import (
+    JsonValue,
     canonical_json_file,
     canonical_json_value,
 )
@@ -161,6 +162,67 @@ def test_stage_acknowledgement_hash_matches_execution_authority_binding_digest(
     assert acknowledgement["stage_binding_sha256"] == hashlib.sha256(
         canonical_json_value(binding)
     ).hexdigest()
+
+
+def test_bind_bct_builds_from_valid_screening_and_freeze_lineage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Given: a fresh private state with all prerequisite manifests and valid lineage files.
+    state_home = tmp_path / "state"
+    root = state_home / "memcontam/phase12-filter-v5-rootless-local"
+    attempt = "bind-bct-positive"
+    manifest_root = root / "manifests" / attempt
+    terminal = root / "terminals" / attempt / "screening.json"
+    freeze = root / "freeze" / attempt / "freeze_b.json"
+    key = root / "keys" / "ed25519-private.key"
+    for directory in (manifest_root, terminal.parent, freeze.parent, key.parent):
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    state_home.chmod(0o700)
+    key.write_bytes(bytes(range(32)))
+    (root / "plan-bind.md").write_bytes(b"reviewed plan\n")
+    for name in ("source", "runtime", "input", "compiler", "bct-schedule"):
+        (manifest_root / f"{name}.json").write_bytes(b"{}\n")
+    terminal.write_bytes(b'{"status":"completed_estimable"}\n')
+    freeze.write_bytes(b'{"selected_game24_probe_ids":["a","b"]}\n')
+    source: dict[str, JsonValue] = {
+        "execution_commit": "b" * 40,
+        "signature": "signature",
+    }
+    captured: dict[str, JsonValue] = {}
+
+    def build(**values: JsonValue) -> dict[str, JsonValue]:
+        captured.update(values)
+        return {"stage": "bct"}
+
+    monkeypatch.setattr(rootless_local_bootstrap_cli, "validate_rootless_configs", lambda _root: {
+        "decoding_authority": "1" * 64,
+        "rate_card": "2" * 64,
+    })
+    monkeypatch.setattr(rootless_local_bootstrap_cli, "_read", lambda _path: source)
+    monkeypatch.setattr(rootless_local_bootstrap_cli, "verify_object_signature", lambda *_args: None)
+    monkeypatch.setattr(rootless_local_bootstrap_cli, "read_canonical", lambda _path: {
+        "execution_commit": "b" * 40,
+    })
+    monkeypatch.setattr(rootless_local_bootstrap_cli, "build_stage_binding", build)
+    monkeypatch.setattr(rootless_local_bootstrap_cli, "_write", lambda _path, _value: "3" * 64)
+    monkeypatch.setattr(rootless_local_bootstrap_cli, "_status", lambda *_args: None)
+    monkeypatch.setattr(rootless_local_bootstrap_cli, "materialize_bct_schedule", lambda *_args: None)
+    arguments = _parse(
+        "--state-home",
+        os.fspath(state_home),
+        "bind-bct",
+        "--attempt-id",
+        attempt,
+    )
+
+    # When: production administration binds BCT after screening and Freeze-B.
+    rootless_local_bootstrap_cli._bind(arguments)
+
+    # Then: the positive binding carries both immutable predecessor hashes.
+    assert captured["stage"] == "bct"
+    assert captured["registered_slots"] == 480
+    assert captured["predecessor_terminal_sha256"] == hashlib.sha256(terminal.read_bytes()).hexdigest()
+    assert captured["freeze_b_sha256"] == hashlib.sha256(freeze.read_bytes()).hexdigest()
 
 
 def test_preflight_blocks_missing_frozen_inputs_without_writing_artifacts(
