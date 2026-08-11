@@ -1,0 +1,250 @@
+{"canonical_signature":"14,16,20,15,23,25","input":"14 ? 16 ? 20 ? 15 ? 23 = 25","sample_id":"phase13_main_meb_0001","source_row":1,"verifier_spec":{"target":"14 - 16 / 20 * 15 + 23 = 25","target_value":25}}
+{"canonical_signature":"11,19,7,23","input":"11 ? 19 ? 7 = 23","sample_id":"phase13_main_meb_0002","source_row":2,"verifier_spec":{"target":"11 + 19 - 7 = 23","target_value":23}}
+{"canonical_signature":"15,28,14,18,425","input":"15 ? 28 ? 14 ? 18 = 425","sample_id":"phase13_main_meb_0003","source_row":3,"verifier_spec":{"target":"15 + 28 * 14 + 18 = 425","target_value":425}}
+{"canonical_signature":"4,20,2,1,-19","input":"4 ? 20 ? 2 ? 1 = -19","sample_id":"phase13_main_meb_0004","source_row":4,"verifier_spec":{"target":"4 - 20 - 2 - 1 = -19","target_value":-19}}
+{"canonical_signature":"7,24,4,672","input":"7 ? 24 ? 4 = 672","sample_id":"phase13_main_meb_0005","source_row":5,"verifier_spec":{"target":"7 * 24 * 4 = 672","target_value":672}}
+{"canonical_signature":"6,3,9,18","input":"6 ? 3 ? 9 = 18","sample_id":"phase13_main_meb_0006","source_row":6,"verifier_spec":{"target":"6 + 3 + 9 = 18","target_value":18}}
+{"canonical_signature":"1,6,7,5,14,-495","input":"1 ? 6 ? 7 ? 5 ? 14 = -495","sample_id":"phase13_main_meb_0007","source_row":7,"verifier_spec":{"target":"1 - 6 - 7 * 5 * 14 = -495","target_value":-495}}
+{"canonical_signature":"27,8,7,9,33","input":"27 ? 8 ? 7 ? 9 = 33","sample_id":"phase13_main_meb_0008","source_row":8,"verifier_spec":{"target":"27 + 8 + 7 - 9 = 33","target_value":33}}
+{"canonical_signature":"28,15,22,9240","input":"28 ? 15 ? 22 = 9240","sample_id":"phase13_main_meb_0009","source_row":9,"verifier_spec":{"target":"28 * 15 * 22 = 9240","target_value":9240}}
+{"canonical_signature":"12,1,24,37","input":"12 ? 1 ? 24 = 37","sample_id":"phase13_main_meb_0010","source_row":10,"verifier_spec":{"target":"12 + 1 + 24 = 37","target_value":37}}
+{"canonical_signature":"10,14,12,1680","input":"10 ? 14 ? 12 = 1680","sample_id":"phase13_main_meb_0011","source_row":11,"verifier_spec":{"target":"10 * 14 * 12 = 1680","target_value":1680}}
+{"canonical_signature":"24,9,7,21,27,78","input":"24 ? 9 ? 7 ? 21 ? 27 = 78","sample_id":"phase13_main_meb_0012","source_row":12,"verifier_spec":{"target":"24 + 9 / 7 * 21 + 27 = 78","target_value":78}}
+{"canonical_signature":"21,3,9,12,11,-16","input":"21 ? 3 ? 9 ? 12 ? 11 = -16","sample_id":"phase13_main_meb_0013","source_row":13,"verifier_spec":{"target":"21 * 3 / 9 - 12 - 11 = -16","target_value":-16}}
+{"canonical_signature":"10,21,26,-37","input":"10 ? 21 ? 26 = -37","sample_id":"phase13_main_meb_0014","source_row":14,"verifier_spec":{"target":"10 - 21 - 26 = -37","target_value":-37}}
+{"canonical_signature":"25,12,17,22,4513","input":"25 ? 12 ? 17 ? 22 = 4513","sample_id":"phase13_main_meb_0015","source_row":15,"verifier_spec":{"target":"25 + 12 * 17 * 22 = 4513","target_value":4513}}
+{"canonical_signature":"10,9,25,5,21","input":"10 ? 9 ? 25 ? 5 = 21","sample_id":"phase13_main_meb_0016","source_row":16,"verifier_spec":{"target":"10 - 9 + 25 - 5 = 21","target_value":21}}
+{"canonical_signature":"4,26,23,15,-14","input":"4 ? 26 ? 23 ? 15 = -14","sample_id":"phase13_main_meb_0017","source_row":17,"verifier_spec":{"target":"4 - 26 + 23 - 15 = -14","target_value":-14}}
+{"canonical_signature":"10,26,29,23,6,151","input":"10 ? 26 ? 29 ? 23 ? 6 = 151","sample_id":"phase13_main_meb_0018","source_row":18,"verifier_spec":{"target":"10 - 26 + 29 + 23 * 6 = 151","target_value":151}}
+{"canonical_signature":"2,12,1,21,20,55","input":"2 ? 12 ? 1 ? 21 ? 20 = 55","sample_id":"phase13_main_meb_0019","source_row":19,"verifier_spec":{"target":"2 + 12 + 1 * 21 + 20 = 55","target_value":55}}
+{"canonical_signature":"3,21,1,-18","input":"3 ? 21 ? 1 = -18","sample_id":"phase13_main_meb_0020","source_row":20,"verifier_spec":{"target":"3 - 21 / 1 = -18","target_value":-18}}
+{"canonical_signature":"3,15,23,68","input":"3 ? 15 ? 23 = 68","sample_id":"phase13_main_meb_0021","source_row":21,"verifier_spec":{"target":"3 * 15 + 23 = 68","target_value":68}}
+{"canonical_signature":"29,21,9,17,18,3363","input":"29 ? 21 ? 9 ? 17 ? 18 = 3363","sample_id":"phase13_main_meb_0022","source_row":22,"verifier_spec":{"target":"29 * 21 + 9 * 17 * 18 = 3363","target_value":3363}}
+{"canonical_signature":"24,15,27,19,31","input":"24 ? 15 ? 27 ? 19 = 31","sample_id":"phase13_main_meb_0023","source_row":23,"verifier_spec":{"target":"24 + 15 - 27 + 19 = 31","target_value":31}}
+{"canonical_signature":"18,5,6,24,26,-728","input":"18 ? 5 ? 6 ? 24 ? 26 = -728","sample_id":"phase13_main_meb_0024","source_row":24,"verifier_spec":{"target":"18 - 5 * 6 * 24 - 26 = -728","target_value":-728}}
+{"canonical_signature":"12,3,16,10,566","input":"12 ? 3 ? 16 ? 10 = 566","sample_id":"phase13_main_meb_0025","source_row":25,"verifier_spec":{"target":"12 * 3 * 16 - 10 = 566","target_value":566}}
+{"canonical_signature":"22,2,12,-2","input":"22 ? 2 ? 12 = -2","sample_id":"phase13_main_meb_0026","source_row":26,"verifier_spec":{"target":"22 - 2 * 12 = -2","target_value":-2}}
+{"canonical_signature":"12,3,4,6,-20","input":"12 ? 3 ? 4 ? 6 = -20","sample_id":"phase13_main_meb_0027","source_row":27,"verifier_spec":{"target":"12 / 3 - 4 * 6 = -20","target_value":-20}}
+{"canonical_signature":"15,21,28,7,-160","input":"15 ? 21 ? 28 ? 7 = -160","sample_id":"phase13_main_meb_0028","source_row":28,"verifier_spec":{"target":"15 + 21 - 28 * 7 = -160","target_value":-160}}
+{"canonical_signature":"4,16,27,28,7,41","input":"4 ? 16 ? 27 ? 28 ? 7 = 41","sample_id":"phase13_main_meb_0029","source_row":29,"verifier_spec":{"target":"4 * 16 - 27 + 28 / 7 = 41","target_value":41}}
+{"canonical_signature":"19,23,13,11,-291","input":"19 ? 23 ? 13 ? 11 = -291","sample_id":"phase13_main_meb_0030","source_row":30,"verifier_spec":{"target":"19 - 23 * 13 - 11 = -291","target_value":-291}}
+{"canonical_signature":"11,21,4,24,22,-44341","input":"11 ? 21 ? 4 ? 24 ? 22 = -44341","sample_id":"phase13_main_meb_0031","source_row":31,"verifier_spec":{"target":"11 - 21 * 4 * 24 * 22 = -44341","target_value":-44341}}
+{"canonical_signature":"26,28,24,-646","input":"26 ? 28 ? 24 = -646","sample_id":"phase13_main_meb_0032","source_row":32,"verifier_spec":{"target":"26 - 28 * 24 = -646","target_value":-646}}
+{"canonical_signature":"27,1,17,13,22","input":"27 ? 1 ? 17 ? 13 = 22","sample_id":"phase13_main_meb_0033","source_row":33,"verifier_spec":{"target":"27 - 1 - 17 + 13 = 22","target_value":22}}
+{"canonical_signature":"2,9,5,8,4,-24","input":"2 ? 9 ? 5 ? 8 ? 4 = -24","sample_id":"phase13_main_meb_0034","source_row":34,"verifier_spec":{"target":"2 - 9 - 5 - 8 - 4 = -24","target_value":-24}}
+{"canonical_signature":"6,2,9,13","input":"6 ? 2 ? 9 = 13","sample_id":"phase13_main_meb_0035","source_row":35,"verifier_spec":{"target":"6 - 2 + 9 = 13","target_value":13}}
+{"canonical_signature":"1,22,24,-527","input":"1 ? 22 ? 24 = -527","sample_id":"phase13_main_meb_0036","source_row":36,"verifier_spec":{"target":"1 - 22 * 24 = -527","target_value":-527}}
+{"canonical_signature":"29,11,9,49","input":"29 ? 11 ? 9 = 49","sample_id":"phase13_main_meb_0037","source_row":37,"verifier_spec":{"target":"29 + 11 + 9 = 49","target_value":49}}
+{"canonical_signature":"13,1,8,10,-5","input":"13 ? 1 ? 8 ? 10 = -5","sample_id":"phase13_main_meb_0038","source_row":38,"verifier_spec":{"target":"13 * 1 - 8 - 10 = -5","target_value":-5}}
+{"canonical_signature":"29,11,27,22,368","input":"29 ? 11 ? 27 ? 22 = 368","sample_id":"phase13_main_meb_0039","source_row":39,"verifier_spec":{"target":"29 * 11 + 27 + 22 = 368","target_value":368}}
+{"canonical_signature":"16,15,11,10,25,-134","input":"16 ? 15 ? 11 ? 10 ? 25 = -134","sample_id":"phase13_main_meb_0040","source_row":40,"verifier_spec":{"target":"16 - 15 * 11 - 10 + 25 = -134","target_value":-134}}
+{"canonical_signature":"18,11,19,179","input":"18 ? 11 ? 19 = 179","sample_id":"phase13_main_meb_0041","source_row":41,"verifier_spec":{"target":"18 * 11 - 19 = 179","target_value":179}}
+{"canonical_signature":"18,13,9,14","input":"18 ? 13 ? 9 = 14","sample_id":"phase13_main_meb_0042","source_row":42,"verifier_spec":{"target":"18 - 13 + 9 = 14","target_value":14}}
+{"canonical_signature":"18,4,12,54","input":"18 ? 4 ? 12 = 54","sample_id":"phase13_main_meb_0043","source_row":43,"verifier_spec":{"target":"18 / 4 * 12 = 54","target_value":54}}
+{"canonical_signature":"25,14,1,19,331","input":"25 ? 14 ? 1 ? 19 = 331","sample_id":"phase13_main_meb_0044","source_row":44,"verifier_spec":{"target":"25 * 14 / 1 - 19 = 331","target_value":331}}
+{"canonical_signature":"28,12,1,337","input":"28 ? 12 ? 1 = 337","sample_id":"phase13_main_meb_0045","source_row":45,"verifier_spec":{"target":"28 * 12 + 1 = 337","target_value":337}}
+{"canonical_signature":"24,11,17,8,561","input":"24 ? 11 ? 17 ? 8 = 561","sample_id":"phase13_main_meb_0046","source_row":46,"verifier_spec":{"target":"24 * 11 * 17 / 8 = 561","target_value":561}}
+{"canonical_signature":"13,16,9,19,1","input":"13 ? 16 ? 9 ? 19 = 1","sample_id":"phase13_main_meb_0047","source_row":47,"verifier_spec":{"target":"13 + 16 - 9 - 19 = 1","target_value":1}}
+{"canonical_signature":"1,22,17,2,377","input":"1 ? 22 ? 17 ? 2 = 377","sample_id":"phase13_main_meb_0048","source_row":48,"verifier_spec":{"target":"1 + 22 * 17 + 2 = 377","target_value":377}}
+{"canonical_signature":"18,19,6,22,-133","input":"18 ? 19 ? 6 ? 22 = -133","sample_id":"phase13_main_meb_0049","source_row":49,"verifier_spec":{"target":"18 - 19 - 6 * 22 = -133","target_value":-133}}
+{"canonical_signature":"3,7,8,13,-725","input":"3 ? 7 ? 8 ? 13 = -725","sample_id":"phase13_main_meb_0050","source_row":50,"verifier_spec":{"target":"3 - 7 * 8 * 13 = -725","target_value":-725}}
+{"canonical_signature":"18,9,23,-14","input":"18 ? 9 ? 23 = -14","sample_id":"phase13_main_meb_0051","source_row":51,"verifier_spec":{"target":"18 - 9 - 23 = -14","target_value":-14}}
+{"canonical_signature":"15,17,29,-478","input":"15 ? 17 ? 29 = -478","sample_id":"phase13_main_meb_0052","source_row":52,"verifier_spec":{"target":"15 - 17 * 29 = -478","target_value":-478}}
+{"canonical_signature":"1,5,8,3,7,-8","input":"1 ? 5 ? 8 ? 3 ? 7 = -8","sample_id":"phase13_main_meb_0053","source_row":53,"verifier_spec":{"target":"1 * 5 + 8 - 3 * 7 = -8","target_value":-8}}
+{"canonical_signature":"25,17,3,8,436","input":"25 ? 17 ? 3 ? 8 = 436","sample_id":"phase13_main_meb_0054","source_row":54,"verifier_spec":{"target":"25 * 17 + 3 + 8 = 436","target_value":436}}
+{"canonical_signature":"19,17,5,328","input":"19 ? 17 ? 5 = 328","sample_id":"phase13_main_meb_0055","source_row":55,"verifier_spec":{"target":"19 * 17 + 5 = 328","target_value":328}}
+{"canonical_signature":"8,9,29,22,15,25","input":"8 ? 9 ? 29 ? 22 ? 15 = 25","sample_id":"phase13_main_meb_0056","source_row":56,"verifier_spec":{"target":"8 + 9 - 29 + 22 + 15 = 25","target_value":25}}
+{"canonical_signature":"29,8,14,35","input":"29 ? 8 ? 14 = 35","sample_id":"phase13_main_meb_0057","source_row":57,"verifier_spec":{"target":"29 - 8 + 14 = 35","target_value":35}}
+{"canonical_signature":"22,8,13,163","input":"22 ? 8 ? 13 = 163","sample_id":"phase13_main_meb_0058","source_row":58,"verifier_spec":{"target":"22 * 8 - 13 = 163","target_value":163}}
+{"canonical_signature":"21,4,18,66","input":"21 ? 4 ? 18 = 66","sample_id":"phase13_main_meb_0059","source_row":59,"verifier_spec":{"target":"21 * 4 - 18 = 66","target_value":66}}
+{"canonical_signature":"5,2,19,11,26,-439","input":"5 ? 2 ? 19 ? 11 ? 26 = -439","sample_id":"phase13_main_meb_0060","source_row":60,"verifier_spec":{"target":"5 - 2 * 19 * 11 - 26 = -439","target_value":-439}}
+{"canonical_signature":"14,17,18,49","input":"14 ? 17 ? 18 = 49","sample_id":"phase13_main_meb_0061","source_row":61,"verifier_spec":{"target":"14 + 17 + 18 = 49","target_value":49}}
+{"canonical_signature":"26,12,2,28,286","input":"26 ? 12 ? 2 ? 28 = 286","sample_id":"phase13_main_meb_0062","source_row":62,"verifier_spec":{"target":"26 * 12 + 2 - 28 = 286","target_value":286}}
+{"canonical_signature":"9,10,18,4,12,-3","input":"9 ? 10 ? 18 ? 4 ? 12 = -3","sample_id":"phase13_main_meb_0063","source_row":63,"verifier_spec":{"target":"9 - 10 - 18 + 4 + 12 = -3","target_value":-3}}
+{"canonical_signature":"17,20,5,23,9","input":"17 ? 20 ? 5 ? 23 = 9","sample_id":"phase13_main_meb_0064","source_row":64,"verifier_spec":{"target":"17 + 20 - 5 - 23 = 9","target_value":9}}
+{"canonical_signature":"13,12,21,24,20,-24","input":"13 ? 12 ? 21 ? 24 ? 20 = -24","sample_id":"phase13_main_meb_0065","source_row":65,"verifier_spec":{"target":"13 - 12 - 21 - 24 + 20 = -24","target_value":-24}}
+{"canonical_signature":"22,27,20,26,1,-525","input":"22 ? 27 ? 20 ? 26 ? 1 = -525","sample_id":"phase13_main_meb_0066","source_row":66,"verifier_spec":{"target":"22 - 27 - 20 * 26 * 1 = -525","target_value":-525}}
+{"canonical_signature":"1,9,4,36","input":"1 ? 9 ? 4 = 36","sample_id":"phase13_main_meb_0067","source_row":67,"verifier_spec":{"target":"1 * 9 * 4 = 36","target_value":36}}
+{"canonical_signature":"26,11,12,19,3413","input":"26 ? 11 ? 12 ? 19 = 3413","sample_id":"phase13_main_meb_0068","source_row":68,"verifier_spec":{"target":"26 * 11 * 12 - 19 = 3413","target_value":3413}}
+{"canonical_signature":"7,13,27,26,19","input":"7 ? 13 ? 27 ? 26 = 19","sample_id":"phase13_main_meb_0069","source_row":69,"verifier_spec":{"target":"7 + 13 - 27 + 26 = 19","target_value":19}}
+{"canonical_signature":"25,22,9,56","input":"25 ? 22 ? 9 = 56","sample_id":"phase13_main_meb_0070","source_row":70,"verifier_spec":{"target":"25 + 22 + 9 = 56","target_value":56}}
+{"canonical_signature":"9,22,23,11,232","input":"9 ? 22 ? 23 ? 11 = 232","sample_id":"phase13_main_meb_0071","source_row":71,"verifier_spec":{"target":"9 * 22 + 23 + 11 = 232","target_value":232}}
+{"canonical_signature":"18,9,27,6","input":"18 ? 9 ? 27 = 6","sample_id":"phase13_main_meb_0072","source_row":72,"verifier_spec":{"target":"18 * 9 / 27 = 6","target_value":6}}
+{"canonical_signature":"12,7,19,0","input":"12 ? 7 ? 19 = 0","sample_id":"phase13_main_meb_0073","source_row":73,"verifier_spec":{"target":"12 + 7 - 19 = 0","target_value":0}}
+{"canonical_signature":"8,3,20,4,-75","input":"8 ? 3 ? 20 ? 4 = -75","sample_id":"phase13_main_meb_0074","source_row":74,"verifier_spec":{"target":"8 - 3 - 20 * 4 = -75","target_value":-75}}
+{"canonical_signature":"11,23,18,1,426","input":"11 ? 23 ? 18 ? 1 = 426","sample_id":"phase13_main_meb_0075","source_row":75,"verifier_spec":{"target":"11 + 23 * 18 + 1 = 426","target_value":426}}
+{"canonical_signature":"5,23,25,12,34500","input":"5 ? 23 ? 25 ? 12 = 34500","sample_id":"phase13_main_meb_0076","source_row":76,"verifier_spec":{"target":"5 * 23 * 25 * 12 = 34500","target_value":34500}}
+{"canonical_signature":"17,7,12,1,1428","input":"17 ? 7 ? 12 ? 1 = 1428","sample_id":"phase13_main_meb_0077","source_row":77,"verifier_spec":{"target":"17 * 7 * 12 / 1 = 1428","target_value":1428}}
+{"canonical_signature":"7,12,1,19,23,-417","input":"7 ? 12 ? 1 ? 19 ? 23 = -417","sample_id":"phase13_main_meb_0078","source_row":78,"verifier_spec":{"target":"7 + 12 + 1 - 19 * 23 = -417","target_value":-417}}
+{"canonical_signature":"8,4,15,5,25,283","input":"8 ? 4 ? 15 ? 5 ? 25 = 283","sample_id":"phase13_main_meb_0079","source_row":79,"verifier_spec":{"target":"8 + 4 * 15 * 5 - 25 = 283","target_value":283}}
+{"canonical_signature":"6,1,5,30","input":"6 ? 1 ? 5 = 30","sample_id":"phase13_main_meb_0080","source_row":80,"verifier_spec":{"target":"6 * 1 * 5 = 30","target_value":30}}
+{"canonical_signature":"29,11,9,13,6,37317","input":"29 ? 11 ? 9 ? 13 ? 6 = 37317","sample_id":"phase13_main_meb_0081","source_row":81,"verifier_spec":{"target":"29 * 11 * 9 * 13 - 6 = 37317","target_value":37317}}
+{"canonical_signature":"27,17,11,4,24,498","input":"27 ? 17 ? 11 ? 4 ? 24 = 498","sample_id":"phase13_main_meb_0082","source_row":82,"verifier_spec":{"target":"27 * 17 + 11 + 4 + 24 = 498","target_value":498}}
+{"canonical_signature":"4,8,27,7,12","input":"4 ? 8 ? 27 ? 7 = 12","sample_id":"phase13_main_meb_0083","source_row":83,"verifier_spec":{"target":"4 * 8 - 27 + 7 = 12","target_value":12}}
+{"canonical_signature":"23,1,10,13","input":"23 ? 1 ? 10 = 13","sample_id":"phase13_main_meb_0084","source_row":84,"verifier_spec":{"target":"23 - 1 * 10 = 13","target_value":13}}
+{"canonical_signature":"26,3,1,23","input":"26 ? 3 ? 1 = 23","sample_id":"phase13_main_meb_0085","source_row":85,"verifier_spec":{"target":"26 - 3 / 1 = 23","target_value":23}}
+{"canonical_signature":"21,19,16,6,-289","input":"21 ? 19 ? 16 ? 6 = -289","sample_id":"phase13_main_meb_0086","source_row":86,"verifier_spec":{"target":"21 - 19 * 16 - 6 = -289","target_value":-289}}
+{"canonical_signature":"25,22,15,355","input":"25 ? 22 ? 15 = 355","sample_id":"phase13_main_meb_0087","source_row":87,"verifier_spec":{"target":"25 + 22 * 15 = 355","target_value":355}}
+{"canonical_signature":"20,4,10,1,89","input":"20 ? 4 ? 10 ? 1 = 89","sample_id":"phase13_main_meb_0088","source_row":88,"verifier_spec":{"target":"20 * 4 + 10 - 1 = 89","target_value":89}}
+{"canonical_signature":"20,3,29,4,111","input":"20 ? 3 ? 29 ? 4 = 111","sample_id":"phase13_main_meb_0089","source_row":89,"verifier_spec":{"target":"20 + 3 * 29 + 4 = 111","target_value":111}}
+{"canonical_signature":"28,1,19,10","input":"28 ? 1 ? 19 = 10","sample_id":"phase13_main_meb_0090","source_row":90,"verifier_spec":{"target":"28 + 1 - 19 = 10","target_value":10}}
+{"canonical_signature":"27,28,17,20,12832","input":"27 ? 28 ? 17 ? 20 = 12832","sample_id":"phase13_main_meb_0091","source_row":91,"verifier_spec":{"target":"27 * 28 * 17 - 20 = 12832","target_value":12832}}
+{"canonical_signature":"1,8,16,15,-112","input":"1 ? 8 ? 16 ? 15 = -112","sample_id":"phase13_main_meb_0092","source_row":92,"verifier_spec":{"target":"1 - 8 * 16 + 15 = -112","target_value":-112}}
+{"canonical_signature":"21,11,3,234","input":"21 ? 11 ? 3 = 234","sample_id":"phase13_main_meb_0093","source_row":93,"verifier_spec":{"target":"21 * 11 + 3 = 234","target_value":234}}
+{"canonical_signature":"19,8,28,-205","input":"19 ? 8 ? 28 = -205","sample_id":"phase13_main_meb_0094","source_row":94,"verifier_spec":{"target":"19 - 8 * 28 = -205","target_value":-205}}
+{"canonical_signature":"10,24,9,25,28,1512000","input":"10 ? 24 ? 9 ? 25 ? 28 = 1512000","sample_id":"phase13_main_meb_0095","source_row":95,"verifier_spec":{"target":"10 * 24 * 9 * 25 * 28 = 1512000","target_value":1512000}}
+{"canonical_signature":"3,2,16,1,23","input":"3 ? 2 ? 16 ? 1 = 23","sample_id":"phase13_main_meb_0096","source_row":96,"verifier_spec":{"target":"3 * 2 + 16 + 1 = 23","target_value":23}}
+{"canonical_signature":"9,19,7,12,-5","input":"9 ? 19 ? 7 ? 12 = -5","sample_id":"phase13_main_meb_0097","source_row":97,"verifier_spec":{"target":"9 - 19 - 7 + 12 = -5","target_value":-5}}
+{"canonical_signature":"20,19,12,18,15,662","input":"20 ? 19 ? 12 ? 18 ? 15 = 662","sample_id":"phase13_main_meb_0098","source_row":98,"verifier_spec":{"target":"20 * 19 + 12 + 18 * 15 = 662","target_value":662}}
+{"canonical_signature":"3,15,22,27,14,124743","input":"3 ? 15 ? 22 ? 27 ? 14 = 124743","sample_id":"phase13_main_meb_0099","source_row":99,"verifier_spec":{"target":"3 + 15 * 22 * 27 * 14 = 124743","target_value":124743}}
+{"canonical_signature":"4,11,22,37","input":"4 ? 11 ? 22 = 37","sample_id":"phase13_main_meb_0100","source_row":100,"verifier_spec":{"target":"4 + 11 + 22 = 37","target_value":37}}
+{"canonical_signature":"24,21,7,-4","input":"24 ? 21 ? 7 = -4","sample_id":"phase13_main_meb_0101","source_row":101,"verifier_spec":{"target":"24 - 21 - 7 = -4","target_value":-4}}
+{"canonical_signature":"21,3,26,37","input":"21 ? 3 ? 26 = 37","sample_id":"phase13_main_meb_0102","source_row":102,"verifier_spec":{"target":"21 * 3 - 26 = 37","target_value":37}}
+{"canonical_signature":"13,28,22,21,826","input":"13 ? 28 ? 22 ? 21 = 826","sample_id":"phase13_main_meb_0103","source_row":103,"verifier_spec":{"target":"13 * 28 + 22 * 21 = 826","target_value":826}}
+{"canonical_signature":"24,9,3,22,43","input":"24 ? 9 ? 3 ? 22 = 43","sample_id":"phase13_main_meb_0104","source_row":104,"verifier_spec":{"target":"24 - 9 / 3 + 22 = 43","target_value":43}}
+{"canonical_signature":"29,2,5,8,28,-2211","input":"29 ? 2 ? 5 ? 8 ? 28 = -2211","sample_id":"phase13_main_meb_0105","source_row":105,"verifier_spec":{"target":"29 - 2 * 5 * 8 * 28 = -2211","target_value":-2211}}
+{"canonical_signature":"10,6,21,-5","input":"10 ? 6 ? 21 = -5","sample_id":"phase13_main_meb_0106","source_row":106,"verifier_spec":{"target":"10 + 6 - 21 = -5","target_value":-5}}
+{"canonical_signature":"26,24,11,613","input":"26 ? 24 ? 11 = 613","sample_id":"phase13_main_meb_0107","source_row":107,"verifier_spec":{"target":"26 * 24 - 11 = 613","target_value":613}}
+{"canonical_signature":"29,12,21,62","input":"29 ? 12 ? 21 = 62","sample_id":"phase13_main_meb_0108","source_row":108,"verifier_spec":{"target":"29 + 12 + 21 = 62","target_value":62}}
+{"canonical_signature":"28,7,23,-133","input":"28 ? 7 ? 23 = -133","sample_id":"phase13_main_meb_0109","source_row":109,"verifier_spec":{"target":"28 - 7 * 23 = -133","target_value":-133}}
+{"canonical_signature":"28,13,16,-1","input":"28 ? 13 ? 16 = -1","sample_id":"phase13_main_meb_0110","source_row":110,"verifier_spec":{"target":"28 - 13 - 16 = -1","target_value":-1}}
+{"canonical_signature":"27,1,19,7","input":"27 ? 1 ? 19 = 7","sample_id":"phase13_main_meb_0111","source_row":111,"verifier_spec":{"target":"27 - 1 - 19 = 7","target_value":7}}
+{"canonical_signature":"9,22,17,11,8,-4113","input":"9 ? 22 ? 17 ? 11 ? 8 = -4113","sample_id":"phase13_main_meb_0112","source_row":112,"verifier_spec":{"target":"9 - 22 * 17 * 11 - 8 = -4113","target_value":-4113}}
+{"canonical_signature":"29,10,21,20,331","input":"29 ? 10 ? 21 ? 20 = 331","sample_id":"phase13_main_meb_0113","source_row":113,"verifier_spec":{"target":"29 * 10 + 21 + 20 = 331","target_value":331}}
+{"canonical_signature":"22,2,18,38","input":"22 ? 2 ? 18 = 38","sample_id":"phase13_main_meb_0114","source_row":114,"verifier_spec":{"target":"22 - 2 + 18 = 38","target_value":38}}
+{"canonical_signature":"29,17,21,67","input":"29 ? 17 ? 21 = 67","sample_id":"phase13_main_meb_0115","source_row":115,"verifier_spec":{"target":"29 + 17 + 21 = 67","target_value":67}}
+{"canonical_signature":"1,23,16,25,20,-38","input":"1 ? 23 ? 16 ? 25 ? 20 = -38","sample_id":"phase13_main_meb_0116","source_row":116,"verifier_spec":{"target":"1 * 23 - 16 - 25 - 20 = -38","target_value":-38}}
+{"canonical_signature":"24,28,8,-200","input":"24 ? 28 ? 8 = -200","sample_id":"phase13_main_meb_0117","source_row":117,"verifier_spec":{"target":"24 - 28 * 8 = -200","target_value":-200}}
+{"canonical_signature":"26,17,14,12,69","input":"26 ? 17 ? 14 ? 12 = 69","sample_id":"phase13_main_meb_0118","source_row":118,"verifier_spec":{"target":"26 + 17 + 14 + 12 = 69","target_value":69}}
+{"canonical_signature":"7,27,2,-18","input":"7 ? 27 ? 2 = -18","sample_id":"phase13_main_meb_0119","source_row":119,"verifier_spec":{"target":"7 - 27 + 2 = -18","target_value":-18}}
+{"canonical_signature":"25,10,26,14,47","input":"25 ? 10 ? 26 ? 14 = 47","sample_id":"phase13_main_meb_0120","source_row":120,"verifier_spec":{"target":"25 + 10 + 26 - 14 = 47","target_value":47}}
+{"canonical_signature":"14,24,1,7,28,58","input":"14 ? 24 ? 1 ? 7 ? 28 = 58","sample_id":"phase13_main_meb_0121","source_row":121,"verifier_spec":{"target":"14 + 24 - 1 - 7 + 28 = 58","target_value":58}}
+{"canonical_signature":"28,1,24,8,-4","input":"28 ? 1 ? 24 ? 8 = -4","sample_id":"phase13_main_meb_0122","source_row":122,"verifier_spec":{"target":"28 - 1 * 24 - 8 = -4","target_value":-4}}
+{"canonical_signature":"15,8,3,123","input":"15 ? 8 ? 3 = 123","sample_id":"phase13_main_meb_0123","source_row":123,"verifier_spec":{"target":"15 * 8 + 3 = 123","target_value":123}}
+{"canonical_signature":"12,6,8,16,200","input":"12 ? 6 ? 8 ? 16 = 200","sample_id":"phase13_main_meb_0124","source_row":124,"verifier_spec":{"target":"12 * 6 + 8 * 16 = 200","target_value":200}}
+{"canonical_signature":"11,26,15,0","input":"11 ? 26 ? 15 = 0","sample_id":"phase13_main_meb_0125","source_row":125,"verifier_spec":{"target":"11 - 26 + 15 = 0","target_value":0}}
+{"canonical_signature":"25,13,29,28,430","input":"25 ? 13 ? 29 ? 28 = 430","sample_id":"phase13_main_meb_0126","source_row":126,"verifier_spec":{"target":"25 + 13 * 29 + 28 = 430","target_value":430}}
+{"canonical_signature":"15,19,8,2,24,42","input":"15 ? 19 ? 8 ? 2 ? 24 = 42","sample_id":"phase13_main_meb_0127","source_row":127,"verifier_spec":{"target":"15 + 19 - 8 * 2 + 24 = 42","target_value":42}}
+{"canonical_signature":"13,1,9,22,-185","input":"13 ? 1 ? 9 ? 22 = -185","sample_id":"phase13_main_meb_0128","source_row":128,"verifier_spec":{"target":"13 / 1 - 9 * 22 = -185","target_value":-185}}
+{"canonical_signature":"26,14,10,29,-85","input":"26 ? 14 ? 10 ? 29 = -85","sample_id":"phase13_main_meb_0129","source_row":129,"verifier_spec":{"target":"26 - 14 * 10 + 29 = -85","target_value":-85}}
+{"canonical_signature":"18,19,16,1,26,28","input":"18 ? 19 ? 16 ? 1 ? 26 = 28","sample_id":"phase13_main_meb_0130","source_row":130,"verifier_spec":{"target":"18 + 19 + 16 + 1 - 26 = 28","target_value":28}}
+{"canonical_signature":"25,13,18,19,324","input":"25 ? 13 ? 18 ? 19 = 324","sample_id":"phase13_main_meb_0131","source_row":131,"verifier_spec":{"target":"25 * 13 + 18 - 19 = 324","target_value":324}}
+{"canonical_signature":"18,23,24,65","input":"18 ? 23 ? 24 = 65","sample_id":"phase13_main_meb_0132","source_row":132,"verifier_spec":{"target":"18 + 23 + 24 = 65","target_value":65}}
+{"canonical_signature":"2,28,29,24,752","input":"2 ? 28 ? 29 ? 24 = 752","sample_id":"phase13_main_meb_0133","source_row":133,"verifier_spec":{"target":"2 * 28 + 29 * 24 = 752","target_value":752}}
+{"canonical_signature":"22,27,18,21,972","input":"22 ? 27 ? 18 ? 21 = 972","sample_id":"phase13_main_meb_0134","source_row":134,"verifier_spec":{"target":"22 * 27 + 18 * 21 = 972","target_value":972}}
+{"canonical_signature":"5,28,19,-42","input":"5 ? 28 ? 19 = -42","sample_id":"phase13_main_meb_0135","source_row":135,"verifier_spec":{"target":"5 - 28 - 19 = -42","target_value":-42}}
+{"canonical_signature":"21,15,6,16,5,486","input":"21 ? 15 ? 6 ? 16 ? 5 = 486","sample_id":"phase13_main_meb_0136","source_row":136,"verifier_spec":{"target":"21 - 15 + 6 * 16 * 5 = 486","target_value":486}}
+{"canonical_signature":"26,14,7,6,13","input":"26 ? 14 ? 7 ? 6 = 13","sample_id":"phase13_main_meb_0137","source_row":137,"verifier_spec":{"target":"26 - 14 + 7 - 6 = 13","target_value":13}}
+{"canonical_signature":"22,16,6,21,9,106","input":"22 ? 16 ? 6 ? 21 ? 9 = 106","sample_id":"phase13_main_meb_0138","source_row":138,"verifier_spec":{"target":"22 + 16 * 6 - 21 + 9 = 106","target_value":106}}
+{"canonical_signature":"16,25,10,24,231","input":"16 ? 25 ? 10 ? 24 = 231","sample_id":"phase13_main_meb_0139","source_row":139,"verifier_spec":{"target":"16 - 25 + 10 * 24 = 231","target_value":231}}
+{"canonical_signature":"27,28,6,1,5","input":"27 ? 28 ? 6 ? 1 = 5","sample_id":"phase13_main_meb_0140","source_row":140,"verifier_spec":{"target":"27 - 28 + 6 * 1 = 5","target_value":5}}
+{"canonical_signature":"15,23,17,27,28,295611","input":"15 ? 23 ? 17 ? 27 ? 28 = 295611","sample_id":"phase13_main_meb_0141","source_row":141,"verifier_spec":{"target":"15 + 23 * 17 * 27 * 28 = 295611","target_value":295611}}
+{"canonical_signature":"4,18,9,26,13,-275","input":"4 ? 18 ? 9 ? 26 ? 13 = -275","sample_id":"phase13_main_meb_0142","source_row":142,"verifier_spec":{"target":"4 * 18 - 9 - 26 * 13 = -275","target_value":-275}}
+{"canonical_signature":"2,27,23,29,594","input":"2 ? 27 ? 23 ? 29 = 594","sample_id":"phase13_main_meb_0143","source_row":143,"verifier_spec":{"target":"2 + 27 * 23 - 29 = 594","target_value":594}}
+{"canonical_signature":"17,15,19,27,29,19","input":"17 ? 15 ? 19 ? 27 ? 29 = 19","sample_id":"phase13_main_meb_0144","source_row":144,"verifier_spec":{"target":"17 - 15 + 19 + 27 - 29 = 19","target_value":19}}
+{"canonical_signature":"12,16,27,219","input":"12 ? 16 ? 27 = 219","sample_id":"phase13_main_meb_0145","source_row":145,"verifier_spec":{"target":"12 * 16 + 27 = 219","target_value":219}}
+{"canonical_signature":"27,21,25,15,-8","input":"27 ? 21 ? 25 ? 15 = -8","sample_id":"phase13_main_meb_0146","source_row":146,"verifier_spec":{"target":"27 - 21 * 25 / 15 = -8","target_value":-8}}
+{"canonical_signature":"9,20,16,8,21,213","input":"9 ? 20 ? 16 ? 8 ? 21 = 213","sample_id":"phase13_main_meb_0147","source_row":147,"verifier_spec":{"target":"9 + 20 + 16 + 8 * 21 = 213","target_value":213}}
+{"canonical_signature":"7,8,2,29,26","input":"7 ? 8 ? 2 ? 29 = 26","sample_id":"phase13_main_meb_0148","source_row":148,"verifier_spec":{"target":"7 - 8 - 2 + 29 = 26","target_value":26}}
+{"canonical_signature":"5,25,2,55","input":"5 ? 25 ? 2 = 55","sample_id":"phase13_main_meb_0149","source_row":149,"verifier_spec":{"target":"5 + 25 * 2 = 55","target_value":55}}
+{"canonical_signature":"18,12,20,30","input":"18 ? 12 ? 20 = 30","sample_id":"phase13_main_meb_0150","source_row":150,"verifier_spec":{"target":"18 / 12 * 20 = 30","target_value":30}}
+{"canonical_signature":"13,3,6,26","input":"13 ? 3 ? 6 = 26","sample_id":"phase13_main_meb_0151","source_row":151,"verifier_spec":{"target":"13 / 3 * 6 = 26","target_value":26}}
+{"canonical_signature":"2,19,15,24,-8","input":"2 ? 19 ? 15 ? 24 = -8","sample_id":"phase13_main_meb_0152","source_row":152,"verifier_spec":{"target":"2 - 19 - 15 + 24 = -8","target_value":-8}}
+{"canonical_signature":"18,6,3,23,32","input":"18 ? 6 ? 3 ? 23 = 32","sample_id":"phase13_main_meb_0153","source_row":153,"verifier_spec":{"target":"18 - 6 - 3 + 23 = 32","target_value":32}}
+{"canonical_signature":"14,29,8,414","input":"14 ? 29 ? 8 = 414","sample_id":"phase13_main_meb_0154","source_row":154,"verifier_spec":{"target":"14 * 29 + 8 = 414","target_value":414}}
+{"canonical_signature":"27,15,29,1,12","input":"27 ? 15 ? 29 ? 1 = 12","sample_id":"phase13_main_meb_0155","source_row":155,"verifier_spec":{"target":"27 + 15 - 29 - 1 = 12","target_value":12}}
+{"canonical_signature":"12,2,22,2","input":"12 ? 2 ? 22 = 2","sample_id":"phase13_main_meb_0156","source_row":156,"verifier_spec":{"target":"12 * 2 - 22 = 2","target_value":2}}
+{"canonical_signature":"29,5,20,24,-335","input":"29 ? 5 ? 20 ? 24 = -335","sample_id":"phase13_main_meb_0157","source_row":157,"verifier_spec":{"target":"29 * 5 - 20 * 24 = -335","target_value":-335}}
+{"canonical_signature":"11,1,12,-1","input":"11 ? 1 ? 12 = -1","sample_id":"phase13_main_meb_0158","source_row":158,"verifier_spec":{"target":"11 / 1 - 12 = -1","target_value":-1}}
+{"canonical_signature":"3,18,23,-411","input":"3 ? 18 ? 23 = -411","sample_id":"phase13_main_meb_0159","source_row":159,"verifier_spec":{"target":"3 - 18 * 23 = -411","target_value":-411}}
+{"canonical_signature":"14,28,5,47","input":"14 ? 28 ? 5 = 47","sample_id":"phase13_main_meb_0160","source_row":160,"verifier_spec":{"target":"14 + 28 + 5 = 47","target_value":47}}
+{"canonical_signature":"20,13,25,21,4,-2093","input":"20 ? 13 ? 25 ? 21 ? 4 = -2093","sample_id":"phase13_main_meb_0161","source_row":161,"verifier_spec":{"target":"20 - 13 - 25 * 21 * 4 = -2093","target_value":-2093}}
+{"canonical_signature":"1,28,3,-24","input":"1 ? 28 ? 3 = -24","sample_id":"phase13_main_meb_0162","source_row":162,"verifier_spec":{"target":"1 - 28 + 3 = -24","target_value":-24}}
+{"canonical_signature":"20,2,6,4,12","input":"20 ? 2 ? 6 ? 4 = 12","sample_id":"phase13_main_meb_0163","source_row":163,"verifier_spec":{"target":"20 / 2 + 6 - 4 = 12","target_value":12}}
+{"canonical_signature":"28,5,26,158","input":"28 ? 5 ? 26 = 158","sample_id":"phase13_main_meb_0164","source_row":164,"verifier_spec":{"target":"28 + 5 * 26 = 158","target_value":158}}
+{"canonical_signature":"28,2,1,29","input":"28 ? 2 ? 1 = 29","sample_id":"phase13_main_meb_0165","source_row":165,"verifier_spec":{"target":"28 + 2 - 1 = 29","target_value":29}}
+{"canonical_signature":"13,19,27,21","input":"13 ? 19 ? 27 = 21","sample_id":"phase13_main_meb_0166","source_row":166,"verifier_spec":{"target":"13 - 19 + 27 = 21","target_value":21}}
+{"canonical_signature":"11,27,4,1,2,44","input":"11 ? 27 ? 4 ? 1 ? 2 = 44","sample_id":"phase13_main_meb_0167","source_row":167,"verifier_spec":{"target":"11 + 27 + 4 * 1 + 2 = 44","target_value":44}}
+{"canonical_signature":"4,17,1,-13","input":"4 ? 17 ? 1 = -13","sample_id":"phase13_main_meb_0168","source_row":168,"verifier_spec":{"target":"4 - 17 / 1 = -13","target_value":-13}}
+{"canonical_signature":"29,7,24,179","input":"29 ? 7 ? 24 = 179","sample_id":"phase13_main_meb_0169","source_row":169,"verifier_spec":{"target":"29 * 7 - 24 = 179","target_value":179}}
+{"canonical_signature":"14,24,10,-20","input":"14 ? 24 ? 10 = -20","sample_id":"phase13_main_meb_0170","source_row":170,"verifier_spec":{"target":"14 - 24 - 10 = -20","target_value":-20}}
+{"canonical_signature":"1,21,26,14,7645","input":"1 ? 21 ? 26 ? 14 = 7645","sample_id":"phase13_main_meb_0171","source_row":171,"verifier_spec":{"target":"1 + 21 * 26 * 14 = 7645","target_value":7645}}
+{"canonical_signature":"7,27,29,14,-790","input":"7 ? 27 ? 29 ? 14 = -790","sample_id":"phase13_main_meb_0172","source_row":172,"verifier_spec":{"target":"7 - 27 * 29 - 14 = -790","target_value":-790}}
+{"canonical_signature":"13,7,26,32","input":"13 ? 7 ? 26 = 32","sample_id":"phase13_main_meb_0173","source_row":173,"verifier_spec":{"target":"13 - 7 + 26 = 32","target_value":32}}
+{"canonical_signature":"13,12,20,176","input":"13 ? 12 ? 20 = 176","sample_id":"phase13_main_meb_0174","source_row":174,"verifier_spec":{"target":"13 * 12 + 20 = 176","target_value":176}}
+{"canonical_signature":"21,11,20,12,-187","input":"21 ? 11 ? 20 ? 12 = -187","sample_id":"phase13_main_meb_0175","source_row":175,"verifier_spec":{"target":"21 - 11 * 20 + 12 = -187","target_value":-187}}
+{"canonical_signature":"29,4,12,5,10,133","input":"29 ? 4 ? 12 ? 5 ? 10 = 133","sample_id":"phase13_main_meb_0176","source_row":176,"verifier_spec":{"target":"29 * 4 + 12 - 5 + 10 = 133","target_value":133}}
+{"canonical_signature":"10,4,18,25,57","input":"10 ? 4 ? 18 ? 25 = 57","sample_id":"phase13_main_meb_0177","source_row":177,"verifier_spec":{"target":"10 + 4 + 18 + 25 = 57","target_value":57}}
+{"canonical_signature":"11,4,3,9,50","input":"11 ? 4 ? 3 ? 9 = 50","sample_id":"phase13_main_meb_0178","source_row":178,"verifier_spec":{"target":"11 * 4 - 3 + 9 = 50","target_value":50}}
+{"canonical_signature":"4,11,5,8,47","input":"4 ? 11 ? 5 ? 8 = 47","sample_id":"phase13_main_meb_0179","source_row":179,"verifier_spec":{"target":"4 * 11 - 5 + 8 = 47","target_value":47}}
+{"canonical_signature":"3,4,25,-13","input":"3 ? 4 ? 25 = -13","sample_id":"phase13_main_meb_0180","source_row":180,"verifier_spec":{"target":"3 * 4 - 25 = -13","target_value":-13}}
+{"canonical_signature":"27,24,29,18792","input":"27 ? 24 ? 29 = 18792","sample_id":"phase13_main_meb_0181","source_row":181,"verifier_spec":{"target":"27 * 24 * 29 = 18792","target_value":18792}}
+{"canonical_signature":"7,8,17,-129","input":"7 ? 8 ? 17 = -129","sample_id":"phase13_main_meb_0182","source_row":182,"verifier_spec":{"target":"7 - 8 * 17 = -129","target_value":-129}}
+{"canonical_signature":"15,6,2,13,-10","input":"15 ? 6 ? 2 ? 13 = -10","sample_id":"phase13_main_meb_0183","source_row":183,"verifier_spec":{"target":"15 - 6 * 2 - 13 = -10","target_value":-10}}
+{"canonical_signature":"27,13,2,353","input":"27 ? 13 ? 2 = 353","sample_id":"phase13_main_meb_0184","source_row":184,"verifier_spec":{"target":"27 * 13 + 2 = 353","target_value":353}}
+{"canonical_signature":"19,17,25,298","input":"19 ? 17 ? 25 = 298","sample_id":"phase13_main_meb_0185","source_row":185,"verifier_spec":{"target":"19 * 17 - 25 = 298","target_value":298}}
+{"canonical_signature":"21,12,7,27,198","input":"21 ? 12 ? 7 ? 27 = 198","sample_id":"phase13_main_meb_0186","source_row":186,"verifier_spec":{"target":"21 - 12 + 7 * 27 = 198","target_value":198}}
+{"canonical_signature":"20,11,4,216","input":"20 ? 11 ? 4 = 216","sample_id":"phase13_main_meb_0187","source_row":187,"verifier_spec":{"target":"20 * 11 - 4 = 216","target_value":216}}
+{"canonical_signature":"23,13,28,387","input":"23 ? 13 ? 28 = 387","sample_id":"phase13_main_meb_0188","source_row":188,"verifier_spec":{"target":"23 + 13 * 28 = 387","target_value":387}}
+{"canonical_signature":"8,1,14,23","input":"8 ? 1 ? 14 = 23","sample_id":"phase13_main_meb_0189","source_row":189,"verifier_spec":{"target":"8 + 1 + 14 = 23","target_value":23}}
+{"canonical_signature":"4,22,13,12,1","input":"4 ? 22 ? 13 ? 12 = 1","sample_id":"phase13_main_meb_0190","source_row":190,"verifier_spec":{"target":"4 + 22 - 13 - 12 = 1","target_value":1}}
+{"canonical_signature":"9,17,20,26,16,131","input":"9 ? 17 ? 20 ? 26 ? 16 = 131","sample_id":"phase13_main_meb_0191","source_row":191,"verifier_spec":{"target":"9 * 17 + 20 - 26 - 16 = 131","target_value":131}}
+{"canonical_signature":"6,5,2,60","input":"6 ? 5 ? 2 = 60","sample_id":"phase13_main_meb_0192","source_row":192,"verifier_spec":{"target":"6 * 5 * 2 = 60","target_value":60}}
+{"canonical_signature":"12,21,24,276","input":"12 ? 21 ? 24 = 276","sample_id":"phase13_main_meb_0193","source_row":193,"verifier_spec":{"target":"12 * 21 + 24 = 276","target_value":276}}
+{"canonical_signature":"29,22,28,79","input":"29 ? 22 ? 28 = 79","sample_id":"phase13_main_meb_0194","source_row":194,"verifier_spec":{"target":"29 + 22 + 28 = 79","target_value":79}}
+{"canonical_signature":"3,27,11,20,50","input":"3 ? 27 ? 11 ? 20 = 50","sample_id":"phase13_main_meb_0195","source_row":195,"verifier_spec":{"target":"3 * 27 - 11 - 20 = 50","target_value":50}}
+{"canonical_signature":"8,22,24,-520","input":"8 ? 22 ? 24 = -520","sample_id":"phase13_main_meb_0196","source_row":196,"verifier_spec":{"target":"8 - 22 * 24 = -520","target_value":-520}}
+{"canonical_signature":"6,28,3,27,63","input":"6 ? 28 ? 3 ? 27 = 63","sample_id":"phase13_main_meb_0197","source_row":197,"verifier_spec":{"target":"6 + 28 * 3 - 27 = 63","target_value":63}}
+{"canonical_signature":"24,11,26,238","input":"24 ? 11 ? 26 = 238","sample_id":"phase13_main_meb_0198","source_row":198,"verifier_spec":{"target":"24 * 11 - 26 = 238","target_value":238}}
+{"canonical_signature":"12,18,17,318","input":"12 ? 18 ? 17 = 318","sample_id":"phase13_main_meb_0199","source_row":199,"verifier_spec":{"target":"12 + 18 * 17 = 318","target_value":318}}
+{"canonical_signature":"27,21,25,73","input":"27 ? 21 ? 25 = 73","sample_id":"phase13_main_meb_0200","source_row":200,"verifier_spec":{"target":"27 + 21 + 25 = 73","target_value":73}}
+{"canonical_signature":"21,28,23,565","input":"21 ? 28 ? 23 = 565","sample_id":"phase13_main_meb_0201","source_row":201,"verifier_spec":{"target":"21 * 28 - 23 = 565","target_value":565}}
+{"canonical_signature":"26,14,2,10,20","input":"26 ? 14 ? 2 ? 10 = 20","sample_id":"phase13_main_meb_0202","source_row":202,"verifier_spec":{"target":"26 + 14 - 2 * 10 = 20","target_value":20}}
+{"canonical_signature":"24,27,1,26,16848","input":"24 ? 27 ? 1 ? 26 = 16848","sample_id":"phase13_main_meb_0203","source_row":203,"verifier_spec":{"target":"24 * 27 / 1 * 26 = 16848","target_value":16848}}
+{"canonical_signature":"26,15,16,-214","input":"26 ? 15 ? 16 = -214","sample_id":"phase13_main_meb_0204","source_row":204,"verifier_spec":{"target":"26 - 15 * 16 = -214","target_value":-214}}
+{"canonical_signature":"27,28,13,391","input":"27 ? 28 ? 13 = 391","sample_id":"phase13_main_meb_0205","source_row":205,"verifier_spec":{"target":"27 + 28 * 13 = 391","target_value":391}}
+{"canonical_signature":"9,25,28,29,796","input":"9 ? 25 ? 28 ? 29 = 796","sample_id":"phase13_main_meb_0206","source_row":206,"verifier_spec":{"target":"9 - 25 + 28 * 29 = 796","target_value":796}}
+{"canonical_signature":"25,3,18,4","input":"25 ? 3 ? 18 = 4","sample_id":"phase13_main_meb_0207","source_row":207,"verifier_spec":{"target":"25 - 3 - 18 = 4","target_value":4}}
+{"canonical_signature":"2,3,20,9,17,-40","input":"2 ? 3 ? 20 ? 9 ? 17 = -40","sample_id":"phase13_main_meb_0208","source_row":208,"verifier_spec":{"target":"2 * 3 - 20 - 9 - 17 = -40","target_value":-40}}
+{"canonical_signature":"24,1,17,23,64","input":"24 ? 1 ? 17 ? 23 = 64","sample_id":"phase13_main_meb_0209","source_row":209,"verifier_spec":{"target":"24 + 1 * 17 + 23 = 64","target_value":64}}
+{"canonical_signature":"24,1,12,13","input":"24 ? 1 ? 12 = 13","sample_id":"phase13_main_meb_0210","source_row":210,"verifier_spec":{"target":"24 + 1 - 12 = 13","target_value":13}}
+{"canonical_signature":"5,3,10,20,6,-179","input":"5 ? 3 ? 10 ? 20 ? 6 = -179","sample_id":"phase13_main_meb_0211","source_row":211,"verifier_spec":{"target":"5 * 3 - 10 * 20 + 6 = -179","target_value":-179}}
+{"canonical_signature":"16,8,2,32","input":"16 ? 8 ? 2 = 32","sample_id":"phase13_main_meb_0212","source_row":212,"verifier_spec":{"target":"16 + 8 * 2 = 32","target_value":32}}
+{"canonical_signature":"27,7,15,49","input":"27 ? 7 ? 15 = 49","sample_id":"phase13_main_meb_0213","source_row":213,"verifier_spec":{"target":"27 + 7 + 15 = 49","target_value":49}}
+{"canonical_signature":"18,10,12,1,23,191","input":"18 ? 10 ? 12 ? 1 ? 23 = 191","sample_id":"phase13_main_meb_0214","source_row":214,"verifier_spec":{"target":"18 * 10 - 12 + 1 * 23 = 191","target_value":191}}
+{"canonical_signature":"22,24,12,13,-279","input":"22 ? 24 ? 12 ? 13 = -279","sample_id":"phase13_main_meb_0215","source_row":215,"verifier_spec":{"target":"22 - 24 * 12 - 13 = -279","target_value":-279}}
+{"canonical_signature":"22,19,16,24,350","input":"22 ? 19 ? 16 ? 24 = 350","sample_id":"phase13_main_meb_0216","source_row":216,"verifier_spec":{"target":"22 + 19 * 16 + 24 = 350","target_value":350}}
+{"canonical_signature":"16,18,5,-7","input":"16 ? 18 ? 5 = -7","sample_id":"phase13_main_meb_0217","source_row":217,"verifier_spec":{"target":"16 - 18 - 5 = -7","target_value":-7}}
+{"canonical_signature":"22,1,26,17,464","input":"22 ? 1 ? 26 ? 17 = 464","sample_id":"phase13_main_meb_0218","source_row":218,"verifier_spec":{"target":"22 + 1 * 26 * 17 = 464","target_value":464}}
+{"canonical_signature":"15,18,2,24,81","input":"15 ? 18 ? 2 ? 24 = 81","sample_id":"phase13_main_meb_0219","source_row":219,"verifier_spec":{"target":"15 + 18 + 2 * 24 = 81","target_value":81}}
+{"canonical_signature":"4,21,9,16","input":"4 ? 21 ? 9 = 16","sample_id":"phase13_main_meb_0220","source_row":220,"verifier_spec":{"target":"4 + 21 - 9 = 16","target_value":16}}
+{"canonical_signature":"21,13,5,19,26,507","input":"21 ? 13 ? 5 ? 19 ? 26 = 507","sample_id":"phase13_main_meb_0221","source_row":221,"verifier_spec":{"target":"21 - 13 + 5 + 19 * 26 = 507","target_value":507}}
+{"canonical_signature":"7,13,14,21,-15","input":"7 ? 13 ? 14 ? 21 = -15","sample_id":"phase13_main_meb_0222","source_row":222,"verifier_spec":{"target":"7 + 13 - 14 - 21 = -15","target_value":-15}}
+{"canonical_signature":"23,18,12,8,13,-133","input":"23 ? 18 ? 12 ? 8 ? 13 = -133","sample_id":"phase13_main_meb_0223","source_row":223,"verifier_spec":{"target":"23 - 18 / 12 * 8 * 13 = -133","target_value":-133}}
+{"canonical_signature":"17,10,26,144","input":"17 ? 10 ? 26 = 144","sample_id":"phase13_main_meb_0224","source_row":224,"verifier_spec":{"target":"17 * 10 - 26 = 144","target_value":144}}
+{"canonical_signature":"1,25,7,176","input":"1 ? 25 ? 7 = 176","sample_id":"phase13_main_meb_0225","source_row":225,"verifier_spec":{"target":"1 + 25 * 7 = 176","target_value":176}}
+{"canonical_signature":"22,14,2,3,32","input":"22 ? 14 ? 2 ? 3 = 32","sample_id":"phase13_main_meb_0226","source_row":226,"verifier_spec":{"target":"22 + 14 / 2 + 3 = 32","target_value":32}}
+{"canonical_signature":"28,27,13,19,248","input":"28 ? 27 ? 13 ? 19 = 248","sample_id":"phase13_main_meb_0227","source_row":227,"verifier_spec":{"target":"28 - 27 + 13 * 19 = 248","target_value":248}}
+{"canonical_signature":"23,29,4,8,2660","input":"23 ? 29 ? 4 ? 8 = 2660","sample_id":"phase13_main_meb_0228","source_row":228,"verifier_spec":{"target":"23 * 29 * 4 - 8 = 2660","target_value":2660}}
+{"canonical_signature":"9,15,5,22,11,60","input":"9 ? 15 ? 5 ? 22 ? 11 = 60","sample_id":"phase13_main_meb_0229","source_row":229,"verifier_spec":{"target":"9 * 15 / 5 + 22 + 11 = 60","target_value":60}}
+{"canonical_signature":"18,15,16,258","input":"18 ? 15 ? 16 = 258","sample_id":"phase13_main_meb_0230","source_row":230,"verifier_spec":{"target":"18 + 15 * 16 = 258","target_value":258}}
+{"canonical_signature":"4,6,20,-116","input":"4 ? 6 ? 20 = -116","sample_id":"phase13_main_meb_0231","source_row":231,"verifier_spec":{"target":"4 - 6 * 20 = -116","target_value":-116}}
+{"canonical_signature":"10,5,21,-6","input":"10 ? 5 ? 21 = -6","sample_id":"phase13_main_meb_0232","source_row":232,"verifier_spec":{"target":"10 + 5 - 21 = -6","target_value":-6}}
+{"canonical_signature":"17,23,24,18","input":"17 ? 23 ? 24 = 18","sample_id":"phase13_main_meb_0233","source_row":233,"verifier_spec":{"target":"17 - 23 + 24 = 18","target_value":18}}
+{"canonical_signature":"9,18,20,369","input":"9 ? 18 ? 20 = 369","sample_id":"phase13_main_meb_0234","source_row":234,"verifier_spec":{"target":"9 + 18 * 20 = 369","target_value":369}}
+{"canonical_signature":"8,26,4,6,-20","input":"8 ? 26 ? 4 ? 6 = -20","sample_id":"phase13_main_meb_0235","source_row":235,"verifier_spec":{"target":"8 - 26 + 4 - 6 = -20","target_value":-20}}
+{"canonical_signature":"23,2,27,19,67","input":"23 ? 2 ? 27 ? 19 = 67","sample_id":"phase13_main_meb_0236","source_row":236,"verifier_spec":{"target":"23 - 2 + 27 + 19 = 67","target_value":67}}
+{"canonical_signature":"26,9,19,54","input":"26 ? 9 ? 19 = 54","sample_id":"phase13_main_meb_0237","source_row":237,"verifier_spec":{"target":"26 + 9 + 19 = 54","target_value":54}}
+{"canonical_signature":"2,5,17,18,42","input":"2 ? 5 ? 17 ? 18 = 42","sample_id":"phase13_main_meb_0238","source_row":238,"verifier_spec":{"target":"2 + 5 + 17 + 18 = 42","target_value":42}}
+{"canonical_signature":"18,17,11,205","input":"18 ? 17 ? 11 = 205","sample_id":"phase13_main_meb_0239","source_row":239,"verifier_spec":{"target":"18 + 17 * 11 = 205","target_value":205}}
+{"canonical_signature":"16,7,1,9","input":"16 ? 7 ? 1 = 9","sample_id":"phase13_main_meb_0240","source_row":240,"verifier_spec":{"target":"16 - 7 * 1 = 9","target_value":9}}
+{"canonical_signature":"19,16,8,2432","input":"19 ? 16 ? 8 = 2432","sample_id":"phase13_main_meb_0241","source_row":241,"verifier_spec":{"target":"19 * 16 * 8 = 2432","target_value":2432}}
+{"canonical_signature":"22,25,29,4,-36","input":"22 ? 25 ? 29 ? 4 = -36","sample_id":"phase13_main_meb_0242","source_row":242,"verifier_spec":{"target":"22 - 25 - 29 - 4 = -36","target_value":-36}}
+{"canonical_signature":"20,26,6,17,16,2688","input":"20 ? 26 ? 6 ? 17 ? 16 = 2688","sample_id":"phase13_main_meb_0243","source_row":243,"verifier_spec":{"target":"20 + 26 * 6 * 17 + 16 = 2688","target_value":2688}}
+{"canonical_signature":"18,2,19,12,13","input":"18 ? 2 ? 19 ? 12 = 13","sample_id":"phase13_main_meb_0244","source_row":244,"verifier_spec":{"target":"18 + 2 - 19 + 12 = 13","target_value":13}}
+{"canonical_signature":"14,18,15,9,3771","input":"14 ? 18 ? 15 ? 9 = 3771","sample_id":"phase13_main_meb_0245","source_row":245,"verifier_spec":{"target":"14 * 18 * 15 - 9 = 3771","target_value":3771}}
+{"canonical_signature":"9,6,20,14,9","input":"9 ? 6 ? 20 ? 14 = 9","sample_id":"phase13_main_meb_0246","source_row":246,"verifier_spec":{"target":"9 - 6 + 20 - 14 = 9","target_value":9}}
+{"canonical_signature":"15,29,22,653","input":"15 ? 29 ? 22 = 653","sample_id":"phase13_main_meb_0247","source_row":247,"verifier_spec":{"target":"15 + 29 * 22 = 653","target_value":653}}
+{"canonical_signature":"5,6,24,9,-11","input":"5 ? 6 ? 24 ? 9 = -11","sample_id":"phase13_main_meb_0248","source_row":248,"verifier_spec":{"target":"5 - 6 * 24 / 9 = -11","target_value":-11}}
+{"canonical_signature":"27,26,3,-51","input":"27 ? 26 ? 3 = -51","sample_id":"phase13_main_meb_0249","source_row":249,"verifier_spec":{"target":"27 - 26 * 3 = -51","target_value":-51}}
+{"canonical_signature":"11,21,27,22,-562","input":"11 ? 21 ? 27 ? 22 = -562","sample_id":"phase13_main_meb_0250","source_row":250,"verifier_spec":{"target":"11 + 21 - 27 * 22 = -562","target_value":-562}}

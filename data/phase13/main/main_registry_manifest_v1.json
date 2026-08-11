@@ -1,0 +1,80 @@
+{
+  "exclusion_registry": {
+    "path": "data/phase13/main/exclusions_v1.json",
+    "sha256": "f9b87b2eec6d6c4211a2adfffae09c35064ccd0ff814b12c5b1e9602d50754d9"
+  },
+  "registries": {
+    "game24": {
+      "exclusions": [
+        {
+          "canonical_signature": "1,6,6,6",
+          "reason": "duplicate_canonical_signature",
+          "source_row": 65
+        },
+        {
+          "canonical_signature": "4,6,6,9",
+          "reason": "duplicate_canonical_signature",
+          "source_row": 92
+        },
+        {
+          "canonical_signature": "2,3,4,7",
+          "reason": "duplicate_canonical_signature",
+          "source_row": 97
+        }
+      ],
+      "main_count": 95,
+      "path": "game24_main_v1.jsonl",
+      "sha256": "ae682f138d8035fc1de9382eb8903730d392851def720351a78846df160b615f",
+      "source_count": 98
+    },
+    "math_equation_balancer": {
+      "exclusions": [],
+      "main_count": 250,
+      "path": "math_equation_balancer_main_v1.jsonl",
+      "sha256": "dfa07c8c3ada1b0030a735cca97022f98dfb8da30d8ce86f82013eb51b4a7037",
+      "source_count": 250
+    },
+    "word_sorting": {
+      "exclusions": [],
+      "main_count": 250,
+      "path": "word_sorting_main_v1.jsonl",
+      "sha256": "e7ff0507512af4e71ae027a5226984b175d9b75dca898df79ca88535326c9c54",
+      "source_count": 250
+    }
+  },
+  "schema_version": "phase13_reduced_main_registry_manifest_v1",
+  "selection_law": "source_order_after_prospective_canonical_exclusion_v1",
+  "sources": {
+    "game24": {
+      "approved_path": "/home/hyunwoo/git/buffer-of-thought-llm/benchmarks/gameof24.jsonl",
+      "approved_path_clean": true,
+      "commit": "d771df690ca03c82ae84c206734b762110920d85",
+      "content_sha256": "4ebb8ffd108f6ce8ea88ac6a112dfbdf9881a0eefec330b97f24dd3a878e9dfb",
+      "repository": "/home/hyunwoo/git/buffer-of-thought-llm",
+      "repository_worktree_clean": false
+    },
+    "math_equation_balancer": {
+      "approved_path": "/home/hyunwoo/git/dynamic-cheatsheet/data/MathEquationBalancer/data-00000-of-00001.arrow",
+      "approved_path_clean": true,
+      "commit": "5cfe3c37e8e52b1d858d0f3df46e7f17c50991b9",
+      "content_sha256": "4f7a605807efb3b2b5e739f39032d4e9bb5026e57ca3c8d45a3e99a861c3e5e2",
+      "dataset_files": {
+        "data-00000-of-00001.arrow": "4f7a605807efb3b2b5e739f39032d4e9bb5026e57ca3c8d45a3e99a861c3e5e2",
+        "dataset_info.json": "5125ae8b933dd4b4a3ce99c5228e2c767323f56c137633712da1a659f7e0223d",
+        "state.json": "1d0c9f527c08afe4ec4359fa19a249e476c458d5442c7cc739f9e1a053fd1838"
+      },
+      "dataset_fingerprint": "4e73e842b315f878",
+      "load_contract": "datasets.load_from_disk",
+      "repository": "/home/hyunwoo/git/dynamic-cheatsheet",
+      "repository_worktree_clean": true
+    },
+    "word_sorting": {
+      "approved_path": "/home/hyunwoo/git/buffer-of-thought-llm/benchmarks/word_sorting.jsonl",
+      "approved_path_clean": true,
+      "commit": "d771df690ca03c82ae84c206734b762110920d85",
+      "content_sha256": "199086725912c96246fb6d5f259560b112f8844c7ad58ea6042853f0c3205cd4",
+      "repository": "/home/hyunwoo/git/buffer-of-thought-llm",
+      "repository_worktree_clean": false
+    }
+  }
+}
