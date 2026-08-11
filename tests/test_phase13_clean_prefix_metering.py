@@ -21,7 +21,7 @@ def test_metered_client_records_observed_usage_once_per_successful_response() ->
             del messages, model, config
             return LLMResponse(
                 content="final: 24",
-                raw={"attempts": 2, "cost_usd": 0.25},
+                raw={"attempts": 2, "cost_usd": 0.025},
                 token_usage={"prompt_tokens": 3, "completion_tokens": 2},
             )
 
@@ -31,7 +31,7 @@ def test_metered_client_records_observed_usage_once_per_successful_response() ->
     assert metered.transport_attempts == 2
     assert metered.input_tokens == 3
     assert metered.output_tokens == 2
-    assert metered.cost_usd == 0.25
+    assert metered.cost_usd == 0.025
 
 
 def test_metered_client_rejects_oversized_prompt_before_dispatch() -> None:
@@ -88,7 +88,7 @@ def test_metered_client_uses_utf8_byte_bound_before_dispatch() -> None:
     assert client.calls == 0
 
 
-def test_metered_client_allows_exact_reserved_cost_ceiling() -> None:
+def test_metered_client_allows_low_cost_calls_under_lower_hard_ceiling() -> None:
     class _Client:
         def chat(self, messages, model, config) -> LLMResponse:  # noqa: ANN001
             del messages, model, config
@@ -98,7 +98,9 @@ def test_metered_client_allows_exact_reserved_cost_ceiling() -> None:
                 token_usage={"prompt_tokens": 1, "completion_tokens": 1},
             )
 
-    metered = MeteredClient(_Client(), load_clean_prefix_config(CONFIG))
+    config = load_clean_prefix_config(CONFIG)
+    config["budget"]["hard_ceiling_microusd"] = 15_000_000
+    metered = MeteredClient(_Client(), config)
     for _ in range(metered.maximum_semantic_calls):
         metered.chat(
             [{"role": "user", "content": "solve"}],
@@ -106,4 +108,20 @@ def test_metered_client_allows_exact_reserved_cost_ceiling() -> None:
             {"max_output_tokens": 1},
         )
 
-    assert metered.reserved_max_cost_usd == metered.hard_ceiling_usd
+    assert metered.reserved_max_cost_usd == 0.0
+
+
+def test_metered_client_retains_failed_attempt_liability_after_success() -> None:
+    class _RetryingClient:
+        def chat(self, messages, model, config) -> LLMResponse:  # noqa: ANN001
+            del messages, model, config
+            return LLMResponse(
+                content="final: 24",
+                raw={"attempts": 2, "cost_usd": 0.000001},
+                token_usage={"prompt_tokens": 1, "completion_tokens": 1},
+            )
+
+    metered = MeteredClient(_RetryingClient(), load_clean_prefix_config(CONFIG))
+    metered.chat([{"role": "user", "content": "solve"}], "model", {"max_output_tokens": 1})
+
+    assert metered.reserved_max_cost_microusd == 30_721

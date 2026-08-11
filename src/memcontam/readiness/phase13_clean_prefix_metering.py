@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import ROUND_CEILING, Decimal
 from typing import Any
 
 from memcontam.clients.base import LLMClient, LLMResponse
@@ -21,12 +22,13 @@ class MeteredClient:
         self.maximum_attempts_per_semantic_call = 1 + retry["retries_after_initial_attempt"]
         self.hard_ceiling_microusd = budget["hard_ceiling_microusd"]
         self.hard_ceiling_usd = self.hard_ceiling_microusd / 1_000_000
-        self.maximum_cost_per_semantic_call_microusd = int(
+        self.maximum_cost_per_transport_attempt_microusd = int(
+            self.maximum_input_tokens_per_attempt * budget["input_per_1m_tokens"]
+            + self.maximum_output_tokens_per_attempt * budget["output_per_1m_tokens"]
+        )
+        self.maximum_cost_per_semantic_call_microusd = (
             self.maximum_attempts_per_semantic_call
-            * (
-                self.maximum_input_tokens_per_attempt * budget["input_per_1m_tokens"]
-                + self.maximum_output_tokens_per_attempt * budget["output_per_1m_tokens"]
-            )
+            * self.maximum_cost_per_transport_attempt_microusd
         )
         self.semantic_calls = 0
         self.semantic_calls_dispatched = 0
@@ -79,10 +81,17 @@ class MeteredClient:
         self.transport_attempts += attempts
         self.input_tokens += prompt_tokens
         self.output_tokens += completion_tokens
-        cost = response.raw.get("cost_usd", 0.0)
+        cost = response.raw.get("cost_usd")
         if type(cost) not in {int, float} or cost < 0:
             raise Phase13CalibrationError("CALIBRATION_PROVIDER_ACCOUNTING_REQUIRED")
         self.cost_usd += float(cost)
+        observed_cost_microusd = int(
+            (Decimal(str(cost)) * 1_000_000).to_integral_value(rounding=ROUND_CEILING)
+        )
+        settled_max_cost_microusd = (
+            (attempts - 1) * self.maximum_cost_per_transport_attempt_microusd
+            + observed_cost_microusd
+        )
         if (
             self.transport_attempts > self.maximum_transport_attempts
             or self.input_tokens > self.maximum_input_tokens
@@ -90,8 +99,13 @@ class MeteredClient:
             or prompt_tokens > self.maximum_input_tokens_per_attempt
             or completion_tokens > self.maximum_output_tokens_per_attempt
             or self.cost_usd > self.hard_ceiling_usd
+            or settled_max_cost_microusd > self.maximum_cost_per_semantic_call_microusd
         ):
             raise Phase13CalibrationError("CALIBRATION_PROVIDER_BUDGET_EXCEEDED")
+        self.reserved_max_cost_microusd += (
+            settled_max_cost_microusd - self.maximum_cost_per_semantic_call_microusd
+        )
+        self.reserved_max_cost_usd = self.reserved_max_cost_microusd / 1_000_000
         self.call_records.append(
             {
                 "sequence": self.semantic_calls,
