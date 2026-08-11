@@ -1,0 +1,100 @@
+{
+  "schema_version": "phase13_reduced_main_a_readiness_v1",
+  "status": "BLOCKED_ON_ONE_PRE_MAIN_DECISION",
+  "evidence_layer": "build",
+  "scientific_result": false,
+  "provider_calls_issued": 0,
+  "filter_calls": 0,
+  "repository_base_commit": "74e6a8419de1238c752a3728a1198ae86e24242b",
+  "panel": {
+    "tasks": [
+      "game24",
+      "math_equation_balancer",
+      "word_sorting"
+    ],
+    "memory_baselines": [
+      "fh_bounded",
+      "rag_frozen",
+      "bot_style",
+      "reflexion_style"
+    ],
+    "nomem_rule": "singleton_per_seed",
+    "arms": [
+      "clean",
+      "correct",
+      "irrelevant",
+      "contam"
+    ],
+    "tool_mode": "text_only",
+    "route_candidate": "3w",
+    "target_jointly_eligible_seeds_per_task": 10,
+    "suffix_horizon": 1,
+    "checkpoint_rule": "common_lower_median_jointly_eligible_v1"
+  },
+  "frozen_inputs": {
+    "main_registry_manifest": {
+      "path": "data/phase13/main/main_registry_manifest_v1.json",
+      "sha256": "8b84820aa7e62cbcb71b035d002e5466ed6d5f32fbc3e4cd66ad636ca4303efb"
+    },
+    "candidate_registry": {
+      "path": "data/phase12/registries/candidate_registry_v1.json",
+      "sha256": "7dc76a6816a1d3d641a38db71c9152eccf9fe290b4dfdc9d4fd19f62a73ceef8"
+    },
+    "superseded_filter_inclusive_route_candidate": {
+      "path": "configs/phase12/main_3w.yaml",
+      "sha256": "918638ae269e72fbd16462107de691a3a40cb4490ed57c8b07219c28c42a64c6",
+      "transfer_forbidden": true
+    },
+    "eligibility_law": {
+      "path": "src/memcontam/experiment/phase12/eligibility.py",
+      "sha256": "94931ff31abbaa737a6f84c02c7ad3897f20fddda700e94ad9a597a8d23b9b76"
+    },
+    "maturity_law": {
+      "path": "src/memcontam/experiment/phase12/maturity.py",
+      "sha256": "f8c856ef5cda8fb7ad776cc02e77a5c145c0b7118723002929240760043756cd"
+    },
+    "planner_law": {
+      "path": "src/memcontam/experiment/phase12/planner.py",
+      "sha256": "58687ca1b884afdece92b5e787b9e2c2bd87c9c421929a2282516dba6bd5b8c9"
+    }
+  },
+  "independently_ready": {
+    "prospective_main_source_pools": true,
+    "candidate_triplets": true,
+    "three_task_native_context": true,
+    "four_memory_arm_branching": true,
+    "nomem_singleton_aliasing": true,
+    "filter_removed_from_reduced_execution": true
+  },
+  "accounting_boundary": {
+    "exact_total_calls": null,
+    "exact_total_tokens": null,
+    "exact_total_usd": null,
+    "reason": "Attempted seed counts and reduced-panel conditional activation rates are not frozen.",
+    "forbidden_substitutions": [
+      "filter_inclusive_15509_call_plan",
+      "synthetic_fixture_rates",
+      "main_outcome_derived_rates",
+      "filter_challenge_token_reservations"
+    ]
+  },
+  "blocking_rationale": {
+    "existing_route_is_not_transferable": "The only 3w route binds five arms including Filter and has null route and seed manifests.",
+    "attempted_seed_counts_are_undetermined": "Ten jointly eligible seeds require a pre-Main reduced-panel intersection rate across FH, RAG-Frozen, BoT, and Reflexion; no admissible rate exists.",
+    "cost_totals_are_undetermined": "Reduced semantic calls depend on attempted counts and conditional activations; token/USD totals additionally require frozen stage token estimates.",
+    "prohibited_inference": "Main outcomes, synthetic fixtures, and Filter-only reservations cannot supply these inputs."
+  },
+  "blocking_decision": {
+    "code": "REDUCED_PANEL_PRE_MAIN_RATE_SOURCE_REQUIRED",
+    "required_output": [
+      "conditional_call_rate_registry",
+      "attempted_seed_counts_by_task",
+      "route_selection_manifest",
+      "seed_allocation_manifest"
+    ],
+    "admissible_options": [
+      "run_reduced_panel_pilot_b_before_main",
+      "register_a_separately_justified_conservative_upper_bound_before_main"
+    ]
+  }
+}
