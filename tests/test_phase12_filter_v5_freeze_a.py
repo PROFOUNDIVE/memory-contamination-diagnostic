@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 from typing import TypeAlias
 
@@ -48,7 +49,21 @@ def test_freeze_a_builds_exact_disjoint_pool_and_native_construction_artifacts(t
     assert freeze["provider_calls_issued"] == 0
     assert _json_object(tmp_path / "candidate_triplets_v1.json")["render_count"] == 36
     assert _json_object(tmp_path / "checkpoint_manifest_v1.json")["checkpoint_count"] == 12
-    assert _json_object(tmp_path / "ordinary_route_false_manifest_v1.json")["realization_count"] == 12
+    ordinary = _json_object(tmp_path / "ordinary_route_false_manifest_v1.json")
+    assert ordinary["schema_version"] == "phase13_fv5_ordinary_route_false_manifest_v2"
+    assert ordinary["realization_count"] == 12
+    realizations = [_object(value) for value in _array(ordinary["realizations"])]
+    assert {
+        (_object(realization["writer_envelope"])["writer_id"], _object(realization["writer_envelope"])["writer_stage"])
+        for realization in realizations
+    } == {
+        ("fh_appender", "full_history_generate"),
+        ("rag_corpus_loader", "rag_corpus_load"),
+        ("bot_buffer_manager", "bot_thought_distill"),
+        ("reflexion_reflector", "reflexion_reflect"),
+    }
+    assert all(_object(realization["source_interaction"])["position"] == 9 for realization in realizations)
+    assert all(realization["pre_native_state_sha256"] != realization["post_native_state_sha256"] for realization in realizations)
 
 
 def test_freeze_a_is_byte_repeatable_and_excludes_known_leakage(tmp_path: Path) -> None:
@@ -84,4 +99,22 @@ def test_freeze_a_validator_rejects_tampered_manifest_hash_and_leaky_probe(tmp_p
     manifest.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
 
     with pytest.raises(FreezeAError, match="FREEZE_A_MANIFEST_HASH_MISMATCH"):
+        validate_freeze_a(CONFIG, SOURCE_UNIVERSE, tmp_path)
+
+
+def test_freeze_a_validator_rejects_rehashed_synthetic_ordinary_writer(tmp_path: Path) -> None:
+    build_freeze_a(CONFIG, SOURCE_UNIVERSE, tmp_path)
+    manifest = tmp_path / "ordinary_route_false_manifest_v1.json"
+    payload = _json_object(manifest)
+    first = _object(_array(payload["realizations"])[0])
+    envelope = _object(first["writer_envelope"])
+    envelope["writer_id"] = "ordinary-writer-full_history"
+    manifest.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+    freeze_path = tmp_path / "freeze_a.json"
+    freeze = _json_object(freeze_path)
+    hashes = _object(freeze["manifest_sha256"])
+    hashes[manifest.name] = hashlib.sha256(manifest.read_bytes()).hexdigest()
+    freeze_path.write_text(json.dumps(freeze, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+
+    with pytest.raises(FreezeAError, match="ORDINARY_NATIVE_WRITER_AUTHORITY_INVALID"):
         validate_freeze_a(CONFIG, SOURCE_UNIVERSE, tmp_path)

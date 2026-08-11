@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from itertools import combinations, combinations_with_replacement, product
 from pathlib import Path
 from typing import Final
@@ -16,10 +17,20 @@ from memcontam.experiment.phase12.filter_challenge.calibration_laws import (
 from memcontam.experiment.phase12.filter_challenge.registry_calibration import screening_schedule
 from memcontam.memory.checkpoint_v3 import NativeEntry, NativeState, serialize_checkpoint
 from memcontam.memory.serializer_registry import SerializerRegistry
+from memcontam.experiment.phase12.filter_challenge.ordinary_authority import (
+    Baseline,
+    OrdinaryAuthorityError,
+    realize_ordinary_false,
+)
 
 
 TASKS: Final = ("game24", "math_equation_balancer", "word_sorting")
-BASELINES: Final = ("full_history", "rag_frozen", "bot_style", "reflexion_style")
+BASELINES: Final[tuple[Baseline, ...]] = (
+    "full_history",
+    "rag_frozen",
+    "bot_style",
+    "reflexion_style",
+)
 _EXCLUDED: Final = {
     "game24": {"3,3,8,8"},
     "math_equation_balancer": {"1,2,3,7"},
@@ -115,11 +126,13 @@ def _state(task: str, baseline: str) -> NativeState:
     return NativeState(baseline=baseline, entries=entries, native_state=native_state)
 
 
-def _construction(root: Path) -> tuple[list[dict[str, object]], list[dict[str, object]], list[dict[str, object]]]:
+def _construction(
+    root: Path,
+) -> tuple[list[dict[str, object]], list[dict[str, object]], list[Mapping[str, object]]]:
     registry = load_candidate_registry(root / "data/phase12/registries/candidate_registry_v1.json")
     renders: list[dict[str, object]] = []
     checkpoints: list[dict[str, object]] = []
-    ordinary: list[dict[str, object]] = []
+    ordinary: list[Mapping[str, object]] = []
     for triplet in registry.triplets:
         for baseline in BASELINES:
             checkpoint = serialize_checkpoint(_state(triplet.task, baseline))
@@ -131,8 +144,7 @@ def _construction(root: Path) -> tuple[list[dict[str, object]], list[dict[str, o
                     content=candidate.content, content_hash=candidate.content_hash, render_id=candidate.render_id,
                 )
                 renders.append({"task": triplet.task, "baseline": baseline, "entry": entry.to_mapping()})
-            false_entry = render_false(baseline, triplet, checkpoint)
-            ordinary.append({"task": triplet.task, "baseline": baseline, "eligible_position": 9, "writer_event": f"ordinary-writer-{triplet.task}-{baseline}", "entry": false_entry.to_mapping(), "state_sha256": checkpoint.canonical_sha256})
+            ordinary.append(realize_ordinary_false(triplet, baseline, checkpoint))
     return renders, checkpoints, ordinary
 
 
@@ -147,7 +159,7 @@ def build_freeze_a(config: Path, source_universe: Path, output_root: Path) -> Pa
         "probe_construction_manifest_v1.json": {"schema_version": "phase12_fv5_probe_construction_manifest_v1", "probes": probes},
         "candidate_triplets_v1.json": {"schema_version": "phase12_fv5_candidate_triplets_v1", "render_count": len(renders), "renders": renders},
         "checkpoint_manifest_v1.json": {"schema_version": "phase12_fv5_checkpoint_manifest_v1", "checkpoint_count": len(checkpoints), "checkpoints": checkpoints},
-        "ordinary_route_false_manifest_v1.json": {"schema_version": "phase12_fv5_ordinary_route_false_manifest_v1", "realization_count": len(ordinary), "realizations": ordinary},
+        "ordinary_route_false_manifest_v1.json": {"schema_version": "phase13_fv5_ordinary_route_false_manifest_v2", "realization_count": len(ordinary), "realizations": ordinary},
         "leakage_disjointness_report.json": {"schema_version": "phase12_fv5_leakage_disjointness_report_v1", "excluded_signatures": {key: sorted(value) for key, value in _EXCLUDED.items()}, "candidate_conditioned_outcomes": False},
     }
     for name, payload in manifests.items():
@@ -197,6 +209,19 @@ def validate_freeze_a(config: Path, source_universe: Path, output_root: Path) ->
             signature = str(certificate.get("input_canonical"))
             if signature in _EXCLUDED.get(task, set()):
                 raise FreezeAError("LEAKAGE_PILOT_INSTANCE" if task == "game24" else "LEAKAGE_CANDIDATE_EXAMPLE")
+    try:
+        expected_ordinary = _construction(root)[2]
+    except OrdinaryAuthorityError as error:
+        raise FreezeAError(error.code) from error
+    ordinary = json.loads(
+        (output_root / "ordinary_route_false_manifest_v1.json").read_text(encoding="utf-8")
+    )
+    if ordinary != {
+        "schema_version": "phase13_fv5_ordinary_route_false_manifest_v2",
+        "realization_count": 12,
+        "realizations": expected_ordinary,
+    }:
+        raise FreezeAError("ORDINARY_NATIVE_WRITER_AUTHORITY_INVALID")
     if len(freeze.get("control_schedule", [])) != 72 or len(freeze.get("method_call_schedule", [])) != 90:
         raise FreezeAError("CALL_SCHEDULE_MISMATCH")
     return freeze
