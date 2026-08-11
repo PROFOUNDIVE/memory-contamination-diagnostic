@@ -2143,8 +2143,10 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", required=True)
 
     from memcontam.experiment.phase12.cli import add_parser as add_phase12_parser
+    from memcontam.readiness.phase13_cli import add_parser as add_phase13_parser
 
     add_phase12_parser(sub)
+    add_phase13_parser(sub)
 
     validate = sub.add_parser("validate-config")
     validate.add_argument("config", type=Path)
@@ -2168,6 +2170,10 @@ def main() -> None:
         from memcontam.experiment.phase12.cli import run as run_phase12
 
         run_phase12(args)
+    elif args.command == "phase13":
+        from memcontam.readiness.phase13_cli import run as run_phase13
+
+        run_phase13(args)
     elif args.command == "run":
         run_config(load_config(args.config), args.run_id, allow_live_calls=args.allow_live_calls)
     elif args.command == "aggregate":
