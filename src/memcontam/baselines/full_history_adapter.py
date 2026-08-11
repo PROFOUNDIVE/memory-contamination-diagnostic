@@ -193,7 +193,12 @@ def _append_response(
     selected_record_ids: list[str],
 ) -> MemoryEntry:
     selected_record_id_set = set(selected_record_ids)
-    entry_id = f"full_history:{task.task_name}:{task.sample_id}:{uuid4().hex}"
+    configured_entry_id = config.get("_deterministic_memory_entry_id")
+    entry_id = (
+        configured_entry_id
+        if isinstance(configured_entry_id, str) and configured_entry_id
+        else f"full_history:{task.task_name}:{task.sample_id}:{uuid4().hex}"
+    )
     entry = MemoryEntry(
         entry_id=entry_id,
         content=render_full_history(

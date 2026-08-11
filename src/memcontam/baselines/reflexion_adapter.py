@@ -425,8 +425,13 @@ def _append_reflection(
     entries_by_id = {entry.entry_id: entry for entry in visible_entries}
     used_entries = [entries_by_id[entry_id] for entry_id in used_ids]
     contaminated_source_ids = _contaminated_source_entry_ids(used_entries)
+    configured_entry_id = config.get("_deterministic_memory_entry_id")
     entry = MemoryEntry(
-        entry_id=f"reflexion:{task.task_name}:{task.sample_id}:{uuid4().hex}",
+        entry_id=(
+            configured_entry_id
+            if isinstance(configured_entry_id, str) and configured_entry_id
+            else f"reflexion:{task.task_name}:{task.sample_id}:{uuid4().hex}"
+        ),
         content=f"Reflection: {payload.reflection_text}",
         memory_type="verbal_reflection",
         clean_or_contaminated="contaminated" if contaminated_source_ids else "clean",
