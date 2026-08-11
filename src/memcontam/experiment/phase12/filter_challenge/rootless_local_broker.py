@@ -375,7 +375,7 @@ class FakeBroker:
         self.runtime_lock = runtime_lock
         self.exchange_fixture_id = exchange_fixture_id or str(binding["fixture_id"])
         self.probe_specs = (
-            _load_bound_probe_specs(root, binding, seed)
+            _load_bound_probe_specs(root, binding, seed, repository)
             if binding.get("transport_mode") == "live"
             else _load_probe_specs(repository or Path(__file__).resolve().parents[5])
         )
@@ -1053,7 +1053,7 @@ def _load_probe_specs(repository: Path) -> dict[str, tuple[str, dict[str, JsonVa
 
 
 def _load_bound_probe_specs(
-    root: Path, binding: Mapping[str, JsonValue], seed: bytes
+    root: Path, binding: Mapping[str, JsonValue], seed: bytes, repository: Path | None
 ) -> dict[str, tuple[str, dict[str, JsonValue]]]:
     attempt_id = binding.get("attempt_id")
     expected_hash = binding.get("input_manifest_sha256")
@@ -1079,16 +1079,19 @@ def _load_bound_probe_specs(
         raise RootlessContractError("ROOTLESS_COMPILATION_INVALID")
     result: dict[str, tuple[str, dict[str, JsonValue]]] = {}
     for entry in entries:
-        if not isinstance(entry, dict) or entry.get("role") not in {
-            "screening-probes",
-            "bct-probes",
-        }:
+        if not isinstance(entry, dict) or entry.get("role") != "historical-probe-construction":
             continue
         path_value = entry.get("absolute_path")
         digest = entry.get("sha256")
         if not isinstance(path_value, str) or not isinstance(digest, str):
             raise RootlessContractError("ROOTLESS_COMPILATION_INVALID")
-        probe_raw = read_private_file(Path(path_value))
+        path = Path(path_value)
+        if repository is None or path != repository / "data/phase12/filter_v5_bct_v1/probe_construction_manifest_v1.json":
+            raise RootlessContractError("ROOTLESS_COMPILATION_INVALID")
+        info = path.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise RootlessContractError("ROOTLESS_COMPILATION_INVALID")
+        probe_raw = path.read_bytes()
         if hashlib.sha256(probe_raw).hexdigest() != digest:
             raise RootlessContractError("ROOTLESS_COMPILATION_INVALID")
         value = parse_canonical_object(probe_raw)
