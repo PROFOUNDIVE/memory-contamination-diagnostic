@@ -225,7 +225,7 @@ def test_valid_fake_screening_closes_completed_estimable(tmp_path: Path) -> None
         fake_scenario_sha256="5" * 64,
     )
 
-    # When: BCT setup reaches the absent ordinary native-writer authority.
+    # When: BCT executes through the same production fork/socket process seam.
     bct_exit_code = run_stage_process(
         bct.slots,
         lambda: build_fake_broker_for_tests(
@@ -243,16 +243,30 @@ def test_valid_fake_screening_closes_completed_estimable(tmp_path: Path) -> None
     final = parse_canonical_object(
         (fake_root / f"terminals/{context.attempt_id}/final.json").read_bytes()
     )
-    assert bct_exit_code == 69
-    assert final["status"] == "blocked"
-    assert final["reason_code"] == "ROOTLESS_BCT_SETUP_FAILED"
-    assert not evidence_root.exists()
-    assert not (fake_root / f"attempts/{context.attempt_id}/bct").exists()
-    assert not any(
+    bct_terminal = parse_canonical_object(
+        (fake_root / f"terminals/{context.attempt_id}/bct.json").read_bytes()
+    )
+    families = tuple((evidence_root / "families").glob("BCT-FV5-*.json"))
+    ordinary = parse_canonical_object(
+        (evidence_root / "families/BCT-FV5-04-ORDINARY-FALSE.json").read_bytes()
+    )
+    assert bct_exit_code == 0
+    assert bct_terminal["status"] == "review_required"
+    assert bct_terminal["reason_code"] == "BCT_COMPLETED_REVIEW_REQUIRED"
+    assert final["status"] == "review_required"
+    assert final["reason_code"] == "BCT_COMPLETED_REVIEW_REQUIRED"
+    assert len(families) == 4
+    assert ordinary["test_id"] == "BCT-FV5-04-ORDINARY-FALSE"
+    ordinary_units = ordinary["ordered_units"]
+    assert isinstance(ordinary_units, list)
+    assert all(
+        isinstance(unit, dict) and unit["activation_domain_status"] is True
+        for unit in ordinary_units
+    )
+    assert any(
         record.get("record_kind") == "terminal" and record.get("stage") == "bct"
         for record in ledger_records
     )
-    assert not (fake_root / f"terminals/{context.attempt_id}/bct.json").exists()
 
 
 def _rewrite_signed(
@@ -406,6 +420,136 @@ def test_operational_stop_before_dispatch_seals_zero_receipt_manifest(tmp_path: 
             context.attempt_id,
             "2026-08-09T12:00:00Z",
         )
+
+
+def test_fresh_fake_bct_is_rejected_before_state_creation(tmp_path: Path) -> None:
+    # Given: a BCT binding without a completed Screening terminal or Freeze-B.
+    attempt_id = "closure-fresh-bct"
+    binding = build_fake_stage_binding(
+        fixture_id=attempt_id,
+        stage="bct",
+        source_manifest_sha256="1" * 64,
+        input_manifest_sha256="2" * 64,
+        compiler_sha256="3" * 64,
+        schedule_sha256="4" * 64,
+        fake_scenario_sha256="5" * 64,
+    )
+    fake_root = tmp_path / "basetemp/fresh-bct/tmp/fake-state" / attempt_id
+    fake_root.mkdir(mode=0o700, parents=True)
+
+    # When/Then: the fake boundary rejects BCT before creating runtime state.
+    with pytest.raises(RootlessContractError, match="ROOTLESS_FAKE_BOUNDARY_INVALID"):
+        build_fake_broker_for_tests(
+            binding,
+            _StaticTransport(attempt_id, FakeResponse.completed(("unused",))),
+            fake_root,
+        )
+    assert not (fake_root / "runtime.lock").exists()
+    assert not (fake_root / "ledger").exists()
+    assert not (fake_root / "attempts").exists()
+
+
+def _operational_bct_fixture(
+    tmp_path: Path, attempt_id: str
+) -> tuple[Path, StageCompilation, dict[str, JsonValue], FakeResponse]:
+    probes = load_probe_ids(ROOT)
+    selected = {task: values[:2] for task, values in probes.items()}
+    screening_context = CompileContext(attempt_id, "screening", "1" * 64, "2" * 64, "3" * 64)
+    screening = build_screening_compilation(screening_context, probes)
+    screening_slots = tuple(
+        slot for slot in screening.slots if slot.probe_id in selected[slot.task]
+    )
+    screening_binding = build_fake_stage_binding(
+        fixture_id=attempt_id,
+        stage="screening",
+        source_manifest_sha256=screening_context.source_manifest_sha256,
+        input_manifest_sha256=screening_context.input_manifest_sha256,
+        compiler_sha256=screening_context.compiler_sha256,
+        schedule_sha256=screening.ordered_slot_root_sha256,
+        fake_scenario_sha256="4" * 64,
+    )
+    fake_root = tmp_path / "basetemp/bct-partial/tmp/fake-state" / attempt_id
+    fake_root.mkdir(mode=0o700, parents=True)
+    assert run_stage_process(
+        screening_slots,
+        lambda: build_fake_broker_for_tests(
+            screening_binding,
+            _AnswerTransport(attempt_id, _answers(screening)),
+            fake_root,
+        ),
+    ) == 0
+    seed = hashlib.sha256(f"rootless-fixture:{attempt_id}".encode()).digest()
+    rootless_local_closure.derive_freeze_b(fake_root, seed, screening_slots)
+    bct_context = CompileContext(attempt_id, "bct", "1" * 64, "2" * 64, "3" * 64)
+    bct = build_bct_compilation(bct_context, selected)
+    response = FakeResponse.malformed()
+    bct_binding = build_fake_stage_binding(
+        fixture_id=attempt_id,
+        stage="bct",
+        source_manifest_sha256=bct_context.source_manifest_sha256,
+        input_manifest_sha256=bct_context.input_manifest_sha256,
+        compiler_sha256=bct_context.compiler_sha256,
+        schedule_sha256=bct.ordered_slot_root_sha256,
+        fake_scenario_sha256=hashlib.sha256(response.body).hexdigest(),
+    )
+    return fake_root, bct, bct_binding, response
+
+
+def test_operational_bct_seals_partial_manifest_and_blocked_terminals(tmp_path: Path) -> None:
+    # Given: completed Screening and Freeze-B followed by malformed BCT responses.
+    attempt_id = "closure-bct-partial"
+    fake_root, bct, bct_binding, response = _operational_bct_fixture(tmp_path, attempt_id)
+
+    # When: BCT stops on the first operationally invalid ready batch.
+    exit_code = run_stage_process(
+        bct.slots,
+        lambda: build_fake_broker_for_tests(
+            bct_binding,
+            _StaticTransport(attempt_id, response),
+            fake_root,
+        ),
+    )
+
+    # Then: durable partial accounting precedes blocked BCT and final terminals.
+    manifest = parse_canonical_object(
+        (fake_root / f"attempts/{attempt_id}/bct/receipt-manifest.json").read_bytes()
+    )
+    terminal = parse_canonical_object(
+        (fake_root / f"terminals/{attempt_id}/bct.json").read_bytes()
+    )
+    final = parse_canonical_object(
+        (fake_root / f"terminals/{attempt_id}/final.json").read_bytes()
+    )
+    accounted = manifest["accounted_slot_count"]
+    assert exit_code == 69
+    assert isinstance(accounted, int) and 0 < accounted <= 5
+    assert terminal["status"] == "blocked"
+    assert terminal["reason_code"] == "ROOTLESS_ARCHIVE_INVALID"
+    assert terminal["bct_result_manifest_sha256"] is None
+    assert final["status"] == "blocked"
+    assert final["reason_code"] == "ROOTLESS_ARCHIVE_INVALID"
+
+
+def test_operational_bct_rejects_tampered_freeze_before_terminals(tmp_path: Path) -> None:
+    # Given: a valid BCT broker whose signed Freeze-B drifts before closure.
+    attempt_id = "closure-bct-freeze-drift"
+    fake_root, bct, bct_binding, response = _operational_bct_fixture(tmp_path, attempt_id)
+    broker = build_fake_broker_for_tests(
+        bct_binding,
+        _StaticTransport(attempt_id, response),
+        fake_root,
+    )
+    (fake_root / f"freeze/{attempt_id}/freeze_b.json").write_bytes(b"{}")
+    broker.stage_operational_reason = "ROOTLESS_ARCHIVE_INVALID"
+
+    # When/Then: closure rejects the unsigned Freeze-B before sealing either terminal.
+    try:
+        with pytest.raises(RootlessContractError):
+            rootless_local_closure.close_stage(broker, bct.slots)
+    finally:
+        broker.close()
+    assert not (fake_root / f"terminals/{attempt_id}/bct.json").exists()
+    assert not (fake_root / f"terminals/{attempt_id}/final.json").exists()
 
 
 def test_atomic_writer_recovers_identical_orphan_temp_without_overwrite(tmp_path: Path) -> None:

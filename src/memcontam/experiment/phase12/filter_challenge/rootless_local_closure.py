@@ -62,7 +62,29 @@ def close_stage(broker: FakeBroker, slots: tuple[SlotCompilation, ...]) -> str:
     if broker.stage == "screening":
         manifest_sha256 = close_receipt_set(broker, slots)
         return _close_screening(broker, slots, manifest_sha256)
-    return seal_bct_setup_failure(broker.root, broker.attempt_id, broker.seed)
+    from memcontam.experiment.phase12.filter_challenge.ordinary_authority import (
+        validate_ordinary_authority,
+    )
+
+    receipt_manifest_sha256 = close_receipt_set(broker, slots)
+    freeze_path = broker.root / "freeze" / broker.attempt_id / "freeze_b.json"
+    freeze = _verified_file(freeze_path, broker.seed, "freeze-b-v1")
+    freeze_sha256 = hashlib.sha256(freeze_path.read_bytes()).hexdigest()
+    _validate_bct_binding(broker, freeze, freeze_sha256)
+    if broker.stage_operational_reason is not None:
+        return _close_bct(broker, slots, receipt_manifest_sha256, None)
+    screening_slots = _screening_slots_from_bct(broker.root, slots)
+    screening = _screening_results(broker.root, screening_slots, broker.seed)
+    authority = validate_ordinary_authority(Path(__file__).resolve().parents[5])
+    units = _bct_units(broker.root, slots, screening, broker.seed, authority)
+    family_hashes = _write_families(broker, units, freeze_sha256)
+    projection_sha256 = _write_projection(
+        broker, units, screening, freeze_sha256, family_hashes
+    )
+    result_sha256 = _write_bct_result(
+        broker, slots, screening, units, projection_sha256, family_hashes
+    )
+    return _close_bct(broker, slots, receipt_manifest_sha256, result_sha256)
 
 
 def seal_bct_setup_failure(root: Path, attempt_id: str, seed: bytes) -> str:
@@ -86,10 +108,10 @@ def _require_ordinary_native_writer_authority() -> None:
 
 
 def close_receipt_set(broker: FakeBroker, slots: tuple[SlotCompilation, ...]) -> str:
-    """Validate and seal the stage's exact durable receipt prefix."""
+    """Validate and seal the stage's exact durable receipt set."""
     if not slots or any(slot.attempt_id != broker.attempt_id or slot.stage != broker.stage for slot in slots):
         raise RootlessContractError("ROOTLESS_STAGE_PREFIX_INVALID")
-    accounted_slots = _accounted_prefix(broker, slots)
+    accounted_slots = _accounted_slots(broker, slots)
     if accounted_slots:
         validation = (
             validate_rootless_screening_archive(broker.root, accounted_slots, seed=broker.seed)
@@ -139,7 +161,7 @@ def close_receipt_set(broker: FakeBroker, slots: tuple[SlotCompilation, ...]) ->
     return write_new_or_same(destination, value)
 
 
-def _accounted_prefix(
+def _accounted_slots(
     broker: FakeBroker, slots: tuple[SlotCompilation, ...]
 ) -> tuple[SlotCompilation, ...]:
     present = tuple(
@@ -154,6 +176,10 @@ def _accounted_prefix(
         ).is_file()
         for slot in slots
     )
+    if broker.stage_operational_reason is not None:
+        return tuple(
+            slot for slot, exists in zip(slots, present, strict=True) if exists
+        )
     count = next((index for index, exists in enumerate(present) if not exists), len(slots))
     if any(present[count:]):
         raise RootlessContractError("ROOTLESS_STAGE_PREFIX_INVALID")
@@ -416,6 +442,7 @@ def _bct_units(
     slots: tuple[SlotCompilation, ...],
     screening: tuple[ScreeningProbeResult, ...],
     seed: bytes,
+    authority: tuple[Mapping[str, object], ...],
 ) -> tuple[BCTUnitResult, ...]:
     units: list[BCTUnitResult] = []
     representatives = {
@@ -485,7 +512,7 @@ def _bct_units(
             if slot.side == "challenge" and slot.native_stage != "bot_problem_distill"
         )
         exposed, ordinary_reconciled = _request_candidate_observation(
-            root, challenge_slot, candidate
+            root, challenge_slot, candidate, authority
         )
         harmful = candidate in {"certified_false", "ordinary_false"}
         witness = paired and final["challenge"].get("verifier_result") is False if paired else False
@@ -556,7 +583,10 @@ def _bct_units(
 
 
 def _request_candidate_observation(
-    root: Path, slot: SlotCompilation, candidate_class: str
+    root: Path,
+    slot: SlotCompilation,
+    candidate_class: str,
+    authority: tuple[Mapping[str, object], ...],
 ) -> tuple[bool, bool]:
     raw = (
         root
@@ -576,6 +606,7 @@ def _request_candidate_observation(
     inputs = request.get("input")
     if not isinstance(inputs, list):
         return False, False
+    expected_content = _candidate_content(slot, candidate_class, authority)
     for item in inputs:
         if not isinstance(item, dict) or item.get("role") != "user":
             continue
@@ -585,33 +616,47 @@ def _request_candidate_observation(
         for part in content:
             if not isinstance(part, dict) or not isinstance(part.get("text"), str):
                 continue
-            try:
-                value = json.loads(part["text"])
-            except json.JSONDecodeError:
-                continue
-            if (
-                isinstance(value, dict)
-                and value.get("side") == "challenge"
-                and value.get("candidate_class") == candidate_class
-            ):
-                source = value.get("ordinary_source")
-                source_hash = (
-                    source.get("source_checkpoint_sha256")
-                    if isinstance(source, dict)
-                    else None
-                )
-                reconciled = (
-                    candidate_class == "ordinary_false"
-                    and isinstance(source, dict)
-                    and isinstance(source.get("candidate_entry_id"), str)
-                    and source.get("candidate_writer_event_id")
-                    == f"ordinary-writer-{slot.task}-{slot.baseline}"
-                    and isinstance(source_hash, str)
-                    and len(source_hash) == 64
-                    and all(character in "0123456789abcdef" for character in source_hash)
-                )
-                return True, reconciled
+            if expected_content in part["text"]:
+                return True, candidate_class == "ordinary_false"
     return False, False
+
+
+def _candidate_content(
+    slot: SlotCompilation,
+    candidate_class: str,
+    authority: tuple[Mapping[str, object], ...],
+) -> str:
+    if candidate_class == "ordinary_false":
+        rows = authority
+        entry_field = "native_entry"
+    else:
+        repository = Path(__file__).resolve().parents[5]
+        manifest = parse_canonical_object(
+            (repository / "data/phase12/filter_v5_bct_v1/candidate_triplets_v1.json").read_bytes()
+        )
+        raw_rows = manifest.get("renders")
+        if not isinstance(raw_rows, list):
+            raise RootlessContractError("ROOTLESS_BCT_ARCHIVE_INVALID")
+        rows = tuple(row for row in raw_rows if isinstance(row, dict))
+        entry_field = "entry"
+    role = {
+        "certified_false": "false",
+        "correct": "correct",
+        "irrelevant": "irrelevant",
+        "ordinary_false": None,
+    }.get(candidate_class)
+    for row in rows:
+        if row.get("task") != slot.task or row.get("baseline") != slot.baseline:
+            continue
+        entry = row.get(entry_field)
+        if not isinstance(entry, dict):
+            continue
+        if role is not None and role not in str(entry.get("render_id")):
+            continue
+        content = entry.get("content")
+        if isinstance(content, str) and content:
+            return content
+    raise RootlessContractError("ROOTLESS_BCT_ARCHIVE_INVALID")
 
 
 def _apply_candidate_route(
@@ -773,6 +818,61 @@ def _write_projection(
     )
 
 
+def _write_bct_result(
+    broker: FakeBroker,
+    slots: tuple[SlotCompilation, ...],
+    screening: tuple[ScreeningProbeResult, ...],
+    units: tuple[BCTUnitResult, ...],
+    projection_sha256: str,
+    family_hashes: Mapping[str, JsonValue],
+) -> str:
+    provider_slots = tuple(
+        ProviderSlotResult(slot.task, slot.probe_id, _receipt(broker.root, slot).get("issued") is True)
+        for slot in slots
+    )
+    post = build_post_bct(
+        screening,
+        units,
+        provider_calls_issued=sum(slot.issued for slot in provider_slots),
+        projection_manifest_sha256=projection_sha256,
+        provider_slots=provider_slots,
+    )
+    evidence = broker.root / "attempts" / broker.attempt_id / "bct" / "evidence"
+    created_at = _latest_receipt_time_for_broker(broker)
+    common: dict[str, JsonValue] = {
+        "profile": PROFILE,
+        "attempt_id": broker.attempt_id,
+        "created_at": created_at,
+        "key_fingerprint": hashlib.sha256(public_key_from_seed(broker.seed)).hexdigest(),
+    }
+    rows_payload: dict[str, JsonValue] = {
+        **common,
+        "schema_version": "rootless_search_config_rows_v1",
+        "kind": "search_config_rows",
+        "projection_manifest_sha256": projection_sha256,
+        "ordered_rows": [asdict(row) for row in post.rows],
+    }
+    rows_sha256 = write_new_or_same(
+        evidence / "search-config-rows.json",
+        _signed(broker.seed, "search-config-rows-v1", rows_payload),
+    )
+    result_payload: dict[str, JsonValue] = {
+        **common,
+        "schema_version": "rootless_bct_result_manifest_v1",
+        "kind": "bct_result_manifest",
+        "bct_stage_binding_sha256": hashlib.sha256(
+            canonical_json_file(broker.binding)
+        ).hexdigest(),
+        "projection_manifest_sha256": projection_sha256,
+        "search_config_rows_sha256": rows_sha256,
+        **family_hashes,
+    }
+    return write_new_or_same(
+        evidence / "bct-result-manifest.json",
+        _signed(broker.seed, "bct-result-manifest-v1", result_payload),
+    )
+
+
 def _metric_values(
     units: tuple[BCTUnitResult, ...], screening: tuple[ScreeningProbeResult, ...]
 ) -> tuple[dict[str, JsonValue], ...]:
@@ -862,7 +962,7 @@ def _close_bct(
         "receipt_manifest_sha256": receipt_manifest_sha256,
         "freeze_b_sha256": hashlib.sha256(freeze_path.read_bytes()).hexdigest(),
         "bct_result_manifest_sha256": result_sha256,
-        "provider_calls_issued": sum(_receipt(broker.root, slot).get("issued") is True for slot in slots),
+        "provider_calls_issued": terminal.record["issued_slots"],
         "settled_nanousd": terminal.record["settled_nanousd"],
         "retained_nanousd": terminal.record["retained_nanousd"],
         "created_at": terminal.record["created_at"],
@@ -1009,7 +1109,17 @@ def validate_closed_lineage(inputs: LineageValidationInput) -> None:
         / "families/BCT-FV5-04-ORDINARY-FALSE.json",
     }
     screening_results = _screening_results(root, inputs.screening_slots, inputs.seed)
-    expected_units = _bct_units(root, inputs.bct_slots, screening_results, inputs.seed)
+    from memcontam.experiment.phase12.filter_challenge.ordinary_authority import (
+        validate_ordinary_authority,
+    )
+
+    expected_units = _bct_units(
+        root,
+        inputs.bct_slots,
+        screening_results,
+        inputs.seed,
+        validate_ordinary_authority(Path(__file__).resolve().parents[5]),
+    )
     family_classes = (
         "certified_false",
         "correct",

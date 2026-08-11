@@ -704,6 +704,7 @@ def build_fake_broker_for_tests(
         or fake_root.parent.name != "fake-state"
         or fake_root.parent.parent.name != "tmp"
         or "basetemp" not in fake_root.parts
+        or (stage == "bct" and not continuing)
         or (fake_root / "live-attempt-claim.json").exists()
         or (not continuing and (fake_root / "ledger").exists())
         or (not continuing and (fake_root / "attempts").exists())
@@ -717,6 +718,7 @@ def build_fake_broker_for_tests(
     if continuing:
         if stage == "bct":
             _validate_fake_bct_predecessor(fake_root, fixture_id, seed)
+            _validate_ordinary_authority(Path(__file__).resolve().parents[5])
     else:
         keys_root = fake_root / "keys"
         keys_root.mkdir(mode=0o700)
@@ -767,6 +769,8 @@ def build_live_broker(
     validate_live_stage_binding(binding)
     if "fake-state" in state_root.parts or binding.get("transport_mode") != "live":
         raise RootlessContractError("ROOTLESS_BINDING_INVALID")
+    if binding.get("stage") == "bct":
+        _validate_ordinary_authority(repository)
     secret = load_provider_key(repository / ".env")
     seed = read_private_file(state_root / "keys" / "ed25519-private.key")
     attempt_id = binding.get("attempt_id")
@@ -783,6 +787,18 @@ def build_live_broker(
     broker = FakeBroker(binding, HTTPXTransport(secret), state_root, seed, lock, "live", repository)
     broker.runtime_authority = (runtime_manifest, decoding_authority)
     return broker
+
+
+def _validate_ordinary_authority(repository: Path) -> None:
+    from memcontam.experiment.phase12.filter_challenge.ordinary_authority import (
+        OrdinaryAuthorityError,
+        validate_ordinary_authority,
+    )
+
+    try:
+        validate_ordinary_authority(repository)
+    except OrdinaryAuthorityError as error:
+        raise RootlessContractError(error.code) from error
 
 
 def _establish_live_claim(

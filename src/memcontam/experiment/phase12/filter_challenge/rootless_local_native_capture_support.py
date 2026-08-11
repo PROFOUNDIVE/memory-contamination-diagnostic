@@ -151,6 +151,24 @@ def checkpoint_fixture(call: ScheduledCall) -> Phase12Checkpoint:
 def candidate_fixture(
     call: ScheduledCall, source_hash: str, checkpoint_id: str
 ) -> ChallengeCandidate:
+    ordinary_manifest = _load("ordinary_route_false_manifest_v1.json")
+    ordinary_rows = ordinary_manifest.get("realizations")
+    if not isinstance(ordinary_rows, list):
+        raise RootlessContractError("ROOTLESS_COMPILATION_INVALID")
+    ordinary = next(
+        (
+            row
+            for row in ordinary_rows
+            if isinstance(row, dict)
+            and row.get("task") == call.task
+            and row.get("baseline") == call.baseline
+        ),
+        None,
+    )
+    if not isinstance(ordinary, dict) or not isinstance(
+        ordinary.get("challenge_suite_key"), str
+    ):
+        raise RootlessContractError("ROOTLESS_COMPILATION_INVALID")
     manifest = _load("candidate_triplets_v1.json")
     rows = manifest.get("renders")
     if not isinstance(rows, list):
@@ -162,7 +180,12 @@ def candidate_fixture(
             variant = "correct"
         case "irrelevant":
             variant = "irrelevant"
-    for row in rows:
+    candidate_rows = (
+        [{"task": call.task, "baseline": call.baseline, "entry": ordinary.get("native_entry")}]
+        if call.candidate_class == "ordinary_false"
+        else rows
+    )
+    for row in candidate_rows:
         if (
             not isinstance(row, dict)
             or row.get("task") != call.task
@@ -170,7 +193,10 @@ def candidate_fixture(
         ):
             continue
         entry = row.get("entry")
-        if not isinstance(entry, dict) or variant not in str(entry.get("render_id")):
+        if not isinstance(entry, dict) or (
+            call.candidate_class != "ordinary_false"
+            and variant not in str(entry.get("render_id"))
+        ):
             continue
         return ChallengeCandidate.model_validate(
             {
@@ -183,7 +209,7 @@ def candidate_fixture(
                 "source_active_state_hash": source_hash,
                 "routability": {
                     "routability": "challenge_routable_v1",
-                    "challenge_suite_key": "rootless-native-capture",
+                    "challenge_suite_key": ordinary["challenge_suite_key"],
                 },
             }
         )

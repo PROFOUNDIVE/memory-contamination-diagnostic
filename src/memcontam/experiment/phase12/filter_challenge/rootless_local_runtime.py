@@ -67,10 +67,6 @@ def run_stage_process(slots: tuple[SlotCompilation, ...], broker_factory: Broker
     completed = False
     try:
         broker = broker_factory()
-        if broker.stage == "bct":
-            close_stage(broker, slots)
-            completed = True
-            return 69
         broker_socket, worker_socket = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
         process = os.fork()
         if process == 0:
