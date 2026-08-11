@@ -1,0 +1,95 @@
+config_kind: phase13_clean_prefix_calibration_v1
+config_version: 1
+evidence_layer: calibration
+run_family: phase13_clean_prefix_calibration
+scientific_result: false
+main_result: false
+scope:
+  clean_prefix_only: true
+  suffix_execution: false
+  nomem_execution: false
+  intervention_execution: false
+  filter_execution: false
+suffix_horizon: 1
+checkpoint_rule: common_lower_median_jointly_eligible_v1
+baselines: [fh_bounded, rag_frozen, bot_style, reflexion_style]
+task_registries:
+  game24:
+    path: data/tasks/game24_pilot.jsonl
+    sha256: 7a7a39f8697ccd7199e063679de90a373535f912a04ca6c15d1e919f0749e8b5
+  math_equation_balancer:
+    path: data/tasks/math_equation_balancer_pilot.jsonl
+    sha256: 6fa5a5d3be52853f8d9da93a9a9c0ea5399f67c9c08acc64fdbdd4821f68bb41
+  word_sorting:
+    path: data/tasks/word_sorting_pilot.jsonl
+    sha256: da3f3bb073b55f20690005b25eb7f3a88d1e1ea4ed9a262e7071f902eeda91f8
+main_exclusions:
+  path: data/phase13/main/exclusions_v1.json
+  sha256: f9b87b2eec6d6c4211a2adfffae09c35064ccd0ff814b12c5b1e9602d50754d9
+clean_context:
+  corpus_path: data/memory/baseline_fidelity_v2_contract_corpus.jsonl
+  corpus_sha256: b608b1694bc4250a4d0e79400357ef8d01c76fe498b20cf45e76004cd01d30a7
+  manifest_path: data/memory/baseline_fidelity_v2_contract_corpus.manifest.json
+  manifest_sha256: 839e84ff0b0394abd36f0b1ac89f6b56219348b3f7b4572e0daecc58630bcd3c
+readiness_evidence:
+  path: .omo/evidence/pilot-a-closeout/pilot_a_readiness_manifest.json
+  sha256: ca82e5a37035d2f0538d7a9288dc30e1768e2816cd321d475c348470b1d96ae8
+embedding_contract:
+  path: data/phase12/registries/embedding_runtime_contract.yaml
+  sha256: 88327f95323863f87e6ed61e4dceb186c60f3173c4def77023bd284f548160c5
+metric_registry:
+  path: data/phase12/registries/metric_registry.yaml
+  sha256: 40805002d13aa6d03838864a845e47dbbd3117635dab5056e43a8592fe1107e1
+trajectory_seeds:
+  game24:
+    0: [game24_pilot_001, game24_pilot_002, game24_pilot_003, game24_pilot_004, game24_pilot_005]
+    1: [game24_pilot_002, game24_pilot_003, game24_pilot_004, game24_pilot_005, game24_pilot_001]
+    2: [game24_pilot_003, game24_pilot_004, game24_pilot_005, game24_pilot_001, game24_pilot_002]
+    3: [game24_pilot_004, game24_pilot_005, game24_pilot_001, game24_pilot_002, game24_pilot_003]
+  math_equation_balancer:
+    0: [meb_pilot_001, meb_pilot_002, meb_pilot_003]
+    1: [meb_pilot_002, meb_pilot_003, meb_pilot_001]
+    2: [meb_pilot_003, meb_pilot_001, meb_pilot_002]
+    3: [meb_pilot_001, meb_pilot_003, meb_pilot_002]
+  word_sorting:
+    0: [word_sorting_pilot_001, word_sorting_pilot_002, word_sorting_pilot_003]
+    1: [word_sorting_pilot_002, word_sorting_pilot_003, word_sorting_pilot_001]
+    2: [word_sorting_pilot_003, word_sorting_pilot_001, word_sorting_pilot_002]
+    3: [word_sorting_pilot_001, word_sorting_pilot_003, word_sorting_pilot_002]
+provider:
+  provider: openai
+  endpoint: responses
+  model_id: gpt-4o-2024-11-20
+  api_key_env: OPENAI_API_KEY
+  service_tier: default
+  store: false
+decoding:
+  temperature: 0.0
+  top_p: 1.0
+  max_output_tokens: 2048
+  requested_seed: 0
+baseline_config:
+  fh_bounded: {context_window_tokens: 10000, context_budget_id: fh-bounded-10000-v1}
+  rag_frozen: {top_k: 3, index_version: index-v3}
+  bot_style: {threshold: 0.7, active_capacity: 3}
+  reflexion_style: {active_capacity: 3, max_attempts: 2, verifier_boundary: post_actor_verification_v1}
+embedding:
+  model_id: BAAI/bge-m3
+  revision: 5617a9f61b028005a4858fdac845db406aefb181
+  local_files_only: true
+retry:
+  retries_after_initial_attempt: 3
+  backoff_seconds: [1, 2, 4]
+budget:
+  maximum_input_tokens_per_attempt: 4096
+  nominal_semantic_calls: 264
+  maximum_semantic_calls: 396
+  maximum_transport_attempts: 1584
+  maximum_input_tokens: 6488064
+  maximum_output_tokens: 3244032
+  hard_ceiling_microusd: 48660480
+  input_per_1m_tokens: 2.5
+  cached_input_per_1m_tokens: 1.25
+  output_per_1m_tokens: 10.0
+live_calls: {enabled: true}
+output: {artifact_root: runs/phase13-clean-prefix-calibration-v1}
