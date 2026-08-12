@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Mapping, Sequence
 
 from memcontam.experiment.phase12.maturity import EligibilityError, MaturityDecision
 from memcontam.experiment.phase12.timing import select_lower_quantile_checkpoint
@@ -17,6 +17,7 @@ _PRIMARY_FAMILIES = {
     "reflexion": "reflexion",
     "reflexion_style": "reflexion",
 }
+PRIMARY_FAMILIES = tuple(dict.fromkeys(_PRIMARY_FAMILIES.values()))
 
 
 @dataclass(frozen=True)
@@ -36,9 +37,15 @@ class JointEligibilityResult:
 
 
 def compute_joint_eligibility(
-    decisions: Sequence[MaturityDecision], horizon: int
+    decisions: Sequence[MaturityDecision],
+    horizon: int,
+    *,
+    required_families: Sequence[str] = PRIMARY_FAMILIES,
 ) -> JointEligibilityResult:
     _validate_horizon(horizon)
+    required = tuple(
+        dict.fromkeys(_PRIMARY_FAMILIES.get(family, family) for family in required_families)
+    )
     eligible_by_family: dict[str, set[int]] = {}
     reasons_by_family: dict[str, list[str]] = {}
     seen_checkpoints: dict[tuple[str, int], str] = {}
@@ -60,23 +67,19 @@ def compute_joint_eligibility(
 
     primary_sets: dict[str, set[int]] = {}
     for family, indices in eligible_by_family.items():
-        primary_family = _PRIMARY_FAMILIES.get(family)
-        if primary_family is not None:
+        primary_family = _PRIMARY_FAMILIES.get(family, family)
+        if primary_family in required:
             primary_sets[primary_family] = indices
-    if len(primary_sets) == len(set(_PRIMARY_FAMILIES.values())):
-        intersection = set.intersection(*primary_sets.values())
-    else:
-        intersection = set()
-    joint = tuple(sorted(intersection))
+    joint = intersect_eligible_support(primary_sets, required_families=required_families)
     baseline_eligible = {
         family: sorted(indices)
         for family, indices in eligible_by_family.items()
-        if family in _PRIMARY_FAMILIES
+        if _PRIMARY_FAMILIES.get(family, family) in required
     }
     optional_eligible = {
         family: sorted(indices)
         for family, indices in eligible_by_family.items()
-        if family not in _PRIMARY_FAMILIES
+        if _PRIMARY_FAMILIES.get(family, family) not in required
     }
     return JointEligibilityResult(
         horizon=horizon,
@@ -89,10 +92,25 @@ def compute_joint_eligibility(
         },
         estimability_counts={
             "eligible_checkpoints": len(joint),
-            "primary_baselines": len(primary_sets),
+            "primary_baselines": len(set(required) & set(primary_sets)),
         },
         not_estimable=not joint,
     )
+
+
+def intersect_eligible_support(
+    eligible_by_family: Mapping[str, set[int]], *, required_families: Sequence[str]
+) -> tuple[int, ...]:
+    required = tuple(
+        dict.fromkeys(_PRIMARY_FAMILIES.get(family, family) for family in required_families)
+    )
+    canonical = {
+        _PRIMARY_FAMILIES.get(family, family): indices
+        for family, indices in eligible_by_family.items()
+    }
+    if not required or any(family not in canonical for family in required):
+        return ()
+    return tuple(sorted(set.intersection(*(canonical[family] for family in required))))
 
 
 def _validate_horizon(horizon: int) -> None:
@@ -110,6 +128,8 @@ def _is_nomem_family(family: str) -> bool:
 __all__ = [
     "EligibilityError",
     "JointEligibilityResult",
+    "PRIMARY_FAMILIES",
     "compute_joint_eligibility",
+    "intersect_eligible_support",
     "select_lower_quantile_checkpoint",
 ]
