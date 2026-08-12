@@ -293,6 +293,65 @@ def test_validator_rejects_resigned_semantic_aliases(tmp_path: Path, alias: str)
 
 
 @pytest.mark.parametrize(
+    "manifest_path",
+    [
+        "/tmp/game24_main_v1.jsonl",
+        "../../../../outside.jsonl",
+        "nested/game24_main_v1.jsonl",
+        "./game24_main_v1.jsonl",
+        "word_sorting_main_v1.jsonl",
+    ],
+)
+def test_validator_rejects_manifest_source_path_variants(
+    tmp_path: Path, manifest_path: str
+) -> None:
+    authority_root = _copy_authorities(tmp_path)
+    output = tmp_path / "registry"
+    build_calibration_v2_registry(ROOT, output)
+    manifest = authority_root / "data/phase13/main/main_registry_manifest_v1.json"
+    payload = _read_json(manifest)
+    registries = payload["registries"]
+    assert isinstance(registries, dict) and isinstance(registries["game24"], dict)
+    registries["game24"]["path"] = manifest_path
+    manifest.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n")
+    registry_path = output / "seed_partition_registry_v1.json"
+    registry = _read_json(registry_path)
+    authorities = registry["input_authorities"]
+    assert isinstance(authorities, dict)
+    authorities["main_manifest_sha256"] = hashlib.sha256(manifest.read_bytes()).hexdigest()
+    registry_path.write_text(json.dumps(registry, sort_keys=True, indent=2) + "\n")
+
+    with pytest.raises(CalibrationV2Error, match="MAIN_SOURCE_PATH_INVALID"):
+        validate_calibration_v2_registry(output, authority_root)
+
+
+def test_validator_rejects_source_symlink_before_read(tmp_path: Path) -> None:
+    authority_root = _copy_authorities(tmp_path)
+    output = tmp_path / "registry"
+    build_calibration_v2_registry(ROOT, output)
+    source = authority_root / "data/phase13/main/game24_main_v1.jsonl"
+    external = tmp_path / "external.jsonl"
+    source.rename(external)
+    source.symlink_to(external)
+
+    with pytest.raises(CalibrationV2Error, match="AUTHORITY_FILE_NOT_REGULAR"):
+        validate_calibration_v2_registry(output, authority_root)
+
+
+def test_validator_rejects_manifest_symlink_before_read(tmp_path: Path) -> None:
+    authority_root = _copy_authorities(tmp_path)
+    output = tmp_path / "registry"
+    build_calibration_v2_registry(ROOT, output)
+    manifest = authority_root / "data/phase13/main/main_registry_manifest_v1.json"
+    external = tmp_path / "manifest.json"
+    manifest.rename(external)
+    manifest.symlink_to(external)
+
+    with pytest.raises(CalibrationV2Error, match="AUTHORITY_FILE_NOT_REGULAR"):
+        validate_calibration_v2_registry(output, authority_root)
+
+
+@pytest.mark.parametrize(
     ("mutation", "expected_code"),
     [
         ("short_task", "TASK_TRAJECTORY_TOO_SHORT"),

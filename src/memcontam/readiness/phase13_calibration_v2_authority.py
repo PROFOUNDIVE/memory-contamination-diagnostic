@@ -8,8 +8,14 @@ from pathlib import Path
 from typing import Final
 
 from memcontam.main_registry import Task
+from memcontam.readiness.phase13_authority_files import AuthorityFileError, read_regular_nofollow
 
 TASKS: Final[tuple[Task, ...]] = ("game24", "math_equation_balancer", "word_sorting")
+SOURCE_NAMES: Final[dict[Task, str]] = {
+    "game24": "game24_main_v1.jsonl",
+    "math_equation_balancer": "math_equation_balancer_main_v1.jsonl",
+    "word_sorting": "word_sorting_main_v1.jsonl",
+}
 FORBIDDEN_TOKENS: Final = frozenset({"outcome", "outcomes", "eligibility", "eligible"})
 
 
@@ -21,8 +27,10 @@ class AuthorityError(ValueError):
 
 def load_json(path: Path) -> dict[str, object]:
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        value = json.loads(read_regular_nofollow(path))
+    except AuthorityFileError as error:
+        raise AuthorityError(str(error)) from error
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise AuthorityError("REGISTRY_INPUT_MALFORMED") from error
     if not isinstance(value, dict):
         raise AuthorityError("REGISTRY_INPUT_MALFORMED")
@@ -31,8 +39,10 @@ def load_json(path: Path) -> dict[str, object]:
 
 def load_jsonl(path: Path) -> list[dict[str, object]]:
     try:
-        values = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        values = [json.loads(line) for line in read_regular_nofollow(path).splitlines()]
+    except AuthorityFileError as error:
+        raise AuthorityError(str(error)) from error
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise AuthorityError("REGISTRY_INPUT_MALFORMED") from error
     if any(not isinstance(value, dict) for value in values):
         raise AuthorityError("REGISTRY_INPUT_MALFORMED")
@@ -106,14 +116,22 @@ def validate_authority_hashes(root: Path, claimed: Mapping[str, object]) -> None
         "candidate_registry_sha256": root / "data/phase12/registries/candidate_registry_v1.json",
     }
     for key, path in expected.items():
-        if claimed.get(key) != hashlib.sha256(path.read_bytes()).hexdigest():
+        try:
+            digest = hashlib.sha256(read_regular_nofollow(path)).hexdigest()
+        except AuthorityFileError as error:
+            raise AuthorityError(str(error)) from error
+        if claimed.get(key) != digest:
             raise AuthorityError("INPUT_AUTHORITY_HASH_MISMATCH")
     pilots = claimed.get("pilot_registry_sha256")
     if not isinstance(pilots, dict):
         raise AuthorityError("INPUT_AUTHORITY_HASH_MISMATCH")
     for task in TASKS:
         path = root / f"data/tasks/{task}_pilot.jsonl"
-        if pilots.get(task) != hashlib.sha256(path.read_bytes()).hexdigest():
+        try:
+            digest = hashlib.sha256(read_regular_nofollow(path)).hexdigest()
+        except AuthorityFileError as error:
+            raise AuthorityError(str(error)) from error
+        if pilots.get(task) != digest:
             raise AuthorityError("INPUT_AUTHORITY_HASH_MISMATCH")
 
 
@@ -126,9 +144,18 @@ def authenticated_source(root: Path, task: Task) -> tuple[list[dict[str, object]
     name, digest = entry.get("path"), entry.get("sha256")
     if not isinstance(name, str) or not isinstance(digest, str):
         raise AuthorityError("REGISTRY_INPUT_MALFORMED")
+    if name != SOURCE_NAMES[task] or Path(name).name != name:
+        raise AuthorityError("MAIN_SOURCE_PATH_INVALID")
     relative = f"data/phase13/main/{name}"
     path = root / relative
-    if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+    main_root = (root / "data/phase13/main").resolve()
+    if path.parent.resolve() != main_root:
+        raise AuthorityError("MAIN_SOURCE_PATH_INVALID")
+    try:
+        source_raw = read_regular_nofollow(path)
+    except AuthorityFileError as error:
+        raise AuthorityError(str(error)) from error
+    if hashlib.sha256(source_raw).hexdigest() != digest:
         raise AuthorityError("MAIN_SOURCE_HASH_MISMATCH")
     return load_jsonl(path), {"path": relative, "sha256": digest}
 
