@@ -1,0 +1,754 @@
+{
+  "evidence_layer_seeds": {
+    "calibration_v2": [
+      10000,
+      10001,
+      10002,
+      10003,
+      10004,
+      10005,
+      10006,
+      10007,
+      10008,
+      10009,
+      10010,
+      10011
+    ],
+    "historical_calibration_v1": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "prospective_main_v2": "pending_future_registry",
+    "reserved_extension": []
+  },
+  "input_authorities": {
+    "candidate_registry_sha256": "7dc76a6816a1d3d641a38db71c9152eccf9fe290b4dfdc9d4fd19f62a73ceef8",
+    "exclusions_sha256": "f9b87b2eec6d6c4211a2adfffae09c35064ccd0ff814b12c5b1e9602d50754d9",
+    "main_manifest_sha256": "8b84820aa7e62cbcb71b035d002e5466ed6d5f32fbc3e4cd66ad636ca4303efb",
+    "pilot_registry_sha256": {
+      "game24": "7a7a39f8697ccd7199e063679de90a373535f912a04ca6c15d1e919f0749e8b5",
+      "math_equation_balancer": "6fa5a5d3be52853f8d9da93a9a9c0ea5399f67c9c08acc64fdbdd4821f68bb41",
+      "word_sorting": "da3f3bb073b55f20690005b25eb7f3a88d1e1ea4ed9a262e7071f902eeda91f8"
+    }
+  },
+  "schema_version": "phase13_calibration_v2_seed_partition_registry_v1",
+  "selection_law": "first_11_source_order_after_registered_signature_exclusions_v1",
+  "tasks": {
+    "game24": {
+      "calibration_path": "game24_calibration_v2.jsonl",
+      "calibration_sha256": "6f474aa24f1d33e62ccfdfafddb6e6656c45a66099729668bbfb1bc6e58356ea",
+      "prospective_main_v2": {
+        "count": 84,
+        "definition": "source_main_v1_after_calibration_v2_exclusions_in_source_order",
+        "ordered_signatures_sha256": "5cd5dbbff45a6752ce294326cf380ae6333ba160dfceaffbe2fa7a0feb05ffbd",
+        "source_reference": "data/phase13/main/game24_main_v1.jsonl",
+        "starts_after_calibration_rows": 11
+      },
+      "reserved_extension": {
+        "count": 0,
+        "registry_status": "blocked_pending_future_registry",
+        "signatures": []
+      },
+      "source_main_v1": {
+        "path": "data/phase13/main/game24_main_v1.jsonl",
+        "sha256": "ae682f138d8035fc1de9382eb8903730d392851def720351a78846df160b615f"
+      },
+      "trajectories": [
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_game24_0001",
+            "phase13_calibration_v2_game24_0002",
+            "phase13_calibration_v2_game24_0003",
+            "phase13_calibration_v2_game24_0004",
+            "phase13_calibration_v2_game24_0005",
+            "phase13_calibration_v2_game24_0006",
+            "phase13_calibration_v2_game24_0007",
+            "phase13_calibration_v2_game24_0008",
+            "phase13_calibration_v2_game24_0009",
+            "phase13_calibration_v2_game24_0010",
+            "phase13_calibration_v2_game24_0011"
+          ],
+          "ordered_stream_sha256": "9f74ad462d286796e671544745f55cae323eb48aed22e151638ed99345230bb8",
+          "rotation_offset": 0,
+          "seed_id": 10000
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_game24_0002",
+            "phase13_calibration_v2_game24_0003",
+            "phase13_calibration_v2_game24_0004",
+            "phase13_calibration_v2_game24_0005",
+            "phase13_calibration_v2_game24_0006",
+            "phase13_calibration_v2_game24_0007",
+            "phase13_calibration_v2_game24_0008",
+            "phase13_calibration_v2_game24_0009",
+            "phase13_calibration_v2_game24_0010",
+            "phase13_calibration_v2_game24_0011",
+            "phase13_calibration_v2_game24_0001"
+          ],
+          "ordered_stream_sha256": "dcd35df897caba4e10df4673151b9de26597141473f5dc5cdc74b2aa448fd0ca",
+          "rotation_offset": 1,
+          "seed_id": 10001
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_game24_0003",
+            "phase13_calibration_v2_game24_0004",
+            "phase13_calibration_v2_game24_0005",
+            "phase13_calibration_v2_game24_0006",
+            "phase13_calibration_v2_game24_0007",
+            "phase13_calibration_v2_game24_0008",
+            "phase13_calibration_v2_game24_0009",
+            "phase13_calibration_v2_game24_0010",
+            "phase13_calibration_v2_game24_0011",
+            "phase13_calibration_v2_game24_0001",
+            "phase13_calibration_v2_game24_0002"
+          ],
+          "ordered_stream_sha256": "d57cacd63eee585850b1f9fbda83c4c4b00722d8b61271532dff194618881e61",
+          "rotation_offset": 2,
+          "seed_id": 10002
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_game24_0004",
+            "phase13_calibration_v2_game24_0005",
+            "phase13_calibration_v2_game24_0006",
+            "phase13_calibration_v2_game24_0007",
+            "phase13_calibration_v2_game24_0008",
+            "phase13_calibration_v2_game24_0009",
+            "phase13_calibration_v2_game24_0010",
+            "phase13_calibration_v2_game24_0011",
+            "phase13_calibration_v2_game24_0001",
+            "phase13_calibration_v2_game24_0002",
+            "phase13_calibration_v2_game24_0003"
+          ],
+          "ordered_stream_sha256": "bf24519500d7cdbd01ebec159f68172b702d17d3b8812b232b853b11cef93a8d",
+          "rotation_offset": 3,
+          "seed_id": 10003
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_game24_0005",
+            "phase13_calibration_v2_game24_0006",
+            "phase13_calibration_v2_game24_0007",
+            "phase13_calibration_v2_game24_0008",
+            "phase13_calibration_v2_game24_0009",
+            "phase13_calibration_v2_game24_0010",
+            "phase13_calibration_v2_game24_0011",
+            "phase13_calibration_v2_game24_0001",
+            "phase13_calibration_v2_game24_0002",
+            "phase13_calibration_v2_game24_0003",
+            "phase13_calibration_v2_game24_0004"
+          ],
+          "ordered_stream_sha256": "35aaed93ab92bc2925891e27b43e071372e9966e4baeb15d59c0b658c050d023",
+          "rotation_offset": 4,
+          "seed_id": 10004
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_game24_0006",
+            "phase13_calibration_v2_game24_0007",
+            "phase13_calibration_v2_game24_0008",
+            "phase13_calibration_v2_game24_0009",
+            "phase13_calibration_v2_game24_0010",
+            "phase13_calibration_v2_game24_0011",
+            "phase13_calibration_v2_game24_0001",
+            "phase13_calibration_v2_game24_0002",
+            "phase13_calibration_v2_game24_0003",
+            "phase13_calibration_v2_game24_0004",
+            "phase13_calibration_v2_game24_0005"
+          ],
+          "ordered_stream_sha256": "7862e9839427e57b4048506222e796a2467b60af8b5982e4383b48818e610cab",
+          "rotation_offset": 5,
+          "seed_id": 10005
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_game24_0007",
+            "phase13_calibration_v2_game24_0008",
+            "phase13_calibration_v2_game24_0009",
+            "phase13_calibration_v2_game24_0010",
+            "phase13_calibration_v2_game24_0011",
+            "phase13_calibration_v2_game24_0001",
+            "phase13_calibration_v2_game24_0002",
+            "phase13_calibration_v2_game24_0003",
+            "phase13_calibration_v2_game24_0004",
+            "phase13_calibration_v2_game24_0005",
+            "phase13_calibration_v2_game24_0006"
+          ],
+          "ordered_stream_sha256": "ae087798b99abe30d0665e0df5668712bd28463d218a9668e320ed06082a6386",
+          "rotation_offset": 6,
+          "seed_id": 10006
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_game24_0008",
+            "phase13_calibration_v2_game24_0009",
+            "phase13_calibration_v2_game24_0010",
+            "phase13_calibration_v2_game24_0011",
+            "phase13_calibration_v2_game24_0001",
+            "phase13_calibration_v2_game24_0002",
+            "phase13_calibration_v2_game24_0003",
+            "phase13_calibration_v2_game24_0004",
+            "phase13_calibration_v2_game24_0005",
+            "phase13_calibration_v2_game24_0006",
+            "phase13_calibration_v2_game24_0007"
+          ],
+          "ordered_stream_sha256": "e9e8fad538cae52fe6dfb259e98761bf3fc952a214f32bfb08fb015a2945f1d2",
+          "rotation_offset": 7,
+          "seed_id": 10007
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_game24_0009",
+            "phase13_calibration_v2_game24_0010",
+            "phase13_calibration_v2_game24_0011",
+            "phase13_calibration_v2_game24_0001",
+            "phase13_calibration_v2_game24_0002",
+            "phase13_calibration_v2_game24_0003",
+            "phase13_calibration_v2_game24_0004",
+            "phase13_calibration_v2_game24_0005",
+            "phase13_calibration_v2_game24_0006",
+            "phase13_calibration_v2_game24_0007",
+            "phase13_calibration_v2_game24_0008"
+          ],
+          "ordered_stream_sha256": "6e05d904193929f820b2a1d72e6d115b4a9186cccbf9e6b63d54774ec0888bfd",
+          "rotation_offset": 8,
+          "seed_id": 10008
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_game24_0010",
+            "phase13_calibration_v2_game24_0011",
+            "phase13_calibration_v2_game24_0001",
+            "phase13_calibration_v2_game24_0002",
+            "phase13_calibration_v2_game24_0003",
+            "phase13_calibration_v2_game24_0004",
+            "phase13_calibration_v2_game24_0005",
+            "phase13_calibration_v2_game24_0006",
+            "phase13_calibration_v2_game24_0007",
+            "phase13_calibration_v2_game24_0008",
+            "phase13_calibration_v2_game24_0009"
+          ],
+          "ordered_stream_sha256": "aa86ee3608a917be468a4738208b8c6276c7bada66114aa96e21c477bdebede4",
+          "rotation_offset": 9,
+          "seed_id": 10009
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_game24_0011",
+            "phase13_calibration_v2_game24_0001",
+            "phase13_calibration_v2_game24_0002",
+            "phase13_calibration_v2_game24_0003",
+            "phase13_calibration_v2_game24_0004",
+            "phase13_calibration_v2_game24_0005",
+            "phase13_calibration_v2_game24_0006",
+            "phase13_calibration_v2_game24_0007",
+            "phase13_calibration_v2_game24_0008",
+            "phase13_calibration_v2_game24_0009",
+            "phase13_calibration_v2_game24_0010"
+          ],
+          "ordered_stream_sha256": "fdaa88f05b5c72a7b0c36ebc84fd515a4bece39945d0604f525637f77aa964bb",
+          "rotation_offset": 10,
+          "seed_id": 10010
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_game24_0001",
+            "phase13_calibration_v2_game24_0002",
+            "phase13_calibration_v2_game24_0003",
+            "phase13_calibration_v2_game24_0004",
+            "phase13_calibration_v2_game24_0005",
+            "phase13_calibration_v2_game24_0006",
+            "phase13_calibration_v2_game24_0007",
+            "phase13_calibration_v2_game24_0008",
+            "phase13_calibration_v2_game24_0009",
+            "phase13_calibration_v2_game24_0010",
+            "phase13_calibration_v2_game24_0011"
+          ],
+          "ordered_stream_sha256": "9f74ad462d286796e671544745f55cae323eb48aed22e151638ed99345230bb8",
+          "rotation_offset": 0,
+          "seed_id": 10011
+        }
+      ]
+    },
+    "math_equation_balancer": {
+      "calibration_path": "math_equation_balancer_calibration_v2.jsonl",
+      "calibration_sha256": "ea4702092a9964104b1852dc9794b6d84c8aa4faf4df7f490826b2c0b6ba19cb",
+      "prospective_main_v2": {
+        "count": 239,
+        "definition": "source_main_v1_after_calibration_v2_exclusions_in_source_order",
+        "ordered_signatures_sha256": "5621cd7adf7f82d823431215b90a7babe38ddc0410bfb19969429f4a09716fb4",
+        "source_reference": "data/phase13/main/math_equation_balancer_main_v1.jsonl",
+        "starts_after_calibration_rows": 11
+      },
+      "reserved_extension": {
+        "count": 0,
+        "registry_status": "blocked_pending_future_registry",
+        "signatures": []
+      },
+      "source_main_v1": {
+        "path": "data/phase13/main/math_equation_balancer_main_v1.jsonl",
+        "sha256": "dfa07c8c3ada1b0030a735cca97022f98dfb8da30d8ce86f82013eb51b4a7037"
+      },
+      "trajectories": [
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_math_equation_balancer_0001",
+            "phase13_calibration_v2_math_equation_balancer_0002",
+            "phase13_calibration_v2_math_equation_balancer_0003",
+            "phase13_calibration_v2_math_equation_balancer_0004",
+            "phase13_calibration_v2_math_equation_balancer_0005",
+            "phase13_calibration_v2_math_equation_balancer_0006",
+            "phase13_calibration_v2_math_equation_balancer_0007",
+            "phase13_calibration_v2_math_equation_balancer_0008",
+            "phase13_calibration_v2_math_equation_balancer_0009",
+            "phase13_calibration_v2_math_equation_balancer_0010",
+            "phase13_calibration_v2_math_equation_balancer_0011"
+          ],
+          "ordered_stream_sha256": "4c95907d20a838a8a56d0cce046fd2c07a99a833b640be138661f2c27873dc7d",
+          "rotation_offset": 0,
+          "seed_id": 10000
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_math_equation_balancer_0002",
+            "phase13_calibration_v2_math_equation_balancer_0003",
+            "phase13_calibration_v2_math_equation_balancer_0004",
+            "phase13_calibration_v2_math_equation_balancer_0005",
+            "phase13_calibration_v2_math_equation_balancer_0006",
+            "phase13_calibration_v2_math_equation_balancer_0007",
+            "phase13_calibration_v2_math_equation_balancer_0008",
+            "phase13_calibration_v2_math_equation_balancer_0009",
+            "phase13_calibration_v2_math_equation_balancer_0010",
+            "phase13_calibration_v2_math_equation_balancer_0011",
+            "phase13_calibration_v2_math_equation_balancer_0001"
+          ],
+          "ordered_stream_sha256": "771d182bb5a9f79ac4d78c9418f84962ca5ceb587701117dd26e384f770f0517",
+          "rotation_offset": 1,
+          "seed_id": 10001
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_math_equation_balancer_0003",
+            "phase13_calibration_v2_math_equation_balancer_0004",
+            "phase13_calibration_v2_math_equation_balancer_0005",
+            "phase13_calibration_v2_math_equation_balancer_0006",
+            "phase13_calibration_v2_math_equation_balancer_0007",
+            "phase13_calibration_v2_math_equation_balancer_0008",
+            "phase13_calibration_v2_math_equation_balancer_0009",
+            "phase13_calibration_v2_math_equation_balancer_0010",
+            "phase13_calibration_v2_math_equation_balancer_0011",
+            "phase13_calibration_v2_math_equation_balancer_0001",
+            "phase13_calibration_v2_math_equation_balancer_0002"
+          ],
+          "ordered_stream_sha256": "c005fdd9b4d14b6a3e6edb364ff1ce45c552127d5048eead00aecb7247e467ab",
+          "rotation_offset": 2,
+          "seed_id": 10002
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_math_equation_balancer_0004",
+            "phase13_calibration_v2_math_equation_balancer_0005",
+            "phase13_calibration_v2_math_equation_balancer_0006",
+            "phase13_calibration_v2_math_equation_balancer_0007",
+            "phase13_calibration_v2_math_equation_balancer_0008",
+            "phase13_calibration_v2_math_equation_balancer_0009",
+            "phase13_calibration_v2_math_equation_balancer_0010",
+            "phase13_calibration_v2_math_equation_balancer_0011",
+            "phase13_calibration_v2_math_equation_balancer_0001",
+            "phase13_calibration_v2_math_equation_balancer_0002",
+            "phase13_calibration_v2_math_equation_balancer_0003"
+          ],
+          "ordered_stream_sha256": "c8f85f01fd72780dd1b6de1f5f9240d731598c270caa8493adc1b8f3d4fa6893",
+          "rotation_offset": 3,
+          "seed_id": 10003
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_math_equation_balancer_0005",
+            "phase13_calibration_v2_math_equation_balancer_0006",
+            "phase13_calibration_v2_math_equation_balancer_0007",
+            "phase13_calibration_v2_math_equation_balancer_0008",
+            "phase13_calibration_v2_math_equation_balancer_0009",
+            "phase13_calibration_v2_math_equation_balancer_0010",
+            "phase13_calibration_v2_math_equation_balancer_0011",
+            "phase13_calibration_v2_math_equation_balancer_0001",
+            "phase13_calibration_v2_math_equation_balancer_0002",
+            "phase13_calibration_v2_math_equation_balancer_0003",
+            "phase13_calibration_v2_math_equation_balancer_0004"
+          ],
+          "ordered_stream_sha256": "ed4e936d59c499103ebfece820606259ca0b4e367260231e7df2b014c174e160",
+          "rotation_offset": 4,
+          "seed_id": 10004
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_math_equation_balancer_0006",
+            "phase13_calibration_v2_math_equation_balancer_0007",
+            "phase13_calibration_v2_math_equation_balancer_0008",
+            "phase13_calibration_v2_math_equation_balancer_0009",
+            "phase13_calibration_v2_math_equation_balancer_0010",
+            "phase13_calibration_v2_math_equation_balancer_0011",
+            "phase13_calibration_v2_math_equation_balancer_0001",
+            "phase13_calibration_v2_math_equation_balancer_0002",
+            "phase13_calibration_v2_math_equation_balancer_0003",
+            "phase13_calibration_v2_math_equation_balancer_0004",
+            "phase13_calibration_v2_math_equation_balancer_0005"
+          ],
+          "ordered_stream_sha256": "10ff1e83b49fc57c580111c3e8ec4d81667787f9864336b7cd1f59db41e9c619",
+          "rotation_offset": 5,
+          "seed_id": 10005
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_math_equation_balancer_0007",
+            "phase13_calibration_v2_math_equation_balancer_0008",
+            "phase13_calibration_v2_math_equation_balancer_0009",
+            "phase13_calibration_v2_math_equation_balancer_0010",
+            "phase13_calibration_v2_math_equation_balancer_0011",
+            "phase13_calibration_v2_math_equation_balancer_0001",
+            "phase13_calibration_v2_math_equation_balancer_0002",
+            "phase13_calibration_v2_math_equation_balancer_0003",
+            "phase13_calibration_v2_math_equation_balancer_0004",
+            "phase13_calibration_v2_math_equation_balancer_0005",
+            "phase13_calibration_v2_math_equation_balancer_0006"
+          ],
+          "ordered_stream_sha256": "9505f49010da492cd52f1a93b0c271bc59128925aad74406bdbc832152894bcc",
+          "rotation_offset": 6,
+          "seed_id": 10006
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_math_equation_balancer_0008",
+            "phase13_calibration_v2_math_equation_balancer_0009",
+            "phase13_calibration_v2_math_equation_balancer_0010",
+            "phase13_calibration_v2_math_equation_balancer_0011",
+            "phase13_calibration_v2_math_equation_balancer_0001",
+            "phase13_calibration_v2_math_equation_balancer_0002",
+            "phase13_calibration_v2_math_equation_balancer_0003",
+            "phase13_calibration_v2_math_equation_balancer_0004",
+            "phase13_calibration_v2_math_equation_balancer_0005",
+            "phase13_calibration_v2_math_equation_balancer_0006",
+            "phase13_calibration_v2_math_equation_balancer_0007"
+          ],
+          "ordered_stream_sha256": "6a587f23eab4b911d2b84ed1331376017762203d949b4450e0182ac6d7946800",
+          "rotation_offset": 7,
+          "seed_id": 10007
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_math_equation_balancer_0009",
+            "phase13_calibration_v2_math_equation_balancer_0010",
+            "phase13_calibration_v2_math_equation_balancer_0011",
+            "phase13_calibration_v2_math_equation_balancer_0001",
+            "phase13_calibration_v2_math_equation_balancer_0002",
+            "phase13_calibration_v2_math_equation_balancer_0003",
+            "phase13_calibration_v2_math_equation_balancer_0004",
+            "phase13_calibration_v2_math_equation_balancer_0005",
+            "phase13_calibration_v2_math_equation_balancer_0006",
+            "phase13_calibration_v2_math_equation_balancer_0007",
+            "phase13_calibration_v2_math_equation_balancer_0008"
+          ],
+          "ordered_stream_sha256": "66156f15bc3bb8799f8f2d39f01d87769a199177b2a4af42f1d0cc78b474bc2b",
+          "rotation_offset": 8,
+          "seed_id": 10008
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_math_equation_balancer_0010",
+            "phase13_calibration_v2_math_equation_balancer_0011",
+            "phase13_calibration_v2_math_equation_balancer_0001",
+            "phase13_calibration_v2_math_equation_balancer_0002",
+            "phase13_calibration_v2_math_equation_balancer_0003",
+            "phase13_calibration_v2_math_equation_balancer_0004",
+            "phase13_calibration_v2_math_equation_balancer_0005",
+            "phase13_calibration_v2_math_equation_balancer_0006",
+            "phase13_calibration_v2_math_equation_balancer_0007",
+            "phase13_calibration_v2_math_equation_balancer_0008",
+            "phase13_calibration_v2_math_equation_balancer_0009"
+          ],
+          "ordered_stream_sha256": "b1a42095b447a6294346f29e4ee09daf8f99ab555223ed3b2fb4d2db45e6c23a",
+          "rotation_offset": 9,
+          "seed_id": 10009
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_math_equation_balancer_0011",
+            "phase13_calibration_v2_math_equation_balancer_0001",
+            "phase13_calibration_v2_math_equation_balancer_0002",
+            "phase13_calibration_v2_math_equation_balancer_0003",
+            "phase13_calibration_v2_math_equation_balancer_0004",
+            "phase13_calibration_v2_math_equation_balancer_0005",
+            "phase13_calibration_v2_math_equation_balancer_0006",
+            "phase13_calibration_v2_math_equation_balancer_0007",
+            "phase13_calibration_v2_math_equation_balancer_0008",
+            "phase13_calibration_v2_math_equation_balancer_0009",
+            "phase13_calibration_v2_math_equation_balancer_0010"
+          ],
+          "ordered_stream_sha256": "f18c150b608f3bce640ff9875b93c541b517e8d51ed224ef7acd1b80d5decf9e",
+          "rotation_offset": 10,
+          "seed_id": 10010
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_math_equation_balancer_0001",
+            "phase13_calibration_v2_math_equation_balancer_0002",
+            "phase13_calibration_v2_math_equation_balancer_0003",
+            "phase13_calibration_v2_math_equation_balancer_0004",
+            "phase13_calibration_v2_math_equation_balancer_0005",
+            "phase13_calibration_v2_math_equation_balancer_0006",
+            "phase13_calibration_v2_math_equation_balancer_0007",
+            "phase13_calibration_v2_math_equation_balancer_0008",
+            "phase13_calibration_v2_math_equation_balancer_0009",
+            "phase13_calibration_v2_math_equation_balancer_0010",
+            "phase13_calibration_v2_math_equation_balancer_0011"
+          ],
+          "ordered_stream_sha256": "4c95907d20a838a8a56d0cce046fd2c07a99a833b640be138661f2c27873dc7d",
+          "rotation_offset": 0,
+          "seed_id": 10011
+        }
+      ]
+    },
+    "word_sorting": {
+      "calibration_path": "word_sorting_calibration_v2.jsonl",
+      "calibration_sha256": "f032f49cf712757266d4d23cd00753fc7d986cd27627ba218c225ba04e660394",
+      "prospective_main_v2": {
+        "count": 239,
+        "definition": "source_main_v1_after_calibration_v2_exclusions_in_source_order",
+        "ordered_signatures_sha256": "e35737f644ad762187a4cceba4d37fd9558f720d4a6299d9571225dc511b0285",
+        "source_reference": "data/phase13/main/word_sorting_main_v1.jsonl",
+        "starts_after_calibration_rows": 11
+      },
+      "reserved_extension": {
+        "count": 0,
+        "registry_status": "blocked_pending_future_registry",
+        "signatures": []
+      },
+      "source_main_v1": {
+        "path": "data/phase13/main/word_sorting_main_v1.jsonl",
+        "sha256": "e7ff0507512af4e71ae027a5226984b175d9b75dca898df79ca88535326c9c54"
+      },
+      "trajectories": [
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_word_sorting_0001",
+            "phase13_calibration_v2_word_sorting_0002",
+            "phase13_calibration_v2_word_sorting_0003",
+            "phase13_calibration_v2_word_sorting_0004",
+            "phase13_calibration_v2_word_sorting_0005",
+            "phase13_calibration_v2_word_sorting_0006",
+            "phase13_calibration_v2_word_sorting_0007",
+            "phase13_calibration_v2_word_sorting_0008",
+            "phase13_calibration_v2_word_sorting_0009",
+            "phase13_calibration_v2_word_sorting_0010",
+            "phase13_calibration_v2_word_sorting_0011"
+          ],
+          "ordered_stream_sha256": "174288331014bb04224e887e9d8214401c0010db3094edd20aa9d667b989e03d",
+          "rotation_offset": 0,
+          "seed_id": 10000
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_word_sorting_0002",
+            "phase13_calibration_v2_word_sorting_0003",
+            "phase13_calibration_v2_word_sorting_0004",
+            "phase13_calibration_v2_word_sorting_0005",
+            "phase13_calibration_v2_word_sorting_0006",
+            "phase13_calibration_v2_word_sorting_0007",
+            "phase13_calibration_v2_word_sorting_0008",
+            "phase13_calibration_v2_word_sorting_0009",
+            "phase13_calibration_v2_word_sorting_0010",
+            "phase13_calibration_v2_word_sorting_0011",
+            "phase13_calibration_v2_word_sorting_0001"
+          ],
+          "ordered_stream_sha256": "a2309b8a818c43fc105793704722c97ccb53e58f646effa4a721690d4e7d93a6",
+          "rotation_offset": 1,
+          "seed_id": 10001
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_word_sorting_0003",
+            "phase13_calibration_v2_word_sorting_0004",
+            "phase13_calibration_v2_word_sorting_0005",
+            "phase13_calibration_v2_word_sorting_0006",
+            "phase13_calibration_v2_word_sorting_0007",
+            "phase13_calibration_v2_word_sorting_0008",
+            "phase13_calibration_v2_word_sorting_0009",
+            "phase13_calibration_v2_word_sorting_0010",
+            "phase13_calibration_v2_word_sorting_0011",
+            "phase13_calibration_v2_word_sorting_0001",
+            "phase13_calibration_v2_word_sorting_0002"
+          ],
+          "ordered_stream_sha256": "940b94d3ed7a1ca12c6941bd1ad4cceb5900b86d2f9a6f5601ef110a035e9ae0",
+          "rotation_offset": 2,
+          "seed_id": 10002
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_word_sorting_0004",
+            "phase13_calibration_v2_word_sorting_0005",
+            "phase13_calibration_v2_word_sorting_0006",
+            "phase13_calibration_v2_word_sorting_0007",
+            "phase13_calibration_v2_word_sorting_0008",
+            "phase13_calibration_v2_word_sorting_0009",
+            "phase13_calibration_v2_word_sorting_0010",
+            "phase13_calibration_v2_word_sorting_0011",
+            "phase13_calibration_v2_word_sorting_0001",
+            "phase13_calibration_v2_word_sorting_0002",
+            "phase13_calibration_v2_word_sorting_0003"
+          ],
+          "ordered_stream_sha256": "b7602ee08b021ba57aee977394810c371a7ac46dd9f6824eb56f1fd87dacc04e",
+          "rotation_offset": 3,
+          "seed_id": 10003
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_word_sorting_0005",
+            "phase13_calibration_v2_word_sorting_0006",
+            "phase13_calibration_v2_word_sorting_0007",
+            "phase13_calibration_v2_word_sorting_0008",
+            "phase13_calibration_v2_word_sorting_0009",
+            "phase13_calibration_v2_word_sorting_0010",
+            "phase13_calibration_v2_word_sorting_0011",
+            "phase13_calibration_v2_word_sorting_0001",
+            "phase13_calibration_v2_word_sorting_0002",
+            "phase13_calibration_v2_word_sorting_0003",
+            "phase13_calibration_v2_word_sorting_0004"
+          ],
+          "ordered_stream_sha256": "86fd6b91fb5150d47cf22668b11a58298972e076d9567778f27876d0676cac2b",
+          "rotation_offset": 4,
+          "seed_id": 10004
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_word_sorting_0006",
+            "phase13_calibration_v2_word_sorting_0007",
+            "phase13_calibration_v2_word_sorting_0008",
+            "phase13_calibration_v2_word_sorting_0009",
+            "phase13_calibration_v2_word_sorting_0010",
+            "phase13_calibration_v2_word_sorting_0011",
+            "phase13_calibration_v2_word_sorting_0001",
+            "phase13_calibration_v2_word_sorting_0002",
+            "phase13_calibration_v2_word_sorting_0003",
+            "phase13_calibration_v2_word_sorting_0004",
+            "phase13_calibration_v2_word_sorting_0005"
+          ],
+          "ordered_stream_sha256": "bcfa690e8ef5c73de1a06faa6936a7638c53b40782cc6d56cb303ced0f546230",
+          "rotation_offset": 5,
+          "seed_id": 10005
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_word_sorting_0007",
+            "phase13_calibration_v2_word_sorting_0008",
+            "phase13_calibration_v2_word_sorting_0009",
+            "phase13_calibration_v2_word_sorting_0010",
+            "phase13_calibration_v2_word_sorting_0011",
+            "phase13_calibration_v2_word_sorting_0001",
+            "phase13_calibration_v2_word_sorting_0002",
+            "phase13_calibration_v2_word_sorting_0003",
+            "phase13_calibration_v2_word_sorting_0004",
+            "phase13_calibration_v2_word_sorting_0005",
+            "phase13_calibration_v2_word_sorting_0006"
+          ],
+          "ordered_stream_sha256": "1e3acb5259f1f4de833cc76dacba322dc022e5fa6217d202d62b62a562f45921",
+          "rotation_offset": 6,
+          "seed_id": 10006
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_word_sorting_0008",
+            "phase13_calibration_v2_word_sorting_0009",
+            "phase13_calibration_v2_word_sorting_0010",
+            "phase13_calibration_v2_word_sorting_0011",
+            "phase13_calibration_v2_word_sorting_0001",
+            "phase13_calibration_v2_word_sorting_0002",
+            "phase13_calibration_v2_word_sorting_0003",
+            "phase13_calibration_v2_word_sorting_0004",
+            "phase13_calibration_v2_word_sorting_0005",
+            "phase13_calibration_v2_word_sorting_0006",
+            "phase13_calibration_v2_word_sorting_0007"
+          ],
+          "ordered_stream_sha256": "61ef7c1c37c63c9623b696c938b9c8cff4c2760b059388ebfbdd2b7949eaa369",
+          "rotation_offset": 7,
+          "seed_id": 10007
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_word_sorting_0009",
+            "phase13_calibration_v2_word_sorting_0010",
+            "phase13_calibration_v2_word_sorting_0011",
+            "phase13_calibration_v2_word_sorting_0001",
+            "phase13_calibration_v2_word_sorting_0002",
+            "phase13_calibration_v2_word_sorting_0003",
+            "phase13_calibration_v2_word_sorting_0004",
+            "phase13_calibration_v2_word_sorting_0005",
+            "phase13_calibration_v2_word_sorting_0006",
+            "phase13_calibration_v2_word_sorting_0007",
+            "phase13_calibration_v2_word_sorting_0008"
+          ],
+          "ordered_stream_sha256": "f06d0569e46beaf20c6512748eb3517c3546897c1d9b75c55c80136e7607c296",
+          "rotation_offset": 8,
+          "seed_id": 10008
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_word_sorting_0010",
+            "phase13_calibration_v2_word_sorting_0011",
+            "phase13_calibration_v2_word_sorting_0001",
+            "phase13_calibration_v2_word_sorting_0002",
+            "phase13_calibration_v2_word_sorting_0003",
+            "phase13_calibration_v2_word_sorting_0004",
+            "phase13_calibration_v2_word_sorting_0005",
+            "phase13_calibration_v2_word_sorting_0006",
+            "phase13_calibration_v2_word_sorting_0007",
+            "phase13_calibration_v2_word_sorting_0008",
+            "phase13_calibration_v2_word_sorting_0009"
+          ],
+          "ordered_stream_sha256": "f7075e8b45c80c53db836e5f4187e7ea356af1d237003d6580d19e2749ed849f",
+          "rotation_offset": 9,
+          "seed_id": 10009
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_word_sorting_0011",
+            "phase13_calibration_v2_word_sorting_0001",
+            "phase13_calibration_v2_word_sorting_0002",
+            "phase13_calibration_v2_word_sorting_0003",
+            "phase13_calibration_v2_word_sorting_0004",
+            "phase13_calibration_v2_word_sorting_0005",
+            "phase13_calibration_v2_word_sorting_0006",
+            "phase13_calibration_v2_word_sorting_0007",
+            "phase13_calibration_v2_word_sorting_0008",
+            "phase13_calibration_v2_word_sorting_0009",
+            "phase13_calibration_v2_word_sorting_0010"
+          ],
+          "ordered_stream_sha256": "4c446773b101d3a738f821d799aebb1328bb629b4cbf7f2154b8ae9e4457d846",
+          "rotation_offset": 10,
+          "seed_id": 10010
+        },
+        {
+          "ordered_sample_ids": [
+            "phase13_calibration_v2_word_sorting_0001",
+            "phase13_calibration_v2_word_sorting_0002",
+            "phase13_calibration_v2_word_sorting_0003",
+            "phase13_calibration_v2_word_sorting_0004",
+            "phase13_calibration_v2_word_sorting_0005",
+            "phase13_calibration_v2_word_sorting_0006",
+            "phase13_calibration_v2_word_sorting_0007",
+            "phase13_calibration_v2_word_sorting_0008",
+            "phase13_calibration_v2_word_sorting_0009",
+            "phase13_calibration_v2_word_sorting_0010",
+            "phase13_calibration_v2_word_sorting_0011"
+          ],
+          "ordered_stream_sha256": "174288331014bb04224e887e9d8214401c0010db3094edd20aa9d667b989e03d",
+          "rotation_offset": 0,
+          "seed_id": 10011
+        }
+      ]
+    }
+  }
+}

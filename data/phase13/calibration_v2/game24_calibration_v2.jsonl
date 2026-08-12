@@ -1,0 +1,11 @@
+{"canonical_signature":"2,5,8,11","numbers":[2,5,8,11],"row_sha256":"a5bbe2f9f8bfb4b9c4bda23f0a793c997de378b2122068c73b691e6a27bd3bb1","sample_id":"phase13_calibration_v2_game24_0001","source_row":1,"target":24}
+{"canonical_signature":"2,4,5,6","numbers":[2,4,5,6],"row_sha256":"752ac998f96173f29aa5f65666f6613f21712f9bad654f5269ec39e03ed7f2dd","sample_id":"phase13_calibration_v2_game24_0002","source_row":2,"target":24}
+{"canonical_signature":"4,4,7,10","numbers":[4,4,7,10],"row_sha256":"e76e5bc2be10157c6df72e4c09e62a27e28a6c1a96c7e6f8e0607c8beab05052","sample_id":"phase13_calibration_v2_game24_0003","source_row":3,"target":24}
+{"canonical_signature":"1,2,8,13","numbers":[1,2,8,13],"row_sha256":"8e7d3a40b4a51517bd4c37675552ad6aa4671318e8b87d07b36da53b30f8826a","sample_id":"phase13_calibration_v2_game24_0004","source_row":4,"target":24}
+{"canonical_signature":"2,2,8,8","numbers":[2,2,8,8],"row_sha256":"37608a7e36d74f7f337f220696264c09ffdccf9a0c5c4a91cb63b49e75d12f82","sample_id":"phase13_calibration_v2_game24_0005","source_row":5,"target":24}
+{"canonical_signature":"2,6,8,12","numbers":[2,6,8,12],"row_sha256":"144c4db07b5208839dc5732222718d2b8102291fafb64c802032ef411e78314c","sample_id":"phase13_calibration_v2_game24_0006","source_row":6,"target":24}
+{"canonical_signature":"3,3,7,12","numbers":[3,3,7,12],"row_sha256":"2f44d825d508ef5693bf1acafd7b8c977f00bbb4107ecd9b0757490167a3f186","sample_id":"phase13_calibration_v2_game24_0007","source_row":7,"target":24}
+{"canonical_signature":"2,6,8,13","numbers":[2,6,8,13],"row_sha256":"18a0ca2c10e4ee203f44c738395052cd474c88364c3108b3d3d7b19b072ddd56","sample_id":"phase13_calibration_v2_game24_0008","source_row":8,"target":24}
+{"canonical_signature":"2,2,5,12","numbers":[2,2,5,12],"row_sha256":"298f9d29d2276ba0ba3ac678966475349a1e666bd75e8fe2ef9e9a6b0853d639","sample_id":"phase13_calibration_v2_game24_0009","source_row":9,"target":24}
+{"canonical_signature":"6,7,10,12","numbers":[6,7,10,12],"row_sha256":"34bcfe7d96a8561fd2a14381bb659ecaa9aaadd6ab7d33a8b2d3b8a216f2f318","sample_id":"phase13_calibration_v2_game24_0010","source_row":10,"target":24}
+{"canonical_signature":"3,4,9,13","numbers":[3,4,9,13],"row_sha256":"f546b8f93709125a32952dd12f2c74fc0dbd2a41536426c48123abe497835592","sample_id":"phase13_calibration_v2_game24_0011","source_row":11,"target":24}
