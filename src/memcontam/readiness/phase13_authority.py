@@ -157,6 +157,13 @@ class Phase13AuthorityFreeze(_StrictModel):
             raise Phase13AuthorityError("DUPLICATE_REGISTRY")
         if set(registry_kinds) != EXPECTED_REGISTRIES:
             raise Phase13AuthorityError("FULL_CLOSURE_REQUIRED")
+        registry_ids = [reference.registry_id for reference in self.registries]
+        if len(registry_ids) != len(set(registry_ids)):
+            raise Phase13AuthorityError("DUPLICATE_REGISTRY_ID")
+        artifact_ids = [reference.artifact.artifact_id for reference in self.authorities]
+        artifact_ids.extend(reference.artifact.artifact_id for reference in self.registries)
+        if len(artifact_ids) != len(set(artifact_ids)):
+            raise Phase13AuthorityError("DUPLICATE_ARTIFACT_ID")
 
         classes: set[str] = set()
         for classification in self.parameter_classifications:
@@ -191,6 +198,8 @@ def _validation_code(error: ValidationError) -> str:
         "BARE_H_PROHIBITED",
         "FULL_CLOSURE_REQUIRED",
         "AUTHORITY_HASH_DRIFT",
+        "DUPLICATE_REGISTRY_ID",
+        "DUPLICATE_ARTIFACT_ID",
         "DUPLICATE_REGISTRY",
         "CLOSURE_HASH_MISMATCH",
         "MALFORMED_REFERENCE",
@@ -201,10 +210,22 @@ def _validation_code(error: ValidationError) -> str:
         return "UNKNOWN_REGISTRY"
     if "class_code" in location:
         return "WRONG_PARAMETER_CLASS"
-    if "reproducibility" in location:
+    if issue["type"] == "missing" and "reproducibility" in location:
         return "MISSING_E_SETTINGS"
-    if "scientific_design" in location and "H_primary" in location:
+    if issue["type"] == "extra_forbidden" and "reproducibility" in location:
+        return "UNEXPECTED_E_SETTINGS"
+    if "reproducibility" in location:
+        return "INVALID_E_SETTINGS"
+    if (
+        issue["type"] == "missing"
+        and "scientific_design" in location
+        and "H_primary" in location
+    ):
         return "MISSING_H_PRIMARY"
+    if "scientific_design" in location and "H_primary" in location:
+        return "INVALID_H_PRIMARY"
+    if issue["type"] in {"int_type", "float_type", "string_type", "bool_type"}:
+        return "STRICT_SCALAR_REQUIRED"
     if location == ("closure_hash",):
         return "FULL_CLOSURE_REQUIRED"
     if "artifact" in location or "sha256" in location:

@@ -171,6 +171,76 @@ def _malformed_reference(payload: dict[str, object]) -> None:
     _resign(payload)
 
 
+def _duplicate_registry_id(payload: dict[str, object]) -> None:
+    registries = _rows(payload, "registries")
+    registries[1]["registry_id"] = registries[0]["registry_id"]
+    _resign(payload)
+
+
+def _duplicate_artifact_id(payload: dict[str, object]) -> None:
+    registries = _rows(payload, "registries")
+    _artifact(registries[1])["artifact_id"] = _artifact(registries[0])["artifact_id"]
+    _resign(payload)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "code"),
+    [
+        (_duplicate_registry_id, "DUPLICATE_REGISTRY_ID"),
+        (_duplicate_artifact_id, "DUPLICATE_ARTIFACT_ID"),
+    ],
+)
+def test_resigned_duplicate_identities_are_rejected(mutate: Mutation, code: str) -> None:
+    payload = _fixture()
+    mutate(payload)
+
+    with pytest.raises(Phase13AuthorityError) as caught:
+        _parse(payload)
+
+    assert caught.value.code == code
+
+
+def _invalid_h_primary(payload: dict[str, object]) -> None:
+    _rows(payload, "parameter_classifications")[0]["H_primary"] = 0
+    _resign(payload)
+
+
+def _invalid_e_setting(payload: dict[str, object]) -> None:
+    _rows(payload, "parameter_classifications")[4]["bootstrap_rng_seed"] = -1
+    _resign(payload)
+
+
+def _extra_e_setting(payload: dict[str, object]) -> None:
+    _rows(payload, "parameter_classifications")[4]["unexpected"] = 1
+    _resign(payload)
+
+
+def _strict_scalar_error(payload: dict[str, object]) -> None:
+    _rows(payload, "parameter_classifications")[1]["H_run"] = "10"
+    _resign(payload)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "code"),
+    [
+        (_missing_h_primary, "MISSING_H_PRIMARY"),
+        (_invalid_h_primary, "INVALID_H_PRIMARY"),
+        (_missing_e_setting, "MISSING_E_SETTINGS"),
+        (_invalid_e_setting, "INVALID_E_SETTINGS"),
+        (_extra_e_setting, "UNEXPECTED_E_SETTINGS"),
+        (_strict_scalar_error, "STRICT_SCALAR_REQUIRED"),
+    ],
+)
+def test_missing_and_invalid_fields_have_accurate_codes(mutate: Mutation, code: str) -> None:
+    payload = _fixture()
+    mutate(payload)
+
+    with pytest.raises(Phase13AuthorityError) as caught:
+        _parse(payload)
+
+    assert caught.value.code == code
+
+
 @pytest.mark.parametrize(
     ("mutate", "code"),
     [
