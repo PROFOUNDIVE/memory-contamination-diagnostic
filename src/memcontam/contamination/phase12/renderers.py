@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from memcontam.contamination.phase12.models import CandidateTriplet, CandidateVariant
+from memcontam.contamination.phase12.models import (
+    CandidateTriplet,
+    CandidateVariant,
+    canonical_content_hash,
+)
 from memcontam.memory.checkpoint_v3 import (
     CheckpointError,
     NativeEntry,
@@ -10,6 +14,14 @@ from memcontam.memory.checkpoint_v3 import (
     deserialize_checkpoint,
 )
 from memcontam.memory.serializer_registry import SerializerRegistry
+
+
+_NATIVE_CONTENT_TEMPLATES = {
+    "full_history": "User: Please demonstrate the procedure.\nAssistant: {candidate}",
+    "fh_bounded": "User: Please demonstrate the procedure.\nAssistant: {candidate}",
+    "bot_style": "Thought template:\n{candidate}",
+    "reflexion_style": "Reflection: I should correct my approach.\nLesson: {candidate}",
+}
 
 
 class RendererError(ValueError):
@@ -53,15 +65,23 @@ def _render(beta: str, candidate: CandidateVariant, checkpoint: Phase12Checkpoin
         schema = SerializerRegistry.native().schema_for(beta)
     except CheckpointError as error:
         raise RendererError(error.code) from error
+    template = _NATIVE_CONTENT_TEMPLATES.get(beta)
+    content = candidate.content if template is None else template.format(candidate=candidate.content)
+    content_hash = canonical_content_hash(content)
+    render_id = (
+        candidate.render_id
+        if content == candidate.content
+        else f"{candidate.render_id}-{beta}-{content_hash[:16]}"
+    )
     return NativeEntry(
         entry_id=candidate.candidate_id,
         semantic_kind=schema.semantic_kind,
         schema_version="phase12_native_entry_v1",
         native_component=schema.native_component,
-        content=candidate.content,
-        content_hash=candidate.content_hash,
+        content=content,
+        content_hash=content_hash,
         direct_parent_ids=(),
-        render_id=candidate.render_id,
+        render_id=render_id,
     )
 
 

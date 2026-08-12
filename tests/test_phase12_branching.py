@@ -10,7 +10,7 @@ from memcontam.contamination.phase12.registry import load_candidate_registry
 from memcontam.contamination.phase12.renderers import RendererRegistry
 from memcontam.memory.admission import AdmissionContext
 from memcontam.memory.cards_v3 import MemoryCardEnvelopeV3, canonical_content_hash
-from memcontam.memory.checkpoint_v3 import NativeState, serialize_checkpoint
+from memcontam.memory.checkpoint_v3 import NativeEntry, NativeState, serialize_checkpoint
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -121,6 +121,51 @@ def test_builds_five_matched_branches_for_each_memory_baseline() -> None:
         assert branches.contam.checkpoint.identity.sha256 != prefix_checkpoint.identity.sha256
         assert not triplet.correct_twin.in_b_star
         assert not triplet.irrelevant_control.in_b_star
+
+
+def test_reduced_main_roots_use_matched_native_rendering_and_consumed_content_hashes() -> None:
+    from memcontam.experiment.phase12.branching import BranchSet, build_matched_branches
+
+    fixture = _fixture()
+    registry = load_candidate_registry(REGISTRY_PATH)
+    expected_skeletons = {
+        "fh_bounded": "User: Please demonstrate the procedure.\nAssistant: {candidate}",
+        "rag_frozen": "{candidate}",
+        "bot_style": "Thought template:\n{candidate}",
+        "reflexion_style": "Reflection: I should correct my approach.\nLesson: {candidate}",
+    }
+
+    for baseline, prefix in fixture["baseline_prefixes"].items():
+        prefix_checkpoint = serialize_checkpoint(NativeState.from_mapping(prefix["checkpoint"]))
+        observed_skeletons = set()
+        for triplet in registry.triplets:
+            branches = build_matched_branches(
+                prefix_checkpoint,
+                triplet,
+                RendererRegistry.native(),
+                _context(baseline, tuple(prefix["checkpoint"]["entries"])),
+            )
+            assert isinstance(branches, BranchSet)
+            for branch, candidate in (
+                (branches.correct, triplet.correct_twin),
+                (branches.irrelevant, triplet.irrelevant_control),
+                (branches.contam, triplet.false_candidate),
+            ):
+                entry = branch.checkpoint.state.entries[-1]
+                assert isinstance(entry, NativeEntry)
+                assert entry.entry_id == candidate.candidate_id
+                assert entry.content_hash == canonical_content_hash(entry.content)
+                observed_skeletons.add(entry.content.replace(candidate.content, "{candidate}"))
+                if baseline == "rag_frozen":
+                    assert entry.render_id == candidate.render_id
+                else:
+                    assert entry.render_id != candidate.render_id
+                    assert entry.render_id is not None
+                    assert entry.render_id.startswith(f"{candidate.render_id}-{baseline}-")
+            assert {item.candidate_triplet_id for item in branches.interventions} == {
+                triplet.triplet_id
+            }
+        assert observed_skeletons == {expected_skeletons[baseline]}
 
 
 def test_rejects_unmatched_or_illegal_branch_construction() -> None:
