@@ -38,6 +38,15 @@ class _Client:
     (
         (
             TaskInstance(
+                sample_id="game24-main-1",
+                task_name="game24",
+                input={"numbers": [1, 3, 4, 6]},
+                verifier_spec={"target": 24},
+            ),
+            "game24-fraction-intermediate-v1",
+        ),
+        (
+            TaskInstance(
                 sample_id="meb-main-1",
                 task_name="math_equation_balancer",
                 input={"input": "14 ? 16 ? 20 ? 15 ? 23 = 25"},
