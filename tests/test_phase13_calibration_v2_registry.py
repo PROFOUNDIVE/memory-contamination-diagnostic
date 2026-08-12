@@ -13,6 +13,7 @@ from memcontam.readiness.phase13_calibration_v2_registry import (
     select_calibration_rows,
     validate_calibration_v2_registry,
 )
+from memcontam.readiness.phase13_calibration_v2_authority import pilot_signatures
 
 ROOT = Path(__file__).resolve().parents[1]
 MAIN_ROOT = ROOT / "data/phase13/main"
@@ -37,6 +38,27 @@ def _read_json(path: Path) -> dict[str, object]:
 
 def _read_jsonl(path: Path) -> list[dict[str, object]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+
+
+def _resign_row(output: Path, task: str, mutation: dict[str, object]) -> None:
+    row_path = output / f"{task}_calibration_v2.jsonl"
+    rows = _read_jsonl(row_path)
+    rows[0].update(mutation)
+    unhashed = {key: value for key, value in rows[0].items() if key != "row_sha256"}
+    rows[0]["row_sha256"] = hashlib.sha256(
+        (json.dumps(unhashed, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    ).hexdigest()
+    raw = b"".join(
+        (json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n").encode()
+        for row in rows
+    )
+    row_path.write_bytes(raw)
+    registry_path = output / "seed_partition_registry_v1.json"
+    registry = _read_json(registry_path)
+    tasks = registry["tasks"]
+    assert isinstance(tasks, dict) and isinstance(tasks[task], dict)
+    tasks[task]["calibration_sha256"] = hashlib.sha256(raw).hexdigest()
+    registry_path.write_text(json.dumps(registry, sort_keys=True, indent=2) + "\n")
 
 
 def test_current_main_v1_source_bytes_and_signatures_are_immutable() -> None:
@@ -124,6 +146,85 @@ def test_selector_rejects_outcome_fields() -> None:
         select_calibration_rows(
             "game24", rows, SelectionExclusions(frozenset(), frozenset())
         )
+
+
+def test_meb_pilot_signature_includes_target_value() -> None:
+    assert pilot_signatures(ROOT, "math_equation_balancer") == {
+        "2,5,7",
+        "3,6,18",
+        "9,4,5",
+    }
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        {"metadata": {"outcome": "forbidden"}},
+        {"metadata": {"verifier_result": "forbidden"}},
+        {"metadata": {"eligibility": True}},
+        {"metadata": {"success_rate": 1.0}},
+    ],
+)
+def test_validator_rejects_resigned_recursive_semantic_fields(
+    tmp_path: Path, mutation: dict[str, object]
+) -> None:
+    output = tmp_path / "registry"
+    build_calibration_v2_registry(ROOT, output)
+    _resign_row(output, "game24", mutation)
+
+    with pytest.raises(CalibrationV2Error, match="FORBIDDEN_SEMANTIC_FIELD"):
+        validate_calibration_v2_registry(output, ROOT)
+
+
+@pytest.mark.parametrize(
+    ("task", "signature", "expected_code"),
+    [
+        ("game24", "1,3,4,6", "PILOT_SIGNATURE_OVERLAP"),
+        ("math_equation_balancer", "1,2,3,7", "CANDIDATE_CONTROL_SIGNATURE_OVERLAP"),
+        ("game24", "1,2,2,9", "PROSPECTIVE_MAIN_V2_SIGNATURE_OVERLAP"),
+    ],
+)
+def test_validator_rejects_resigned_authority_layer_overlap(
+    tmp_path: Path, task: str, signature: str, expected_code: str
+) -> None:
+    output = tmp_path / "registry"
+    build_calibration_v2_registry(ROOT, output)
+    _resign_row(output, task, {"canonical_signature": signature})
+
+    with pytest.raises(CalibrationV2Error, match=expected_code):
+        validate_calibration_v2_registry(output, ROOT)
+
+
+def test_validator_rejects_resigned_reserved_signature(tmp_path: Path) -> None:
+    output = tmp_path / "registry"
+    build_calibration_v2_registry(ROOT, output)
+    registry_path = output / "seed_partition_registry_v1.json"
+    registry = _read_json(registry_path)
+    tasks = registry["tasks"]
+    assert isinstance(tasks, dict) and isinstance(tasks["game24"], dict)
+    tasks["game24"]["reserved_extension"] = {
+        "count": 1,
+        "registry_status": "blocked_pending_future_registry",
+        "signatures": ["2,5,8,11"],
+    }
+    registry_path.write_text(json.dumps(registry, sort_keys=True, indent=2) + "\n")
+
+    with pytest.raises(CalibrationV2Error, match="RESERVED_EXTENSION_SIGNATURE_OVERLAP"):
+        validate_calibration_v2_registry(output, ROOT)
+
+
+def test_validator_rejects_claimed_authority_hash_without_source_match(tmp_path: Path) -> None:
+    output = tmp_path / "registry"
+    build_calibration_v2_registry(ROOT, output)
+    registry_path = output / "seed_partition_registry_v1.json"
+    registry = _read_json(registry_path)
+    authorities = registry["input_authorities"]
+    assert isinstance(authorities, dict)
+    authorities["candidate_registry_sha256"] = "0" * 64
+    registry_path.write_text(json.dumps(registry, sort_keys=True, indent=2) + "\n")
+
+    with pytest.raises(CalibrationV2Error, match="INPUT_AUTHORITY_HASH_MISMATCH"):
+        validate_calibration_v2_registry(output, ROOT)
 
 
 @pytest.mark.parametrize(

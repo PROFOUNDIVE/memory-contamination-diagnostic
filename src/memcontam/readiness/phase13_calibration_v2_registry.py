@@ -2,12 +2,21 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Final, NamedTuple
 
 from memcontam.main_registry import Task
+from memcontam.readiness.phase13_calibration_v2_authority import (
+    AuthorityError,
+    candidate_signatures,
+    load_json,
+    load_jsonl,
+    pilot_signatures,
+    reject_forbidden_fields,
+    validate_authority_hashes,
+    validate_signature_layers,
+)
 
 TASKS: Final[tuple[Task, ...]] = ("game24", "math_equation_balancer", "word_sorting")
 ROW_COUNT: Final = 11
@@ -32,26 +41,6 @@ def _sha256(raw: bytes) -> str:
 
 def _canonical_bytes(value: Mapping[str, object]) -> bytes:
     return (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
-
-
-def _load_json(path: Path) -> dict[str, object]:
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise CalibrationV2Error("REGISTRY_INPUT_MALFORMED") from error
-    if not isinstance(value, dict):
-        raise CalibrationV2Error("REGISTRY_INPUT_MALFORMED")
-    return value
-
-
-def _load_jsonl(path: Path) -> list[dict[str, object]]:
-    try:
-        values = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise CalibrationV2Error("REGISTRY_INPUT_MALFORMED") from error
-    if any(not isinstance(value, dict) for value in values):
-        raise CalibrationV2Error("REGISTRY_INPUT_MALFORMED")
-    return values
 
 
 def _signature(row: Mapping[str, object]) -> str:
@@ -89,60 +78,15 @@ def select_calibration_rows(
     return tuple(selected)
 
 
-def _pilot_signatures(root: Path, task: Task) -> frozenset[str]:
-    rows = _load_jsonl(root / f"data/tasks/{task}_pilot.jsonl")
-    if task == "game24":
-        signatures: set[str] = set()
-        for row in rows:
-            numbers = row.get("numbers")
-            if not isinstance(numbers, list) or not all(isinstance(value, int) for value in numbers):
-                raise CalibrationV2Error("PILOT_REGISTRY_INVALID")
-            signatures.add(",".join(str(value) for value in sorted(numbers)))
-        return frozenset(signatures)
-    if task == "math_equation_balancer":
-        return frozenset(",".join(re.findall(r"-?\d+", str(row.get("input")))) for row in rows)
-    signatures = set()
-    for row in rows:
-        words = row.get("words")
-        if not isinstance(words, list) or not all(isinstance(value, str) for value in words):
-            raise CalibrationV2Error("PILOT_REGISTRY_INVALID")
-        signatures.add("|".join(sorted(words)))
-    return frozenset(signatures)
-
-
-def _candidate_signatures(root: Path) -> dict[str, str]:
-    registry = _load_json(root / "data/phase12/registries/candidate_registry_v1.json")
-    triplets = registry.get("triplets")
-    if not isinstance(triplets, list) or len(triplets) != len(TASKS):
-        raise CalibrationV2Error("CANDIDATE_REGISTRY_INVALID")
-    signatures: dict[str, str] = {}
-    for triplet in triplets:
-        if not isinstance(triplet, dict):
-            raise CalibrationV2Error("CANDIDATE_REGISTRY_INVALID")
-        task, counterexample = triplet.get("task"), triplet.get("counterexample")
-        if task == "game24" and isinstance(counterexample, str):
-            values = sorted(int(value) for value in re.findall(r"\d+", counterexample.rsplit("=", 1)[0]))
-            signatures[task] = ",".join(str(value) for value in values)
-        elif task == "math_equation_balancer" and isinstance(counterexample, str):
-            signatures[task] = ",".join(re.findall(r"-?\d+", counterexample))
-        elif task == "word_sorting" and isinstance(counterexample, list) and all(isinstance(value, str) for value in counterexample):
-            signatures[task] = "|".join(sorted(counterexample))
-        else:
-            raise CalibrationV2Error("CANDIDATE_REGISTRY_INVALID")
-    if set(signatures) != set(TASKS):
-        raise CalibrationV2Error("CANDIDATE_REGISTRY_INVALID")
-    return signatures
-
-
 def build_calibration_v2_registry(root: Path, output_root: Path) -> dict[str, object]:
-    manifest = _load_json(root / "data/phase13/main/main_registry_manifest_v1.json")
-    exclusions_payload = _load_json(root / "data/phase13/main/exclusions_v1.json")
+    manifest = load_json(root / "data/phase13/main/main_registry_manifest_v1.json")
+    exclusions_payload = load_json(root / "data/phase13/main/exclusions_v1.json")
     registries = manifest.get("registries")
     excluded_by_task = exclusions_payload.get("excluded_signatures")
     if not isinstance(registries, dict) or not isinstance(excluded_by_task, dict):
         raise CalibrationV2Error("REGISTRY_INPUT_MALFORMED")
     candidate_path = root / "data/phase12/registries/candidate_registry_v1.json"
-    candidate_signatures = _candidate_signatures(root)
+    candidates = candidate_signatures(root)
     output_root.mkdir(parents=True, exist_ok=True)
     tasks: dict[str, object] = {}
     for task in TASKS:
@@ -157,10 +101,10 @@ def build_calibration_v2_registry(root: Path, output_root: Path) -> dict[str, ob
             raise CalibrationV2Error("REGISTRY_INPUT_MALFORMED")
         if _sha256(source_raw) != expected_hash:
             raise CalibrationV2Error("SOURCE_POOL_HASH_MISMATCH")
-        source_rows = _load_jsonl(source_path)
-        pilot = _pilot_signatures(root, task)
+        source_rows = load_jsonl(source_path)
+        pilot = pilot_signatures(root, task)
         registered = frozenset(task_exclusions)
-        if candidate_signatures[task] not in registered:
+        if candidates[task] not in registered:
             raise CalibrationV2Error("CANDIDATE_CONTROL_SIGNATURE_MISSING")
         selected = select_calibration_rows(
             task, source_rows, SelectionExclusions(pilot, registered - pilot)
@@ -225,14 +169,23 @@ def build_calibration_v2_registry(root: Path, output_root: Path) -> dict[str, ob
     return registry
 
 
-def validate_calibration_v2_registry(output_root: Path) -> dict[str, object]:
-    registry = _load_json(output_root / "seed_partition_registry_v1.json")
+def validate_calibration_v2_registry(output_root: Path, root: Path | None = None) -> dict[str, object]:
+    authority_root = root or Path(__file__).resolve().parents[3]
+    registry = load_json(output_root / "seed_partition_registry_v1.json")
+    try:
+        authorities = registry.get("input_authorities")
+        if not isinstance(authorities, dict):
+            raise AuthorityError("INPUT_AUTHORITY_HASH_MISMATCH")
+        validate_authority_hashes(authority_root, authorities)
+        reject_forbidden_fields(registry)
+    except AuthorityError as error:
+        raise CalibrationV2Error(error.code) from error
     tasks = registry.get("tasks")
     if not isinstance(tasks, dict) or set(tasks) != set(TASKS):
         raise CalibrationV2Error("TASK_PARTITION_INVALID")
     for task in TASKS:
         task_registry = tasks[task]
-        rows = _load_jsonl(output_root / f"{task}_calibration_v2.jsonl")
+        rows = load_jsonl(output_root / f"{task}_calibration_v2.jsonl")
         if len(rows) != ROW_COUNT:
             raise CalibrationV2Error("TASK_TRAJECTORY_TOO_SHORT")
         row_raw = b"".join(_canonical_bytes(row) for row in rows)
@@ -240,6 +193,10 @@ def validate_calibration_v2_registry(output_root: Path) -> dict[str, object]:
             raise CalibrationV2Error("STALE_GENERATED_STATE")
         sample_ids = [str(row["sample_id"]) for row in rows]
         signatures = [_signature(row) for row in rows]
+        try:
+            reject_forbidden_fields(rows)
+        except AuthorityError as error:
+            raise CalibrationV2Error(error.code) from error
         if len(set(signatures)) != ROW_COUNT:
             raise CalibrationV2Error("CALIBRATION_SIGNATURE_DUPLICATE")
         for row in rows:
@@ -251,8 +208,15 @@ def validate_calibration_v2_registry(output_root: Path) -> dict[str, object]:
         if remainder["starts_after_calibration_rows"] != ROW_COUNT:
             raise CalibrationV2Error("MAIN_V2_REFERENCE_INVALID")
         reserved = task_registry["reserved_extension"]
-        if reserved != {"count": 0, "registry_status": "blocked_pending_future_registry", "signatures": []}:
-            raise CalibrationV2Error("RESERVED_EXTENSION_NOT_EMPTY")
+        source_rows = load_jsonl(authority_root / f"data/phase13/main/{task}_main_v1.jsonl")
+        remainder_signatures = [_signature(row) for row in source_rows[ROW_COUNT:]]
+        try:
+            validate_signature_layers(authority_root, task, signatures, remainder_signatures, reserved)
+        except AuthorityError as error:
+            raise CalibrationV2Error(error.code) from error
+        expected_remainder_hash = _sha256(_canonical_bytes({"signatures": remainder_signatures}))
+        if remainder.get("count") != len(remainder_signatures) or remainder.get("ordered_signatures_sha256") != expected_remainder_hash:
+            raise CalibrationV2Error("MAIN_V2_REFERENCE_INVALID")
         trajectories = task_registry["trajectories"]
         seeds = [trajectory["seed_id"] for trajectory in trajectories]
         if len(seeds) != len(set(seeds)):
