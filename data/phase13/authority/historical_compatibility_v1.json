@@ -1,0 +1,39 @@
+{
+  "registry_kind": "phase13_historical_compatibility_v1",
+  "registry_version": 1,
+  "historical_execution": {
+    "implementation_commit": "40b389c3c5035b0054398e3378bcdce55e5afe33",
+    "run_id": "phase13-pre-main-calibration-15usd-rerun1",
+    "config": {
+      "path": "configs/phase13/clean_prefix_calibration_v1.yaml",
+      "sha256": "c97608f1d6f3bafbcb93a30c711ef979ebccacd8341323b1bfc048a6b35a0040"
+    },
+    "request_sha256": "0a8af1c9fc1d9270a4c439670532489b968b5a42f853b7d026e16b0a2b00879e",
+    "authorization_sha256": "c5da3b5e06466fda82b4c34913dbd8e316f16e06520c608bf66fbe0d6e813b9e",
+    "artifacts": {
+      "rates.json": {
+        "sha256": "85468516eca29a4c3895a883081435b6b94bae2ec29acf9190ab49de3f5c6645"
+      },
+      "eligibility.jsonl": {
+        "sha256": "aab072898f156516e9baaa8617e6c62116b8a93d8c29e3ff452fffc9ea3b277b"
+      },
+      "calls.jsonl": {
+        "sha256": "1642931edc995e3f69d44e933620b5f20dce62da03b60bdac7e57034c3cec2b8"
+      },
+      "accounting.json": {
+        "sha256": "57f7155f1e78f71c9e75268a37bc5c274a4e81d38f1632c7a0a777546fa46178"
+      },
+      "artifact_manifest.json": {
+        "sha256": "59d98125b6721fada1f9f078ccef393fb640cd63736e6b8f74ebb308b5f9cfb9"
+      }
+    },
+    "sealed_archive": {
+      "path": "runs/phase13-clean-prefix-calibration-v1/phase13-pre-main-calibration-15usd-rerun1/",
+      "availability": "external_reference_unavailable"
+    }
+  },
+  "source_provenance_map": {
+    "path": "/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/5주차/2026-08-12_Phase13_Calibration_Evidence_Provenance_and_AgentOps_Map.md",
+    "sha256": "50b73ba708895cccebc451e0673e85d4aa5945047755fb2780efc8a97acafb19"
+  }
+}
