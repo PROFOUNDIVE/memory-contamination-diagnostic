@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -59,6 +60,17 @@ def _resign_row(output: Path, task: str, mutation: dict[str, object]) -> None:
     assert isinstance(tasks, dict) and isinstance(tasks[task], dict)
     tasks[task]["calibration_sha256"] = hashlib.sha256(raw).hexdigest()
     registry_path.write_text(json.dumps(registry, sort_keys=True, indent=2) + "\n")
+
+
+def _copy_authorities(tmp_path: Path) -> Path:
+    root = tmp_path / "authority"
+    for relative in (
+        "data/phase13/main",
+        "data/tasks",
+        "data/phase12/registries",
+    ):
+        shutil.copytree(ROOT / relative, root / relative)
+    return root
 
 
 def test_current_main_v1_source_bytes_and_signatures_are_immutable() -> None:
@@ -224,6 +236,59 @@ def test_validator_rejects_claimed_authority_hash_without_source_match(tmp_path:
     registry_path.write_text(json.dumps(registry, sort_keys=True, indent=2) + "\n")
 
     with pytest.raises(CalibrationV2Error, match="INPUT_AUTHORITY_HASH_MISMATCH"):
+        validate_calibration_v2_registry(output, ROOT)
+
+
+def test_validator_rejects_main_source_bytes_drift(tmp_path: Path) -> None:
+    authority_root = _copy_authorities(tmp_path)
+    output = tmp_path / "registry"
+    build_calibration_v2_registry(ROOT, output)
+    source = authority_root / "data/phase13/main/game24_main_v1.jsonl"
+    source.write_bytes(source.read_bytes() + b"\n")
+
+    with pytest.raises(CalibrationV2Error, match="MAIN_SOURCE_HASH_MISMATCH"):
+        validate_calibration_v2_registry(output, authority_root)
+
+
+def test_validator_rejects_resigned_source_payload_drift(tmp_path: Path) -> None:
+    output = tmp_path / "registry"
+    build_calibration_v2_registry(ROOT, output)
+    _resign_row(output, "game24", {"target": 99})
+
+    with pytest.raises(CalibrationV2Error, match="CALIBRATION_SOURCE_ROW_MISMATCH"):
+        validate_calibration_v2_registry(output, ROOT)
+
+
+@pytest.mark.parametrize(
+    "claim",
+    [
+        {"path": "data/phase13/main/word_sorting_main_v1.jsonl", "sha256": SOURCE_HASHES["game24"]},
+        {"path": "data/phase13/main/game24_main_v1.jsonl", "sha256": "0" * 64},
+    ],
+)
+def test_validator_rejects_source_claim_drift(
+    tmp_path: Path, claim: dict[str, str]
+) -> None:
+    output = tmp_path / "registry"
+    build_calibration_v2_registry(ROOT, output)
+    registry_path = output / "seed_partition_registry_v1.json"
+    registry = _read_json(registry_path)
+    tasks = registry["tasks"]
+    assert isinstance(tasks, dict) and isinstance(tasks["game24"], dict)
+    tasks["game24"]["source_main_v1"] = claim
+    registry_path.write_text(json.dumps(registry, sort_keys=True, indent=2) + "\n")
+
+    with pytest.raises(CalibrationV2Error, match="SOURCE_MAIN_V1_CLAIM_MISMATCH"):
+        validate_calibration_v2_registry(output, ROOT)
+
+
+@pytest.mark.parametrize("alias", ["outcomeRate", "verifier_outcome", "eligibility_status"])
+def test_validator_rejects_resigned_semantic_aliases(tmp_path: Path, alias: str) -> None:
+    output = tmp_path / "registry"
+    build_calibration_v2_registry(ROOT, output)
+    _resign_row(output, "game24", {"metadata": {alias: 1}})
+
+    with pytest.raises(CalibrationV2Error, match="FORBIDDEN_SEMANTIC_FIELD"):
         validate_calibration_v2_registry(output, ROOT)
 
 

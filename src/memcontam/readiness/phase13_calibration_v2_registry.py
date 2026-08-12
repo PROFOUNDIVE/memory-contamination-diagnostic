@@ -9,12 +9,14 @@ from typing import Final, NamedTuple
 from memcontam.main_registry import Task
 from memcontam.readiness.phase13_calibration_v2_authority import (
     AuthorityError,
+    authenticated_source,
     candidate_signatures,
     load_json,
     load_jsonl,
     pilot_signatures,
     reject_forbidden_fields,
     validate_authority_hashes,
+    validate_selected_source_rows,
     validate_signature_layers,
 )
 
@@ -208,10 +210,16 @@ def validate_calibration_v2_registry(output_root: Path, root: Path | None = None
         if remainder["starts_after_calibration_rows"] != ROW_COUNT:
             raise CalibrationV2Error("MAIN_V2_REFERENCE_INVALID")
         reserved = task_registry["reserved_extension"]
-        source_rows = load_jsonl(authority_root / f"data/phase13/main/{task}_main_v1.jsonl")
+        try:
+            source_rows, expected_source_claim = authenticated_source(authority_root, task)
+            if task_registry.get("source_main_v1") != expected_source_claim:
+                raise AuthorityError("SOURCE_MAIN_V1_CLAIM_MISMATCH")
+        except AuthorityError as error:
+            raise CalibrationV2Error(error.code) from error
         remainder_signatures = [_signature(row) for row in source_rows[ROW_COUNT:]]
         try:
             validate_signature_layers(authority_root, task, signatures, remainder_signatures, reserved)
+            validate_selected_source_rows(rows, source_rows[:ROW_COUNT])
         except AuthorityError as error:
             raise CalibrationV2Error(error.code) from error
         expected_remainder_hash = _sha256(_canonical_bytes({"signatures": remainder_signatures}))

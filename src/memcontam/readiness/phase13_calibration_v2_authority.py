@@ -10,12 +10,7 @@ from typing import Final
 from memcontam.main_registry import Task
 
 TASKS: Final[tuple[Task, ...]] = ("game24", "math_equation_balancer", "word_sorting")
-FORBIDDEN_FIELDS: Final = frozenset({
-    "outcome", "outcomes", "verifier_result", "verifier_results", "eligibility", "eligible",
-    "rate", "rates", "success_rate", "success_rates", "eligibility_rate", "eligibility_rates",
-    "inclusion_rate", "inclusion_rates", "evaluability_rate", "evaluability_rates",
-    "outcome_rate", "outcome_rates", "accuracy_rate", "accuracy_rates", "pass_rate", "pass_rates",
-})
+FORBIDDEN_TOKENS: Final = frozenset({"outcome", "outcomes", "eligibility", "eligible"})
 
 
 class AuthorityError(ValueError):
@@ -92,8 +87,11 @@ def candidate_signatures(root: Path) -> dict[str, str]:
 def reject_forbidden_fields(value: object) -> None:
     if isinstance(value, dict):
         for key, nested in value.items():
-            normalized = key.lower()
-            if normalized in FORBIDDEN_FIELDS:
+            snake = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", key).lower()
+            tokens = frozenset(part for part in re.split(r"[^a-z0-9]+", snake) if part)
+            forbidden_rate = "rate" in tokens and "limit" not in tokens
+            forbidden_result = "verifier" in tokens and "result" in tokens
+            if tokens & FORBIDDEN_TOKENS or forbidden_rate or forbidden_result:
                 raise AuthorityError("FORBIDDEN_SEMANTIC_FIELD")
             reject_forbidden_fields(nested)
     elif isinstance(value, list):
@@ -117,6 +115,34 @@ def validate_authority_hashes(root: Path, claimed: Mapping[str, object]) -> None
         path = root / f"data/tasks/{task}_pilot.jsonl"
         if pilots.get(task) != hashlib.sha256(path.read_bytes()).hexdigest():
             raise AuthorityError("INPUT_AUTHORITY_HASH_MISMATCH")
+
+
+def authenticated_source(root: Path, task: Task) -> tuple[list[dict[str, object]], dict[str, str]]:
+    manifest = load_json(root / "data/phase13/main/main_registry_manifest_v1.json")
+    registries = manifest.get("registries")
+    if not isinstance(registries, dict) or not isinstance(registries.get(task), dict):
+        raise AuthorityError("REGISTRY_INPUT_MALFORMED")
+    entry = registries[task]
+    name, digest = entry.get("path"), entry.get("sha256")
+    if not isinstance(name, str) or not isinstance(digest, str):
+        raise AuthorityError("REGISTRY_INPUT_MALFORMED")
+    relative = f"data/phase13/main/{name}"
+    path = root / relative
+    if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+        raise AuthorityError("MAIN_SOURCE_HASH_MISMATCH")
+    return load_jsonl(path), {"path": relative, "sha256": digest}
+
+
+def validate_selected_source_rows(
+    selected: Sequence[Mapping[str, object]], source_prefix: Sequence[Mapping[str, object]]
+) -> None:
+    if len(selected) != len(source_prefix):
+        raise AuthorityError("CALIBRATION_SOURCE_ROW_MISMATCH")
+    for selected_row, source_row in zip(selected, source_prefix, strict=True):
+        payload = {key: value for key, value in selected_row.items() if key not in {"sample_id", "row_sha256"}}
+        expected = {key: value for key, value in source_row.items() if key != "sample_id"}
+        if payload != expected:
+            raise AuthorityError("CALIBRATION_SOURCE_ROW_MISMATCH")
 
 
 def validate_signature_layers(
