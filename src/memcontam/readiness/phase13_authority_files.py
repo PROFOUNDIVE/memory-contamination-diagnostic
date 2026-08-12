@@ -10,20 +10,31 @@ class AuthorityFileError(ValueError):
 
 
 def read_regular_nofollow(path: Path) -> bytes:
+    target = path if path.is_absolute() else Path.cwd() / path
+    if any(part in {".", ".."} for part in target.parts):
+        raise AuthorityFileError("AUTHORITY_FILE_NOT_REGULAR")
+    parts = tuple(part for part in target.parts if part != "/")
+    directory = os.open("/", os.O_RDONLY | os.O_DIRECTORY)
     try:
-        info = path.lstat()
-        if not stat.S_ISREG(info.st_mode):
-            raise AuthorityFileError("AUTHORITY_FILE_NOT_REGULAR")
-        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        for component in parts[:-1]:
+            next_directory = os.open(
+                component,
+                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                dir_fd=directory,
+            )
+            os.close(directory)
+            directory = next_directory
+        descriptor = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory)
+        try:
+            if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                raise AuthorityFileError("AUTHORITY_FILE_NOT_REGULAR")
+            chunks: list[bytes] = []
+            while chunk := os.read(descriptor, 1_048_576):
+                chunks.append(chunk)
+            return b"".join(chunks)
+        finally:
+            os.close(descriptor)
     except (OSError, AuthorityFileError) as error:
         raise AuthorityFileError("AUTHORITY_FILE_NOT_REGULAR") from error
-    try:
-        opened = os.fstat(descriptor)
-        if not stat.S_ISREG(opened.st_mode) or (opened.st_dev, opened.st_ino) != (info.st_dev, info.st_ino):
-            raise AuthorityFileError("AUTHORITY_FILE_NOT_REGULAR")
-        chunks: list[bytes] = []
-        while chunk := os.read(descriptor, 1_048_576):
-            chunks.append(chunk)
-        return b"".join(chunks)
     finally:
-        os.close(descriptor)
+        os.close(directory)

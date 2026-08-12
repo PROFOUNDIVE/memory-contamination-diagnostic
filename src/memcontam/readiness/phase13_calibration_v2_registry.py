@@ -9,16 +9,18 @@ from typing import Final, NamedTuple
 from memcontam.main_registry import Task
 from memcontam.readiness.phase13_calibration_v2_authority import (
     AuthorityError,
+    authenticated_authorities,
     authenticated_source,
     candidate_signatures,
+    jsonl_from_bytes,
     load_json,
     load_jsonl,
     pilot_signatures,
     reject_forbidden_fields,
-    validate_authority_hashes,
     validate_selected_source_rows,
     validate_signature_layers,
 )
+from memcontam.readiness.phase13_authority_files import AuthorityFileError, read_regular_nofollow
 
 TASKS: Final[tuple[Task, ...]] = ("game24", "math_equation_balancer", "word_sorting")
 ROW_COUNT: Final = 11
@@ -93,7 +95,6 @@ def build_calibration_v2_registry(root: Path, output_root: Path) -> dict[str, ob
     tasks: dict[str, object] = {}
     for task in TASKS:
         source_path = root / f"data/phase13/main/{task}_main_v1.jsonl"
-        source_raw = source_path.read_bytes()
         source_ref = registries.get(task)
         task_exclusions = excluded_by_task.get(task)
         if not isinstance(source_ref, dict) or not isinstance(task_exclusions, list):
@@ -101,9 +102,13 @@ def build_calibration_v2_registry(root: Path, output_root: Path) -> dict[str, ob
         expected_hash = source_ref.get("sha256")
         if not isinstance(expected_hash, str) or not all(isinstance(value, str) for value in task_exclusions):
             raise CalibrationV2Error("REGISTRY_INPUT_MALFORMED")
+        try:
+            source_raw = read_regular_nofollow(source_path)
+            source_rows = jsonl_from_bytes(source_raw)
+        except (AuthorityError, AuthorityFileError) as error:
+            raise CalibrationV2Error(str(error)) from error
         if _sha256(source_raw) != expected_hash:
             raise CalibrationV2Error("SOURCE_POOL_HASH_MISMATCH")
-        source_rows = load_jsonl(source_path)
         pilot = pilot_signatures(root, task)
         registered = frozenset(task_exclusions)
         if candidates[task] not in registered:
@@ -178,7 +183,7 @@ def validate_calibration_v2_registry(output_root: Path, root: Path | None = None
         authorities = registry.get("input_authorities")
         if not isinstance(authorities, dict):
             raise AuthorityError("INPUT_AUTHORITY_HASH_MISMATCH")
-        validate_authority_hashes(authority_root, authorities)
+        manifest, pilots, controls = authenticated_authorities(authority_root, authorities)
         reject_forbidden_fields(registry)
     except AuthorityError as error:
         raise CalibrationV2Error(error.code) from error
@@ -211,14 +216,20 @@ def validate_calibration_v2_registry(output_root: Path, root: Path | None = None
             raise CalibrationV2Error("MAIN_V2_REFERENCE_INVALID")
         reserved = task_registry["reserved_extension"]
         try:
-            source_rows, expected_source_claim = authenticated_source(authority_root, task)
+            source_rows, expected_source_claim = authenticated_source(authority_root, task, manifest)
             if task_registry.get("source_main_v1") != expected_source_claim:
                 raise AuthorityError("SOURCE_MAIN_V1_CLAIM_MISMATCH")
         except AuthorityError as error:
             raise CalibrationV2Error(error.code) from error
         remainder_signatures = [_signature(row) for row in source_rows[ROW_COUNT:]]
         try:
-            validate_signature_layers(authority_root, task, signatures, remainder_signatures, reserved)
+            validate_signature_layers(
+                signatures,
+                remainder_signatures,
+                reserved,
+                pilots[task],
+                controls[task],
+            )
             validate_selected_source_rows(rows, source_rows[:ROW_COUNT])
         except AuthorityError as error:
             raise CalibrationV2Error(error.code) from error

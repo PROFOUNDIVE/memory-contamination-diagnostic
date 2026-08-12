@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from memcontam.readiness import phase13_calibration_v2_authority as authority
 from memcontam.readiness.phase13_calibration_v2_registry import (
     CalibrationV2Error,
     SelectionExclusions,
@@ -14,7 +15,7 @@ from memcontam.readiness.phase13_calibration_v2_registry import (
     select_calibration_rows,
     validate_calibration_v2_registry,
 )
-from memcontam.readiness.phase13_calibration_v2_authority import pilot_signatures
+from memcontam.readiness.phase13_calibration_v2_authority import AuthorityError, pilot_signatures
 
 ROOT = Path(__file__).resolve().parents[1]
 MAIN_ROOT = ROOT / "data/phase13/main"
@@ -349,6 +350,79 @@ def test_validator_rejects_manifest_symlink_before_read(tmp_path: Path) -> None:
 
     with pytest.raises(CalibrationV2Error, match="AUTHORITY_FILE_NOT_REGULAR"):
         validate_calibration_v2_registry(output, authority_root)
+
+
+def test_authenticated_source_parses_the_bytes_it_authenticated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    authority_root = _copy_authorities(tmp_path)
+    source = authority_root / "data/phase13/main/game24_main_v1.jsonl"
+    expected = _read_jsonl(source)
+    replacement = [dict(row) for row in expected]
+    replacement[0]["target"] = 99
+    original_read = authority.read_regular_nofollow
+    source_reads = 0
+
+    def replace_after_first_read(path: Path) -> bytes:
+        nonlocal source_reads
+        raw = original_read(path)
+        if path == source:
+            source_reads += 1
+            if source_reads == 1:
+                source.write_text("\n".join(json.dumps(row) for row in replacement) + "\n")
+        return raw
+
+    monkeypatch.setattr(authority, "read_regular_nofollow", replace_after_first_read)
+
+    rows, _ = authority.authenticated_source(authority_root, "game24")
+
+    assert rows == expected
+
+
+@pytest.mark.parametrize(
+    "relative",
+    [
+        "data/phase13/main/main_registry_manifest_v1.json",
+        "data/phase13/main/exclusions_v1.json",
+        "data/tasks/game24_pilot.jsonl",
+    ],
+)
+def test_validator_parses_each_authenticated_authority_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, relative: str
+) -> None:
+    authority_root = _copy_authorities(tmp_path)
+    output = tmp_path / "registry"
+    build_calibration_v2_registry(ROOT, output)
+    target = authority_root / relative
+    original_read = authority.read_regular_nofollow
+    target_reads = 0
+
+    def replace_after_first_read(path: Path) -> bytes:
+        nonlocal target_reads
+        raw = original_read(path)
+        if path == target:
+            target_reads += 1
+            if target_reads == 1:
+                target.write_bytes(b"malformed")
+        return raw
+
+    monkeypatch.setattr(authority, "read_regular_nofollow", replace_after_first_read)
+
+    validate_calibration_v2_registry(output, authority_root)
+
+
+@pytest.mark.parametrize("component", ["data", "data/phase13", "data/phase13/main"])
+def test_authenticated_source_rejects_symlinked_directory_component(
+    tmp_path: Path, component: str
+) -> None:
+    authority_root = _copy_authorities(tmp_path)
+    directory = authority_root / component
+    external = tmp_path / f"external-{directory.name}"
+    directory.rename(external)
+    directory.symlink_to(external, target_is_directory=True)
+
+    with pytest.raises(AuthorityError, match="AUTHORITY_FILE_NOT_REGULAR"):
+        authority.authenticated_source(authority_root, "game24")
 
 
 @pytest.mark.parametrize(

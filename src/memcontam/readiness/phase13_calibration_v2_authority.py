@@ -25,11 +25,9 @@ class AuthorityError(ValueError):
         super().__init__(code)
 
 
-def load_json(path: Path) -> dict[str, object]:
+def json_from_bytes(raw: bytes) -> dict[str, object]:
     try:
-        value = json.loads(read_regular_nofollow(path))
-    except AuthorityFileError as error:
-        raise AuthorityError(str(error)) from error
+        value = json.loads(raw)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise AuthorityError("REGISTRY_INPUT_MALFORMED") from error
     if not isinstance(value, dict):
@@ -37,11 +35,16 @@ def load_json(path: Path) -> dict[str, object]:
     return value
 
 
-def load_jsonl(path: Path) -> list[dict[str, object]]:
+def load_json(path: Path) -> dict[str, object]:
     try:
-        values = [json.loads(line) for line in read_regular_nofollow(path).splitlines()]
+        return json_from_bytes(read_regular_nofollow(path))
     except AuthorityFileError as error:
         raise AuthorityError(str(error)) from error
+
+
+def jsonl_from_bytes(raw: bytes) -> list[dict[str, object]]:
+    try:
+        values = [json.loads(line) for line in raw.splitlines()]
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise AuthorityError("REGISTRY_INPUT_MALFORMED") from error
     if any(not isinstance(value, dict) for value in values):
@@ -49,8 +52,14 @@ def load_jsonl(path: Path) -> list[dict[str, object]]:
     return values
 
 
-def pilot_signatures(root: Path, task: Task) -> frozenset[str]:
-    rows = load_jsonl(root / f"data/tasks/{task}_pilot.jsonl")
+def load_jsonl(path: Path) -> list[dict[str, object]]:
+    try:
+        return jsonl_from_bytes(read_regular_nofollow(path))
+    except AuthorityFileError as error:
+        raise AuthorityError(str(error)) from error
+
+
+def pilot_signatures_from_rows(rows: Sequence[Mapping[str, object]], task: Task) -> frozenset[str]:
     signatures: set[str] = set()
     for row in rows:
         match task:
@@ -70,6 +79,10 @@ def pilot_signatures(root: Path, task: Task) -> frozenset[str]:
                     raise AuthorityError("PILOT_REGISTRY_INVALID")
                 signatures.add("|".join(sorted(values)))
     return frozenset(signatures)
+
+
+def pilot_signatures(root: Path, task: Task) -> frozenset[str]:
+    return pilot_signatures_from_rows(load_jsonl(root / f"data/tasks/{task}_pilot.jsonl"), task)
 
 
 def candidate_signatures(root: Path) -> dict[str, str]:
@@ -109,34 +122,64 @@ def reject_forbidden_fields(value: object) -> None:
             reject_forbidden_fields(nested)
 
 
-def validate_authority_hashes(root: Path, claimed: Mapping[str, object]) -> None:
+def authenticated_authority_bytes(root: Path, claimed: Mapping[str, object]) -> dict[str, bytes]:
     expected = {
         "main_manifest_sha256": root / "data/phase13/main/main_registry_manifest_v1.json",
         "exclusions_sha256": root / "data/phase13/main/exclusions_v1.json",
         "candidate_registry_sha256": root / "data/phase12/registries/candidate_registry_v1.json",
     }
+    authenticated: dict[str, bytes] = {}
     for key, path in expected.items():
         try:
-            digest = hashlib.sha256(read_regular_nofollow(path)).hexdigest()
+            raw = read_regular_nofollow(path)
         except AuthorityFileError as error:
             raise AuthorityError(str(error)) from error
-        if claimed.get(key) != digest:
+        if claimed.get(key) != hashlib.sha256(raw).hexdigest():
             raise AuthorityError("INPUT_AUTHORITY_HASH_MISMATCH")
+        authenticated[key] = raw
     pilots = claimed.get("pilot_registry_sha256")
     if not isinstance(pilots, dict):
         raise AuthorityError("INPUT_AUTHORITY_HASH_MISMATCH")
     for task in TASKS:
         path = root / f"data/tasks/{task}_pilot.jsonl"
         try:
-            digest = hashlib.sha256(read_regular_nofollow(path)).hexdigest()
+            raw = read_regular_nofollow(path)
         except AuthorityFileError as error:
             raise AuthorityError(str(error)) from error
-        if pilots.get(task) != digest:
+        if pilots.get(task) != hashlib.sha256(raw).hexdigest():
             raise AuthorityError("INPUT_AUTHORITY_HASH_MISMATCH")
+        authenticated[f"pilot_registry_sha256:{task}"] = raw
+    return authenticated
 
 
-def authenticated_source(root: Path, task: Task) -> tuple[list[dict[str, object]], dict[str, str]]:
-    manifest = load_json(root / "data/phase13/main/main_registry_manifest_v1.json")
+def authenticated_authorities(
+    root: Path, claimed: Mapping[str, object]
+) -> tuple[dict[str, object], dict[Task, frozenset[str]], dict[Task, frozenset[str]]]:
+    raw = authenticated_authority_bytes(root, claimed)
+    manifest = json_from_bytes(raw["main_manifest_sha256"])
+    exclusions = json_from_bytes(raw["exclusions_sha256"]).get("excluded_signatures")
+    if not isinstance(exclusions, dict):
+        raise AuthorityError("REGISTRY_INPUT_MALFORMED")
+    pilots: dict[Task, frozenset[str]] = {}
+    controls: dict[Task, frozenset[str]] = {}
+    for task in TASKS:
+        pilot = pilot_signatures_from_rows(
+            jsonl_from_bytes(raw[f"pilot_registry_sha256:{task}"]), task
+        )
+        task_exclusions = exclusions.get(task)
+        if not isinstance(task_exclusions, list) or not all(
+            isinstance(value, str) for value in task_exclusions
+        ):
+            raise AuthorityError("REGISTRY_INPUT_MALFORMED")
+        pilots[task] = pilot
+        controls[task] = frozenset(task_exclusions) - pilot
+    return manifest, pilots, controls
+
+
+def authenticated_source(
+    root: Path, task: Task, manifest: Mapping[str, object] | None = None
+) -> tuple[list[dict[str, object]], dict[str, str]]:
+    manifest = manifest or load_json(root / "data/phase13/main/main_registry_manifest_v1.json")
     registries = manifest.get("registries")
     if not isinstance(registries, dict) or not isinstance(registries.get(task), dict):
         raise AuthorityError("REGISTRY_INPUT_MALFORMED")
@@ -157,7 +200,7 @@ def authenticated_source(root: Path, task: Task) -> tuple[list[dict[str, object]
         raise AuthorityError(str(error)) from error
     if hashlib.sha256(source_raw).hexdigest() != digest:
         raise AuthorityError("MAIN_SOURCE_HASH_MISMATCH")
-    return load_jsonl(path), {"path": relative, "sha256": digest}
+    return jsonl_from_bytes(source_raw), {"path": relative, "sha256": digest}
 
 
 def validate_selected_source_rows(
@@ -173,15 +216,15 @@ def validate_selected_source_rows(
 
 
 def validate_signature_layers(
-    root: Path, task: Task, selected: Sequence[str], remainder: Sequence[str], reserved: object
+    selected: Sequence[str],
+    remainder: Sequence[str],
+    reserved: object,
+    pilot: frozenset[str],
+    controls: frozenset[str],
 ) -> None:
     selected_set = set(selected)
-    if selected_set & pilot_signatures(root, task):
+    if selected_set & pilot:
         raise AuthorityError("PILOT_SIGNATURE_OVERLAP")
-    exclusions = load_json(root / "data/phase13/main/exclusions_v1.json").get("excluded_signatures")
-    if not isinstance(exclusions, dict) or not isinstance(exclusions.get(task), list):
-        raise AuthorityError("REGISTRY_INPUT_MALFORMED")
-    controls = set(exclusions[task]) - set(pilot_signatures(root, task))
     if selected_set & controls:
         raise AuthorityError("CANDIDATE_CONTROL_SIGNATURE_OVERLAP")
     if selected_set & set(remainder):
