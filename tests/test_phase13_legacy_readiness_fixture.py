@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from phase13_fixture_support import provision_readiness
+from tests.phase13_fixture_support import provision_readiness
 
 
 SOURCE = Path("data/phase13/authority/pilot_a_readiness_manifest_v1.json")
