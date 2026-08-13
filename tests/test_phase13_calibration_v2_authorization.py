@@ -13,6 +13,7 @@ from memcontam.readiness import phase13_calibration_v2_authorization as authoriz
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "configs/phase13/pre_main_calibration_v2.yaml"
+FREEZE = ROOT / "data/phase13/authority/phase13_authority_freeze_v1.json"
 PLAN = Path("/home/hyunwoo/git/memory-contamination-diagnostic/.omo/plans/phase13-canonical-authority-sync-calibration-v2.md")
 NOW = datetime(2026, 8, 13, 12, tzinfo=UTC)
 
@@ -61,8 +62,6 @@ def _freeze() -> dict[str, object]:
 
 
 def complete_bundle(tmp_path: Path) -> tuple[Path, Path, str, dict[str, object]]:
-    freeze_path = tmp_path / "freeze.json"
-    freeze_path.write_text(json.dumps(_freeze()), encoding="utf-8")
     files = {
         "config": CONFIG,
         "partition": ROOT / "data/phase13/calibration_v2/seed_partition_registry_v1.json",
@@ -81,7 +80,7 @@ def complete_bundle(tmp_path: Path) -> tuple[Path, Path, str, dict[str, object]]
     bindings: dict[str, object] = {
         "schema_version": "phase13_calibration_v2_request_v1",
         "run_id": "authorized-synthetic",
-        "freeze": {"path": str(freeze_path), "sha256": _sha(freeze_path)},
+        "freeze": {"path": str(FREEZE), "sha256": _sha(FREEZE)},
         "config": {"path": str(CONFIG), "sha256": _sha(CONFIG)},
         "registries": {role: {"path": str(path), "sha256": _sha(path)} for role, path in files.items() if role != "config"},
         "stream_registry_id": "phase13-calibration-v2-rotations-v1",
@@ -225,7 +224,7 @@ def test_missing_prerequisite_fails_closed(
         )
 
 
-@pytest.mark.parametrize("kind", ["request", "authorization", "freeze"])
+@pytest.mark.parametrize("kind", ["request", "authorization"])
 def test_trusted_inputs_reject_symlinks_and_directories(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str,
 ) -> None:

@@ -1,0 +1,23 @@
+{
+  "schema_version": "phase13-authority-freeze-v1",
+  "closure_id": "phase13-calibration-v2-prospective",
+  "authorities": [
+    {"kind": "authority", "authority_role": "theory", "artifact": {"kind": "artifact", "artifact_id": "phase13-theory-authority", "path": "external-authority/theory.md", "sha256": "34f63f37a49e92607c78ced038c4c70b4c9d5e3fa8fc57d6e97de1ee79db59a8"}},
+    {"kind": "authority", "authority_role": "baseline", "artifact": {"kind": "artifact", "artifact_id": "phase13-baseline-authority", "path": "external-authority/baseline.md", "sha256": "c28f0e2b00db6a2731f64933ccc67c5ea5a163d6233c526e6b473e540f988204"}},
+    {"kind": "authority", "authority_role": "protocol", "artifact": {"kind": "artifact", "artifact_id": "phase13-protocol-authority", "path": "external-authority/protocol.md", "sha256": "06d23e29dff6c607bc2035c5641fbb696fb5c09dd86f2ce190a99c6baa57eefc"}},
+    {"kind": "authority", "authority_role": "experiment_design", "artifact": {"kind": "artifact", "artifact_id": "phase13-experiment_design-authority", "path": "external-authority/experiment_design.md", "sha256": "6b8ab4e414c86dbcb4afc9c2781b13f9312e8ba2834d20473d261f264e6e1acf"}}
+  ],
+  "parameter_classifications": [
+    {"kind": "scientific_design", "class_code": "A", "H_primary": 5, "primary_analysis_window_id": "accuracy-h5-primary"},
+    {"kind": "execution", "class_code": "B", "H_run": 10},
+    {"kind": "inference", "class_code": "C", "estimator_id": "paired-seed-risk-difference-v1"},
+    {"kind": "planning", "class_code": "D", "calibration_seed_count_per_task": 12},
+    {"kind": "reproducibility", "class_code": "E", "bootstrap_replicates": 20000, "bootstrap_rng_seed": 13, "serialization_version": "canonical-json-v1"}
+  ],
+  "registries": [
+    {"kind": "registry", "registry_kind": "calibration_v2", "registry_id": "phase13-calibration-v2-registry-v1", "artifact": {"kind": "artifact", "artifact_id": "phase13-calibration-v2-registry-v1", "path": "data/phase13/calibration_v2/seed_partition_registry_v1.json", "sha256": "a31b731244f5c56b4aafa5ed83bbe720c8623563cfbd800e7a478a0025aff4ba"}},
+    {"kind": "registry", "registry_kind": "execution", "registry_id": "phase13-execution-registry-v1", "artifact": {"kind": "artifact", "artifact_id": "phase13-execution-registry-v1", "path": "data/phase13/authority/execution_registry_v1.json", "sha256": "7c92189f645b74381f3fedf2d3ffbc8c4768a7019eaeb621edb8c22fb4a34970"}},
+    {"kind": "registry", "registry_kind": "analysis", "registry_id": "phase13-analysis-registry-v1", "artifact": {"kind": "artifact", "artifact_id": "phase13-analysis-registry-v1", "path": "data/phase13/authority/analysis_registry_v1.json", "sha256": "b58e6aec8acc040fb934e9b25842eb68c702d098a08b41ba0eab9502a198a0f3"}}
+  ],
+  "closure_hash": "c770dd05975d2d29407d13c778cf29d772c0640251b81e21bc7353645b873ade"
+}

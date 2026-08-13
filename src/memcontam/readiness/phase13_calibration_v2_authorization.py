@@ -23,12 +23,14 @@ PLAN_PATH: Final = Path(
     "/home/hyunwoo/git/memory-contamination-diagnostic/.omo/plans/phase13-canonical-authority-sync-calibration-v2.md"
 )
 EXPECTED_FILES: Final = {
+    "freeze": "data/phase13/authority/phase13_authority_freeze_v1.json",
     "config": "configs/phase13/pre_main_calibration_v2.yaml",
     "partition": "data/phase13/calibration_v2/seed_partition_registry_v1.json",
     "execution": "data/phase13/authority/execution_registry_v1.json",
     "analysis": "data/phase13/authority/analysis_registry_v1.json",
     "structural": "data/phase13/authority/structural_checkpoint_registry_v1.json",
 }
+EXPECTED_FREEZE_SHA256: Final = "c56de79385e9eee0e00fdc02aae9deea5bc84789af31c0f2e8d9b84d8a6ff449"
 IMPLEMENTATION_FILES: Final = {
     "cli": "src/memcontam/readiness/phase13_cli.py",
     "provider_runtime": "src/memcontam/readiness/phase13_provider_runtime.py",
@@ -181,7 +183,7 @@ def verify_calibration_v2_authorization(
     expected_authorization_sha256: str, allow_live_calls: bool,
     environment: Mapping[str, str] | None = None, now: datetime | None = None,
 ) -> VerifiedCalibrationV2Authorization:
-    env = environment or os.environ
+    env = os.environ if environment is None else environment
     if not allow_live_calls or not expected_authorization_sha256:
         raise CalibrationV2AuthorizationError()
     request_raw, authorization_raw = _read(request_path), _read(authorization_path)
@@ -195,13 +197,20 @@ def verify_calibration_v2_authorization(
     current = now or datetime.now(UTC)
     if permit.request_sha256 != _sha(request_raw) or permit.bindings != request:
         raise CalibrationV2AuthorizationError()
+    if current.tzinfo is None or permit.issued_at.tzinfo is None or permit.expires_at.tzinfo is None:
+        raise CalibrationV2AuthorizationError()
     if permit.issued_at > current or permit.expires_at <= current or permit.expires_at <= permit.issued_at:
         raise CalibrationV2AuthorizationError()
     config_expected = ROOT / EXPECTED_FILES["config"]
-    if config_path.resolve(strict=False) != config_expected or request.config.path != str(config_path):
-        raise CalibrationV2AuthorizationError()
+    try:
+        if config_path.resolve(strict=False) != config_expected or request.config.path != str(config_path):
+            raise CalibrationV2AuthorizationError()
+    except OSError as error:
+        raise CalibrationV2AuthorizationError() from error
     _verify_file(request.config, config_expected)
-    freeze_raw = _verify_file(request.freeze, Path(request.freeze.path))
+    freeze_raw = _verify_file(request.freeze, ROOT / EXPECTED_FILES["freeze"])
+    if request.freeze.sha256 != EXPECTED_FREEZE_SHA256:
+        raise CalibrationV2AuthorizationError()
     try:
         parse_phase13_authority_freeze(freeze_raw)
     except Phase13AuthorityError as error:
@@ -212,18 +221,24 @@ def verify_calibration_v2_authorization(
     for role in ("cli", "provider_runtime", "trajectory_runtime"):
         relative = IMPLEMENTATION_FILES[role]
         _verify_file(request.implementation[role], ROOT / relative)
-    if request.implementation_commit != _git_head(ROOT) or not _tracked_worktree_clean(ROOT):
-        raise CalibrationV2AuthorizationError()
+    try:
+        if request.implementation_commit != _git_head(ROOT) or not _tracked_worktree_clean(ROOT):
+            raise CalibrationV2AuthorizationError()
+    except (OSError, subprocess.SubprocessError) as error:
+        raise CalibrationV2AuthorizationError() from error
     if request.runtime_python != sys.version.split()[0]:
         raise CalibrationV2AuthorizationError()
-    if not env.get(request.credential_env_name) or not _cache_ready(env):
-        raise CalibrationV2AuthorizationError()
+    try:
+        if not env.get(request.credential_env_name) or not _cache_ready(env):
+            raise CalibrationV2AuthorizationError()
+    except OSError as error:
+        raise CalibrationV2AuthorizationError() from error
     if request.output_root != str(ROOT / "runs/phase13-calibration-v2" / request.run_id):
         raise CalibrationV2AuthorizationError()
     try:
         validate_calibration_v2(config_path)
         execution = load_execution_registry(ROOT / EXPECTED_FILES["execution"], ROOT)
-    except ValueError as error:
+    except (OSError, ValueError) as error:
         raise CalibrationV2AuthorizationError() from error
     if any(
         getattr(execution.identities, field) != value
