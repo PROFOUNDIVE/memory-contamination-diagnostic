@@ -13,6 +13,7 @@ from memcontam.readiness.phase13_calibration_v2_runtime_models import (
     TrajectoryRequest,
 )
 from memcontam.readiness.phase13_prefix_reuse import derive_prefix_windows
+from memcontam.readiness.phase13_prefix_authority import load_prefix_authority
 
 
 ANALYSIS_REGISTRY_HASH = "82960a8f65d316c53bcf55da3e215f0c4b62781643c21155307b40aa9adf4eee"
@@ -51,6 +52,9 @@ def authenticate_conformance(
         or source.source_seal.analysis_registry_hash != ANALYSIS_REGISTRY_HASH
     ):
         raise SupportAuthorityError("CONFORMANCE_ANALYSIS_AUTHORITY_MISMATCH")
+    authority = load_prefix_authority(request)
+    if request.source_ordered_stream_sha256 != authority.ordered_stream_sha256:
+        raise SupportAuthorityError("CONFORMANCE_SOURCE_AUTHORITY_HASH_MISMATCH")
     raw_hash = hashlib.sha256(
         b"".join(
             (json.dumps(asdict(event), sort_keys=True, separators=(",", ":")) + "\n").encode()

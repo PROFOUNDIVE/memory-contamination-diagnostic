@@ -11,6 +11,10 @@ from memcontam.readiness.phase13_calibration_v2_runtime_models import (
     TrajectoryRequest,
 )
 from memcontam.readiness.phase13_prefix_reuse import CHECK_IDS, derive_prefix_windows
+from memcontam.readiness.phase13_support_authority import (
+    SupportAuthorityError,
+    authenticate_conformance,
+)
 from test_phase13_calibration_v2_runtime import _fixture
 
 
@@ -65,3 +69,14 @@ def test_unregistered_or_mutated_window_claims_are_ignored(window_index: int) ->
 
     assert isinstance(result, PrefixDerivationArtifact)
     assert "caller-window" not in {row.analysis_window_id for row in result.rows}
+
+
+def test_conformance_rejects_caller_stream_hash_drift_without_mocking_authority() -> None:
+    _, _, request = _fixture()
+    source = _completed(request)
+    drifted = replace(request, source_ordered_stream_sha256="0" * 64)
+    certificate = derive_prefix_windows(drifted, source)
+    assert isinstance(certificate, PrefixDerivationArtifact)
+
+    with pytest.raises(SupportAuthorityError, match="CONFORMANCE_SOURCE_AUTHORITY_HASH_MISMATCH"):
+        authenticate_conformance(certificate, drifted, source)
