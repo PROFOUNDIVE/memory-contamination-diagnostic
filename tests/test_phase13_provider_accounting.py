@@ -8,11 +8,12 @@ import pytest
 
 from memcontam.clients.base import LLMResponse
 from memcontam.readiness.phase13_provider_accounting import (
-    OwnedDispatchConfig,
     OwnedProviderAccounting,
     ProviderAccountingError,
     ProviderDispatchFailure,
+    build_owned_provider_client,
 )
+from memcontam.readiness.phase13_provider_models import ExecutionTemplateIdentity
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,6 +34,7 @@ def _attempt(
         "attempt_id": attempt_id,
         "semantic_call_id": semantic_call_id,
         "execution_owner_id": owner_id,
+        "execution_template_id": TEMPLATE,
         "attempt_number": number,
         "status": status,
         "input_tokens": 3,
@@ -73,18 +75,19 @@ class _TwoAttemptClient:
         )
 
 
-def _config(owner_id: str = OWNER) -> OwnedDispatchConfig:
-    return OwnedDispatchConfig(
-        execution_owner_id=owner_id,
-        execution_template_id=TEMPLATE,
-        provider_config={"temperature": 0},
+def _accounting(client: Any, template_id: str = TEMPLATE) -> OwnedProviderAccounting:
+    del template_id
+    return build_owned_provider_client(
+        client,
+        ROOT,
+        ExecutionTemplateIdentity(task="game24", baseline="bot_style", arm_key="Contam"),
     )
 
 
 def test_two_attempt_dispatch_reconciles_to_one_authenticated_execution_owner() -> None:
-    accounting = OwnedProviderAccounting.from_authority(_TwoAttemptClient(), ROOT)
+    accounting = _accounting(_TwoAttemptClient())
 
-    response = accounting.chat([{"role": "user", "content": "solve"}], "model", _config())
+    response = accounting.chat([{"role": "user", "content": "solve"}], "model", {"temperature": 0})
     report = accounting.reconcile()
 
     assert response.content == "final: 24"
@@ -116,10 +119,10 @@ class _FailedClient:
 
 
 def test_provider_failure_after_reservation_retains_raw_evidence_and_settles() -> None:
-    accounting = OwnedProviderAccounting.from_authority(_FailedClient(), ROOT)
+    accounting = _accounting(_FailedClient())
 
     with pytest.raises(ProviderAccountingError) as caught:
-        accounting.chat([{"role": "user", "content": "solve"}], "model", _config())
+        accounting.chat([{"role": "user", "content": "solve"}], "model", {})
 
     assert caught.value.code == "PROVIDER_DISPATCH_FAILED"
     report = accounting.reconcile()
@@ -130,14 +133,13 @@ def test_provider_failure_after_reservation_retains_raw_evidence_and_settles() -
 
 
 def test_offline_owner_is_rejected_before_provider_dispatch() -> None:
-    client = _TwoAttemptClient()
-    accounting = OwnedProviderAccounting.from_authority(client, ROOT)
+    accounting = _accounting(_TwoAttemptClient())
 
     with pytest.raises(ProviderAccountingError) as caught:
         accounting.chat(
             [{"role": "user", "content": "solve"}],
             "model",
-            _config(OFFLINE_OWNER),
+            {"execution_owner_id": OFFLINE_OWNER},
         )
 
     assert caught.value.code == "OFFLINE_OWNER_FORBIDDEN"
@@ -146,15 +148,15 @@ def test_offline_owner_is_rejected_before_provider_dispatch() -> None:
 def test_duplicate_generated_semantic_call_id_is_rejected_before_second_dispatch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    accounting = OwnedProviderAccounting.from_authority(_TwoAttemptClient(), ROOT)
+    accounting = _accounting(_TwoAttemptClient())
     monkeypatch.setattr(
         "memcontam.readiness.phase13_provider_accounting.uuid4",
         lambda: "frozen-call-id",
     )
-    accounting.chat([{"role": "user", "content": "first"}], "model", _config())
+    accounting.chat([{"role": "user", "content": "first"}], "model", {})
 
     with pytest.raises(ProviderAccountingError) as caught:
-        accounting.chat([{"role": "user", "content": "second"}], "model", _config())
+        accounting.chat([{"role": "user", "content": "second"}], "model", {})
 
     assert caught.value.code == "DUPLICATE_SEMANTIC_CALL_ID"
 
@@ -228,9 +230,93 @@ def test_adversarial_provider_accounting_is_rejected(
             mutate(payload, call_id)
             return LLMResponse("final: 24", payload, {"prompt_tokens": 3, "completion_tokens": 2})
 
-    accounting = OwnedProviderAccounting.from_authority(_MutatedClient(), ROOT)
+    accounting = _accounting(_MutatedClient())
 
     with pytest.raises(ProviderAccountingError) as caught:
-        accounting.chat([{"role": "user", "content": "solve"}], "model", _config())
+        accounting.chat([{"role": "user", "content": "solve"}], "model", {})
 
     assert caught.value.code == code
+
+
+def test_openai_shaped_retry_metadata_is_normalized_at_owned_boundary() -> None:
+    class _OpenAIShapedClient:
+        def chat(self, messages, model, config) -> LLMResponse:  # noqa: ANN001
+            del messages, model, config
+            return LLMResponse(
+                content="final: 24",
+                raw={
+                    "response_id": "resp-1",
+                    "attempts": 2,
+                    "cost_usd": 0.000022,
+                    "usage": {"input_tokens": 6, "output_tokens": 2},
+                    "storage_bytes": 26,
+                },
+                token_usage={"prompt_tokens": 6, "completion_tokens": 2},
+                latency_ms=14,
+            )
+
+    accounting = _accounting(_OpenAIShapedClient())
+
+    accounting.chat([{"role": "user", "content": "solve"}], "model", {})
+
+    assert accounting.reconcile().totals.model_dump() == {
+        "semantic_calls": 1,
+        "dispatches": 1,
+        "transport_attempts": 2,
+        "retries": 1,
+        "input_tokens": 6,
+        "output_tokens": 2,
+        "cost_microusd": 22,
+        "latency_ms": 14,
+        "storage_bytes": 26,
+    }
+
+
+def test_ordinary_provider_exception_settles_before_original_error_is_reraised() -> None:
+    error = RuntimeError("socket closed")
+
+    class _ExplodingClient:
+        def chat(self, messages, model, config) -> LLMResponse:  # noqa: ANN001
+            del messages, model, config
+            raise error
+
+    accounting = _accounting(_ExplodingClient())
+
+    with pytest.raises(RuntimeError) as caught:
+        accounting.chat([{"role": "user", "content": "solve"}], "model", {})
+
+    assert caught.value is error
+    report = accounting.reconcile()
+    assert report.calls[0].provider_error == "socket closed"
+    assert report.totals.semantic_calls == report.totals.dispatches == 1
+    assert report.totals.transport_attempts == 1
+
+
+def test_bound_template_rejects_wrong_registered_template_substitution() -> None:
+    accounting = _accounting(_TwoAttemptClient())
+
+    with pytest.raises(ProviderAccountingError) as caught:
+        accounting.chat(
+            [{"role": "user", "content": "solve"}],
+            "model",
+            {"execution_template_id": "game24-fh_bounded-clean"},
+        )
+
+    assert caught.value.code == "EXECUTION_TEMPLATE_MISMATCH"
+
+
+def test_malformed_post_call_metadata_settles_before_accounting_error() -> None:
+    class _MalformedClient:
+        def chat(self, messages, model, config) -> LLMResponse:  # noqa: ANN001
+            del messages, model, config
+            return LLMResponse("final: 24", {"attempts": 0}, {})
+
+    accounting = _accounting(_MalformedClient())
+
+    with pytest.raises(ProviderAccountingError) as caught:
+        accounting.chat([{"role": "user", "content": "solve"}], "model", {})
+
+    assert caught.value.code == "PROVIDER_ACCOUNTING_REQUIRED"
+    report = accounting.reconcile()
+    assert report.totals.semantic_calls == report.totals.dispatches == 1
+    assert report.calls[0].provider_error == "PROVIDER_ACCOUNTING_REQUIRED"

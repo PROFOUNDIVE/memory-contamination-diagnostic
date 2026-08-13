@@ -16,16 +16,17 @@ class StrictAccountingModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
 
-class OwnedDispatchConfig(StrictAccountingModel):
-    execution_owner_id: str
-    execution_template_id: str
-    provider_config: Mapping[str, JsonScalar]
+class ExecutionTemplateIdentity(StrictAccountingModel):
+    task: Literal["game24", "math_equation_balancer", "word_sorting"]
+    baseline: Literal["fh_bounded", "rag_frozen", "bot_style", "reflexion_style", "nomem"]
+    arm_key: Literal["Clean", "Correct", "Irrelevant", "Contam", "star_NoMem"]
 
 
 class TransportAttempt(StrictAccountingModel):
     attempt_id: str = Field(min_length=1)
     semantic_call_id: str = Field(min_length=1)
     execution_owner_id: str = Field(min_length=1)
+    execution_template_id: str = Field(min_length=1)
     attempt_number: int = Field(gt=0)
     status: Literal["completed", "failed", "partial"]
     input_tokens: int = Field(ge=0)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
+import time
 from uuid import uuid4
 
 from pydantic import ValidationError
@@ -13,14 +14,19 @@ from memcontam.readiness.phase13_authority import JsonValue
 from memcontam.readiness.phase13_provider_models import (
     AccountingReport,
     AccountingTotals,
+    ExecutionTemplateIdentity,
     JsonScalar,
     OfflineAccounting,
-    OwnedDispatchConfig,
     ProviderAccountingError,
     ProviderDispatchFailure,
     ProviderTotals,
     SettledCall,
     TransportAttempt,
+)
+from memcontam.readiness.phase13_provider_normalization import (
+    normalize_exception,
+    normalize_openai_response,
+    sum_attempts,
 )
 
 
@@ -29,6 +35,7 @@ class OwnedProviderAccounting:
         self,
         client: LLMClient,
         root: Path,
+        intended_template: ExecutionTemplateIdentity,
     ) -> None:
         execution = load_execution_registry(
             root / "data/phase13/authority/execution_registry_v1.json", root
@@ -38,7 +45,15 @@ class OwnedProviderAccounting:
         )
         self._client = client
         self._execution_owner_id = execution.execution_owner_id
-        self._template_ids = frozenset(row.template_id for row in execution.execution_templates)
+        matches = tuple(
+            row.template_id
+            for row in execution.execution_templates
+            if (row.task, row.baseline, row.arm_key)
+            == (intended_template.task, intended_template.baseline, intended_template.arm_key)
+        )
+        if len(matches) != 1:
+            raise ProviderAccountingError("UNKNOWN_EXECUTION_TEMPLATE")
+        self._intended_template_id = matches[0]
         self._offline_rows = tuple(
             OfflineAccounting(
                 operation=row.operation,
@@ -52,39 +67,42 @@ class OwnedProviderAccounting:
         self._calls: list[SettledCall] = []
         self._dispatches = 0
 
-    @classmethod
-    def from_authority(cls, client: LLMClient, root: Path) -> OwnedProviderAccounting:
-        return cls(client, root)
-
     def chat(
         self,
         messages: list[dict[str, str]],
         model: str,
-        dispatch: OwnedDispatchConfig,
+        config: dict,
     ) -> LLMResponse:
-        self._validate_dispatch(dispatch)
+        self._validate_dispatch(config)
         semantic_call_id = str(uuid4())
         if semantic_call_id in self._planned_ids:
             raise ProviderAccountingError("DUPLICATE_SEMANTIC_CALL_ID")
         self._planned_ids.add(semantic_call_id)
         self._dispatches += 1
-        provider_config = dict(dispatch.provider_config)
-        provider_config["execution_owner_id"] = dispatch.execution_owner_id
+        provider_config = dict(config)
+        provider_config["execution_owner_id"] = self._execution_owner_id
         provider_config["semantic_call_id"] = semantic_call_id
-        provider_config["execution_template_id"] = dispatch.execution_template_id
+        provider_config["execution_template_id"] = self._intended_template_id
+        started = time.perf_counter()
         try:
             response = self._client.chat(messages, model, provider_config)
         except ProviderDispatchFailure as failure:
             call = self._settle(
                 semantic_call_id,
-                dispatch,
                 failure.provider_attempts,
                 failure.provider_totals,
                 failure.provider_error,
             )
             self._calls.append(call)
             raise ProviderAccountingError("PROVIDER_DISPATCH_FAILED") from failure
-        call = self._settle_from_response(semantic_call_id, dispatch, response)
+        except Exception as error:  # noqa: BLE001  # noqa: BROAD_EXCEPT_OK
+            self._calls.append(self._settle_exception(semantic_call_id, error, started))
+            raise
+        try:
+            call = self._settle_from_response(semantic_call_id, response)
+        except ProviderAccountingError as error:
+            self._calls.append(self._settle_exception(semantic_call_id, error, started))
+            raise
         self._calls.append(call)
         return response
 
@@ -97,25 +115,27 @@ class OwnedProviderAccounting:
         totals = self._aggregate(self._calls)
         return AccountingReport(calls=tuple(self._calls), offline=self._offline_rows, totals=totals)
 
-    def _validate_dispatch(self, dispatch: OwnedDispatchConfig) -> None:
-        if dispatch.execution_owner_id in {row.owner_id for row in self._offline_rows}:
+    def _validate_dispatch(self, config: dict) -> None:
+        claimed_owner = config.get("execution_owner_id")
+        claimed_template = config.get("execution_template_id")
+        if claimed_owner in {row.owner_id for row in self._offline_rows}:
             raise ProviderAccountingError("OFFLINE_OWNER_FORBIDDEN")
-        if dispatch.execution_owner_id != self._execution_owner_id:
+        if claimed_owner is not None and claimed_owner != self._execution_owner_id:
             raise ProviderAccountingError("UNKNOWN_EXECUTION_OWNER")
-        if dispatch.execution_template_id not in self._template_ids:
-            raise ProviderAccountingError("UNKNOWN_EXECUTION_TEMPLATE")
+        if claimed_template is not None and claimed_template != self._intended_template_id:
+            raise ProviderAccountingError("EXECUTION_TEMPLATE_MISMATCH")
 
     def _settle_from_response(
         self,
         call_id: str,
-        dispatch: OwnedDispatchConfig,
         response: LLMResponse,
     ) -> SettledCall:
         attempts = response.raw.get("provider_attempts")
         totals = response.raw.get("provider_totals")
-        if not isinstance(attempts, (list, tuple)) or not isinstance(totals, Mapping):
-            raise ProviderAccountingError("PROVIDER_ACCOUNTING_REQUIRED")
-        call = self._settle(call_id, dispatch, attempts, totals, None)
+        if isinstance(attempts, (list, tuple)) and isinstance(totals, Mapping):
+            call = self._settle(call_id, attempts, totals, None)
+        else:
+            call = self._settle_openai_response(call_id, response)
         if (
             response.token_usage.get("prompt_tokens") != call.totals.input_tokens
             or response.token_usage.get("completion_tokens") != call.totals.output_tokens
@@ -127,7 +147,6 @@ class OwnedProviderAccounting:
     def _settle(
         self,
         call_id: str,
-        dispatch: OwnedDispatchConfig,
         raw_attempts: tuple[Mapping[str, JsonValue], ...] | list[Mapping[str, JsonValue]],
         raw_totals: Mapping[str, int] | Mapping[str, JsonScalar],
         provider_error: str | None,
@@ -141,6 +160,8 @@ class OwnedProviderAccounting:
             raise ProviderAccountingError("PROVIDER_ACCOUNTING_REQUIRED")
         if any(row.semantic_call_id != call_id for row in attempts):
             raise ProviderAccountingError("SEMANTIC_CALL_ID_MISMATCH")
+        if any(row.execution_template_id != self._intended_template_id for row in attempts):
+            raise ProviderAccountingError("EXECUTION_TEMPLATE_MISMATCH")
         owners = {row.execution_owner_id for row in attempts}
         if owners & {row.owner_id for row in self._offline_rows}:
             raise ProviderAccountingError("OFFLINE_OWNER_FORBIDDEN")
@@ -150,28 +171,16 @@ class OwnedProviderAccounting:
             raise ProviderAccountingError("DUPLICATE_ATTEMPT_ID")
         if tuple(row.attempt_number for row in attempts) != tuple(range(1, len(attempts) + 1)):
             raise ProviderAccountingError("TRANSPORT_RETRY_SEQUENCE_INVALID")
-        expected = self._sum_attempts(attempts)
+        expected = sum_attempts(attempts)
         if totals != expected:
             raise ProviderAccountingError("OWNER_TOTAL_MISMATCH")
         return SettledCall(
             semantic_call_id=call_id,
-            execution_owner_id=dispatch.execution_owner_id,
-            execution_template_id=dispatch.execution_template_id,
+            execution_owner_id=self._execution_owner_id,
+            execution_template_id=self._intended_template_id,
             provider_error=provider_error,
             attempts=attempts,
             totals=totals,
-        )
-
-    @staticmethod
-    def _sum_attempts(attempts: tuple[TransportAttempt, ...]) -> ProviderTotals:
-        return ProviderTotals(
-            transport_attempts=len(attempts),
-            retries=max(0, len(attempts) - 1),
-            input_tokens=sum(row.input_tokens for row in attempts),
-            output_tokens=sum(row.output_tokens for row in attempts),
-            cost_microusd=sum(row.cost_microusd for row in attempts),
-            latency_ms=sum(row.latency_ms for row in attempts),
-            storage_bytes=sum(row.storage_bytes for row in attempts),
         )
 
     def _aggregate(self, calls: list[SettledCall]) -> AccountingTotals:
@@ -182,3 +191,32 @@ class OwnedProviderAccounting:
             dispatches=self._dispatches,
             **sums,
         )
+
+    def _settle_openai_response(self, call_id: str, response: LLMResponse) -> SettledCall:
+        rows, totals = normalize_openai_response(
+            call_id,
+            self._execution_owner_id,
+            self._intended_template_id,
+            response,
+        )
+        return self._settle(call_id, [row.model_dump() for row in rows], totals.model_dump(), None)
+
+    def _settle_exception(
+        self, call_id: str, error: Exception, started: float
+    ) -> SettledCall:
+        rows, totals = normalize_exception(
+            call_id,
+            self._execution_owner_id,
+            self._intended_template_id,
+            error,
+            started,
+        )
+        return self._settle(call_id, [row.model_dump() for row in rows], totals.model_dump(), str(error))
+
+
+def build_owned_provider_client(
+    client: LLMClient,
+    root: Path,
+    intended_template: ExecutionTemplateIdentity,
+) -> OwnedProviderAccounting:
+    return OwnedProviderAccounting(client, root, intended_template)
