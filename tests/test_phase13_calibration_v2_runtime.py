@@ -217,7 +217,7 @@ def _fixture(
         state["step"] = prior - 1 if rewind and prior == 4 else prior + 1
         writes = ("forbidden",) if rag_write and context.identities.condition_id == "rag_frozen" else ()
         return RuntimeTrialResult(
-            outcome=BaselineExecutionOutcome("succeeded"),
+            outcome=BaselineExecutionOutcome("succeeded", verifier_result=True),
             state={"step": state["step"]} if replace_state else state,
             write_envelopes=writes,
         )
@@ -269,6 +269,7 @@ def test_executes_one_causal_h10_source_with_owned_calls_and_nomem_singleton() -
     assert result.status == "completed"
     assert len(result.events) == 4 * 4 * 10
     assert {event.event_time for event in result.events} == set(range(10))
+    assert all(event.verified_score == 1 for event in result.events)
     assert all(
         left.state_after_sha256 == right.state_before_sha256
         for left, right in zip(result.events, result.events[1:])

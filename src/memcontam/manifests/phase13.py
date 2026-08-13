@@ -58,6 +58,7 @@ class SourceEvent(StrictModel):
     intervention_id: str | None
     execution_owner_id: Identifier
     status: Literal["succeeded", "failed"]
+    verified_score: Literal[0, 1]
     state_before_sha256: Sha256
     state_after_sha256: Sha256
 

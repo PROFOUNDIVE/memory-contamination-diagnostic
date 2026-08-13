@@ -85,6 +85,7 @@ class TrajectoryEvent:
     intervention_id: str | None
     execution_owner_id: str
     status: Literal["succeeded", "failed"]
+    verified_score: Literal[0, 1]
     state_before_sha256: str
     state_after_sha256: str
 

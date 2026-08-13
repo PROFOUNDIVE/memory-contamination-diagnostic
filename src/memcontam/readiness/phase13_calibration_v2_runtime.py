@@ -21,6 +21,7 @@ from memcontam.readiness.phase13_calibration_v2_runtime_validation import (
     RuntimeValidationError,
     validate_trajectory_request,
 )
+from memcontam.readiness.phase13_runtime_event import build_trajectory_event
 
 from .phase13_calibration_v2_runtime_models import (
     AuthorizedTrajectoryExecution,
@@ -203,7 +204,13 @@ def _observed_registry(
             ):
                 raise _Violation("REFLEXION_WRITE_MISMATCH")
             if baseline != "nomem":
-                events.append(_event(request, context, baseline, arm, before, after, result.outcome.status))
+                verified: Literal[0, 1] = 1 if result.outcome.verifier_result is True else 0
+                events.append(
+                    build_trajectory_event(
+                        request, context, baseline, arm, (before, after),
+                        (result.outcome.status, verified),
+                    )
+                )
             return result
 
         registry[baseline] = replace(entry, execute_trial=execute)
@@ -234,33 +241,6 @@ def _prior_before(events: list[TrajectoryEvent], baseline: str, arm: Arm) -> set
         for event in events
         if (event.baseline, event.arm) == (baseline, arm)
     }
-
-
-def _event(
-    request: TrajectoryRequest,
-    context: Game24RuntimeContext,
-    baseline: str,
-    arm: Arm,
-    before: str,
-    after: str,
-    status: Literal["succeeded", "failed"],
-) -> TrajectoryEvent:
-    branch = request.branches_by_baseline[baseline].arms[arm]
-    absolute = int(context.identities.order_key)
-    return TrajectoryEvent(
-        absolute - 2, absolute, baseline, arm, branch.prefix_identity,
-        branch.checkpoint.identity.checkpoint_id, context.task.sample_id, request.task,
-        context.model,
-        request.verified.execution.identities.decoding_contract_id,
-        request.verified.execution.identities.prompt_contract_id,
-        request.verified.execution.identities.tool_contract_id,
-        request.verified.execution.identities.parser_contract_id,
-        request.verified.execution.identities.verifier_contract_id,
-        request.verified.execution.identities.native_capacity_registry_id,
-        request.session_id, "provider-managed-no-client-seed-v1", 0,
-        branch.injected_root_id, request.verified.execution.execution_owner_id,
-        status, before, after,
-    )
 
 
 __all__ = (
