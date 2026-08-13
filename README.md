@@ -52,12 +52,21 @@ The planned research window is an eight-week Fast Track ending no later than Aug
 
 ## Current Status
 
-Baseline-Fidelity-V2 authority and evidence are the sole current status authority, recorded in
-the retained `baseline-fidelity-v2.md` and `baseline-fidelity-v2-evidence.md` documents. The
-operator runbook is a frozen Phase-12 contract snapshot and not a current BFV2 status source.
-Phase-12 contract authority remains the retained `phase12-implementation-contract.md` plus
-`logging-v3-phase12.md`; the BGE-M3 cache note remains a supporting authority. This entrypoint
-does not repeat their method tables or schemas.
+Phase-13 authority sync and calibration-v2 deterministic readiness is complete at terminal
+`DETERMINISTIC_AUTHORITY_SYNC_COMPLETE`. Live calibration remains externally blocked at
+`CALIBRATION_V2_EXTERNAL_BLOCK`: provider calls are `0`, no calibration archive or claim exists,
+and `MAIN_A_EXECUTION_FORBIDDEN` is unconditional. Authenticated structural checkpoint authority
+is absent for 34 of 36 required streams, and the runtime emits 160 baseline/arm events per source
+while the archive contract requires one completed 10-event source.
+
+This is build/readiness evidence, not calibration or scientific evidence. It establishes no
+provider, Pilot-A, Pilot-B, Main, benchmark, causal, production, or manuscript result. Synthetic
+and test artifacts are not calibration evidence. Baseline-Fidelity-V2 remains the current scientific-method authority.
+The Phase-12 contracts and operator runbook retain their existing scopes; the runbook remains a
+frozen Phase-12 contract snapshot and not a current BFV2 status source. User-issued capacities and
+credential/cache availability were verified privately, but cannot overcome the authority and
+archive-contract failures. An actual run requires separately authorized authority and
+archive-contract revision, not ad hoc live dispatch.
 
 ## Filter-v5 Build Status
 
@@ -82,6 +91,7 @@ regenerate or extend the sealed evidence.
 - [Phase-12 Filter-v5 build status](docs/phase12-filter-v5-build-status.md)
 - [Phase-12 implementation contract](docs/phase12-implementation-contract.md)
 - [Phase-12 operator runbook](docs/phase12-operator-runbook.md)
+- [Phase-13 authority sync and calibration-v2 readiness](docs/phase13-authority-sync-calibration-v2.md)
 
 ## Verification
 

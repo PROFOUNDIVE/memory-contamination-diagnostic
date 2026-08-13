@@ -1,0 +1,189 @@
+{
+  "archive_status": "absent",
+  "build_terminal": "DETERMINISTIC_AUTHORITY_SYNC_COMPLETE",
+  "calibration_ran": false,
+  "calibration_terminal": "CALIBRATION_V2_EXTERNAL_BLOCK",
+  "claim_status": "absent",
+  "command_results": [
+    {
+      "command": "PYTHONPATH=src python -m memcontam.cli phase13 validate-calibration-v2 --config configs/phase13/pre_main_calibration_v2.yaml",
+      "exit_code": 0,
+      "stdout_sha256": "4c4f749d2262b8ae85e1092e8785b0e628eda54650b3ccaf8fd7c7627c8c8083",
+      "terminal_lines": [
+        "DETERMINISTIC_AUTHORITY_SYNC_COMPLETE"
+      ]
+    },
+    {
+      "command": "PYTHONPATH=src python -m memcontam.cli phase13 prepare-calibration-v2 --config configs/phase13/pre_main_calibration_v2.yaml",
+      "exit_code": 0,
+      "stdout_sha256": "d80b03702c5b58c9ac9f2ee64515a9174982adda1293b9c52d74d909eb70768c",
+      "terminal_lines": [
+        "DETERMINISTIC_AUTHORITY_SYNC_COMPLETE",
+        "AWAITING_CALIBRATION_V2_AUTHORIZATION"
+      ]
+    },
+    {
+      "command": "PYTHONPATH=src python -m memcontam.cli phase13 run-calibration-v2 --config configs/phase13/pre_main_calibration_v2.yaml",
+      "exit_code": 1,
+      "stdout_sha256": "6abad468250f5a0f557ef5b8f6d1c127ac46376cb8aaf79bc8a49ab1d49a52f5",
+      "terminal_lines": [
+        "CALIBRATION_V2_EXTERNAL_BLOCK",
+        "MAIN_A_EXECUTION_FORBIDDEN"
+      ]
+    },
+    {
+      "command": "PYTHONPATH=src python -m memcontam.cli phase13 main-a",
+      "exit_code": 1,
+      "stdout_sha256": "5f5daf9efab168ca3303ad586e7793fe4c310066c599daea945239c1d950f45a",
+      "terminal_lines": [
+        "MAIN_A_EXECUTION_FORBIDDEN"
+      ]
+    }
+  ],
+  "external_blockers": [
+    "authenticated_structural_checkpoint_authority_incomplete",
+    "runtime_archive_cardinality_contract_incompatible"
+  ],
+  "main_a_artifact_paths": [],
+  "main_terminal": "MAIN_A_EXECUTION_FORBIDDEN",
+  "protected_dirty_roots": [
+    {
+      "after": {
+        "combined_sha256": "ef92f9e5dbf82d8876752e192222fef3c2e19382f667b6f8837c3df8e71bf7fc",
+        "content_sha256": "78e77383193236a75b1316939deaf55b270880e6dceb2a36ebdb290143b96e93",
+        "entry_count": 39,
+        "metadata_sha256": "eade3c94167f0f7bf3bf5c7e8ecdadbdb3e4a44decf3838fa3c8ec436ae7db87",
+        "staged": false,
+        "untracked": true
+      },
+      "before": {
+        "combined_sha256": "ef92f9e5dbf82d8876752e192222fef3c2e19382f667b6f8837c3df8e71bf7fc",
+        "content_sha256": "78e77383193236a75b1316939deaf55b270880e6dceb2a36ebdb290143b96e93",
+        "entry_count": 39,
+        "metadata_sha256": "eade3c94167f0f7bf3bf5c7e8ecdadbdb3e4a44decf3838fa3c8ec436ae7db87",
+        "staged": false,
+        "untracked": true
+      },
+      "path": "$tmp_dir/"
+    },
+    {
+      "after": {
+        "combined_sha256": "018a2ba6ad56efa270d41910121122ed5473ce8bfb343544920271f0b822c47d",
+        "content_sha256": "d2f23abf1a7874ff74e60fc0836cc0479ee324f77ee7b451e9d70233d1943fd1",
+        "entry_count": 18,
+        "metadata_sha256": "d314071f8f3f154a8c6ba30aef0149026b46b7ff8f543ee6f46ef3c1b1807810",
+        "staged": false,
+        "untracked": true
+      },
+      "before": {
+        "combined_sha256": "018a2ba6ad56efa270d41910121122ed5473ce8bfb343544920271f0b822c47d",
+        "content_sha256": "d2f23abf1a7874ff74e60fc0836cc0479ee324f77ee7b451e9d70233d1943fd1",
+        "entry_count": 18,
+        "metadata_sha256": "d314071f8f3f154a8c6ba30aef0149026b46b7ff8f543ee6f46ef3c1b1807810",
+        "staged": false,
+        "untracked": true
+      },
+      "path": "data/embedding_cache/bfv2-source-contract-replay-test/"
+    },
+    {
+      "after": {
+        "combined_sha256": "d234e5d07d7be1f492521f4e980464a889b3d6752a558749ecef4e1a1a542fd0",
+        "content_sha256": "b7fe7f8c2f66fb4d0b96a7816631999cbfd8fc4298edb001639c1b52d96c8d6d",
+        "entry_count": 5,
+        "metadata_sha256": "68865777c4d250f0b75aad4638f957d94306b91f77359e2f6eb18760fc129fde",
+        "staged": false,
+        "untracked": true
+      },
+      "before": {
+        "combined_sha256": "d234e5d07d7be1f492521f4e980464a889b3d6752a558749ecef4e1a1a542fd0",
+        "content_sha256": "b7fe7f8c2f66fb4d0b96a7816631999cbfd8fc4298edb001639c1b52d96c8d6d",
+        "entry_count": 5,
+        "metadata_sha256": "68865777c4d250f0b75aad4638f957d94306b91f77359e2f6eb18760fc129fde",
+        "staged": false,
+        "untracked": true
+      },
+      "path": "data/embedding_cache/bfv2-structural-replay-test/"
+    },
+    {
+      "after": {
+        "combined_sha256": "29a99036e04e7764917159e6beec6a74d5a90c0b9f3e6c58c456b4066be376a7",
+        "content_sha256": "ff95cb58a6c4ca1f7e69c0025786089050bb220d151e035191d95a7c2e542ab6",
+        "entry_count": 1,
+        "metadata_sha256": "99ead82923b156aae07d267e980bab1b55c28222a3f883f5800a1e6d2f3d0b00",
+        "staged": false,
+        "untracked": true
+      },
+      "before": {
+        "combined_sha256": "29a99036e04e7764917159e6beec6a74d5a90c0b9f3e6c58c456b4066be376a7",
+        "content_sha256": "ff95cb58a6c4ca1f7e69c0025786089050bb220d151e035191d95a7c2e542ab6",
+        "entry_count": 1,
+        "metadata_sha256": "99ead82923b156aae07d267e980bab1b55c28222a3f883f5800a1e6d2f3d0b00",
+        "staged": false,
+        "untracked": true
+      },
+      "path": "oh-my-opencode.json"
+    }
+  ],
+  "provider_calls": 0,
+  "schema_version": "phase13_authority_sync_calibration_v2_evidence_v1",
+  "scientific_evidence": false,
+  "tracked_artifacts": [
+    {
+      "path": "data/phase13/authority/phase13_authority_freeze_v1.json",
+      "sha256": "c56de79385e9eee0e00fdc02aae9deea5bc84789af31c0f2e8d9b84d8a6ff449"
+    },
+    {
+      "path": "configs/phase13/pre_main_calibration_v2.yaml",
+      "sha256": "5264bc442963b4a11f35784e9ddcab2b0a1fb35d1902096fee360c71570e6f5c"
+    },
+    {
+      "path": "data/phase13/calibration_v2/seed_partition_registry_v1.json",
+      "sha256": "a31b731244f5c56b4aafa5ed83bbe720c8623563cfbd800e7a478a0025aff4ba"
+    },
+    {
+      "path": "data/phase13/authority/execution_registry_v1.json",
+      "sha256": "7c92189f645b74381f3fedf2d3ffbc8c4768a7019eaeb621edb8c22fb4a34970"
+    },
+    {
+      "path": "data/phase13/authority/analysis_registry_v1.json",
+      "sha256": "b58e6aec8acc040fb934e9b25842eb68c702d098a08b41ba0eab9502a198a0f3"
+    },
+    {
+      "path": "data/phase13/authority/structural_checkpoint_registry_v1.json",
+      "sha256": "c2173d1fb5557611050a7e281fcf0613671bda06ffad6e7cc370de568f37ecff"
+    },
+    {
+      "path": "data/phase13/authority/historical_compatibility_v1.json",
+      "sha256": "446e5634d7be2bd049ffd3af733262e72a076d22ec24a0e9c11d7259b60264d4"
+    },
+    {
+      "path": "src/memcontam/readiness/phase13_evidence.py",
+      "sha256": "ebaa9ed7f57a9dee3b5d2be34a23e84e55c681fba7905137cef396e66daca5bb"
+    },
+    {
+      "path": "src/memcontam/readiness/phase13_prefix_reuse.py",
+      "sha256": "3c248f2b309c5e7b5780bcbea118967345a34231b5612e1f0468cb4689cf4d71"
+    },
+    {
+      "path": "src/memcontam/manifests/phase13_archive_sources.py",
+      "sha256": "6d1146cad004ee695efb83f54abcb17e2a061d50b41aa8f5b9ac52db4867855f"
+    },
+    {
+      "path": "tests/test_phase13_evidence_report.py",
+      "sha256": "c998d92a6973f2b8349f7926ab2c8f1beaf50d236f4f1bf24fd65af6af418616"
+    },
+    {
+      "path": "tests/test_docs_scope.py",
+      "sha256": "69c64da35032d1ec9dd546acd4efc5a846043fdf7345d4dcfd5c9df0c12e5f56"
+    },
+    {
+      "path": "docs/phase13-authority-sync-calibration-v2.md",
+      "sha256": "c0dd1278f80c7859414f9f36e3b9f544ef1ce50961a0b07bd71025527cbebd51"
+    },
+    {
+      "path": "README.md",
+      "sha256": "465cbf34dd467e16365153bb2065c0249db3eb8ce9d04c2fe33e9d50af9d5ef2"
+    }
+  ],
+  "report_sha256": "0374545b3bb233cb9e4014710012cd87ccc184d81e116dad8beea0902b48167d"
+}

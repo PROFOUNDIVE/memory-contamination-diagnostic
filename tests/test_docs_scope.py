@@ -25,7 +25,7 @@ EXPECTED_DOCS = frozenset(
         "baseline-fidelity-v2-evidence.md", "baseline-fidelity-v2.md",
         "bge-m3-cache-setup.md", "logging-v3-phase12.md",
         "phase12-filter-v5-bct-methods-lock.md", "phase12-filter-v5-build-status.md", "phase12-implementation-contract.md",
-        "phase12-operator-runbook.md",
+        "phase12-operator-runbook.md", "phase13-authority-sync-calibration-v2.md",
     }
 )
 AUTHORITY_SHA256 = {
@@ -146,7 +146,7 @@ def test_readme_is_current_authority_index() -> None:
         f"docs/{name}" for name in EXPECTED_DOCS - {"phase12-filter-v5-bct-methods-lock.md"}
     }
     assert "## Documentation Authorities" in text
-    assert "Baseline-Fidelity-V2 authority and evidence are the sole current status authority" in text
+    assert "Baseline-Fidelity-V2 remains the current scientific-method authority" in text
     assert "frozen Phase-12 contract snapshot" in text
     assert "not a current BFV2 status source" in text
 
