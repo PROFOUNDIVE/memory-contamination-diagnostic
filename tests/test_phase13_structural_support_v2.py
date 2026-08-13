@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import hashlib
+import json
+from pathlib import Path
+import shutil
 from typing import Final
 
 import pytest
@@ -13,19 +17,23 @@ from memcontam.readiness.phase13_structural_support import (
     parse_prospective_selector_input,
     select_prospective_checkpoint,
 )
+from memcontam.readiness.phase13_structural_authority import (
+    StructuralAuthorityError,
+    registered_checkpoints,
+)
 
 
 BASELINES: Final = ("fh_bounded", "rag_frozen", "bot_style", "reflexion_style")
 SHA_A: Final = "a" * 64
 SHA_B: Final = "b" * 64
+ROOT: Final = Path(__file__).resolve().parents[1]
 
 
 def _selector_payload(
-    checkpoints: dict[str, Phase12Checkpoint] | None = None,
+    stream_id: str = "game24-seed-10000",
 ) -> dict[str, object]:
-    registered = checkpoints or _checkpoints()
     return {
-        "stream_id": "game24-seed-10000",
+        "stream_id": stream_id,
         "ordered_trials": [
             {"trial_index": index, "sample_id": f"sample-{index:02d}"}
             for index in range(1, 12)
@@ -36,8 +44,6 @@ def _selector_payload(
             {
                 "baseline": baseline,
                 "checkpoint_trial_index": 1,
-                "registered_checkpoint_id": registered[baseline].identity.checkpoint_id,
-                "registered_checkpoint_sha256": registered[baseline].canonical_sha256,
                 "checkpoint_serializable": True,
                 "suffix_executable": True,
                 "route_capacity_available": True,
@@ -73,9 +79,9 @@ def _states() -> dict[str, NativeState]:
             "bot_style",
             (),
             {
-                "templates": ["template-a", "template-b"],
+                "templates": [],
                 "checkpoint_index": 1,
-                "clean_competitor_ids": ["template-a", "template-b"],
+                "clean_competitor_ids": [],
                 "active_capacity": 8,
             },
         ),
@@ -100,9 +106,9 @@ def _checkpoint_facts(states: dict[str, NativeState] | None = None) -> tuple[Che
     )
 
 
-def _selection(checkpoints: dict[str, Phase12Checkpoint] | None = None):
+def _selection(stream_id: str = "game24-seed-10000"):
     return select_prospective_checkpoint(
-        parse_prospective_selector_input(_selector_payload(checkpoints))
+        parse_prospective_selector_input(_selector_payload(stream_id))
     )
 
 
@@ -226,19 +232,7 @@ def test_selector_requires_every_baseline_resource_fact(field: str, code: str) -
 
 def test_empty_reflexion_is_ready_with_zero_richness_and_support_is_intersected() -> None:
     states = _states()
-    states["bot_style"] = NativeState(
-        "bot_style",
-        (),
-        {
-            "checkpoint_index": 1,
-            "templates": [],
-            "clean_competitor_ids": [],
-            "active_capacity": 8,
-        },
-    )
-
-    checkpoints = _checkpoints(states)
-    report = evaluate_structural_support(_selection(checkpoints), _checkpoint_facts(states))
+    report = evaluate_structural_support(_selection(), _checkpoint_facts(states))
 
     readiness = {row.baseline: row for row in report.readiness}
     assert readiness["reflexion_style"].ready is True
@@ -266,8 +260,7 @@ def test_support_intersections_are_derived_from_local_readiness() -> None:
     )
     facts[1] = replace(facts[1], expected_sha256=facts[1].checkpoint.canonical_sha256)
 
-    registered = {row.baseline: row.checkpoint for row in facts}
-    report = evaluate_structural_support(_selection(registered), tuple(facts))
+    report = evaluate_structural_support(_selection("game24-seed-10001"), tuple(facts))
 
     local = {row.baseline: row.supported for row in report.baseline_local}
     pairs = {row.pair_id: row.supported for row in report.exact_pairs}
@@ -348,10 +341,7 @@ def test_forged_canonical_hash_is_rejected_before_readiness() -> None:
 
 
 def test_self_consistent_unregistered_trial_one_checkpoint_is_rejected() -> None:
-    registered = _checkpoints()
-    selection = select_prospective_checkpoint(
-        parse_prospective_selector_input(_selector_payload(registered))
-    )
+    selection = _selection()
     facts = list(_checkpoint_facts())
     source = facts[0].checkpoint.state
     unregistered = serialize_checkpoint(
@@ -366,6 +356,75 @@ def test_self_consistent_unregistered_trial_one_checkpoint_is_rejected() -> None
 
     with pytest.raises(StructuralSupportError, match="UNREGISTERED_CHECKPOINT"):
         evaluate_structural_support(selection, tuple(facts))
+
+
+def test_coordinated_checkpoint_and_resource_substitution_is_rejected() -> None:
+    states = _states()
+    states["fh_bounded"] = NativeState(
+        "fh_bounded",
+        (),
+        {**states["fh_bounded"].native_state, "records": []},
+    )
+    states["rag_frozen"] = NativeState(
+        "rag_frozen",
+        (),
+        {**states["rag_frozen"].native_state, "corpus_id": "substituted-corpus"},
+    )
+    states["bot_style"] = NativeState(
+        "bot_style",
+        (),
+        {**states["bot_style"].native_state, "templates": ["substituted-template"]},
+    )
+    states["reflexion_style"] = NativeState(
+        "reflexion_style",
+        (),
+        {**states["reflexion_style"].native_state, "reflections": ["substituted-reflection"]},
+    )
+    with pytest.raises(StructuralSupportError, match="UNREGISTERED_CHECKPOINT"):
+        evaluate_structural_support(_selection(), _checkpoint_facts(states))
+
+
+def test_direct_selection_decision_substitution_is_rejected() -> None:
+    facts = list(_checkpoint_facts())
+    source = facts[0].checkpoint.state
+    substituted = serialize_checkpoint(
+        NativeState(source.baseline, source.entries, {**source.native_state, "records": []})
+    )
+    facts[0] = CheckpointFact("fh_bounded", 1, substituted, substituted.canonical_sha256)
+    selection = _selection()
+    decisions = list(selection.decisions)
+    decisions[0] = replace(
+        decisions[0],
+        registered_checkpoint_id=substituted.identity.checkpoint_id,
+        registered_checkpoint_sha256=substituted.canonical_sha256,
+    )
+
+    with pytest.raises(StructuralSupportError, match="UNREGISTERED_CHECKPOINT"):
+        evaluate_structural_support(replace(selection, decisions=tuple(decisions)), tuple(facts))
+
+
+def test_resigned_checkpoint_registry_substitution_is_rejected(tmp_path: Path) -> None:
+    registry_path = tmp_path / "data/phase13/authority/structural_checkpoint_registry_v1.json"
+    partition_path = tmp_path / "data/phase13/calibration_v2/seed_partition_registry_v1.json"
+    registry_path.parent.mkdir(parents=True)
+    partition_path.parent.mkdir(parents=True)
+    shutil.copyfile(ROOT / "data/phase13/calibration_v2/seed_partition_registry_v1.json", partition_path)
+    payload = json.loads(
+        (ROOT / "data/phase13/authority/structural_checkpoint_registry_v1.json").read_bytes()
+    )
+    payload["streams"][0]["checkpoints"]["fh_bounded"] = {
+        "checkpoint_id": "checkpoint-substituted",
+        "sha256": SHA_A,
+    }
+    unsigned = dict(payload)
+    unsigned.pop("registry_hash")
+    payload["registry_hash"] = hashlib.sha256(
+        json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    registry_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(StructuralAuthorityError, match="CHECKPOINT_REGISTRY_AUTHORITY_MISMATCH"):
+        registered_checkpoints("game24-seed-10000", tmp_path)
 
 
 def test_duplicate_checkpoint_trial_is_rejected_without_mutating_inputs() -> None:

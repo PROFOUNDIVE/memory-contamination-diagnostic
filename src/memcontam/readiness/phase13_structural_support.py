@@ -8,6 +8,10 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from memcontam.experiment.phase12.native_state_facts import inspect_native_state
 from memcontam.memory.checkpoint_v3 import CheckpointError, Phase12Checkpoint, deserialize_checkpoint
 from memcontam.readiness.phase13_calibration_v2_authority import AuthorityError, reject_forbidden_fields
+from memcontam.readiness.phase13_structural_authority import (
+    StructuralAuthorityError,
+    registered_checkpoints,
+)
 
 Baseline = Literal["fh_bounded", "rag_frozen", "bot_style", "reflexion_style"]
 BASELINES: Final[tuple[Baseline, ...]] = (
@@ -43,8 +47,6 @@ class OrderedTrial(_StrictModel):
 class ResourceFact(_StrictModel):
     baseline: Baseline
     checkpoint_trial_index: Annotated[int, Field(gt=0)]
-    registered_checkpoint_id: Annotated[str, Field(min_length=1)]
-    registered_checkpoint_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
     checkpoint_serializable: bool
     suffix_executable: bool
     route_capacity_available: bool
@@ -174,20 +176,16 @@ def select_prospective_checkpoint(selector: ProspectiveSelectorInput) -> Prospec
             raise StructuralSupportError("CHECKPOINT_SERIALIZATION_UNAVAILABLE")
         if not row.suffix_executable or not row.route_capacity_available:
             raise StructuralSupportError("SUFFIX_UNAVAILABLE")
+    try:
+        registered = registered_checkpoints(selector.stream_id)
+    except StructuralAuthorityError as error:
+        raise StructuralSupportError(error.code) from error
     return ProspectiveSelection(
         selector.stream_id,
         candidate,
         candidate - 1,
         suffix,
-        tuple(
-            SelectionDecision(
-                baseline,
-                candidate,
-                resources[baseline].registered_checkpoint_id,
-                resources[baseline].registered_checkpoint_sha256,
-            )
-            for baseline in BASELINES
-        ),
+        tuple(SelectionDecision(row.baseline, candidate, row.checkpoint_id, row.sha256) for row in registered),
     )
 
 
@@ -195,6 +193,14 @@ def evaluate_structural_support(
     selection: ProspectiveSelection,
     checkpoints: tuple[CheckpointFact, ...],
 ) -> StructuralSupportReport:
+    try:
+        registered = registered_checkpoints(selection.stream_id)
+    except StructuralAuthorityError as error:
+        raise StructuralSupportError(error.code) from error
+    authority = tuple((row.baseline, row.checkpoint_id, row.sha256) for row in registered)
+    supplied = tuple((row.baseline, row.registered_checkpoint_id, row.registered_checkpoint_sha256) for row in selection.decisions)
+    if supplied != authority:
+        raise StructuralSupportError("UNREGISTERED_CHECKPOINT")
     if any(row.baseline == "nomem" for row in checkpoints):
         raise StructuralSupportError("NOMEM_SUPPORT_FORBIDDEN")
     keys = tuple((row.baseline, row.trial_index) for row in checkpoints)
@@ -283,10 +289,3 @@ def _contains_future_field(value: object) -> bool:
     elif isinstance(value, list):
         return any(_contains_future_field(item) for item in value)
     return False
-
-
-__all__ = (
-    "CheckpointFact", "ProspectiveSelectorInput", "StructuralSupportError",
-    "StructuralSupportReport", "evaluate_structural_support",
-    "parse_prospective_selector_input", "select_prospective_checkpoint",
-)

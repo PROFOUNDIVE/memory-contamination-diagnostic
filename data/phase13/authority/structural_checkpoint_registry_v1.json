@@ -1,0 +1,59 @@
+{
+  "registry_hash": "a0da4b778a6892ec26da1073ee9ee1d7770e6985128468adadf85696b06ddc7a",
+  "registry_id": "phase13-structural-checkpoint-registry-v1",
+  "schema_version": "phase13_structural_checkpoint_registry_v1",
+  "source_partition": {
+    "path": "data/phase13/calibration_v2/seed_partition_registry_v1.json",
+    "sha256": "a31b731244f5c56b4aafa5ed83bbe720c8623563cfbd800e7a478a0025aff4ba"
+  },
+  "streams": [
+    {
+      "checkpoints": {
+        "bot_style": {
+          "checkpoint_id": "checkpoint-33446cefe2e361bd",
+          "sha256": "33446cefe2e361bdda590e3bc807f17a2a6b08f092c130ac7633d4fb9a5a583b"
+        },
+        "fh_bounded": {
+          "checkpoint_id": "checkpoint-3de74961a1870cb9",
+          "sha256": "3de74961a1870cb9bbbca13d9bf7b2148eb3c3409ee84a6d1679e44bdb67bb9f"
+        },
+        "rag_frozen": {
+          "checkpoint_id": "checkpoint-21e960b6ad804cac",
+          "sha256": "21e960b6ad804cac1d461556d58beac6c4c92652e5862dd32339f37c6c19addd"
+        },
+        "reflexion_style": {
+          "checkpoint_id": "checkpoint-6a7c2ab6b35372b1",
+          "sha256": "6a7c2ab6b35372b15437542f5402f521837ab855a3344add285db8bec1f88332"
+        }
+      },
+      "ordered_stream_sha256": "9f74ad462d286796e671544745f55cae323eb48aed22e151638ed99345230bb8",
+      "seed_id": 10000,
+      "stream_id": "game24-seed-10000",
+      "task": "game24"
+    },
+    {
+      "checkpoints": {
+        "bot_style": {
+          "checkpoint_id": "checkpoint-33446cefe2e361bd",
+          "sha256": "33446cefe2e361bdda590e3bc807f17a2a6b08f092c130ac7633d4fb9a5a583b"
+        },
+        "fh_bounded": {
+          "checkpoint_id": "checkpoint-3de74961a1870cb9",
+          "sha256": "3de74961a1870cb9bbbca13d9bf7b2148eb3c3409ee84a6d1679e44bdb67bb9f"
+        },
+        "rag_frozen": {
+          "checkpoint_id": "checkpoint-cca4892e5a15a3cf",
+          "sha256": "cca4892e5a15a3cf32104c1c9f8a8144d45ce15a14c98389276becf9b8eec2f6"
+        },
+        "reflexion_style": {
+          "checkpoint_id": "checkpoint-6a7c2ab6b35372b1",
+          "sha256": "6a7c2ab6b35372b15437542f5402f521837ab855a3344add285db8bec1f88332"
+        }
+      },
+      "ordered_stream_sha256": "dcd35df897caba4e10df4673151b9de26597141473f5dc5cdc74b2aa448fd0ca",
+      "seed_id": 10001,
+      "stream_id": "game24-seed-10001",
+      "task": "game24"
+    }
+  ]
+}
