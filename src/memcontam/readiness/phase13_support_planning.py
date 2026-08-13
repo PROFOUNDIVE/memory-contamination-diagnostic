@@ -29,6 +29,10 @@ from memcontam.readiness.phase13_support_authority import (
     SupportAuthorityError,
     authenticate_conformance,
 )
+from memcontam.readiness.phase13_support_inputs import (
+    SupportInputError,
+    validate_route_support_inputs,
+)
 
 
 ANALYSIS_PATH: Final = Path("data/phase13/authority/analysis_registry_v1.json")
@@ -237,6 +241,10 @@ def plan_route(request: RoutePlanningRequest, root: Path) -> RoutePlan:
     if request.budget_layer != "phase13":
         raise PlanningError("BUDGET_LAYER_INVALID")
     analysis, execution = _authorities(root)
+    try:
+        validate_route_support_inputs(request.support_inputs, analysis)
+    except SupportInputError as error:
+        raise PlanningError(error.code) from error
     target = next(row for row in analysis.planning.targets if row.route == request.route)
     required = {
         *(row.support_population_id for row in analysis.support.level_1),
