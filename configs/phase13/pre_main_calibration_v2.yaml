@@ -12,6 +12,12 @@ authority:
     path: data/phase13/authority/analysis_registry_v1.json
     file_sha256: b58e6aec8acc040fb934e9b25842eb68c702d098a08b41ba0eab9502a198a0f3
     registry_hash: 82960a8f65d316c53bcf55da3e215f0c4b62781643c21155307b40aa9adf4eee
+  historical_compatibility:
+    path: data/phase13/authority/historical_compatibility_v1.json
+    file_sha256: 446e5634d7be2bd049ffd3af733262e72a076d22ec24a0e9c11d7259b60264d4
+    registry_kind: phase13_historical_compatibility_v1
+    historical_run_id: phase13-pre-main-calibration-15usd-rerun1
+    sealed_archive_availability: external_reference_unavailable
 scientific:
   H_primary: 5
   H_run: 10

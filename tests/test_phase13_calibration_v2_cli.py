@@ -2,16 +2,21 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Literal, assert_never
 
 import pytest
 
 from memcontam.readiness import phase13_cli
+from memcontam.readiness import phase13_calibration_v2
+from memcontam.readiness.phase13_calibration_v2 import CalibrationV2ConfigError
 
 
 CONFIG = Path("configs/phase13/pre_main_calibration_v2.yaml")
+HISTORICAL = Path("data/phase13/authority/historical_compatibility_v1.json")
 
 
 def _command(config: Path, command: str) -> subprocess.CompletedProcess[str]:
@@ -48,7 +53,10 @@ def test_deterministic_commands_never_construct_provider(
         raise AssertionError("provider construction is forbidden")
 
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.setattr(phase13_cli, "OpenAIResponsesClient", forbidden_constructor)
+    monkeypatch.setattr(
+        "memcontam.clients.openai_responses.OpenAIResponsesClient",
+        forbidden_constructor,
+    )
 
     phase13_cli.run(argparse.Namespace(phase13_command=command, config=CONFIG))
 
@@ -59,6 +67,38 @@ def test_deterministic_commands_never_construct_provider(
         else "DETERMINISTIC_AUTHORITY_SYNC_COMPLETE"
     )
     assert constructions == 0
+
+
+@pytest.mark.parametrize("mode", ["deleted", "mutated"])
+def test_historical_registry_drift_fails_before_provider_import(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mode: Literal["deleted", "mutated"],
+) -> None:
+    root = tmp_path / "root"
+    for path in (
+        Path("data/phase13/calibration_v2"),
+        Path("data/phase13/authority"),
+        Path("data/phase13/main"),
+        Path("data/phase12/registries"),
+        Path("data/tasks"),
+    ):
+        shutil.copytree(path, root / path)
+    historical = root / HISTORICAL
+    match mode:
+        case "deleted":
+            historical.unlink()
+        case "mutated":
+            historical.write_bytes(historical.read_bytes() + b"\n")
+        case unreachable:
+            assert_never(unreachable)
+    monkeypatch.setattr(phase13_calibration_v2, "ROOT", root)
+
+    with pytest.raises(
+        CalibrationV2ConfigError,
+        match="AUTHORITY_FILE_NOT_REGULAR" if mode == "deleted" else "AUTHORITY_HASH_MISMATCH",
+    ):
+        phase13_calibration_v2.validate_calibration_v2(CONFIG)
 
 
 @pytest.mark.parametrize(
