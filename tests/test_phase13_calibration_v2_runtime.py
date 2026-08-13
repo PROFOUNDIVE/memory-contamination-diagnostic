@@ -48,9 +48,11 @@ ARMS = ("clean", "correct", "irrelevant", "contam")
 class _Provider:
     def __init__(self) -> None:
         self.configs: list[dict[str, object]] = []
+        self.messages: list[tuple[dict[str, str], ...]] = []
 
     def chat(self, messages, model, config) -> LLMResponse:  # noqa: ANN001
-        del messages, model
+        del model
+        self.messages.append(tuple(dict(message) for message in messages))
         self.configs.append(dict(config))
         return LLMResponse("final: 24", {"attempts": 1}, {"prompt_tokens": 1, "completion_tokens": 1}, 1)
 
@@ -76,6 +78,9 @@ def _fixture(
     rewind: bool = False,
     rag_write: bool = False,
     replace_state: bool = False,
+    decoding_seed: bool = False,
+    baseline_seed: bool = False,
+    prompt_content: str = "solve",
 ):
     provider = _Provider()
     clients = {(baseline, arm): _runtime(provider, baseline, arm) for baseline in BASELINES for arm in ARMS}
@@ -122,7 +127,11 @@ def _fixture(
         baseline: LiveThreeArmBranches(
             baseline,
             "gpt-4o-2024-11-20",
-            {"temperature": 0.0, **({"future_horizon": 10} if leak else {})},
+            {
+                "temperature": 0.0,
+                **({"future_horizon": 10} if leak else {}),
+                **({"seed": 10000} if decoding_seed else {}),
+            },
             {
                 arm: LiveArmBranch(
                     arm,
@@ -181,9 +190,14 @@ def _fixture(
             clients[("fh_bounded", "clean")],
             "gpt-4o-2024-11-20",
             lambda _answer, _task: True,
-            {"temperature": 0.0, **({"future_horizon": 10} if leak else {})},
+            {
+                "temperature": 0.0,
+                **({"future_horizon": 10} if leak else {}),
+                **({"seed": 10000} if decoding_seed else {}),
+            },
             "clean",
             RuntimeIdentities("run-1", f"trial-{index}", index),
+            baseline_configs={"fh_bounded": {"seed": 10000}} if baseline_seed else {},
         )
         for index, task in enumerate(tasks, start=2)
     )
@@ -192,7 +206,7 @@ def _fixture(
         calls = 2 if context.identities.condition_id in {"bot_style", "reflexion_style"} else 1
         for _ in range(calls):
             context.client.chat(
-                [{"role": "user", "content": "solve"}],
+                [{"role": "user", "content": prompt_content}],
                 context.model,
                 {**context.decoding, **context.baseline_configs.get(context.identities.condition_id, {})},
             )
@@ -273,7 +287,11 @@ def test_executes_one_causal_h10_source_with_owned_calls_and_nomem_singleton() -
     (({"leak": True}, "PROVIDER_CONFIG_LEAKAGE"), ({"rewind": True}, "STATE_REWIND"), ({"rag_write": True}, "RAG_WRITE_FORBIDDEN")),
 )
 def test_violation_seals_invalidated_partial_trajectory(mutation: dict[str, bool], code: str) -> None:
-    _, _, request = _fixture(**mutation)
+    _, _, request = _fixture(
+        leak=mutation.get("leak", False),
+        rewind=mutation.get("rewind", False),
+        rag_write=mutation.get("rag_write", False),
+    )
 
     result = execute_calibration_trajectory(request)
 
@@ -465,3 +483,70 @@ def test_accounting_rejects_compensating_template_call_counts() -> None:
 
     assert closure.settled_semantic_calls == closure.expected_semantic_calls
     assert closure.status == "closed_partial"
+
+
+def _run_authorized(request: TrajectoryRequest) -> None:
+    phase13_cli.run(
+        argparse.Namespace(
+            phase13_command="run-calibration-v2",
+            config=ROOT / "configs/phase13/pre_main_calibration_v2.yaml",
+            authorized_execution=AuthorizedTrajectoryExecution(
+                request.verified.authorization, request
+            ),
+        )
+    )
+
+
+def test_authorized_seam_rejects_decoding_seed_before_transport(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    provider, _, request = _fixture(decoding_seed=True)
+
+    _run_authorized(request)
+
+    assert '"failure_code": "PROVIDER_CONFIG_LEAKAGE"' in capsys.readouterr().out
+    assert provider.configs == []
+    assert all(not runtime.dispatched_payloads for runtime in request.providers.values())
+
+
+def test_authorized_seam_rejects_baseline_seed_before_transport(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    provider, _, request = _fixture(baseline_seed=True)
+
+    _run_authorized(request)
+
+    assert '"failure_code": "PROVIDER_CONFIG_LEAKAGE"' in capsys.readouterr().out
+    assert provider.configs == []
+    assert all(not runtime.dispatched_payloads for runtime in request.providers.values())
+
+
+@pytest.mark.parametrize(
+    "prompt_content",
+    ("seed", "seedId=10000", "seed_id=10000", "seed-id=10000", "trajectorySeed 10000"),
+)
+def test_authorized_seam_rejects_prompt_seed_before_transport(
+    capsys: pytest.CaptureFixture[str],
+    prompt_content: str,
+) -> None:
+    provider, _, request = _fixture(prompt_content=prompt_content)
+
+    _run_authorized(request)
+
+    assert '"failure_code": "PROVIDER_PROMPT_LEAKAGE"' in capsys.readouterr().out
+    assert provider.configs == []
+    assert provider.messages == []
+    assert all(not runtime.dispatched_payloads for runtime in request.providers.values())
+
+
+def test_provider_allows_ordinary_nonmetadata_seed_word() -> None:
+    provider, _, request = _fixture()
+    runtime = request.providers[("fh_bounded", "clean")]
+
+    runtime.chat(
+        [{"role": "user", "content": "Plant the seed in soil."}],
+        "gpt-4o-2024-11-20",
+        {},
+    )
+
+    assert provider.messages == [({"role": "user", "content": "Plant the seed in soil."},)]
