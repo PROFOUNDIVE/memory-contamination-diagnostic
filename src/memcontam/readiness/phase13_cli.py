@@ -60,6 +60,11 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
     ):
         calibration_v2 = commands.add_parser(command)
         calibration_v2.add_argument("--config", type=Path, required=True)
+        if command == "run-calibration-v2":
+            calibration_v2.add_argument("--request", type=Path)
+            calibration_v2.add_argument("--authorization", type=Path)
+            calibration_v2.add_argument("--expected-authorization-sha256")
+            calibration_v2.add_argument("--allow-live-calls", action="store_true")
     archive = commands.add_parser("validate-calibration-v2-archive")
     archive.add_argument("--archive", type=Path)
     archive.add_argument("--config", type=Path)
@@ -94,13 +99,45 @@ def run(args: argparse.Namespace) -> None:
             validate_calibration_v2(args.config)
             raise SystemExit(render_terminal(CalibrationV2ExternalBlock()))
         if args.phase13_command == "run-calibration-v2":
-            validate_calibration_v2(args.config)
             authorized = getattr(args, "authorized_execution", None)
             if isinstance(authorized, AuthorizedTrajectoryExecution):
+                validate_calibration_v2(args.config)
                 result = execute_calibration_trajectory(authorized.request)
                 print(json.dumps(result, default=_json_value, sort_keys=True))
                 return
-            raise SystemExit(render_terminal(CalibrationV2ExternalBlock()))
+            request = getattr(args, "request", None)
+            authorization_path = getattr(args, "authorization", None)
+            expected_digest = getattr(args, "expected_authorization_sha256", None)
+            client = getattr(args, "provider_client", None)
+            identity = getattr(args, "execution_template", None)
+            if not (
+                isinstance(request, Path)
+                and isinstance(authorization_path, Path)
+                and isinstance(expected_digest, str)
+                and client is not None
+                and isinstance(identity, ExecutionTemplateIdentity)
+            ):
+                raise SystemExit(render_terminal(CalibrationV2ExternalBlock()))
+            from memcontam.readiness.phase13_calibration_v2_authorization import (
+                CalibrationV2AuthorizationError,
+                verify_calibration_v2_authorization,
+            )
+
+            try:
+                verify_calibration_v2_authorization(
+                    config_path=args.config,
+                    request_path=request,
+                    authorization_path=authorization_path,
+                    expected_authorization_sha256=expected_digest,
+                    allow_live_calls=getattr(args, "allow_live_calls", False),
+                    environment=getattr(args, "authorization_environment", None),
+                    now=getattr(args, "authorization_now", None),
+                )
+            except CalibrationV2AuthorizationError as error:
+                raise SystemExit(error.code) from error
+            build_calibration_v2_provider(client, Path(__file__).resolve().parents[3], identity)
+            print("CALIBRATION_V2_AUTHORIZED")
+            return
         if args.phase13_command == "prepare-clean-prefix":
             payload = prepare_clean_prefix(args.config, args.run_id, args.output)
             print(json.dumps(payload, sort_keys=True))
