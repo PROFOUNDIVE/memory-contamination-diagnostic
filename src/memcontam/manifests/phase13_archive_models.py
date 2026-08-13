@@ -30,6 +30,8 @@ class SourceArchiveEvent(StrictArchiveModel):
     event_time: Annotated[int, Field(ge=0, le=9)]
     absolute_trial_index: Annotated[int, Field(ge=2, le=11)]
     source_checkpoint_id: Identifier
+    baseline: Identifier
+    arm: Identifier
     task: Identifier
     model: Identifier
     session_id: Identifier
@@ -50,6 +52,9 @@ class SourceArchiveEvent(StrictArchiveModel):
 class SourceAttemptRow(StrictArchiveModel):
     attempt_id: Identifier
     source_run_id: Identifier
+    source_manifest_id: Identifier | None = None
+    source_ordered_stream_sha256: Sha256 | None = None
+    execution_contract_id: Identifier | None = None
     status: Literal["completed", "invalidated"]
     invalidated_reason: str | None
     raw_evidence_sha256: Sha256
@@ -62,13 +67,14 @@ class SourceAttemptRow(StrictArchiveModel):
 
 class DerivedWindowArchiveRow(StrictArchiveModel):
     window_id: Identifier
+    analysis_window_id: Identifier
     source_run_id: Identifier
     source_raw_sha256: Sha256
     source_event_range: tuple[int, int]
     event_ids: tuple[Identifier, ...]
     window_length: Literal[2, 5]
-    status: Literal["ESTIMABLE", "NOT_ESTIMABLE"]
-    family_id: Identifier
+    evidence_status: Identifier
+    multiplicity_status: Identifier
     provider_calls: Literal[0]
     owner_id: Identifier
 
@@ -83,6 +89,7 @@ class OfflineLedgerRow(StrictArchiveModel):
     operation: Literal["prefix_derivation", "paired_seed_bootstrap", "report_rendering"]
     owner_id: Identifier
     provider_calls: Annotated[int, Field(ge=0)]
+    cost_microusd: Annotated[int, Field(ge=0)] = 0
 
 
 class AggregateArchiveRow(StrictArchiveModel):
