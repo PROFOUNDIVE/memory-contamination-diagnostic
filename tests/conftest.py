@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.phase13_fixture_support import provision_readiness
+from .phase13_fixture_support import provision_readiness
 
 
 READINESS_SOURCE = Path("data/phase13/authority/pilot_a_readiness_manifest_v1.json")
