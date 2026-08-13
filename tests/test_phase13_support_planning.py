@@ -188,6 +188,55 @@ def test_trusted_source_raw_hash_drift_is_rejected() -> None:
     assert caught.value.code == "CONFORMANCE_SOURCE_HASH_MISMATCH"
 
 
+@pytest.mark.parametrize(
+    ("source_update", "code"),
+    [
+        ({"sealed": False}, "CONFORMANCE_SOURCE_NOT_SEALED"),
+        ({"status": "invalidated"}, "CONFORMANCE_SOURCE_NOT_COMPLETED"),
+    ],
+)
+def test_nonfinal_source_status_cannot_authorize_deterministic_support(
+    source_update: dict[str, bool | str], code: str
+) -> None:
+    certificate, request, source = _trusted_certificate()
+    evidence = DeterministicSupportInput(
+        task="game24",
+        support_population_id=L1[0],
+        certificate=certificate,
+        authority_request=request,
+        authority_source=replace(source, **source_update),
+    )
+
+    with pytest.raises(PlanningError) as caught:
+        plan_support(evidence, ROOT)
+
+    assert caught.value.code == code
+
+
+def test_coordinated_analysis_hash_resigning_is_rejected() -> None:
+    certificate, request, source = _trusted_certificate()
+    forged_hash = "3" * 64
+    verified = replace(
+        request.verified,
+        analysis=request.verified.analysis.model_copy(update={"registry_hash": forged_hash}),
+    )
+    evidence = DeterministicSupportInput(
+        task="game24",
+        support_population_id=L1[0],
+        certificate=certificate,
+        authority_request=replace(request, verified=verified),
+        authority_source=replace(
+            source,
+            source_seal=replace(source.source_seal, analysis_registry_hash=forged_hash),
+        ),
+    )
+
+    with pytest.raises(PlanningError) as caught:
+        plan_support(evidence, ROOT)
+
+    assert caught.value.code == "CONFORMANCE_ANALYSIS_AUTHORITY_MISMATCH"
+
+
 def test_resigned_conformance_mutation_is_rejected() -> None:
     certificate, request, source = _trusted_certificate()
     changed = certificate.checks[0].model_copy(
