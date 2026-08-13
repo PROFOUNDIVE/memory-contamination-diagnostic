@@ -6,6 +6,7 @@ from pathlib import Path
 
 from memcontam.clients.base import LLMClient
 from memcontam.readiness.phase13_provider_models import ExecutionTemplateIdentity
+from memcontam.readiness.phase13_provider_runtime import Phase13V2ProviderRuntime
 
 from memcontam.readiness.phase13_clean_prefix import (
     Phase13CalibrationError,
@@ -27,10 +28,8 @@ def build_calibration_v2_provider(
     client: LLMClient,
     root: Path,
     intended_template: ExecutionTemplateIdentity,
-) -> LLMClient:
-    from memcontam.readiness.phase13_provider_accounting import build_owned_provider_client
-
-    return build_owned_provider_client(client, root, intended_template)
+) -> Phase13V2ProviderRuntime:
+    return Phase13V2ProviderRuntime.from_provider(client, root, intended_template)
 
 
 def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
