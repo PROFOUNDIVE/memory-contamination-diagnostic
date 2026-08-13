@@ -56,11 +56,13 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
         "validate-calibration-v2",
         "prepare-calibration-v2",
         "run-calibration-v2",
-        "validate-calibration-v2-archive",
         "validate-derived-windows",
     ):
         calibration_v2 = commands.add_parser(command)
         calibration_v2.add_argument("--config", type=Path, required=True)
+    archive = commands.add_parser("validate-calibration-v2-archive")
+    archive.add_argument("--archive", type=Path)
+    archive.add_argument("--config", type=Path)
 
 
 def run(args: argparse.Namespace) -> None:
@@ -82,15 +84,19 @@ def run(args: argparse.Namespace) -> None:
                 print(json.dumps(derive_prefix_windows(authorized.request, source), default=_json_value, sort_keys=True))
                 return
             raise SystemExit(render_terminal(CalibrationV2ExternalBlock()))
-        if args.phase13_command in {
-            "run-calibration-v2",
-            "validate-calibration-v2-archive",
-        }:
+        if args.phase13_command == "validate-calibration-v2-archive":
+            from memcontam.manifests.phase13_archive_validation import validate_phase13_archive
+
+            archive = getattr(args, "archive", None)
+            if isinstance(archive, Path):
+                print(json.dumps(validate_phase13_archive(archive).to_dict(), sort_keys=True))
+                return
+            validate_calibration_v2(args.config)
+            raise SystemExit(render_terminal(CalibrationV2ExternalBlock()))
+        if args.phase13_command == "run-calibration-v2":
             validate_calibration_v2(args.config)
             authorized = getattr(args, "authorized_execution", None)
-            if args.phase13_command == "run-calibration-v2" and isinstance(
-                authorized, AuthorizedTrajectoryExecution
-            ):
+            if isinstance(authorized, AuthorizedTrajectoryExecution):
                 result = execute_calibration_trajectory(authorized.request)
                 print(json.dumps(result, default=_json_value, sort_keys=True))
                 return
