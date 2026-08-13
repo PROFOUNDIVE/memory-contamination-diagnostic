@@ -11,7 +11,7 @@ from memcontam.manifests.phase13 import PrefixDerivationArtifact
 from memcontam.readiness.phase13_calibration_v2_runtime import execute_calibration_trajectory
 from memcontam.readiness.phase13_calibration_v2_runtime_models import CompletedTrajectory
 from memcontam.readiness.phase13_prefix_reuse import derive_prefix_windows
-from test_phase13_calibration_v2_runtime import _fixture
+from .test_phase13_calibration_v2_runtime import _fixture
 
 
 ROOT = Path(__file__).resolve().parents[1]

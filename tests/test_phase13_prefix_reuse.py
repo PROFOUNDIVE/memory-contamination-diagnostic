@@ -15,7 +15,7 @@ from memcontam.readiness.phase13_support_authority import (
     SupportAuthorityError,
     authenticate_conformance,
 )
-from test_phase13_calibration_v2_runtime import _fixture
+from .test_phase13_calibration_v2_runtime import _fixture
 
 
 def _completed(request: TrajectoryRequest) -> CompletedTrajectory:

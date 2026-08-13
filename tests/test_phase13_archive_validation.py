@@ -7,7 +7,7 @@ from typing import Any, Callable
 import pytest
 
 from memcontam.readiness import phase13_cli
-from test_phase13_archive_fixture import complete_archive, mutate, resign_source, write_archive
+from .test_phase13_archive_fixture import complete_archive, mutate, resign_source, write_archive
 
 
 Mutation = Callable[[dict[str, Any]], None]

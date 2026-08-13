@@ -25,7 +25,7 @@ from memcontam.readiness.phase13_support_planning import (
     plan_route,
     plan_support,
 )
-from test_phase13_calibration_v2_runtime import _fixture
+from .test_phase13_calibration_v2_runtime import _fixture
 
 
 ROOT = Path(__file__).resolve().parents[1]
