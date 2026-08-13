@@ -8,7 +8,7 @@ import pytest
 from memcontam.readiness import phase13_calibration_v2_authorization as authorization
 from memcontam.readiness import phase13_cli
 from memcontam.readiness.phase13_provider_models import ExecutionTemplateIdentity
-from test_phase13_calibration_v2_authorization import CONFIG, NOW, complete_bundle
+from .test_phase13_calibration_v2_authorization import CONFIG, NOW, complete_bundle
 
 
 def _args(request: Path, permit: Path, digest: str, client: object) -> argparse.Namespace:
