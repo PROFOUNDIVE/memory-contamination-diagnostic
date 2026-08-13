@@ -53,13 +53,25 @@ def test_windows_have_explicit_independent_status_and_one_source_execution() -> 
 
 def test_main_and_calibration_call_illustrations_recompute_independently() -> None:
     registry = load_execution_registry(REGISTRY, ROOT)
+    prefix, execution = registry.call_components
 
-    for illustration, task_seeds, expected in (
-        (registry.planning_illustrations.main, 30, (7680, 11370, 11939)),
-        (registry.planning_illustrations.calibration, 36, (9216, 13644, 14327)),
+    assert len(registry.execution_templates) == 51
+    assert sum(row.nominal_semantic_calls_per_trial for row in registry.execution_templates if row.task == "game24") == execution.nominal_calls_per_activation
+    assert sum(row.raw_maximum_semantic_calls_per_trial for row in registry.execution_templates if row.task == "game24") == execution.raw_maximum_calls_per_activation
+
+    for illustration, multiplicity, expected in (
+        (registry.planning_illustrations.main, "main_seed_multiplicity", (7680, 11370, 11939)),
+        (registry.planning_illustrations.calibration, "calibration_seed_multiplicity", (9216, 13644, 14327)),
     ):
-        nominal = task_seeds * 6 + task_seeds * 10 * 25
-        raw = task_seeds * 9 + task_seeds * 10 * 37
+        task_seeds = sum(getattr(row, multiplicity) for row in registry.execution_templates if row.baseline == "nomem")
+        nominal = task_seeds * prefix.nominal_calls_per_activation + 10 * sum(
+            getattr(row, multiplicity) * row.nominal_semantic_calls_per_trial
+            for row in registry.execution_templates
+        )
+        raw = task_seeds * prefix.raw_maximum_calls_per_activation + 10 * sum(
+            getattr(row, multiplicity) * row.raw_maximum_semantic_calls_per_trial
+            for row in registry.execution_templates
+        )
         reserved = (raw * 105 + 99) // 100
         assert (nominal, raw, reserved) == expected
         assert (
@@ -94,6 +106,20 @@ def _provider_multiplicity(payload: dict[str, Any]) -> None:
     _window(payload, "accuracy-h2-sensitivity")["provider_execution_multiplicity"] = 1
 
 
+def _remove_window(payload: dict[str, Any]) -> None:
+    payload["analysis_windows"].pop()
+
+
+def _add_window(payload: dict[str, Any]) -> None:
+    row = copy.deepcopy(_window(payload, "recurrence-h10-descriptive"))
+    row["analysis_window_id"] = "arbitrary-h10"
+    payload["analysis_windows"].append(row)
+
+
+def _status_drift(payload: dict[str, Any]) -> None:
+    _window(payload, "recurrence-h5-secondary")["evidence_status"] = "descriptive"
+
+
 @pytest.mark.parametrize(
     ("mutate", "code"),
     [
@@ -101,6 +127,9 @@ def _provider_multiplicity(payload: dict[str, Any]) -> None:
         (_realization, "WINDOW_REALIZATION_INVALID"),
         (_multiplicity, "WINDOW_MULTIPLICITY_INVALID"),
         (_provider_multiplicity, "WINDOW_EXECUTION_MULTIPLICITY_INVALID"),
+        (_remove_window, "WINDOW_INVENTORY_INVALID"),
+        (_add_window, "WINDOW_INVENTORY_INVALID"),
+        (_status_drift, "WINDOW_INVENTORY_INVALID"),
     ],
 )
 def test_resigned_window_mutations_fail_without_status_inheritance(

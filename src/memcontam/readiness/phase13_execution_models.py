@@ -105,6 +105,18 @@ class CallComponent(StrictModel):
     raw_maximum_calls_per_activation: NonNegativeInt
 
 
+class ExecutionTemplate(StrictModel):
+    template_id: Identifier
+    owner_id: Identifier
+    task: Task
+    baseline: Literal["fh_bounded", "rag_frozen", "bot_style", "reflexion_style", "nomem"]
+    arm_key: Literal["Clean", "Correct", "Irrelevant", "Contam", "star_NoMem"]
+    nominal_semantic_calls_per_trial: PositiveInt
+    raw_maximum_semantic_calls_per_trial: PositiveInt
+    main_seed_multiplicity: Literal[10]
+    calibration_seed_multiplicity: Literal[12]
+
+
 class AnalysisWindow(StrictModel):
     analysis_window_id: Identifier
     source_execution_contract_id: Identifier
@@ -180,6 +192,7 @@ class ExecutionRegistry(StrictModel):
     prefix_owner_id: Identifier
     execution_owner_id: Identifier
     call_components: tuple[CallComponent, ...]
+    execution_templates: tuple[ExecutionTemplate, ...]
     analysis_windows: tuple[AnalysisWindow, ...]
     operator_capacity: OperatorCapacity
     planning_illustrations: PlanningIllustrations
@@ -187,7 +200,7 @@ class ExecutionRegistry(StrictModel):
 
     @field_validator(
         "task_streams", "memory_arms", "native_capacities", "call_components",
-        "analysis_windows", mode="before",
+        "analysis_windows", "execution_templates", mode="before",
     )
     @classmethod
     def _tuple_fields(cls, value: list[dict[str, object]]) -> tuple[dict[str, object], ...]:

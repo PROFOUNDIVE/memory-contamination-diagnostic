@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import shutil
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -96,6 +97,39 @@ def _bare_h(payload: dict[str, Any]) -> None:
     payload["timing"]["H"] = 10
 
 
+def _duplicate_owner(payload: dict[str, Any]) -> None:
+    payload["execution_owner_id"] = payload["prefix_owner_id"]
+    payload["call_components"][1]["owner_id"] = payload["prefix_owner_id"]
+
+
+def _component_drift(payload: dict[str, Any]) -> None:
+    payload["call_components"][0]["nominal_calls_per_activation"] = 7
+
+
+def _native_capacity_drift(payload: dict[str, Any]) -> None:
+    payload["native_capacities"][0]["configured_limit"] = 9999
+
+
+def _model_drift(payload: dict[str, Any]) -> None:
+    payload["identities"]["model_snapshot_id"] = "gpt-4o-mutated"
+
+
+def _arm_drift(payload: dict[str, Any]) -> None:
+    payload["memory_arms"][0]["candidate_or_control_id"] = "mutated-clean"
+
+
+def _duplicate_component(payload: dict[str, Any]) -> None:
+    payload["call_components"].append(copy.deepcopy(payload["call_components"][0]))
+
+
+def _native_policy_drift(payload: dict[str, Any]) -> None:
+    payload["native_capacities"][0]["transition_policy"] = "bounded_template_eviction"
+
+
+def _template_drift(payload: dict[str, Any]) -> None:
+    payload["execution_templates"][0]["main_seed_multiplicity"] = 11
+
+
 @pytest.mark.parametrize(
     ("mutate", "code"),
     [
@@ -107,6 +141,14 @@ def _bare_h(payload: dict[str, Any]) -> None:
         (_capacity, "CAPACITY_CONTRACT_INVALID"),
         (_source_hash, "SOURCE_AUTHORITY_HASH_MISMATCH"),
         (_bare_h, "BARE_H_PROHIBITED"),
+        (_duplicate_owner, "OWNER_IDENTITY_INVALID"),
+        (_component_drift, "CALL_COMPONENT_INVALID"),
+        (_native_capacity_drift, "NATIVE_CAPACITY_INVALID"),
+        (_model_drift, "EXECUTION_IDENTITY_INVALID"),
+        (_arm_drift, "ARM_REGISTRY_INVALID"),
+        (_duplicate_component, "CALL_COMPONENT_INVALID"),
+        (_native_policy_drift, "NATIVE_CAPACITY_INVALID"),
+        (_template_drift, "MALFORMED_REGISTRY"),
     ],
 )
 def test_resigned_execution_mutations_fail_with_bounded_codes(
@@ -119,3 +161,28 @@ def test_resigned_execution_mutations_fail_with_bounded_codes(
         parse_execution_registry(_resign(payload), ROOT)
 
     assert caught.value.code == code
+
+
+def test_coordinated_resigned_partition_rewrite_is_rejected(tmp_path: Path) -> None:
+    authority_root = tmp_path / "authority"
+    source = ROOT / "data/phase13/calibration_v2/seed_partition_registry_v1.json"
+    target = authority_root / "data/phase13/calibration_v2/seed_partition_registry_v1.json"
+    target.parent.mkdir(parents=True)
+    shutil.copy2(source, target)
+    partition = json.loads(target.read_text())
+    trajectory = partition["tasks"]["game24"]["trajectories"][0]
+    trajectory["ordered_sample_ids"].reverse()
+    trajectory["ordered_stream_sha256"] = hashlib.sha256(
+        (json.dumps({"ordered_sample_ids": trajectory["ordered_sample_ids"]}, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    ).hexdigest()
+    target.write_text(json.dumps(partition, sort_keys=True, indent=2) + "\n")
+    payload = _payload()
+    payload["source_partition"]["sha256"] = hashlib.sha256(target.read_bytes()).hexdigest()
+    payload["task_streams"][0]["suffixes"][0]["source_ordered_stream_sha256"] = trajectory[
+        "ordered_stream_sha256"
+    ]
+
+    with pytest.raises(Phase13ExecutionError) as caught:
+        parse_execution_registry(_resign(payload), authority_root)
+
+    assert caught.value.code == "SOURCE_AUTHORITY_HASH_MISMATCH"
