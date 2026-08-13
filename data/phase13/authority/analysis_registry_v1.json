@@ -194,9 +194,12 @@
       "method": "holm_step_down"
     },
     "interval_id": "main-paired-seed-bootstrap95-v1",
+    "interval_method": "paired_seed_percentile_bootstrap",
     "level_1_estimator": "paired_seed_risk_difference",
     "level_2_estimator": "paired_seed_difference_in_differences",
     "not_estimable": {
+      "p_value": "1.0",
+      "reason_required": true,
       "reject_null": false,
       "renormalize_weights": false,
       "retain_family_slot": true,
@@ -303,6 +306,7 @@
       "confidence": "0.95",
       "denominator": 12,
       "interval_id": "support-planning-cp95-one-sided-v1",
+      "method": "clopper_pearson_exact_binomial",
       "rounding": "floor_to_3_decimals",
       "side": "lower_one_sided",
       "zero_success_value": "0.000"
@@ -322,7 +326,7 @@
       }
     ]
   },
-  "registry_hash": "f56decacce3d8e9401b90e64f5d4df3a6cf194af9f03a369c486767e08977ac0",
+  "registry_hash": "82960a8f65d316c53bcf55da3e215f0c4b62781643c21155307b40aa9adf4eee",
   "registry_id": "phase13-analysis-registry-v1",
   "schema_version": "phase13_analysis_registry_v1",
   "support": {

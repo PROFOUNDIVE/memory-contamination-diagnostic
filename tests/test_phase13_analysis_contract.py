@@ -77,7 +77,9 @@ def test_committed_registry_has_exact_support_and_planning_inventory() -> None:
     assert registry.planning.deterministic.required_state == "conformance_passed"
     assert registry.planning.stochastic.denominator == 12
     assert registry.planning.stochastic.interval_id == "support-planning-cp95-one-sided-v1"
+    assert registry.planning.stochastic.method == "clopper_pearson_exact_binomial"
     assert registry.inference.interval_id == "main-paired-seed-bootstrap95-v1"
+    assert registry.inference.interval_method == "paired_seed_percentile_bootstrap"
     assert registry.planning.stochastic.interval_id != registry.inference.interval_id
     assert registry.planning.calibration_seeds == tuple(range(10000, 10012))
 
@@ -101,6 +103,8 @@ def test_primary_families_are_independently_enumerated_per_task() -> None:
     assert registry.inference.bootstrap.rng_seed == 13
     assert registry.inference.holm.alpha == "0.05"
     assert registry.inference.not_estimable.retain_family_slot is True
+    assert registry.inference.not_estimable.p_value == "1.0"
+    assert registry.inference.not_estimable.reason_required is True
     assert registry.inference.not_estimable.reject_null is False
     assert registry.inference.not_estimable.shrink_family is False
     assert registry.inference.not_estimable.renormalize_weights is False
@@ -176,6 +180,22 @@ def _conflate_interval(payload: dict[str, Any]) -> None:
     payload["inference"]["interval_id"] = payload["planning"]["stochastic"]["interval_id"]
 
 
+def _planning_interval_id(payload: dict[str, Any]) -> None:
+    payload["planning"]["stochastic"]["interval_id"] = "arbitrary-planning-v9"
+
+
+def _treatment_interval_id(payload: dict[str, Any]) -> None:
+    payload["inference"]["interval_id"] = "arbitrary-treatment-v9"
+
+
+def _planning_method(payload: dict[str, Any]) -> None:
+    payload["planning"]["stochastic"]["method"] = "normal_approximation"
+
+
+def _treatment_method(payload: dict[str, Any]) -> None:
+    payload["inference"]["interval_method"] = "studentized_trial_bootstrap"
+
+
 def _renormalize(payload: dict[str, Any]) -> None:
     payload["inference"]["not_estimable"]["renormalize_weights"] = True
 
@@ -192,12 +212,24 @@ def _offline_owner(payload: dict[str, Any]) -> None:
     payload["offline_compute"]["rows"][0]["owner_id"] = "phase13-h10-execution-owner-v1"
 
 
+def _coordinated_offline_owner(payload: dict[str, Any]) -> None:
+    payload["offline_compute"]["owner_id"] = "coordinated-owner-v9"
+    for row in payload["offline_compute"]["rows"]:
+        row["owner_id"] = "coordinated-owner-v9"
+
+
+def _not_estimable_p_value(payload: dict[str, Any]) -> None:
+    payload["inference"]["not_estimable"]["p_value"] = "0.0"
+
+
 @pytest.mark.parametrize(
     "mutate",
     [
         _remove_slot, _add_slot, _reorder_slot, _promote_h2, _gate_p04,
         _insert_nomem, _insert_filter, _replicate_drift, _rng_drift, _alpha_drift,
-        _conflate_interval, _renormalize, _cross_task, _offline_charge, _offline_owner,
+        _conflate_interval, _planning_interval_id, _treatment_interval_id, _planning_method,
+        _treatment_method, _renormalize, _cross_task, _offline_charge, _offline_owner,
+        _coordinated_offline_owner, _not_estimable_p_value,
     ],
 )
 def test_resigned_semantic_drift_is_rejected(mutate: Mutation) -> None:
