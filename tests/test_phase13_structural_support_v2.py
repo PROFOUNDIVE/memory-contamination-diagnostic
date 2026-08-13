@@ -47,13 +47,18 @@ def _states() -> dict[str, NativeState]:
         "fh_bounded": NativeState(
             "fh_bounded",
             (),
-            {"records": [{"id": "trial-1"}], "first_eviction_trial_id": None},
+            {
+                "checkpoint_index": 1,
+                "records": [{"id": "trial-1"}],
+                "first_eviction_trial_id": None,
+            },
         ),
         "rag_frozen": NativeState(
             "rag_frozen",
             (),
             {
                 "branch": "clean",
+                "checkpoint_index": 1,
                 "corpus_id": "corpus-v1",
                 "index_id": "index-v1",
                 "read_only": True,
@@ -64,6 +69,7 @@ def _states() -> dict[str, NativeState]:
             (),
             {
                 "templates": ["template-a", "template-b"],
+                "checkpoint_index": 1,
                 "clean_competitor_ids": ["template-a", "template-b"],
                 "active_capacity": 8,
             },
@@ -71,7 +77,7 @@ def _states() -> dict[str, NativeState]:
         "reflexion_style": NativeState(
             "reflexion_style",
             (),
-            {"reflections": [], "active_capacity": 8},
+            {"checkpoint_index": 1, "reflections": [], "active_capacity": 8},
         ),
     }
 
@@ -210,7 +216,12 @@ def test_empty_reflexion_is_ready_with_zero_richness_and_support_is_intersected(
     states["bot_style"] = NativeState(
         "bot_style",
         (),
-        {"templates": [], "clean_competitor_ids": [], "active_capacity": 8},
+        {
+            "checkpoint_index": 1,
+            "templates": [],
+            "clean_competitor_ids": [],
+            "active_capacity": 8,
+        },
     )
 
     report = evaluate_structural_support(_selection(), _checkpoint_facts(states))
@@ -273,6 +284,52 @@ def test_changed_checkpoint_hash_and_nomem_support_insertion_are_rejected() -> N
     nomem = CheckpointFact("nomem", 1, checkpoint, SHA_B)
     with pytest.raises(StructuralSupportError, match="NOMEM_SUPPORT_FORBIDDEN"):
         evaluate_structural_support(_selection(), (*_checkpoint_facts(), nomem))
+
+
+def test_native_trial_two_checkpoint_cannot_be_relabelled_as_trial_one() -> None:
+    facts = list(_checkpoint_facts())
+    source = facts[0].checkpoint.state
+    trial_two = serialize_checkpoint(
+        NativeState(source.baseline, source.entries, {**source.native_state, "checkpoint_index": 2})
+    )
+    facts[0] = CheckpointFact("fh_bounded", 1, trial_two, trial_two.canonical_sha256)
+
+    with pytest.raises(StructuralSupportError, match="CHECKPOINT_LINEAGE_INVALID"):
+        evaluate_structural_support(_selection(), tuple(facts))
+
+
+def test_forged_checkpoint_identity_is_rejected_before_readiness() -> None:
+    facts = list(_checkpoint_facts())
+    checkpoint = facts[0].checkpoint
+    forged = replace(
+        checkpoint,
+        identity=replace(checkpoint.identity, checkpoint_id="forged-checkpoint"),
+    )
+    facts[0] = replace(facts[0], checkpoint=forged)
+
+    with pytest.raises(StructuralSupportError, match="CHECKPOINT_IDENTITY_MISMATCH"):
+        evaluate_structural_support(_selection(), tuple(facts))
+
+
+def test_caller_trial_relabel_is_rejected_against_registered_checkpoint() -> None:
+    facts = list(_checkpoint_facts())
+    facts[0] = replace(facts[0], trial_index=2)
+
+    with pytest.raises(StructuralSupportError, match="CHECKPOINT_TRIAL_INVALID"):
+        evaluate_structural_support(_selection(), tuple(facts))
+
+
+def test_forged_canonical_hash_is_rejected_before_readiness() -> None:
+    facts = list(_checkpoint_facts())
+    checkpoint = facts[0].checkpoint
+    facts[0] = replace(
+        facts[0],
+        checkpoint=replace(checkpoint, canonical_sha256=SHA_A),
+        expected_sha256=SHA_A,
+    )
+
+    with pytest.raises(StructuralSupportError, match="CHECKPOINT_HASH_MISMATCH"):
+        evaluate_structural_support(_selection(), tuple(facts))
 
 
 def test_duplicate_checkpoint_trial_is_rejected_without_mutating_inputs() -> None:

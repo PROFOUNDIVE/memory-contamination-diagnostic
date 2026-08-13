@@ -6,7 +6,11 @@ from typing import Annotated, Final, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from memcontam.experiment.phase12.native_state_facts import inspect_native_state
-from memcontam.memory.checkpoint_v3 import Phase12Checkpoint, serialize_checkpoint
+from memcontam.memory.checkpoint_v3 import (
+    CheckpointError,
+    Phase12Checkpoint,
+    deserialize_checkpoint,
+)
 from memcontam.readiness.phase13_calibration_v2_authority import (
     AuthorityError,
     reject_forbidden_fields,
@@ -223,20 +227,20 @@ def _readiness(
 ) -> ReadinessRow:
     if fact.trial_index != selection.checkpoint_trial_index:
         raise StructuralSupportError("CHECKPOINT_TRIAL_INVALID")
-    serialized = serialize_checkpoint(fact.checkpoint.state)
-    if (
-        serialized.canonical_bytes != fact.checkpoint.canonical_bytes
-        or serialized.canonical_sha256 != fact.checkpoint.canonical_sha256
-        or serialized.canonical_sha256 != fact.expected_sha256
-        or fact.checkpoint.identity.baseline != fact.baseline
-    ):
+    try:
+        state = deserialize_checkpoint(fact.checkpoint)
+    except CheckpointError as error:
+        raise StructuralSupportError(error.code) from error
+    if fact.checkpoint.canonical_sha256 != fact.expected_sha256:
         raise StructuralSupportError("CHECKPOINT_HASH_MISMATCH")
-    facts = inspect_native_state(serialized)
-    ready, reason, richness = _native_readiness(facts, len(serialized.state.entries))
+    facts = inspect_native_state(fact.checkpoint)
+    if facts.checkpoint_index != fact.trial_index:
+        raise StructuralSupportError("CHECKPOINT_LINEAGE_INVALID")
+    ready, reason, richness = _native_readiness(facts, len(state.entries))
     return ReadinessRow(
         baseline,
-        serialized.identity.checkpoint_id,
-        serialized.canonical_sha256,
+        fact.checkpoint.identity.checkpoint_id,
+        fact.checkpoint.canonical_sha256,
         ready,
         reason,
         richness,
