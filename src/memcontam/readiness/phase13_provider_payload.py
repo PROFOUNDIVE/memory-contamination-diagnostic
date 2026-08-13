@@ -37,4 +37,7 @@ def validate_messages(messages: list[dict[str, str]]) -> None:
 
 def _forbidden_token(value: str) -> bool:
     normalized = value.lower().replace("-", "_")
-    return any(token in normalized for token in ("future", "horizon", "analysis_window"))
+    return any(
+        token in normalized
+        for token in ("future", "horizon", "analysis_window", "task", "window")
+    )

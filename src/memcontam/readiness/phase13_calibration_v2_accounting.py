@@ -50,7 +50,9 @@ def close_accounting(request: TrajectoryRequest) -> AccountingClosure:
     total_settled = sum(row.settled_semantic_calls for row in rows)
     attempts = sum(row.settled_transport_attempts for row in rows)
     status: Literal["closed_complete", "closed_partial"] = (
-        "closed_complete" if total_settled == total_expected else "closed_partial"
+        "closed_complete"
+        if all(row.settled_semantic_calls == row.expected_semantic_calls for row in rows)
+        else "closed_partial"
     )
     return AccountingClosure(status, total_expected, total_settled, attempts, tuple(rows))
 

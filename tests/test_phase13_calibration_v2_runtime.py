@@ -25,6 +25,7 @@ from memcontam.contamination.phase12.controls import construct_correct_control, 
 from memcontam.contamination.phase12.registry import load_candidate_registry
 from memcontam.contamination.phase12.renderers import RendererRegistry
 from memcontam.readiness.phase13_calibration_v2 import load_calibration_v2_config
+from memcontam.readiness.phase13_calibration_v2_accounting import close_accounting
 from memcontam.readiness.phase13_calibration_v2_runtime import (
     AuthorizedTrajectoryExecution,
     CalibrationV2RuntimeError,
@@ -426,3 +427,41 @@ def test_typed_authorized_cli_branch_reaches_trajectory_executor(
     )
 
     assert '"status": "completed"' in capsys.readouterr().out
+
+
+def test_authorized_execution_rejects_equal_but_unverified_authorization_copy() -> None:
+    _, _, request = _fixture()
+
+    with pytest.raises(ValueError, match="AUTHORIZATION_REQUEST_MISMATCH"):
+        AuthorizedTrajectoryExecution(replace(request.verified.authorization), request)
+
+
+@pytest.mark.parametrize("content", ["task", "window"])
+def test_provider_rejects_prompt_boundary_metadata(content: str) -> None:
+    _, _, request = _fixture()
+    runtime = request.providers[("fh_bounded", "clean")]
+
+    with pytest.raises(ValueError, match="PROVIDER_PROMPT_LEAKAGE"):
+        runtime.chat([{"role": "user", "content": content}], "gpt-4o-2024-11-20", {})
+
+
+def test_accounting_rejects_compensating_template_call_counts() -> None:
+    _, _, request = _fixture()
+    nominal_calls = {
+        row.template_id: request.verified.execution.timing.H_run
+        * row.nominal_semantic_calls_per_trial
+        for row in request.verified.execution.execution_templates
+    }
+    for index, runtime in enumerate(request.providers.values()):
+        expected = nominal_calls[runtime.execution_template_id]
+        if index == 0:
+            expected -= 1
+        elif index == 1:
+            expected += 1
+        for _ in range(expected):
+            runtime.chat([{"role": "user", "content": "solve"}], "gpt-4o-2024-11-20", {})
+
+    closure = close_accounting(request)
+
+    assert closure.settled_semantic_calls == closure.expected_semantic_calls
+    assert closure.status == "closed_partial"

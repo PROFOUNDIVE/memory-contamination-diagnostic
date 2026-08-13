@@ -109,7 +109,7 @@ class AuthorizedTrajectoryExecution:
     request: TrajectoryRequest
 
     def __post_init__(self) -> None:
-        if self.authorization != self.request.verified.authorization:
+        if self.authorization is not self.request.verified.authorization:
             raise ValueError("AUTHORIZATION_REQUEST_MISMATCH")
 
 
