@@ -4,6 +4,9 @@ import argparse
 import json
 from pathlib import Path
 
+from memcontam.clients.base import LLMClient
+from memcontam.readiness.phase13_provider_models import ExecutionTemplateIdentity
+
 from memcontam.readiness.phase13_clean_prefix import (
     Phase13CalibrationError,
     load_clean_prefix_config_bytes,
@@ -18,6 +21,16 @@ from memcontam.readiness.phase13_terminal import (
     CalibrationV2ExternalBlock,
     render_terminal,
 )
+
+
+def build_calibration_v2_provider(
+    client: LLMClient,
+    root: Path,
+    intended_template: ExecutionTemplateIdentity,
+) -> LLMClient:
+    from memcontam.readiness.phase13_provider_accounting import build_owned_provider_client
+
+    return build_owned_provider_client(client, root, intended_template)
 
 
 def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
