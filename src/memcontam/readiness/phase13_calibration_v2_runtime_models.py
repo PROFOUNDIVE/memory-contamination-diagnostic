@@ -73,11 +73,28 @@ class TrajectoryEvent:
     suffix_id: str
     task: Task
     model: str
+    decoding_contract_id: str
+    prompt_contract_id: str
+    tool_contract_id: str
+    parser_contract_id: str
+    verifier_contract_id: str
+    native_semantics_id: str
     session_id: str
+    randomness_contract_id: str
+    future_feedback_cutoff: Literal[0]
     intervention_id: str | None
     execution_owner_id: str
+    status: Literal["succeeded", "failed"]
     state_before_sha256: str
     state_after_sha256: str
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeSourceSeal:
+    source_manifest_id: str
+    source_raw_sha256: str
+    execution_registry_hash: str
+    analysis_registry_hash: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,6 +102,9 @@ class CompletedTrajectory:
     status: Literal["completed"]
     stream_id: str
     events: tuple[TrajectoryEvent, ...]
+    source_manifest_id: str
+    source_raw_sha256: str
+    source_seal: RuntimeSourceSeal
     nomem_underlying_execution_count: Literal[1]
     accounting_closure: AccountingClosure
     sealed: Literal[True] = True
@@ -118,6 +138,7 @@ __all__ = (
     "AuthorizedTrajectoryExecution",
     "InvalidatedTrajectory",
     "TrajectoryEvent",
+    "RuntimeSourceSeal",
     "TrajectoryRequest",
     "TrajectoryResult",
     "VerifiedRuntimeAuthorization",

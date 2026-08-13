@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import replace
+import json
+from dataclasses import asdict, replace
 from pathlib import Path
-from typing import Final, Mapping
+from typing import Final, Literal, Mapping
 
 from memcontam.experiment.phase12.game24_runner import Game24RuntimeContext
 from memcontam.experiment.phase12.live_branch import Arm
@@ -28,6 +29,7 @@ from .phase13_calibration_v2_runtime_models import (
     TrajectoryEvent,
     TrajectoryRequest,
     TrajectoryResult,
+    RuntimeSourceSeal,
     VerifiedRuntimeAuthorization,
     VerifiedRuntimeContext,
 )
@@ -131,7 +133,27 @@ def execute_calibration_trajectory(request: TrajectoryRequest) -> TrajectoryResu
             getattr(error, "code", "TRAJECTORY_EXECUTION_FAILED"),
             close_accounting(request),
         )
-    return CompletedTrajectory("completed", request.stream_id, tuple(events), 1, closure)
+    raw_hash = hashlib.sha256(
+        b"".join(
+            (json.dumps(asdict(event), sort_keys=True, separators=(",", ":")) + "\n").encode()
+            for event in events
+        )
+    ).hexdigest()
+    return CompletedTrajectory(
+        "completed",
+        request.stream_id,
+        tuple(events),
+        request.stream_id,
+        raw_hash,
+        RuntimeSourceSeal(
+            request.stream_id,
+            raw_hash,
+            request.verified.execution.registry_hash,
+            request.verified.analysis.registry_hash,
+        ),
+        1,
+        closure,
+    )
 
 
 def _observed_registry(
@@ -181,7 +203,7 @@ def _observed_registry(
             ):
                 raise _Violation("REFLEXION_WRITE_MISMATCH")
             if baseline != "nomem":
-                events.append(_event(request, context, baseline, arm, before, after))
+                events.append(_event(request, context, baseline, arm, before, after, result.outcome.status))
             return result
 
         registry[baseline] = replace(entry, execute_trial=execute)
@@ -221,14 +243,23 @@ def _event(
     arm: Arm,
     before: str,
     after: str,
+    status: Literal["succeeded", "failed"],
 ) -> TrajectoryEvent:
     branch = request.branches_by_baseline[baseline].arms[arm]
     absolute = int(context.identities.order_key)
     return TrajectoryEvent(
         absolute - 2, absolute, baseline, arm, branch.prefix_identity,
         branch.checkpoint.identity.checkpoint_id, context.task.sample_id, request.task,
-        context.model, request.session_id, branch.injected_root_id,
-        request.verified.execution.execution_owner_id, before, after,
+        context.model,
+        request.verified.execution.identities.decoding_contract_id,
+        request.verified.execution.identities.prompt_contract_id,
+        request.verified.execution.identities.tool_contract_id,
+        request.verified.execution.identities.parser_contract_id,
+        request.verified.execution.identities.verifier_contract_id,
+        request.verified.execution.identities.native_capacity_registry_id,
+        request.session_id, "provider-managed-no-client-seed-v1", 0,
+        branch.injected_root_id, request.verified.execution.execution_owner_id,
+        status, before, after,
     )
 
 
