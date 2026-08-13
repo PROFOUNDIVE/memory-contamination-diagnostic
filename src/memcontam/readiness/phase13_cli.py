@@ -148,7 +148,9 @@ def run(args: argparse.Namespace) -> None:
                 and client is not None
                 and isinstance(identity, ExecutionTemplateIdentity)
             ):
-                raise SystemExit(render_terminal(CalibrationV2ExternalBlock()))
+                raise SystemExit(
+                    f"{render_terminal(CalibrationV2ExternalBlock())}\nMAIN_A_EXECUTION_FORBIDDEN"
+                )
             from memcontam.readiness.phase13_calibration_v2_authorization import (
                 CalibrationV2AuthorizationError,
                 verify_calibration_v2_authorization,

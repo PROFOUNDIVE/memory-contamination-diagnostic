@@ -134,7 +134,7 @@ def test_cli_external_block_revalidation_does_not_create_run_root(
     assert json.loads(report.read_text(encoding="utf-8"))["run_root"] is None
 
 
-def test_complete_authorization_runs_exact_synthetic_batch_and_reconciles(
+def test_unbound_synthetic_batch_cannot_emit_completed_or_claim(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     request, permit, digest, _ = complete_bundle(tmp_path)
@@ -161,7 +161,8 @@ def test_complete_authorization_runs_exact_synthetic_batch_and_reconciles(
 
     report = run_calibration_v2_lifecycle(invocation, factory)
 
-    assert report.terminal == "CALIBRATION_V2_COMPLETED"
+    assert report.terminal == "CALIBRATION_V2_INVALIDATED"
+    assert report.reason == "UNBOUND_SYNTHETIC_QA_EVIDENCE"
     assert report.main_terminal == "MAIN_A_EXECUTION_FORBIDDEN"
     assert report.synthetic_qa_only is True
     assert report.trajectory_count == 36
@@ -174,13 +175,52 @@ def test_complete_authorization_runs_exact_synthetic_batch_and_reconciles(
     assert report.settled_semantic_calls == 9_000
     assert report.provider_owner_id == "phase13-h10-execution-owner-v1"
     assert report.offline_owner_id == "phase13-offline-compute-owner-v1"
-    assert report.archive_valid is True
+    assert report.archive_valid is False
+    assert report.archive_status == "invalid"
+    assert report.claim_status == "absent"
     assert report.support_cp95 == tuple((task, "0.779") for task in TASKS)
     assert report.attempted_seeds == tuple((task, 13) for task in TASKS)
     assert report.observed_resources.maximum_input_tokens == 9_000
     assert report.capacity_ceilings.maximum_input_tokens == 234_733_568
     assert report.observed_resources.maximum_input_tokens != report.capacity_ceilings.maximum_input_tokens
     assert constructions == 1
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "code"),
+    [
+        ("observed_input_tokens", -1, "OBSERVED_RESOURCE_INVALID"),
+        ("observed_output_tokens", True, "OBSERVED_RESOURCE_INVALID"),
+        ("observed_input_tokens", 234_733_568, "CAPACITY_CEILING_REACHED"),
+        ("observed_input_tokens", 234_733_569, "CAPACITY_OVERRUN"),
+    ],
+)
+def test_observed_resources_are_nonnegative_integers_strictly_below_ceiling(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    value: int | bool,
+    code: str,
+) -> None:
+    request, permit, digest, _ = complete_bundle(tmp_path)
+    verified = _verify(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        "memcontam.readiness.phase13_calibration_v2_lifecycle.verify_calibration_v2_authorization",
+        lambda **_kwargs: verified,
+    )
+    invocation = replace(
+        _invocation(tmp_path), request_path=request, authorization_path=permit,
+        expected_authorization_sha256=digest, allow_live_calls=True,
+        environment={"OPENAI_API_KEY": "synthetic", "MEMCONTAM_BGE_CACHE_DIR": "/synthetic"},
+    )
+
+    report = run_calibration_v2_lifecycle(
+        invocation, lambda: replace(_authorized_evidence(), **{field: value})
+    )
+
+    assert report.terminal == "CALIBRATION_V2_INVALIDATED"
+    assert report.reason == code
+    assert report.claim_status == "absent"
 
 
 @pytest.mark.parametrize(
@@ -194,7 +234,6 @@ def test_complete_authorization_runs_exact_synthetic_batch_and_reconciles(
         (lambda rows: replace(rows, sources=(replace(rows.sources[0], derived_window_executions=1), *rows.sources[1:])), "SHORT_WINDOW_EXECUTION_FORBIDDEN"),
         (lambda rows: replace(rows, sources=(replace(rows.sources[0], seed_id=99999), *rows.sources[1:])), "TRAJECTORY_SEED_INVENTORY_INVALID"),
         (lambda rows: replace(rows, sources=(replace(rows.sources[0], archive_valid=False), *rows.sources[1:])), "ARCHIVE_INVALID"),
-        (lambda rows: replace(rows, observed_input_tokens=234_733_569), "CAPACITY_OVERRUN"),
     ],
 )
 def test_authorized_mutations_invalidate_without_claim(

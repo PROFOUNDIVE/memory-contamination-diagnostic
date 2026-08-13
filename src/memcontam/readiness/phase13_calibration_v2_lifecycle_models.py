@@ -9,7 +9,6 @@ from typing import Literal, Mapping
 LifecycleTerminal = Literal[
     "CALIBRATION_V2_EXTERNAL_BLOCK",
     "CALIBRATION_V2_INVALIDATED",
-    "CALIBRATION_V2_COMPLETED",
 ]
 
 

@@ -62,18 +62,8 @@ def run_calibration_v2_lifecycle(
         )
         return seal_lifecycle_report(invocation.report_path, report)
     evidence = executor_factory()
-    reason = _invalid_reason(evidence, verified)
-    if reason is not None:
-        report = replace(
-            _base_report(
-                invocation, deterministic, identities,
-                terminal="CALIBRATION_V2_INVALIDATED", reason=reason,
-            ),
-            synthetic_qa_only=True,
-            provider_construction_count=1,
-        )
-        return seal_lifecycle_report(invocation.report_path, report)
-    report = _completed_report(invocation, deterministic, identities, evidence, verified)
+    reason = _invalid_reason(evidence, verified) or "UNBOUND_SYNTHETIC_QA_EVIDENCE"
+    report = _synthetic_report(invocation, deterministic, identities, evidence, verified, reason)
     return seal_lifecycle_report(invocation.report_path, report)
 
 
@@ -166,9 +156,14 @@ def _invalid_reason(
         evidence.observed_storage_bytes,
         evidence.observed_wall_clock_seconds,
     )
+    if any(type(value) is not int or value < 0 for value in totals):
+        return "OBSERVED_RESOURCE_INVALID"
     ceilings = _capacity(verified)
-    if any(value > ceiling for value, ceiling in zip(totals, asdict(ceilings).values(), strict=True)):
+    comparisons = tuple(zip(totals, asdict(ceilings).values(), strict=True))
+    if any(value > ceiling for value, ceiling in comparisons):
         return "CAPACITY_OVERRUN"
+    if any(value == ceiling for value, ceiling in comparisons):
+        return "CAPACITY_CEILING_REACHED"
     if evidence.support_successes != tuple((task, 12) for task in TASKS):
         return "SUPPORT_RECONCILIATION_INVALID"
     if evidence.attempted_seeds != tuple((task, 13) for task in TASKS):
@@ -176,12 +171,13 @@ def _invalid_reason(
     return None
 
 
-def _completed_report(
+def _synthetic_report(
     invocation: LifecycleInvocation,
     deterministic: dict[str, str],
     identities: dict[str, str | None],
     evidence: AuthorizedLifecycleEvidence,
     verified: VerifiedCalibrationV2Authorization,
+    reason: str,
 ) -> LifecycleReport:
     semantic_calls = sum(len(row.settled_call_ids) for row in evidence.sources)
     transports = sum(len(row.transport_attempt_ids) for row in evidence.sources)
@@ -193,14 +189,14 @@ def _completed_report(
     return replace(
         _base_report(
             invocation, deterministic, identities,
-            terminal="CALIBRATION_V2_COMPLETED", reason=None,
+            terminal="CALIBRATION_V2_INVALIDATED", reason=reason,
         ),
         synthetic_qa_only=True,
         provider_construction_count=1,
         provider_dispatch_count=transports,
         run_root=verified.request.output_root,
-        archive_status="valid",
-        claim_status="synthetic_qa_only",
+        archive_status="invalid",
+        claim_status="absent",
         trajectory_count=36,
         tasks=TASKS,
         seeds=SEEDS,
@@ -210,7 +206,7 @@ def _completed_report(
         settled_transport_attempts=transports,
         provider_owner_id=PROVIDER_OWNER,
         offline_owner_id=OFFLINE_OWNER,
-        archive_valid=True,
+        archive_valid=False,
         support_cp95=tuple((task, str(clopper_pearson_lower(12, 12))) for task in TASKS),
         attempted_seeds=evidence.attempted_seeds,
         observed_resources=observed,
@@ -235,7 +231,6 @@ def _base_report(
     terminal: Literal[
         "CALIBRATION_V2_EXTERNAL_BLOCK",
         "CALIBRATION_V2_INVALIDATED",
-        "CALIBRATION_V2_COMPLETED",
     ],
     reason: str | None,
     unavailable_fields: tuple[str, ...] = (),

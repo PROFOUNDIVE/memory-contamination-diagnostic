@@ -102,17 +102,22 @@ def test_historical_registry_drift_fails_before_provider_import(
 
 
 @pytest.mark.parametrize(
-    ("command", "terminal"),
+    ("command", "terminals"),
     [
-        ("run-calibration-v2", "CALIBRATION_V2_EXTERNAL_BLOCK"),
-        ("validate-calibration-v2-archive", "CALIBRATION_V2_EXTERNAL_BLOCK"),
+        (
+            "run-calibration-v2",
+            ("CALIBRATION_V2_EXTERNAL_BLOCK", "MAIN_A_EXECUTION_FORBIDDEN"),
+        ),
+        ("validate-calibration-v2-archive", ("CALIBRATION_V2_EXTERNAL_BLOCK",)),
     ],
 )
-def test_unimplemented_live_boundaries_are_honest(command: str, terminal: str) -> None:
+def test_unimplemented_live_boundaries_are_honest(
+    command: str, terminals: tuple[str, ...]
+) -> None:
     result = _command(CONFIG, command)
 
     assert result.returncode != 0
-    assert result.stderr.rstrip().endswith(terminal)
+    assert tuple(result.stderr.splitlines()) == terminals
 
 
 @pytest.mark.parametrize(
