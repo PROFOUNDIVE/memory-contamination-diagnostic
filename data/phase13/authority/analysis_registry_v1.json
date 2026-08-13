@@ -1,0 +1,413 @@
+{
+  "excluded_conditions": [
+    "nomem",
+    "filter_challenge"
+  ],
+  "execution_authority": {
+    "analysis_window_registry_id": "phase13-analysis-window-registry-v1",
+    "file_sha256": "7c92189f645b74381f3fedf2d3ffbc8c4768a7019eaeb621edb8c22fb4a34970",
+    "path": "data/phase13/authority/execution_registry_v1.json",
+    "registry_hash": "acb769e1e1adbc3eb69e4302322c8eac81829dc836611519caea2ba960900c38",
+    "registry_id": "phase13-execution-registry-v1"
+  },
+  "inference": {
+    "H_primary": 5,
+    "bootstrap": {
+      "dependence": "joint_complete_seed_cluster",
+      "interval": "two_sided_95_percentile",
+      "replicates": 20000,
+      "rng_seed": 13,
+      "test": "null_imposed_paired_cluster",
+      "unit": "trajectory_seed"
+    },
+    "cross_task_family": false,
+    "families": [
+      {
+        "family_id": "game24-h5-primary-holm-v1",
+        "slots": [
+          {
+            "analysis_window_id": "accuracy-h5-primary",
+            "estimand_id": "l1-fh_bounded-clean-contam",
+            "order": 1,
+            "pair_id": null,
+            "support_level": "L1"
+          },
+          {
+            "analysis_window_id": "accuracy-h5-primary",
+            "estimand_id": "l1-rag_frozen-clean-contam",
+            "order": 2,
+            "pair_id": null,
+            "support_level": "L1"
+          },
+          {
+            "analysis_window_id": "accuracy-h5-primary",
+            "estimand_id": "l1-bot_style-clean-contam",
+            "order": 3,
+            "pair_id": null,
+            "support_level": "L1"
+          },
+          {
+            "analysis_window_id": "accuracy-h5-primary",
+            "estimand_id": "l1-reflexion_style-clean-contam",
+            "order": 4,
+            "pair_id": null,
+            "support_level": "L1"
+          },
+          {
+            "analysis_window_id": "accuracy-h5-primary",
+            "estimand_id": "l2-p01-clean-contam-did",
+            "order": 5,
+            "pair_id": "P01",
+            "support_level": "L2"
+          },
+          {
+            "analysis_window_id": "accuracy-h5-primary",
+            "estimand_id": "l2-p02-clean-contam-did",
+            "order": 6,
+            "pair_id": "P02",
+            "support_level": "L2"
+          },
+          {
+            "analysis_window_id": "accuracy-h5-primary",
+            "estimand_id": "l2-p03-clean-contam-did",
+            "order": 7,
+            "pair_id": "P03",
+            "support_level": "L2"
+          }
+        ],
+        "task": "game24"
+      },
+      {
+        "family_id": "math_equation_balancer-h5-primary-holm-v1",
+        "slots": [
+          {
+            "analysis_window_id": "accuracy-h5-primary",
+            "estimand_id": "l1-fh_bounded-clean-contam",
+            "order": 1,
+            "pair_id": null,
+            "support_level": "L1"
+          },
+          {
+            "analysis_window_id": "accuracy-h5-primary",
+            "estimand_id": "l1-rag_frozen-clean-contam",
+            "order": 2,
+            "pair_id": null,
+            "support_level": "L1"
+          },
+          {
+            "analysis_window_id": "accuracy-h5-primary",
+            "estimand_id": "l1-bot_style-clean-contam",
+            "order": 3,
+            "pair_id": null,
+            "support_level": "L1"
+          },
+          {
+            "analysis_window_id": "accuracy-h5-primary",
+            "estimand_id": "l1-reflexion_style-clean-contam",
+            "order": 4,
+            "pair_id": null,
+            "support_level": "L1"
+          },
+          {
+            "analysis_window_id": "accuracy-h5-primary",
+            "estimand_id": "l2-p01-clean-contam-did",
+            "order": 5,
+            "pair_id": "P01",
+            "support_level": "L2"
+          },
+          {
+            "analysis_window_id": "accuracy-h5-primary",
+            "estimand_id": "l2-p02-clean-contam-did",
+            "order": 6,
+            "pair_id": "P02",
+            "support_level": "L2"
+          },
+          {
+            "analysis_window_id": "accuracy-h5-primary",
+            "estimand_id": "l2-p03-clean-contam-did",
+            "order": 7,
+            "pair_id": "P03",
+            "support_level": "L2"
+          }
+        ],
+        "task": "math_equation_balancer"
+      },
+      {
+        "family_id": "word_sorting-h5-primary-holm-v1",
+        "slots": [
+          {
+            "analysis_window_id": "accuracy-h5-primary",
+            "estimand_id": "l1-fh_bounded-clean-contam",
+            "order": 1,
+            "pair_id": null,
+            "support_level": "L1"
+          },
+          {
+            "analysis_window_id": "accuracy-h5-primary",
+            "estimand_id": "l1-rag_frozen-clean-contam",
+            "order": 2,
+            "pair_id": null,
+            "support_level": "L1"
+          },
+          {
+            "analysis_window_id": "accuracy-h5-primary",
+            "estimand_id": "l1-bot_style-clean-contam",
+            "order": 3,
+            "pair_id": null,
+            "support_level": "L1"
+          },
+          {
+            "analysis_window_id": "accuracy-h5-primary",
+            "estimand_id": "l1-reflexion_style-clean-contam",
+            "order": 4,
+            "pair_id": null,
+            "support_level": "L1"
+          },
+          {
+            "analysis_window_id": "accuracy-h5-primary",
+            "estimand_id": "l2-p01-clean-contam-did",
+            "order": 5,
+            "pair_id": "P01",
+            "support_level": "L2"
+          },
+          {
+            "analysis_window_id": "accuracy-h5-primary",
+            "estimand_id": "l2-p02-clean-contam-did",
+            "order": 6,
+            "pair_id": "P02",
+            "support_level": "L2"
+          },
+          {
+            "analysis_window_id": "accuracy-h5-primary",
+            "estimand_id": "l2-p03-clean-contam-did",
+            "order": 7,
+            "pair_id": "P03",
+            "support_level": "L2"
+          }
+        ],
+        "task": "word_sorting"
+      }
+    ],
+    "holm": {
+      "alpha": "0.05",
+      "family_scope": "within_task",
+      "method": "holm_step_down"
+    },
+    "interval_id": "main-paired-seed-bootstrap95-v1",
+    "level_1_estimator": "paired_seed_risk_difference",
+    "level_2_estimator": "paired_seed_difference_in_differences",
+    "not_estimable": {
+      "reject_null": false,
+      "renormalize_weights": false,
+      "retain_family_slot": true,
+      "sentinel": "NOT_ESTIMABLE",
+      "shrink_family": false
+    },
+    "seed_summary": "mean_verified_accuracy_k0_k4"
+  },
+  "non_primary_windows": [
+    {
+      "analysis_window_id": "accuracy-h2-sensitivity",
+      "inference_status": "estimation_only"
+    },
+    {
+      "analysis_window_id": "recurrence-h2-descriptive",
+      "inference_status": "estimation_only"
+    },
+    {
+      "analysis_window_id": "recurrence-h5-secondary",
+      "inference_status": "estimation_only"
+    },
+    {
+      "analysis_window_id": "persistence-h5-secondary",
+      "inference_status": "estimation_only"
+    },
+    {
+      "analysis_window_id": "propagation-h5-conditional",
+      "inference_status": "estimation_only"
+    },
+    {
+      "analysis_window_id": "collapse-h5-exploratory",
+      "inference_status": "estimation_only"
+    },
+    {
+      "analysis_window_id": "accuracy-h10-sensitivity",
+      "inference_status": "estimation_only"
+    },
+    {
+      "analysis_window_id": "recurrence-h10-descriptive",
+      "inference_status": "estimation_only"
+    },
+    {
+      "analysis_window_id": "persistence-h10-descriptive",
+      "inference_status": "estimation_only"
+    },
+    {
+      "analysis_window_id": "propagation-h10-conditional",
+      "inference_status": "estimation_only"
+    },
+    {
+      "analysis_window_id": "collapse-h10-exploratory",
+      "inference_status": "estimation_only"
+    }
+  ],
+  "offline_compute": {
+    "owner_id": "phase13-offline-compute-owner-v1",
+    "rows": [
+      {
+        "memory_evolutions": 0,
+        "operation": "prefix_derivation",
+        "owner_id": "phase13-offline-compute-owner-v1",
+        "provider_calls": 0,
+        "task_presentations": 0
+      },
+      {
+        "memory_evolutions": 0,
+        "operation": "paired_seed_bootstrap",
+        "owner_id": "phase13-offline-compute-owner-v1",
+        "provider_calls": 0,
+        "task_presentations": 0
+      },
+      {
+        "memory_evolutions": 0,
+        "operation": "report_rendering",
+        "owner_id": "phase13-offline-compute-owner-v1",
+        "provider_calls": 0,
+        "task_presentations": 0
+      }
+    ]
+  },
+  "planning": {
+    "calibration_seeds": [
+      10000,
+      10001,
+      10002,
+      10003,
+      10004,
+      10005,
+      10006,
+      10007,
+      10008,
+      10009,
+      10010,
+      10011
+    ],
+    "deterministic": {
+      "classification": "deterministic_structural",
+      "planning_value": "1.000",
+      "required_state": "conformance_passed"
+    },
+    "main_outcomes_prohibited": true,
+    "stochastic": {
+      "classification": "trajectory_stochastic",
+      "confidence": "0.95",
+      "denominator": 12,
+      "interval_id": "support-planning-cp95-one-sided-v1",
+      "rounding": "floor_to_3_decimals",
+      "side": "lower_one_sided",
+      "zero_success_value": "0.000"
+    },
+    "targets": [
+      {
+        "level_1": 10,
+        "level_2": 10,
+        "level_3": null,
+        "route": "3w"
+      },
+      {
+        "level_1": 16,
+        "level_2": 16,
+        "level_3": 8,
+        "route": "5w"
+      }
+    ]
+  },
+  "registry_hash": "f56decacce3d8e9401b90e64f5d4df3a6cf194af9f03a369c486767e08977ac0",
+  "registry_id": "phase13-analysis-registry-v1",
+  "schema_version": "phase13_analysis_registry_v1",
+  "support": {
+    "level_1": [
+      {
+        "baseline": "fh_bounded",
+        "status": "baseline_local",
+        "support_population_id": "l1-fh_bounded-structural-support"
+      },
+      {
+        "baseline": "rag_frozen",
+        "status": "baseline_local",
+        "support_population_id": "l1-rag_frozen-structural-support"
+      },
+      {
+        "baseline": "bot_style",
+        "status": "baseline_local",
+        "support_population_id": "l1-bot_style-structural-support"
+      },
+      {
+        "baseline": "reflexion_style",
+        "status": "baseline_local",
+        "support_population_id": "l1-reflexion_style-structural-support"
+      }
+    ],
+    "level_2": [
+      {
+        "left_baseline": "fh_bounded",
+        "pair_id": "P01",
+        "right_baseline": "rag_frozen",
+        "route_gating": true,
+        "status": "required_confirmatory",
+        "support_population_id": "l2-p01-pairwise-structural-support"
+      },
+      {
+        "left_baseline": "fh_bounded",
+        "pair_id": "P02",
+        "right_baseline": "bot_style",
+        "route_gating": true,
+        "status": "required_confirmatory",
+        "support_population_id": "l2-p02-pairwise-structural-support"
+      },
+      {
+        "left_baseline": "fh_bounded",
+        "pair_id": "P03",
+        "right_baseline": "reflexion_style",
+        "route_gating": true,
+        "status": "required_confirmatory",
+        "support_population_id": "l2-p03-pairwise-structural-support"
+      },
+      {
+        "left_baseline": "rag_frozen",
+        "pair_id": "P04",
+        "right_baseline": "bot_style",
+        "route_gating": false,
+        "status": "planned_secondary",
+        "support_population_id": "l2-p04-pairwise-structural-support"
+      },
+      {
+        "left_baseline": "rag_frozen",
+        "pair_id": "P05",
+        "right_baseline": "reflexion_style",
+        "route_gating": false,
+        "status": "planned_secondary",
+        "support_population_id": "l2-p05-pairwise-structural-support"
+      },
+      {
+        "left_baseline": "bot_style",
+        "pair_id": "P06",
+        "right_baseline": "reflexion_style",
+        "route_gating": false,
+        "status": "planned_secondary",
+        "support_population_id": "l2-p06-pairwise-structural-support"
+      }
+    ],
+    "level_3": {
+      "baselines": [
+        "fh_bounded",
+        "rag_frozen",
+        "bot_style",
+        "reflexion_style"
+      ],
+      "route_gating": false,
+      "status": "sensitivity_only",
+      "support_population_id": "l3-all-primary-baselines-structural-support"
+    }
+  }
+}
