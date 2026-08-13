@@ -106,8 +106,8 @@ def _validate_timing(registry: ExecutionRegistry) -> None:
     if (timing.L_min, timing.tau_star, timing.H_run, timing.minimum_stream_length) != (1, 2, 10, 11):
         raise Phase13ExecutionError("HORIZON_INVALID")
     if (
-        timing.absolute_trial_end - timing.absolute_trial_start + 1 != timing.H_run
-        or timing.event_time_end - timing.event_time_start + 1 != timing.H_run
+        (timing.absolute_trial_start, timing.absolute_trial_end) != (2, 11)
+        or (timing.event_time_start, timing.event_time_end) != (0, 9)
     ):
         raise Phase13ExecutionError("EVENT_RANGE_INVALID")
 

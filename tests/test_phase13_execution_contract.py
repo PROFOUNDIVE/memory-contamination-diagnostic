@@ -77,6 +77,28 @@ def _event_range(payload: dict[str, Any]) -> None:
     payload["timing"]["event_time_end"] = 8
 
 
+def _coordinated_trial_shift(payload: dict[str, Any]) -> None:
+    payload["timing"]["absolute_trial_start"] = 3
+    payload["timing"]["absolute_trial_end"] = 12
+
+
+def _coordinated_event_shift(payload: dict[str, Any]) -> None:
+    payload["timing"]["event_time_start"] = 1
+    payload["timing"]["event_time_end"] = 10
+
+
+def _tau_rule_drift(payload: dict[str, Any]) -> None:
+    payload["timing"]["tau_star_rule"] = "maximum_static_feasible_position"
+
+
+def _minimum_stream_length_drift(payload: dict[str, Any]) -> None:
+    payload["timing"]["minimum_stream_length"] = 12
+
+
+def _timing_scalar_drift(payload: dict[str, Any]) -> None:
+    payload["timing"]["L_min"] = 2
+
+
 def _primary_id(payload: dict[str, Any]) -> None:
     payload["primary_analysis_window_id"] = "accuracy-h2-sensitivity"
 
@@ -136,6 +158,11 @@ def _template_drift(payload: dict[str, Any]) -> None:
         (_suffix_order, "SUFFIX_ORDER_INVALID"),
         (_horizon, "HORIZON_INVALID"),
         (_event_range, "EVENT_RANGE_INVALID"),
+        (_coordinated_trial_shift, "EVENT_RANGE_INVALID"),
+        (_coordinated_event_shift, "EVENT_RANGE_INVALID"),
+        (_tau_rule_drift, "MALFORMED_REGISTRY"),
+        (_minimum_stream_length_drift, "HORIZON_INVALID"),
+        (_timing_scalar_drift, "HORIZON_INVALID"),
         (_primary_id, "PRIMARY_WINDOW_INVALID"),
         (_owner, "OWNER_BINDING_INVALID"),
         (_capacity, "CAPACITY_CONTRACT_INVALID"),
