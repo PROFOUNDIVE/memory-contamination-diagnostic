@@ -32,7 +32,7 @@ clean_context:
   manifest_path: data/memory/baseline_fidelity_v2_contract_corpus.manifest.json
   manifest_sha256: 839e84ff0b0394abd36f0b1ac89f6b56219348b3f7b4572e0daecc58630bcd3c
 readiness_evidence:
-  path: data/phase13/authority/pilot_a_readiness_manifest_v1.json
+  path: .omo/evidence/pilot-a-closeout/pilot_a_readiness_manifest.json
   sha256: ca82e5a37035d2f0538d7a9288dc30e1768e2816cd321d475c348470b1d96ae8
 embedding_contract:
   path: data/phase12/registries/embedding_runtime_contract.yaml

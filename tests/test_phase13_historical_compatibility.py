@@ -21,7 +21,7 @@ PROVENANCE_MAP_PATH: Final = Path(
     "2026-08-12_Phase13_Calibration_Evidence_Provenance_and_AgentOps_Map.md"
 )
 CURRENT_V1_CONFIG_SHA256: Final = (
-    "347ed902e959c7d77f19284129c6dd46018d4900a7a6bc590240bb3845cb8734"
+    "3f1ab4ec633e812b922efc3a3d7a2d7f551dbaf65be67b95f097d109d01a41f9"
 )
 PROVENANCE_MAP_SHA256: Final = (
     "50b73ba708895cccebc451e0673e85d4aa5945047755fb2780efc8a97acafb19"
@@ -110,7 +110,7 @@ def _mutate(registry: dict[str, object], identity_path: str) -> None:
 def test_registry_binds_literal_historical_identity_and_real_source_hashes() -> None:
     assert _sha256(PROVENANCE_MAP_PATH) == PROVENANCE_MAP_SHA256
     assert _sha256(CURRENT_V1_CONFIG_PATH) == CURRENT_V1_CONFIG_SHA256
-    assert CURRENT_V1_CONFIG_PATH.stat().st_size == 3990
+    assert CURRENT_V1_CONFIG_PATH.stat().st_size == 3995
 
     registry = _registry()
 
