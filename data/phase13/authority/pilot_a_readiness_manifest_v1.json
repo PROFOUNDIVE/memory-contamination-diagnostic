@@ -1,0 +1,86 @@
+{
+  "admission": {
+    "admitted": true,
+    "reason_code": null,
+    "scientific_result": false
+  },
+  "authoritative_design_sha256": "56c42b1af761c2f3838638316823d0ce394c6c543f17aff97f4657721c964983",
+  "config_hashes": {
+    "scientific_pilot_a": "bb114bdc3eaf85a913ad3918c1e2121ad0c43ebb134280714ba7919a6fc0d365"
+  },
+  "cost_policy": {
+    "hard_ceiling_usd": 5.0,
+    "projected_max_cost_usd": 2.4576000000000002,
+    "warning_usd": 3.0
+  },
+  "embedding": {
+    "device": "cpu",
+    "dtype": "torch.float32",
+    "local_files_only": true,
+    "model_id": "BAAI/bge-m3",
+    "revision": "5617a9f61b028005a4858fdac845db406aefb181"
+  },
+  "evidence": {
+    "f1a": {
+      "run": "runs/bfv2-structural-final-5ea9a78",
+      "run_json_sha256": "e781bfb98b0b6ab7fa12e94f855443286f5ea024fc4dad9b9971939ea15e925f",
+      "status": "pass"
+    },
+    "f1b": {
+      "manifest_sha256": "0acfe7983bf2348032e45d3f4dbe30bed239752941dc8a9576d8047a61f57493",
+      "run": "runs/bfv2-source-final-5ea9a78",
+      "run_json_sha256": "95c624a4f8a5df195a34ecb8c88beecb424e8db0f531f01f00b5097778960741",
+      "status": "pass"
+    },
+    "f1c": {
+      "sha256": "f63718204c8c67afb4b5f5a9e39e025cd0a442280629aef5f8a89b7ac61639e1",
+      "status": "pass"
+    },
+    "invariants": {
+      "sha256": "588cca3f9258d689700398835b2010e9c12940dbbbd6c097421e0c58961559a2",
+      "status": "pass"
+    },
+    "live_failure_classification": {
+      "sha256": "bb87798c24196a73479559468b3014a8addd75f8b37ecb8f510ec1ad24b387d5",
+      "status": "pass"
+    },
+    "live_plumbing": {
+      "archive_manifest_sha256": "e5b6372caa6dbb2b5ec7506b5daab490aee2d09115be49b37beff9f9f149a485",
+      "evidence_sha256": "010b97ce16392303cdf3b62ed8cdd3226d0bac580e057248a1e35bb608cd5726",
+      "status": "pass"
+    },
+    "micro_retrieval": {
+      "output_sha256": "ebbac075ac4a16ee98aa8e72fd60890e0502a737b432b5133cf563422dd1fa11",
+      "registry_sha256": "500bf4e11888487be6f79b7fa654ac84dd65e338849ee55f50fea713fa265eb3",
+      "status": "pass"
+    },
+    "offline_archive": {
+      "sha256": "c00c2a49b3e5fbab05daf9af68cb7cf733d3483e71cf6ba2fec1cefe45608092",
+      "status": "pass"
+    },
+    "preflight": {
+      "sha256": "cf9524e51a1c373c2e93a709e80bc99db0bfbef090131ec6d17fd7dab6f84472",
+      "status": "pass"
+    }
+  },
+  "implementation_commit": "5ea9a78949f54c20a63e420fc4fd593a7ea02f58",
+  "issued_at": "2026-07-27T06:30:00Z",
+  "model": {
+    "endpoint": "responses",
+    "model_id": "gpt-4o-2024-11-20",
+    "provider": "openai"
+  },
+  "overall": "pass",
+  "prompt_versions": {
+    "bot_solve": "bot_solve_json_v2",
+    "final_answer": "terminal_final_line_prompt_v2",
+    "reflexion_reflect": "reflexion_reflect_json_v2"
+  },
+  "parser_versions": {
+    "bot_solve": "bot_solve_json_v1",
+    "final_answer": "terminal_final_line_v1"
+  },
+  "scientific_result": false,
+  "status": "READY_FOR_HUMAN_AUTHORIZED_PILOT_A",
+  "working_tree_status": "tracked_clean"
+}
