@@ -21,6 +21,7 @@ from memcontam.memory.checkpoint_v3 import (
     append_native_entry,
     serialize_checkpoint,
 )
+from memcontam.logging.schema import VerifierResult
 from memcontam.contamination.phase12.controls import construct_correct_control, construct_irrelevant_control
 from memcontam.contamination.phase12.registry import load_candidate_registry
 from memcontam.contamination.phase12.renderers import RendererRegistry
@@ -82,6 +83,7 @@ def _fixture(
     baseline_seed: bool = False,
     decoding_metadata: dict[str, int] | None = None,
     prompt_content: str = "solve",
+    verifier_result: bool | VerifierResult | str | None = True,
 ):
     provider = _Provider()
     clients = {(baseline, arm): _runtime(provider, baseline, arm) for baseline in BASELINES for arm in ARMS}
@@ -217,7 +219,7 @@ def _fixture(
         state["step"] = prior - 1 if rewind and prior == 4 else prior + 1
         writes = ("forbidden",) if rag_write and context.identities.condition_id == "rag_frozen" else ()
         return RuntimeTrialResult(
-            outcome=BaselineExecutionOutcome("succeeded", verifier_result=True),
+            outcome=BaselineExecutionOutcome("succeeded", verifier_result=verifier_result),
             state={"step": state["step"]} if replace_state else state,
             write_envelopes=writes,
         )
@@ -284,6 +286,30 @@ def test_executes_one_causal_h10_source_with_owned_calls_and_nomem_singleton() -
         f"phase13_calibration_v2_game24_{index:04d}" for index in range(2, 12)
     )
     assert not any(set(config) & {"horizon", "future_horizon", "analysis_window", "task"} for config in provider.configs)
+
+
+@pytest.mark.parametrize("verifier_result", [None, "false"])
+def test_malformed_verifier_result_invalidates_trajectory(
+    verifier_result: str | None,
+) -> None:
+    _, _, request = _fixture(verifier_result=verifier_result)
+
+    result = execute_calibration_trajectory(request)
+
+    assert isinstance(result, InvalidatedTrajectory)
+    assert result.failure_code == "VERIFIER_RESULT_INVALID"
+    assert result.accounting_closure.templates[0].calls[0].attempts[0].raw_evidence
+
+
+def test_structured_verifier_result_is_sealed_exactly() -> None:
+    _, _, request = _fixture(
+        verifier_result=VerifierResult(is_correct=False, reason="wrong answer")
+    )
+
+    result = execute_calibration_trajectory(request)
+
+    assert result.status == "completed"
+    assert all(event.verified_score == 0 for event in result.events)
 
 
 @pytest.mark.parametrize(
@@ -422,7 +448,9 @@ def test_rejects_nominal_template_call_shortfall() -> None:
     def one_call(context, state):  # noqa: ANN001, ANN202
         context.client.chat([{"role": "user", "content": "solve"}], context.model, dict(context.decoding))
         state["step"] += 1
-        return RuntimeTrialResult(BaselineExecutionOutcome("succeeded"), state)
+        return RuntimeTrialResult(
+            BaselineExecutionOutcome("succeeded", verifier_result=True), state
+        )
 
     registry["bot_style"] = replace(original, execute_trial=one_call)
 

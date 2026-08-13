@@ -12,6 +12,7 @@ from memcontam.experiment.phase12.live_suffix import run_live_matched_suffix
 from memcontam.experiment.phase12.runtime_registry import RuntimeEntry, RuntimeTrialResult
 from memcontam.memory.checkpoint_v3 import NativeState, serialize_checkpoint
 from memcontam.main_registry import Task
+from memcontam.logging.schema import VerifierResult
 from memcontam.readiness.phase13_analysis_contract import load_analysis_registry
 from memcontam.readiness.phase13_calibration_v2 import CalibrationV2Config
 from memcontam.readiness.phase13_calibration_v2_registry import validate_calibration_v2_registry
@@ -204,7 +205,13 @@ def _observed_registry(
             ):
                 raise _Violation("REFLEXION_WRITE_MISMATCH")
             if baseline != "nomem":
-                verified: Literal[0, 1] = 1 if result.outcome.verifier_result is True else 0
+                match result.outcome.verifier_result:
+                    case bool() as value:
+                        verified: Literal[0, 1] = 1 if value else 0
+                    case VerifierResult(is_correct=value):
+                        verified = 1 if value else 0
+                    case _:
+                        raise _Violation("VERIFIER_RESULT_INVALID")
                 events.append(
                     build_trajectory_event(
                         request, context, baseline, arm, (before, after),
