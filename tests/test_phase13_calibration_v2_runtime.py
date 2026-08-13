@@ -80,6 +80,7 @@ def _fixture(
     replace_state: bool = False,
     decoding_seed: bool = False,
     baseline_seed: bool = False,
+    decoding_metadata: dict[str, int] | None = None,
     prompt_content: str = "solve",
 ):
     provider = _Provider()
@@ -131,6 +132,7 @@ def _fixture(
                 "temperature": 0.0,
                 **({"future_horizon": 10} if leak else {}),
                 **({"seed": 10000} if decoding_seed else {}),
+                **({} if decoding_metadata is None else decoding_metadata),
             },
             {
                 arm: LiveArmBranch(
@@ -194,6 +196,7 @@ def _fixture(
                 "temperature": 0.0,
                 **({"future_horizon": 10} if leak else {}),
                 **({"seed": 10000} if decoding_seed else {}),
+                **({} if decoding_metadata is None else decoding_metadata),
             },
             "clean",
             RuntimeIdentities("run-1", f"trial-{index}", index),
@@ -550,3 +553,52 @@ def test_provider_allows_ordinary_nonmetadata_seed_word() -> None:
     )
 
     assert provider.messages == [({"role": "user", "content": "Plant the seed in soil."},)]
+
+
+@pytest.mark.parametrize(
+    "prompt_content",
+    (
+        "calibrationSeed=10000",
+        "randomSeed: 10000",
+        "trajectory_seed=10000",
+        "run-seed:10000",
+        "seedValue 10000",
+        "CALIBRATION_SEED_VALUE=10000",
+    ),
+)
+def test_authorized_seam_rejects_prefixed_seed_prompt_metadata(
+    capsys: pytest.CaptureFixture[str],
+    prompt_content: str,
+) -> None:
+    provider, _, request = _fixture(prompt_content=prompt_content)
+
+    _run_authorized(request)
+
+    assert '"failure_code": "PROVIDER_PROMPT_LEAKAGE"' in capsys.readouterr().out
+    assert provider.configs == []
+    assert provider.messages == []
+    assert all(not runtime.dispatched_payloads for runtime in request.providers.values())
+
+
+@pytest.mark.parametrize(
+    "metadata_key",
+    (
+        "calibrationSeed",
+        "random_seed",
+        "trajectory-seed",
+        "runSeed",
+        "seedValue",
+        "calibration_seed_value",
+    ),
+)
+def test_authorized_seam_rejects_prefixed_seed_config_metadata(
+    capsys: pytest.CaptureFixture[str],
+    metadata_key: str,
+) -> None:
+    provider, _, request = _fixture(decoding_metadata={metadata_key: 10000})
+
+    _run_authorized(request)
+
+    assert '"failure_code": "PROVIDER_CONFIG_LEAKAGE"' in capsys.readouterr().out
+    assert provider.configs == []
+    assert all(not runtime.dispatched_payloads for runtime in request.providers.values())

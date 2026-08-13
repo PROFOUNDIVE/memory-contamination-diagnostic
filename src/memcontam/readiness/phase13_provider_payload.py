@@ -12,10 +12,9 @@ ALLOWED_CONFIG: Final = frozenset({
     "execution_template_id", "session_id", "intervention_id",
 })
 INTERNAL_CONFIG: Final = frozenset({"embedding_provider", "_phase12_reflection_hook"})
-SEED_LABEL: Final = re.compile(r"(?i)(?:trajectory[-_ ]*)?seed(?:[-_ ]*id)?\Z")
-SEED_VALUE: Final = re.compile(
-    r"(?i)(?<![A-Za-z0-9])(?:trajectory[-_ ]*)?seed(?:[-_ ]*id)?\s*(?:[:=]\s*)?\d"
-)
+SEED_METADATA_WORDS: Final = frozenset({
+    "calibration", "random", "trajectory", "run", "seed", "id", "value",
+})
 
 
 def provider_config(config: dict) -> dict[str, JsonScalar]:
@@ -42,7 +41,14 @@ def validate_messages(messages: list[dict[str, str]]) -> None:
 
 def _forbidden_token(value: str) -> bool:
     normalized = value.lower().replace("-", "_")
-    return SEED_LABEL.fullmatch(value.strip()) is not None or SEED_VALUE.search(value) is not None or any(
+    return _seed_metadata(value) or any(
         token in normalized
         for token in ("future", "horizon", "analysis_window", "task", "window")
     )
+
+
+def _seed_metadata(value: str) -> bool:
+    normalized = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", value)
+    label = re.split(r"[:=]?\s*\d", normalized, maxsplit=1)[0]
+    words = tuple(word.lower() for word in re.findall(r"[A-Za-z]+", label))
+    return "seed" in words and set(words) <= SEED_METADATA_WORDS
