@@ -4,17 +4,11 @@ import argparse
 import json
 from pathlib import Path
 
-from memcontam.clients.config import ProviderConfig
-from memcontam.clients.cost_guard import CostGuard
-from memcontam.clients.openai_responses import OpenAIResponsesClient
-from memcontam.memory.embeddings import BgeM3EmbeddingProvider
 from memcontam.readiness.phase13_clean_prefix import (
     Phase13CalibrationError,
     load_clean_prefix_config_bytes,
     prepare_clean_prefix,
 )
-from memcontam.readiness.phase13_clean_prefix_authorization import verify_authorization
-from memcontam.readiness.phase13_clean_prefix_runtime import execute_clean_prefix_calibration
 from memcontam.readiness.phase13_calibration_v2 import (
     CalibrationV2ConfigError,
     prepare_calibration_v2,
@@ -24,7 +18,6 @@ from memcontam.readiness.phase13_terminal import (
     CalibrationV2ExternalBlock,
     render_terminal,
 )
-from memcontam.readiness.retrieval_smoke import resolve_bge_cache_path
 
 
 def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -70,6 +63,14 @@ def run(args: argparse.Namespace) -> None:
             payload = prepare_clean_prefix(args.config, args.run_id, args.output)
             print(json.dumps(payload, sort_keys=True))
             return
+        from memcontam.clients.config import ProviderConfig
+        from memcontam.clients.cost_guard import CostGuard
+        from memcontam.clients.openai_responses import OpenAIResponsesClient
+        from memcontam.memory.embeddings import BgeM3EmbeddingProvider
+        from memcontam.readiness.phase13_clean_prefix_authorization import verify_authorization
+        from memcontam.readiness.phase13_clean_prefix_runtime import execute_clean_prefix_calibration
+        from memcontam.readiness.retrieval_smoke import resolve_bge_cache_path
+
         verified = verify_authorization(
             config_path=args.config,
             run_id=args.run_id,
