@@ -5,7 +5,7 @@ from typing import Final
 
 import pytest
 
-from memcontam.memory.checkpoint_v3 import NativeState, serialize_checkpoint
+from memcontam.memory.checkpoint_v3 import NativeState, Phase12Checkpoint, serialize_checkpoint
 from memcontam.readiness.phase13_structural_support import (
     CheckpointFact,
     StructuralSupportError,
@@ -20,7 +20,10 @@ SHA_A: Final = "a" * 64
 SHA_B: Final = "b" * 64
 
 
-def _selector_payload() -> dict[str, object]:
+def _selector_payload(
+    checkpoints: dict[str, Phase12Checkpoint] | None = None,
+) -> dict[str, object]:
+    registered = checkpoints or _checkpoints()
     return {
         "stream_id": "game24-seed-10000",
         "ordered_trials": [
@@ -33,6 +36,8 @@ def _selector_payload() -> dict[str, object]:
             {
                 "baseline": baseline,
                 "checkpoint_trial_index": 1,
+                "registered_checkpoint_id": registered[baseline].identity.checkpoint_id,
+                "registered_checkpoint_sha256": registered[baseline].canonical_sha256,
                 "checkpoint_serializable": True,
                 "suffix_executable": True,
                 "route_capacity_available": True,
@@ -83,9 +88,7 @@ def _states() -> dict[str, NativeState]:
 
 
 def _checkpoint_facts(states: dict[str, NativeState] | None = None) -> tuple[CheckpointFact, ...]:
-    checkpoints = {
-        baseline: serialize_checkpoint(state) for baseline, state in (states or _states()).items()
-    }
+    checkpoints = _checkpoints(states)
     return tuple(
         CheckpointFact(
             baseline=baseline,
@@ -97,8 +100,18 @@ def _checkpoint_facts(states: dict[str, NativeState] | None = None) -> tuple[Che
     )
 
 
-def _selection():
-    return select_prospective_checkpoint(parse_prospective_selector_input(_selector_payload()))
+def _selection(checkpoints: dict[str, Phase12Checkpoint] | None = None):
+    return select_prospective_checkpoint(
+        parse_prospective_selector_input(_selector_payload(checkpoints))
+    )
+
+
+def _checkpoints(
+    states: dict[str, NativeState] | None = None,
+) -> dict[str, Phase12Checkpoint]:
+    return {
+        baseline: serialize_checkpoint(state) for baseline, state in (states or _states()).items()
+    }
 
 
 def test_selects_trial_two_from_source_order_and_resource_feasibility() -> None:
@@ -224,7 +237,8 @@ def test_empty_reflexion_is_ready_with_zero_richness_and_support_is_intersected(
         },
     )
 
-    report = evaluate_structural_support(_selection(), _checkpoint_facts(states))
+    checkpoints = _checkpoints(states)
+    report = evaluate_structural_support(_selection(checkpoints), _checkpoint_facts(states))
 
     readiness = {row.baseline: row for row in report.readiness}
     assert readiness["reflexion_style"].ready is True
@@ -252,7 +266,8 @@ def test_support_intersections_are_derived_from_local_readiness() -> None:
     )
     facts[1] = replace(facts[1], expected_sha256=facts[1].checkpoint.canonical_sha256)
 
-    report = evaluate_structural_support(_selection(), tuple(facts))
+    registered = {row.baseline: row.checkpoint for row in facts}
+    report = evaluate_structural_support(_selection(registered), tuple(facts))
 
     local = {row.baseline: row.supported for row in report.baseline_local}
     pairs = {row.pair_id: row.supported for row in report.exact_pairs}
@@ -330,6 +345,27 @@ def test_forged_canonical_hash_is_rejected_before_readiness() -> None:
 
     with pytest.raises(StructuralSupportError, match="CHECKPOINT_HASH_MISMATCH"):
         evaluate_structural_support(_selection(), tuple(facts))
+
+
+def test_self_consistent_unregistered_trial_one_checkpoint_is_rejected() -> None:
+    registered = _checkpoints()
+    selection = select_prospective_checkpoint(
+        parse_prospective_selector_input(_selector_payload(registered))
+    )
+    facts = list(_checkpoint_facts())
+    source = facts[0].checkpoint.state
+    unregistered = serialize_checkpoint(
+        NativeState(source.baseline, source.entries, {**source.native_state, "records": []})
+    )
+    facts[0] = CheckpointFact(
+        "fh_bounded",
+        1,
+        unregistered,
+        unregistered.canonical_sha256,
+    )
+
+    with pytest.raises(StructuralSupportError, match="UNREGISTERED_CHECKPOINT"):
+        evaluate_structural_support(selection, tuple(facts))
 
 
 def test_duplicate_checkpoint_trial_is_rejected_without_mutating_inputs() -> None:

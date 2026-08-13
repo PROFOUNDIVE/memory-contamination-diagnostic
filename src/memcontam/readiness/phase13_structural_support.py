@@ -6,22 +6,12 @@ from typing import Annotated, Final, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from memcontam.experiment.phase12.native_state_facts import inspect_native_state
-from memcontam.memory.checkpoint_v3 import (
-    CheckpointError,
-    Phase12Checkpoint,
-    deserialize_checkpoint,
-)
-from memcontam.readiness.phase13_calibration_v2_authority import (
-    AuthorityError,
-    reject_forbidden_fields,
-)
+from memcontam.memory.checkpoint_v3 import CheckpointError, Phase12Checkpoint, deserialize_checkpoint
+from memcontam.readiness.phase13_calibration_v2_authority import AuthorityError, reject_forbidden_fields
 
 Baseline = Literal["fh_bounded", "rag_frozen", "bot_style", "reflexion_style"]
 BASELINES: Final[tuple[Baseline, ...]] = (
-    "fh_bounded",
-    "rag_frozen",
-    "bot_style",
-    "reflexion_style",
+    "fh_bounded", "rag_frozen", "bot_style", "reflexion_style",
 )
 PAIRS: Final[tuple[tuple[str, Baseline, Baseline], ...]] = (
     ("P01", "fh_bounded", "rag_frozen"),
@@ -53,6 +43,8 @@ class OrderedTrial(_StrictModel):
 class ResourceFact(_StrictModel):
     baseline: Baseline
     checkpoint_trial_index: Annotated[int, Field(gt=0)]
+    registered_checkpoint_id: Annotated[str, Field(min_length=1)]
+    registered_checkpoint_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
     checkpoint_serializable: bool
     suffix_executable: bool
     route_capacity_available: bool
@@ -75,6 +67,8 @@ class ProspectiveSelectorInput(_StrictModel):
 class SelectionDecision:
     baseline: Baseline
     selected_trial_index: int
+    registered_checkpoint_id: str
+    registered_checkpoint_sha256: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -185,7 +179,15 @@ def select_prospective_checkpoint(selector: ProspectiveSelectorInput) -> Prospec
         candidate,
         candidate - 1,
         suffix,
-        tuple(SelectionDecision(baseline, candidate) for baseline in BASELINES),
+        tuple(
+            SelectionDecision(
+                baseline,
+                candidate,
+                resources[baseline].registered_checkpoint_id,
+                resources[baseline].registered_checkpoint_sha256,
+            )
+            for baseline in BASELINES
+        ),
     )
 
 
@@ -201,9 +203,7 @@ def evaluate_structural_support(
     by_baseline = {row.baseline: row for row in checkpoints}
     if tuple(by_baseline) != BASELINES:
         raise StructuralSupportError("CHECKPOINT_PANEL_INVALID")
-    readiness = tuple(
-        _readiness(selection, baseline, by_baseline[baseline]) for baseline in BASELINES
-    )
+    readiness = tuple(_readiness(selection, baseline, by_baseline[baseline]) for baseline in BASELINES)
     support = {row.baseline: row.ready for row in readiness}
     local = tuple(BaselineSupportRow(baseline, support[baseline]) for baseline in BASELINES)
     pairs = tuple(
@@ -236,6 +236,13 @@ def _readiness(
     facts = inspect_native_state(fact.checkpoint)
     if facts.checkpoint_index != fact.trial_index:
         raise StructuralSupportError("CHECKPOINT_LINEAGE_INVALID")
+    registered = next(row for row in selection.decisions if row.baseline == baseline)
+    if (
+        fact.checkpoint.identity.checkpoint_id != registered.registered_checkpoint_id
+        or fact.checkpoint.canonical_sha256 != registered.registered_checkpoint_sha256
+        or fact.expected_sha256 != registered.registered_checkpoint_sha256
+    ):
+        raise StructuralSupportError("UNREGISTERED_CHECKPOINT")
     ready, reason, richness = _native_readiness(facts, len(state.entries))
     return ReadinessRow(
         baseline,
@@ -279,11 +286,7 @@ def _contains_future_field(value: object) -> bool:
 
 
 __all__ = (
-    "CheckpointFact",
-    "ProspectiveSelectorInput",
-    "StructuralSupportError",
-    "StructuralSupportReport",
-    "evaluate_structural_support",
-    "parse_prospective_selector_input",
-    "select_prospective_checkpoint",
+    "CheckpointFact", "ProspectiveSelectorInput", "StructuralSupportError",
+    "StructuralSupportReport", "evaluate_structural_support",
+    "parse_prospective_selector_input", "select_prospective_checkpoint",
 )
