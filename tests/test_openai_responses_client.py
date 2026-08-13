@@ -10,6 +10,8 @@ from memcontam.clients.config import ProviderConfig
 from memcontam.clients.cost_guard import CostGuard, CostLimitExceeded, MissingUsageError
 from memcontam.clients import openai_responses as responses_module
 from memcontam.clients.openai_responses import OpenAIResponsesClient
+from memcontam.readiness.phase13_provider_accounting import build_owned_provider_client
+from memcontam.readiness.phase13_provider_models import ExecutionTemplateIdentity
 
 
 class _Usage:
@@ -62,6 +64,8 @@ class _OpenAI:
 class _StatusError(Exception):
     def __init__(self, status_code: int) -> None:
         self.status_code = status_code
+        self.provider_attempts_count = 0
+        self.provider_latency_ms = 0
 
 
 def _client(monkeypatch, outcomes: list[object], **config_values: Any) -> OpenAIResponsesClient:
@@ -138,6 +142,53 @@ def test_responses_client_does_not_retry_immediate_client_error(monkeypatch) -> 
         client.chat([{"role": "user", "content": "solve"}], "gpt-4o-2024-11-20", {})
 
     assert len(_OpenAI.instance.responses.calls) == 1
+
+
+def test_responses_client_attaches_attempt_evidence_to_terminal_retry_failure(monkeypatch) -> None:
+    error = _StatusError(503)
+    client = _client(monkeypatch, [_StatusError(503), error], retries_after_initial_attempt=1)
+
+    with pytest.raises(_StatusError) as caught:
+        client.chat([{"role": "user", "content": "solve"}], "gpt-4o-2024-11-20", {})
+
+    assert caught.value is error
+    assert caught.value.provider_attempts_count == 2
+    assert caught.value.provider_latency_ms >= 0
+
+
+def test_owned_boundary_reconciles_actual_openai_client_retry_shape(monkeypatch) -> None:
+    client = _client(monkeypatch, [TimeoutError(), _Response()])
+    accounting = build_owned_provider_client(
+        client,
+        Path(__file__).resolve().parents[1],
+        ExecutionTemplateIdentity(task="game24", baseline="bot_style", arm_key="Contam"),
+    )
+
+    accounting.chat([{"role": "user", "content": "solve"}], "gpt-4o-2024-11-20", {})
+
+    report = accounting.reconcile()
+    assert report.totals.transport_attempts == 2
+    assert report.totals.retries == 1
+    assert report.totals.input_tokens == 7
+    assert report.totals.output_tokens == 11
+
+
+def test_owned_boundary_settles_actual_openai_client_terminal_failure(monkeypatch) -> None:
+    error = _StatusError(400)
+    client = _client(monkeypatch, [error])
+    accounting = build_owned_provider_client(
+        client,
+        Path(__file__).resolve().parents[1],
+        ExecutionTemplateIdentity(task="game24", baseline="bot_style", arm_key="Contam"),
+    )
+
+    with pytest.raises(_StatusError) as caught:
+        accounting.chat([{"role": "user", "content": "solve"}], "gpt-4o-2024-11-20", {})
+
+    assert caught.value is error
+    report = accounting.reconcile()
+    assert report.totals.semantic_calls == report.totals.dispatches == 1
+    assert report.totals.transport_attempts == 1
 
 
 def test_responses_client_fails_closed_when_provider_omits_usage(monkeypatch) -> None:

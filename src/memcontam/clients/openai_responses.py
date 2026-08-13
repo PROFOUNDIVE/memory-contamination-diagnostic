@@ -84,6 +84,8 @@ class OpenAIResponsesClient:
                 break
             except Exception as error:
                 if not _is_retryable(error) or attempts > self._config.retries_after_initial_attempt:
+                    setattr(error, "provider_attempts_count", attempts)
+                    setattr(error, "provider_latency_ms", int((time.perf_counter() - start) * 1000))
                     raise
                 self._sleep(self._config.retry_delays_seconds[attempts - 1])
 
