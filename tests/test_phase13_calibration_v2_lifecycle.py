@@ -125,12 +125,14 @@ def test_cli_external_block_revalidation_does_not_create_run_root(
         allow_live_calls=False,
     )
 
-    for _ in range(2):
-        phase13_cli.run(args)
+    phase13_cli.run(args)
+    first = report.read_bytes()
+    phase13_cli.run(args)
 
     lines = capsys.readouterr().out.splitlines()
     assert sum(line == "CALIBRATION_V2_EXTERNAL_BLOCK" for line in lines) == 2
     assert sum(line == "MAIN_A_EXECUTION_FORBIDDEN" for line in lines) == 2
+    assert report.read_bytes() == first
     assert json.loads(report.read_text(encoding="utf-8"))["run_root"] is None
 
 

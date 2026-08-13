@@ -235,7 +235,11 @@ def _base_report(
     reason: str | None,
     unavailable_fields: tuple[str, ...] = (),
 ) -> LifecycleReport:
-    timestamp = (invocation.now or datetime.now(UTC)).astimezone(UTC).isoformat()
+    timestamp = (
+        invocation.now.astimezone(UTC).isoformat()
+        if invocation.now is not None
+        else identities["implementation_timestamp"] or datetime.now(UTC).isoformat()
+    )
     return LifecycleReport(
         "phase13_calibration_v2_lifecycle_report_v1", terminal, reason,
         "MAIN_A_EXECUTION_FORBIDDEN", False, unavailable_fields, deterministic, identities,

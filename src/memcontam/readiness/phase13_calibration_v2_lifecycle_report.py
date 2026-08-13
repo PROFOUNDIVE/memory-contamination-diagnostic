@@ -18,17 +18,20 @@ def lifecycle_identities(
         return hashlib.sha256(path.read_bytes()).hexdigest() if path is not None and path.is_file() else None
 
     try:
-        commit = subprocess.run(
-            ["git", "rev-parse", "HEAD"], cwd=config_path.resolve().parents[2], check=True,
+        git_identity = subprocess.run(
+            ["git", "show", "-s", "--format=%H%n%cI", "HEAD"],
+            cwd=config_path.resolve().parents[2], check=True,
             capture_output=True, text=True,
-        ).stdout.strip()
+        ).stdout.splitlines()
+        commit, commit_timestamp = git_identity
     except (OSError, subprocess.SubprocessError):
-        commit = None
+        commit = commit_timestamp = None
     return {
         "config_sha256": digest(config_path),
         "request_sha256": digest(request_path),
         "authorization_sha256": digest(authorization_path),
         "implementation_commit": commit,
+        "implementation_timestamp": commit_timestamp,
     }
 
 
