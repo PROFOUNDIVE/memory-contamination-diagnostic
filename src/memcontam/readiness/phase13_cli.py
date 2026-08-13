@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from pydantic import BaseModel
@@ -28,6 +29,8 @@ from memcontam.readiness.phase13_terminal import (
     CalibrationV2ExternalBlock,
     render_terminal,
 )
+
+MAIN_ALIASES = ("main", "main-a", "run-main", "run-main-a", "authorize-main", "request-main")
 
 
 def build_calibration_v2_provider(
@@ -61,6 +64,7 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
         calibration_v2 = commands.add_parser(command)
         calibration_v2.add_argument("--config", type=Path, required=True)
         if command == "run-calibration-v2":
+            calibration_v2.add_argument("--report", type=Path)
             calibration_v2.add_argument("--request", type=Path)
             calibration_v2.add_argument("--authorization", type=Path)
             calibration_v2.add_argument("--expected-authorization-sha256")
@@ -68,10 +72,14 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
     archive = commands.add_parser("validate-calibration-v2-archive")
     archive.add_argument("--archive", type=Path)
     archive.add_argument("--config", type=Path)
+    for command in MAIN_ALIASES:
+        commands.add_parser(command)
 
 
 def run(args: argparse.Namespace) -> None:
     try:
+        if args.phase13_command in MAIN_ALIASES:
+            raise SystemExit("MAIN_A_EXECUTION_FORBIDDEN")
         if args.phase13_command == "validate-calibration-v2":
             print(render_terminal(validate_calibration_v2(args.config)))
             return
@@ -104,6 +112,29 @@ def run(args: argparse.Namespace) -> None:
                 validate_calibration_v2(args.config)
                 result = execute_calibration_trajectory(authorized.request)
                 print(json.dumps(result, default=_json_value, sort_keys=True))
+                return
+            report_path = getattr(args, "report", None)
+            if isinstance(report_path, Path):
+                from memcontam.readiness.phase13_calibration_v2_lifecycle import (
+                    LifecycleInvocation,
+                    run_calibration_v2_lifecycle,
+                )
+
+                report = run_calibration_v2_lifecycle(
+                    LifecycleInvocation(
+                        args.config,
+                        report_path,
+                        getattr(args, "request", None),
+                        getattr(args, "authorization", None),
+                        getattr(args, "expected_authorization_sha256", None),
+                        getattr(args, "allow_live_calls", False),
+                        os.environ,
+                    ),
+                    lambda: (_ for _ in ()).throw(AssertionError("real execution forbidden")),
+                )
+                print(json.dumps(asdict(report), sort_keys=True))
+                print(report.terminal)
+                print(report.main_terminal)
                 return
             request = getattr(args, "request", None)
             authorization_path = getattr(args, "authorization", None)
