@@ -12,7 +12,10 @@ from memcontam.manifests.phase13 import (
 from memcontam.readiness.phase13_calibration_v2_runtime_models import (
     CompletedTrajectory, TrajectoryEvent, TrajectoryRequest,
 )
-from memcontam.readiness.phase13_prefix_authority import PrefixAuthority, load_prefix_authority
+from memcontam.readiness.phase13_prefix_authority import (
+    PrefixAuthority, PrefixAuthorityError, canonical_short_windows, load_prefix_authority,
+)
+from memcontam.readiness.phase13_execution_models import AnalysisWindow
 
 
 CHECKER_VERSION: Final = "phase13-prefix-checker-v2"
@@ -97,7 +100,10 @@ def _state_chain(events: tuple[TrajectoryEvent, ...], group: tuple[str, str]) ->
 def derive_prefix_windows(
     request: TrajectoryRequest, source: CompletedTrajectory
 ) -> PrefixDerivationArtifact | NotExchangeable:
-    authority = load_prefix_authority(request)
+    try:
+        authority = load_prefix_authority(request)
+    except PrefixAuthorityError as error:
+        return _authority_failure(request, source, error)
     checks = _checks(request, source, authority)
     if any(check.verdict == "fail" for check in checks):
         return NotExchangeable(
@@ -120,6 +126,54 @@ def derive_prefix_windows(
         source_raw_sha256=source.source_raw_sha256,
         checks=checks,
         rows=rows,
+    )
+
+
+def _authority_failure(
+    request: TrajectoryRequest,
+    source: CompletedTrajectory,
+    error: PrefixAuthorityError,
+) -> NotExchangeable:
+    mapped = {
+        "CHECKPOINT_STREAM_UNREGISTERED": "checkpoint_source_identity",
+        "CHECKPOINT_REGISTRY_INVALID": "checkpoint_source_identity",
+        "CHECKPOINT_REGISTRY_AUTHORITY_MISMATCH": "checkpoint_source_identity",
+        "SOURCE_AUTHORITY_HASH_MISMATCH": "suffix_order",
+        "SUFFIX_ORDER_INVALID": "suffix_order",
+        "EXECUTION_AUTHORITY_INVALID": "execution_contract_identity",
+        "REGISTRY_HASH_MISMATCH": "execution_contract_identity",
+    }.get(error.code, "source_manifest_identity")
+    checks = tuple(
+        ConformanceCheck(
+            check_id=check_id,
+            verdict="fail",
+            evidence_sha256=hashlib.sha256(
+                f"{check_id}:{mapped}:{error.code}:{source.source_seal.source_raw_sha256}".encode()
+            ).hexdigest(),
+            checker_version=CHECKER_VERSION,
+            source_run_id=request.stream_id,
+            source_manifest_id=source.source_manifest_id,
+            source_raw_sha256=source.source_raw_sha256,
+        )
+        for check_id in CHECK_IDS
+    )
+    return NotExchangeable(
+        status="not_exchangeable",
+        checks=checks,
+        registered_windows=tuple(_failed_window(row) for row in canonical_short_windows()),
+        derived_artifact=None,
+        provider_calls=0,
+        task_presentations=0,
+        memory_evolutions=0,
+    )
+
+
+def _failed_window(window: AnalysisWindow) -> NotExchangeableWindow:
+    return NotExchangeableWindow(
+        analysis_window_id=window.analysis_window_id,
+        evidence_status=window.evidence_status,
+        multiplicity_status=window.multiplicity_status,
+        realization_disposition="not_exchangeable",
     )
 
 
