@@ -8,7 +8,7 @@ from memcontam.readiness.phase13_support_planning import (
     StochasticSupportInput,
     plan_route,
 )
-from test_phase13_support_planning import L1, ROOT, _required_inputs, _rows
+from .test_phase13_support_planning import L1, ROOT, _required_inputs, _rows
 
 
 @pytest.mark.parametrize(

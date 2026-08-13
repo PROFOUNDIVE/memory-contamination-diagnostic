@@ -11,7 +11,7 @@ from memcontam.readiness.phase13_calibration_v2_runtime_models import (
     TrajectoryRequest,
 )
 from memcontam.readiness.phase13_prefix_reuse import derive_prefix_windows
-from test_phase13_calibration_v2_runtime import _fixture
+from .test_phase13_calibration_v2_runtime import _fixture
 
 
 def _completed(request: TrajectoryRequest) -> CompletedTrajectory:
