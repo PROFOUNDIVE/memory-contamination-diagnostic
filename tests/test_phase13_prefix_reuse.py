@@ -6,13 +6,23 @@ import pytest
 
 from memcontam.manifests.phase13 import NotExchangeable, PrefixDerivationArtifact
 from memcontam.readiness.phase13_calibration_v2_runtime import execute_calibration_trajectory
+from memcontam.readiness.phase13_calibration_v2_runtime_models import (
+    CompletedTrajectory,
+    TrajectoryRequest,
+)
 from memcontam.readiness.phase13_prefix_reuse import CHECK_IDS, derive_prefix_windows
 from test_phase13_calibration_v2_runtime import _fixture
 
 
+def _completed(request: TrajectoryRequest) -> CompletedTrajectory:
+    result = execute_calibration_trajectory(request)
+    assert isinstance(result, CompletedTrajectory)
+    return result
+
+
 def test_all_ten_checks_are_named_and_required() -> None:
     _, _, request = _fixture()
-    source = execute_calibration_trajectory(request)
+    source = _completed(request)
 
     result = derive_prefix_windows(request, source)
 
@@ -23,7 +33,7 @@ def test_all_ten_checks_are_named_and_required() -> None:
 
 def test_raw_order_and_state_are_recomputed_from_source_events() -> None:
     _, _, request = _fixture()
-    source = execute_calibration_trajectory(request)
+    source = _completed(request)
     events = list(source.events)
     events[0], events[1] = events[1], events[0]
 
@@ -41,7 +51,7 @@ def test_raw_order_and_state_are_recomputed_from_source_events() -> None:
 )
 def test_unregistered_or_mutated_window_claims_are_ignored(window_index: int) -> None:
     _, _, request = _fixture()
-    source = execute_calibration_trajectory(request)
+    source = _completed(request)
     windows = list(request.verified.execution.analysis_windows)
     windows[window_index] = windows[window_index].model_copy(
         update={"analysis_window_id": "caller-window", "event_time_end": 9}

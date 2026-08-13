@@ -6,13 +6,23 @@ import pytest
 
 from memcontam.manifests.phase13 import NotExchangeable, PrefixDerivationArtifact
 from memcontam.readiness.phase13_calibration_v2_runtime import execute_calibration_trajectory
+from memcontam.readiness.phase13_calibration_v2_runtime_models import (
+    CompletedTrajectory,
+    TrajectoryRequest,
+)
 from memcontam.readiness.phase13_prefix_reuse import derive_prefix_windows
 from test_phase13_calibration_v2_runtime import _fixture
 
 
+def _completed(request: TrajectoryRequest) -> CompletedTrajectory:
+    result = execute_calibration_trajectory(request)
+    assert isinstance(result, CompletedTrajectory)
+    return result
+
+
 def test_runtime_source_derives_registered_prefixes_without_new_dispatch() -> None:
     provider, _, request = _fixture()
-    source = execute_calibration_trajectory(request)
+    source = _completed(request)
     calls_after_source = len(provider.configs)
 
     result = derive_prefix_windows(request, source)
@@ -54,7 +64,7 @@ def test_resigned_runtime_event_drift_is_not_exchangeable(
     field: str, value: str | int, check_id: str
 ) -> None:
     provider, _, request = _fixture()
-    source = execute_calibration_trajectory(request)
+    source = _completed(request)
     calls_after_source = len(provider.configs)
     events = list(source.events)
     events[0] = replace(events[0], **{field: value})
@@ -70,7 +80,7 @@ def test_resigned_runtime_event_drift_is_not_exchangeable(
 
 def test_coordinated_request_and_event_model_drift_cannot_resign_registry() -> None:
     provider, _, request = _fixture()
-    source = execute_calibration_trajectory(request)
+    source = _completed(request)
     events = tuple(replace(event, model="coordinated-model") for event in source.events)
     contexts = tuple(replace(context, model="coordinated-model") for context in request.contexts)
 
@@ -84,7 +94,7 @@ def test_coordinated_request_and_event_model_drift_cannot_resign_registry() -> N
 
 def test_mutated_window_registry_cannot_define_bad_event_end() -> None:
     _, _, request = _fixture()
-    source = execute_calibration_trajectory(request)
+    source = _completed(request)
     windows = list(request.verified.execution.analysis_windows)
     windows[0] = windows[0].model_copy(update={"event_time_end": 4})
     execution = request.verified.execution.model_copy(update={"analysis_windows": tuple(windows)})
@@ -95,3 +105,25 @@ def test_mutated_window_registry_cannot_define_bad_event_end() -> None:
     assert isinstance(result, PrefixDerivationArtifact)
     row = next(item for item in result.rows if item.analysis_window_id == "accuracy-h2-sensitivity")
     assert row.event_time_range == (0, 1)
+
+
+def test_unregistered_stream_returns_fail_closed_certificate_without_dispatch() -> None:
+    provider, _, request = _fixture()
+    source = _completed(request)
+    calls_after_source = len(provider.configs)
+
+    result = derive_prefix_windows(replace(request, stream_id="unregistered-stream"), source)
+
+    assert isinstance(result, NotExchangeable)
+    assert tuple(check.check_id for check in result.checks) == (
+        "checkpoint_source_identity", "suffix_order", "execution_contract_identity",
+        "native_semantics", "session_randomness", "intervention_identity",
+        "future_feedback_cutoff", "source_manifest_identity", "exact_event_range",
+        "source_raw_bytes",
+    )
+    assert "checkpoint_source_identity" in {
+        check.check_id for check in result.checks if check.verdict == "fail"
+    }
+    assert result.derived_artifact is None
+    assert result.provider_calls == result.task_presentations == result.memory_evolutions == 0
+    assert len(provider.configs) == calls_after_source
