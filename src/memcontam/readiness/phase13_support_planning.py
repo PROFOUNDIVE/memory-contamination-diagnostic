@@ -16,11 +16,18 @@ from memcontam.readiness.phase13_execution_contract import (
     Phase13ExecutionError,
     load_execution_registry,
 )
-from memcontam.readiness.phase13_prefix_reuse import CHECKER_VERSION, CHECK_IDS
+from memcontam.readiness.phase13_calibration_v2_runtime_models import (
+    CompletedTrajectory,
+    TrajectoryRequest,
+)
 from memcontam.readiness.phase13_route_capacity import (
     CapacityPlan,
     CapacityPlanningError,
     recompute_capacity,
+)
+from memcontam.readiness.phase13_support_authority import (
+    SupportAuthorityError,
+    authenticate_conformance,
 )
 
 
@@ -63,6 +70,8 @@ class DeterministicSupportInput:
     task: str
     support_population_id: str
     certificate: PrefixDerivationArtifact | NotExchangeable
+    authority_request: TrajectoryRequest | None = None
+    authority_source: CompletedTrajectory | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,29 +168,6 @@ def _registered_populations(analysis) -> set[str]:  # noqa: ANN001
     }
 
 
-def _validate_certificate(certificate: PrefixDerivationArtifact, execution_hash: str) -> None:
-    if (
-        certificate.execution_registry_hash != execution_hash
-        or certificate.conformance_id != "phase13-ten-condition-prefix-v1"
-        or tuple(check.check_id for check in certificate.checks) != CHECK_IDS
-        or len(certificate.checks) != 10
-    ):
-        raise PlanningError("CONFORMANCE_CERTIFICATE_INVALID")
-    for check in certificate.checks:
-        expected = hashlib.sha256(
-            f"{check.check_id}:{check.verdict == 'pass'}:{execution_hash}:"
-            f"{certificate.source_raw_sha256}".encode()
-        ).hexdigest()
-        if (
-            check.evidence_sha256 != expected
-            or check.checker_version != CHECKER_VERSION
-            or check.source_raw_sha256 != certificate.source_raw_sha256
-        ):
-            raise PlanningError("CONFORMANCE_CERTIFICATE_INVALID")
-    if any(check.verdict != "pass" for check in certificate.checks):
-        raise PlanningError("CONFORMANCE_NOT_PASSED")
-
-
 def _stochastic_plan(evidence: StochasticSupportInput) -> SupportPlan:
     if evidence.method != "clopper_pearson_exact_binomial":
         raise PlanningError("POINT_ESTIMATE_FORBIDDEN")
@@ -216,14 +202,21 @@ def _stochastic_plan(evidence: StochasticSupportInput) -> SupportPlan:
 
 
 def plan_support(evidence: SupportInput, root: Path) -> SupportPlan:
-    analysis, execution = _authorities(root)
+    analysis, _ = _authorities(root)
     if evidence.support_population_id not in _registered_populations(analysis):
         raise PlanningError("SUPPORT_POPULATION_UNREGISTERED")
     match evidence:
         case DeterministicSupportInput():
             match evidence.certificate:
                 case PrefixDerivationArtifact() as certificate:
-                    _validate_certificate(certificate, execution.registry_hash)
+                    try:
+                        authenticate_conformance(
+                            certificate,
+                            evidence.authority_request,
+                            evidence.authority_source,
+                        )
+                    except SupportAuthorityError as error:
+                        raise PlanningError(error.code) from error
                     return SupportPlan(
                         evidence.task, evidence.support_population_id,
                         "deterministic_structural", 12, 12, Decimal("1.000"),

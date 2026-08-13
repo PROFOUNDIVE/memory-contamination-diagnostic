@@ -7,7 +7,12 @@ from pathlib import Path
 import pytest
 
 from memcontam.manifests.phase13 import ConformanceCheck, PrefixDerivationArtifact
-from memcontam.readiness.phase13_prefix_reuse import CHECKER_VERSION, CHECK_IDS
+from memcontam.readiness.phase13_calibration_v2_runtime import execute_calibration_trajectory
+from memcontam.readiness.phase13_calibration_v2_runtime_models import (
+    CompletedTrajectory,
+    TrajectoryRequest,
+)
+from memcontam.readiness.phase13_prefix_reuse import CHECKER_VERSION, CHECK_IDS, derive_prefix_windows
 from memcontam.readiness.phase13_support_planning import (
     AbsentSeed,
     DeterministicSupportInput,
@@ -20,6 +25,7 @@ from memcontam.readiness.phase13_support_planning import (
     plan_route,
     plan_support,
 )
+from test_phase13_calibration_v2_runtime import _fixture
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -66,6 +72,17 @@ def _certificate() -> PrefixDerivationArtifact:
     )
 
 
+def _trusted_certificate() -> tuple[
+    PrefixDerivationArtifact, TrajectoryRequest, CompletedTrajectory
+]:
+    _, _, request = _fixture()
+    source = execute_calibration_trajectory(request)
+    assert isinstance(source, CompletedTrajectory)
+    certificate = derive_prefix_windows(request, source)
+    assert isinstance(certificate, PrefixDerivationArtifact)
+    return certificate, request, source
+
+
 def _rows(successes: int) -> tuple[ResolvedSeed, ...]:
     return tuple(
         ResolvedSeed(seed_id=seed, passed=index < successes)
@@ -110,11 +127,27 @@ def test_registered_stochastic_method_rounding_and_denominator_are_mandatory(
     assert caught.value.code == code
 
 
-def test_deterministic_support_requires_authenticated_passed_ten_check_certificate() -> None:
+def test_self_signed_all_pass_certificate_is_rejected_as_untrusted() -> None:
     evidence = DeterministicSupportInput(
         task="game24",
         support_population_id=L1[0],
         certificate=_certificate(),
+    )
+
+    with pytest.raises(PlanningError) as caught:
+        plan_support(evidence, ROOT)
+
+    assert caught.value.code == "CONFORMANCE_AUTHORITY_REQUIRED"
+
+
+def test_trusted_todo10_recomputation_yields_deterministic_support() -> None:
+    certificate, request, source = _trusted_certificate()
+    evidence = DeterministicSupportInput(
+        task="game24",
+        support_population_id=L1[0],
+        certificate=certificate,
+        authority_request=request,
+        authority_source=source,
     )
 
     result = plan_support(evidence, ROOT)
@@ -123,8 +156,40 @@ def test_deterministic_support_requires_authenticated_passed_ten_check_certifica
     assert result.method == "deterministic_structural"
 
 
+def test_trusted_source_manifest_drift_is_rejected() -> None:
+    certificate, request, source = _trusted_certificate()
+    evidence = DeterministicSupportInput(
+        task="game24",
+        support_population_id=L1[0],
+        certificate=certificate,
+        authority_request=request,
+        authority_source=replace(source, source_manifest_id="forged-manifest"),
+    )
+
+    with pytest.raises(PlanningError) as caught:
+        plan_support(evidence, ROOT)
+
+    assert caught.value.code == "CONFORMANCE_SOURCE_IDENTITY_MISMATCH"
+
+
+def test_trusted_source_raw_hash_drift_is_rejected() -> None:
+    certificate, request, source = _trusted_certificate()
+    evidence = DeterministicSupportInput(
+        task="game24",
+        support_population_id=L1[0],
+        certificate=certificate,
+        authority_request=request,
+        authority_source=replace(source, source_raw_sha256="0" * 64),
+    )
+
+    with pytest.raises(PlanningError) as caught:
+        plan_support(evidence, ROOT)
+
+    assert caught.value.code == "CONFORMANCE_SOURCE_HASH_MISMATCH"
+
+
 def test_resigned_conformance_mutation_is_rejected() -> None:
-    certificate = _certificate()
+    certificate, request, source = _trusted_certificate()
     changed = certificate.checks[0].model_copy(
         update={"evidence_sha256": "0" * 64, "verdict": "pass"}
     )
@@ -132,16 +197,18 @@ def test_resigned_conformance_mutation_is_rejected() -> None:
         task="game24",
         support_population_id=L1[0],
         certificate=certificate.model_copy(update={"checks": (changed, *certificate.checks[1:])}),
+        authority_request=request,
+        authority_source=source,
     )
 
     with pytest.raises(PlanningError) as caught:
         plan_support(evidence, ROOT)
 
-    assert caught.value.code == "CONFORMANCE_CERTIFICATE_INVALID"
+    assert caught.value.code == "CONFORMANCE_ARTIFACT_MISMATCH"
 
 
 def test_failed_conformance_never_upgrades_deterministic_support() -> None:
-    certificate = _certificate()
+    certificate, request, source = _trusted_certificate()
     check = certificate.checks[0]
     import hashlib
 
@@ -158,12 +225,14 @@ def test_failed_conformance_never_upgrades_deterministic_support() -> None:
         task="game24",
         support_population_id=L1[0],
         certificate=certificate.model_copy(update={"checks": (failed, *certificate.checks[1:])}),
+        authority_request=request,
+        authority_source=source,
     )
 
     with pytest.raises(PlanningError) as caught:
         plan_support(evidence, ROOT)
 
-    assert caught.value.code == "CONFORMANCE_NOT_PASSED"
+    assert caught.value.code == "CONFORMANCE_ARTIFACT_MISMATCH"
 
 
 @pytest.mark.parametrize(
