@@ -25,6 +25,7 @@ from memcontam.readiness.phase13_provider_models import (
 )
 from memcontam.readiness.phase13_provider_normalization import (
     normalize_exception,
+    normalize_malformed_provider_failure,
     normalize_openai_response,
     sum_attempts,
 )
@@ -87,12 +88,28 @@ class OwnedProviderAccounting:
         try:
             response = self._client.chat(messages, model, provider_config)
         except ProviderDispatchFailure as failure:
-            call = self._settle(
-                semantic_call_id,
-                failure.provider_attempts,
-                failure.provider_totals,
-                failure.provider_error,
-            )
+            try:
+                call = self._settle(
+                    semantic_call_id,
+                    failure.provider_attempts,
+                    failure.provider_totals,
+                    failure.provider_error,
+                )
+            except ProviderAccountingError:
+                attempts, totals = normalize_malformed_provider_failure(
+                    semantic_call_id,
+                    self._execution_owner_id,
+                    self._intended_template_id,
+                    failure,
+                    failure.provider_attempts,
+                    started,
+                )
+                call = self._settle(
+                    semantic_call_id,
+                    [row.model_dump() for row in attempts],
+                    totals.model_dump(),
+                    failure.provider_error,
+                )
             self._calls.append(call)
             raise ProviderAccountingError("PROVIDER_DISPATCH_FAILED") from failure
         except Exception as error:  # noqa: BLE001  # noqa: BROAD_EXCEPT_OK

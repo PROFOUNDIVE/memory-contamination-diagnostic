@@ -86,6 +86,25 @@ def normalize_exception(
     return rows, sum_attempts(rows)
 
 
+def normalize_malformed_provider_failure(
+    call_id: str,
+    owner_id: str,
+    template_id: str,
+    error: Exception,
+    raw_attempts: tuple[Mapping[str, JsonValue], ...],
+    started: float,
+) -> tuple[tuple[TransportAttempt, ...], ProviderTotals]:
+    rows, _ = normalize_exception(call_id, owner_id, template_id, error, started)
+    evidence = {
+        "error_type": type(error).__name__,
+        "error": str(error),
+        "malformed_provider_attempts": json.dumps(raw_attempts, sort_keys=True),
+    }
+    terminal = rows[-1].model_copy(update={"raw_evidence": evidence})
+    normalized = (*rows[:-1], terminal)
+    return normalized, sum_attempts(normalized)
+
+
 def sum_attempts(attempts: tuple[TransportAttempt, ...]) -> ProviderTotals:
     return ProviderTotals(
         transport_attempts=len(attempts),

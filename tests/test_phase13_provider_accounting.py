@@ -320,3 +320,33 @@ def test_malformed_post_call_metadata_settles_before_accounting_error() -> None:
     report = accounting.reconcile()
     assert report.totals.semantic_calls == report.totals.dispatches == 1
     assert report.calls[0].provider_error == "PROVIDER_ACCOUNTING_REQUIRED"
+
+
+def test_malformed_typed_failure_settles_raw_error_before_bounded_failure() -> None:
+    malformed = ProviderDispatchFailure(
+        provider_error="bad gateway",
+        provider_attempts=(
+            {
+                "attempt_id": "broken-attempt",
+                "raw_evidence": {"wire": "partial bytes"},
+            },
+        ),
+        provider_totals={"transport_attempts": 99},
+    )
+
+    class _MalformedFailureClient:
+        def chat(self, messages, model, config) -> LLMResponse:  # noqa: ANN001
+            del messages, model, config
+            raise malformed
+
+    accounting = _accounting(_MalformedFailureClient())
+
+    with pytest.raises(ProviderAccountingError) as caught:
+        accounting.chat([{"role": "user", "content": "solve"}], "model", {})
+
+    assert caught.value.code == "PROVIDER_DISPATCH_FAILED"
+    assert caught.value.__cause__ is malformed
+    report = accounting.reconcile()
+    assert report.totals.semantic_calls == report.totals.dispatches == 1
+    assert report.calls[0].provider_error == "bad gateway"
+    assert "partial bytes" in str(report.calls[0].attempts[0].raw_evidence)
