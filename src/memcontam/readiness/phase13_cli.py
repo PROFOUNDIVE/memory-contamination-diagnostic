@@ -57,6 +57,7 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
         "prepare-calibration-v2",
         "run-calibration-v2",
         "validate-calibration-v2-archive",
+        "validate-derived-windows",
     ):
         calibration_v2 = commands.add_parser(command)
         calibration_v2.add_argument("--config", type=Path, required=True)
@@ -71,6 +72,16 @@ def run(args: argparse.Namespace) -> None:
             print(render_terminal(prepare_calibration_v2(args.config)))
             print("AWAITING_CALIBRATION_V2_AUTHORIZATION")
             return
+        if args.phase13_command == "validate-derived-windows":
+            validate_calibration_v2(args.config)
+            authorized = getattr(args, "authorized_execution", None)
+            source = getattr(args, "source_trajectory", None)
+            if isinstance(authorized, AuthorizedTrajectoryExecution) and source is not None:
+                from memcontam.readiness.phase13_prefix_reuse import derive_prefix_windows
+
+                print(json.dumps(derive_prefix_windows(authorized.request, source), default=_json_value, sort_keys=True))
+                return
+            raise SystemExit(render_terminal(CalibrationV2ExternalBlock()))
         if args.phase13_command in {
             "run-calibration-v2",
             "validate-calibration-v2-archive",
