@@ -15,10 +15,14 @@ from memcontam.readiness.phase13_analysis_contract import load_analysis_registry
 from memcontam.readiness.phase13_calibration_v2 import CalibrationV2Config
 from memcontam.readiness.phase13_calibration_v2_registry import validate_calibration_v2_registry
 from memcontam.readiness.phase13_execution_contract import load_execution_registry
-from memcontam.readiness.phase13_structural_authority import registered_checkpoints
-from memcontam.readiness.phase13_provider_runtime import Phase13V2ProviderRuntime
+from memcontam.readiness.phase13_calibration_v2_accounting import close_accounting
+from memcontam.readiness.phase13_calibration_v2_runtime_validation import (
+    RuntimeValidationError,
+    validate_trajectory_request,
+)
 
 from .phase13_calibration_v2_runtime_models import (
+    AuthorizedTrajectoryExecution,
     CompletedTrajectory,
     InvalidatedTrajectory,
     TrajectoryEvent,
@@ -30,7 +34,6 @@ from .phase13_calibration_v2_runtime_models import (
 
 BASELINES: Final = ("fh_bounded", "rag_frozen", "bot_style", "reflexion_style")
 ARMS: Final = ("clean", "correct", "irrelevant", "contam")
-FORBIDDEN_CONFIG_TOKENS: Final = frozenset({"future", "horizon", "window", "task"})
 
 
 class CalibrationV2RuntimeError(ValueError):
@@ -87,6 +90,7 @@ def verify_runtime_context(
                 raise CalibrationV2RuntimeError("SOURCE_STREAM_IDENTITY_INVALID")
             suffixes[(typed_task, seed)] = tuple(ordered[1:])
     return VerifiedRuntimeContext(
+        root,
         config,
         authorization,
         execution,
@@ -97,7 +101,10 @@ def verify_runtime_context(
 
 
 def execute_calibration_trajectory(request: TrajectoryRequest) -> TrajectoryResult:
-    _validate_request(request)
+    try:
+        validate_trajectory_request(request)
+    except RuntimeValidationError as error:
+        raise CalibrationV2RuntimeError(error.code) from error
     events: list[TrajectoryEvent] = []
     registry = _observed_registry(request, events)
     contexts = tuple(_context_with_client(context, request, "fh_bounded", "clean") for context in request.contexts)
@@ -109,51 +116,22 @@ def execute_calibration_trajectory(request: TrajectoryRequest) -> TrajectoryResu
         )
         if result.nomem.underlying_execution_count != 1:
             raise _Violation("NOMEM_SINGLETON_REQUIRED")
-        _reconcile(request)
+        closure = close_accounting(request)
+        if closure.status != "closed_complete":
+            raise _Violation("PROVIDER_CALL_LEDGER_MISMATCH")
     except _Violation as error:
-        return InvalidatedTrajectory("invalidated", request.stream_id, tuple(events), error.code)
+        return InvalidatedTrajectory(
+            "invalidated", request.stream_id, tuple(events), error.code, close_accounting(request)
+        )
     except Exception as error:  # noqa: BLE001  # noqa: BROAD_EXCEPT_OK
         return InvalidatedTrajectory(
-            "invalidated", request.stream_id, tuple(events),
+            "invalidated",
+            request.stream_id,
+            tuple(events),
             getattr(error, "code", "TRAJECTORY_EXECUTION_FAILED"),
+            close_accounting(request),
         )
-    return CompletedTrajectory("completed", request.stream_id, tuple(events), 1)
-
-
-def _validate_request(request: TrajectoryRequest) -> None:
-    execution = request.verified.execution
-    stream = next((row for row in execution.task_streams if row.task == request.task), None)
-    suffix = None if stream is None else next(
-        (row for row in stream.suffixes if row.seed_id == request.seed_id), None
-    )
-    if suffix is None or suffix.source_ordered_stream_sha256 != request.source_ordered_stream_sha256:
-        raise CalibrationV2RuntimeError("SOURCE_STREAM_IDENTITY_INVALID")
-    if request.stream_id != f"{request.task}-seed-{request.seed_id}":
-        raise CalibrationV2RuntimeError("SOURCE_STREAM_IDENTITY_INVALID")
-    if tuple(request.branches_by_baseline) != BASELINES:
-        raise CalibrationV2RuntimeError("BASELINE_PANEL_INVALID")
-    registered = {row.baseline: row for row in registered_checkpoints(request.stream_id)}
-    for baseline, branches in request.branches_by_baseline.items():
-        if tuple(branches.arms) != ARMS or "filter" in branches.arms:
-            raise CalibrationV2RuntimeError("FILTER_BRANCH_FORBIDDEN")
-        authority = registered[baseline]
-        if any(
-            branch.prefix_identity != authority.checkpoint_id
-            for branch in branches.arms.values()
-        ):
-            raise CalibrationV2RuntimeError("CHECKPOINT_AUTHORITY_MISMATCH")
-    if len(request.contexts) != execution.timing.H_run:
-        raise CalibrationV2RuntimeError("HORIZON_INVALID")
-    if tuple(context.identities.order_key for context in request.contexts) != tuple(range(2, 12)):
-        raise CalibrationV2RuntimeError("EVENT_RANGE_INVALID")
-    expected_suffix = request.verified.ordered_suffixes.get((request.task, request.seed_id))
-    if tuple(context.task.sample_id for context in request.contexts) != expected_suffix:
-        raise CalibrationV2RuntimeError("SUFFIX_TASK_DRIFT")
-    required = {(baseline, arm) for baseline in BASELINES for arm in ARMS} | {("nomem", "clean")}
-    if set(request.providers) != required:
-        raise CalibrationV2RuntimeError("OWNED_PROVIDER_PANEL_INVALID")
-    if any(not isinstance(provider, Phase13V2ProviderRuntime) for provider in request.providers.values()):
-        raise CalibrationV2RuntimeError("OWNED_PROVIDER_REQUIRED")
+    return CompletedTrajectory("completed", request.stream_id, tuple(events), 1, closure)
 
 
 def _observed_registry(
@@ -167,15 +145,35 @@ def _observed_registry(
 
         def execute(context, state, *, baseline=baseline, entry=entry):  # noqa: ANN001, ANN202
             arm = "clean" if baseline == "nomem" else context.branch
-            observed = replace(context, client=request.providers[(baseline, arm)])
-            _validate_provider_configs((dict(context.decoding),))
+            branch = None if baseline == "nomem" else request.branches_by_baseline[baseline].arms[arm]
+            runtime_config = {
+                **dict(context.decoding),
+                **({"session_id": request.session_id} if baseline != "nomem" else {"session_id": request.session_id}),
+                **(
+                    {"intervention_id": branch.injected_root_id}
+                    if branch is not None and branch.injected_root_id is not None
+                    else {}
+                ),
+            }
+            observed = replace(
+                context,
+                client=request.providers[(baseline, arm)],
+                decoding=runtime_config,
+            )
             before = _state_hash(entry, state)
             result = entry.execute_trial(observed, state)
             if not isinstance(result, RuntimeTrialResult):
                 raise _Violation("INVALID_LIVE_TRIAL_RESULT")
             after = _state_hash(entry, result.state)
-            if after in _prior_hashes(events, baseline, arm) and after != before:
+            if baseline != "nomem" and result.state is not state:
+                raise _Violation("STATE_IDENTITY_DRIFT")
+            prior_after = _prior_after(events, baseline, arm)
+            if prior_after is not None and before != prior_after:
+                raise _Violation("STATE_CHAIN_BROKEN")
+            if after in _prior_before(events, baseline, arm) and after != before:
                 raise _Violation("STATE_REWIND")
+            if after == before and baseline not in {"rag_frozen", "nomem"}:
+                raise _Violation("STATE_STAGNANT")
             if baseline == "rag_frozen" and (result.native_entries or result.write_envelopes):
                 raise _Violation("RAG_WRITE_FORBIDDEN")
             if baseline == "reflexion_style" and bool(result.native_entries) != bool(
@@ -203,7 +201,12 @@ def _state_hash(entry: RuntimeEntry, state: object) -> str:
     return hashlib.sha256(repr(snapshot).encode()).hexdigest()
 
 
-def _prior_hashes(events: list[TrajectoryEvent], baseline: str, arm: Arm) -> set[str]:
+def _prior_after(events: list[TrajectoryEvent], baseline: str, arm: Arm) -> str | None:
+    prior = [event for event in events if (event.baseline, event.arm) == (baseline, arm)]
+    return prior[-1].state_after_sha256 if prior else None
+
+
+def _prior_before(events: list[TrajectoryEvent], baseline: str, arm: Arm) -> set[str]:
     return {
         event.state_before_sha256
         for event in events
@@ -229,24 +232,8 @@ def _event(
     )
 
 
-def _validate_provider_configs(configs: tuple[dict[str, object], ...]) -> None:
-    for config in configs:
-        for key in config:
-            tokens = frozenset(key.lower().replace("-", "_").split("_"))
-            if tokens & FORBIDDEN_CONFIG_TOKENS:
-                raise _Violation("PROVIDER_CONFIG_LEAKAGE")
-
-
-def _reconcile(request: TrajectoryRequest) -> None:
-    for provider in request.providers.values():
-        report = provider.reconcile()
-        configs = getattr(provider, "provider_configs", ())
-        _validate_provider_configs(configs)
-        if report.totals.semantic_calls == 0:
-            raise _Violation("UNSETTLED_PROVIDER_CALL")
-
-
 __all__ = (
+    "AuthorizedTrajectoryExecution",
     "CalibrationV2RuntimeError",
     "CompletedTrajectory",
     "InvalidatedTrajectory",

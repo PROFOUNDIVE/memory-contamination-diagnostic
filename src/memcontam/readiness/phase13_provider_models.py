@@ -75,6 +75,14 @@ class AccountingReport(StrictAccountingModel):
     totals: AccountingTotals
 
 
+class ProviderDispatchPayload(StrictAccountingModel):
+    messages: tuple[Mapping[str, str], ...]
+    model: str
+    config: Mapping[str, JsonScalar]
+    session_id: str
+    intervention_id: str | None
+
+
 class ProviderAccountingError(ValueError):
     def __init__(self, code: str) -> None:
         super().__init__(code)

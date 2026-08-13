@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal, Mapping
 
 from memcontam.experiment.phase12.game24_runner import Game24RuntimeContext
@@ -11,6 +12,10 @@ from memcontam.readiness.phase13_analysis_models import AnalysisRegistry
 from memcontam.readiness.phase13_calibration_v2 import CalibrationV2Config
 from memcontam.readiness.phase13_execution_models import ExecutionRegistry
 from memcontam.readiness.phase13_provider_runtime import Phase13V2ProviderRuntime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from memcontam.readiness.phase13_calibration_v2_accounting import AccountingClosure
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +39,7 @@ class VerifiedRuntimeAuthorization:
 
 @dataclass(frozen=True, slots=True)
 class VerifiedRuntimeContext:
+    root: Path
     config: CalibrationV2Config
     authorization: VerifiedRuntimeAuthorization
     execution: ExecutionRegistry
@@ -80,6 +86,7 @@ class CompletedTrajectory:
     stream_id: str
     events: tuple[TrajectoryEvent, ...]
     nomem_underlying_execution_count: Literal[1]
+    accounting_closure: AccountingClosure
     sealed: Literal[True] = True
 
 
@@ -89,14 +96,26 @@ class InvalidatedTrajectory:
     stream_id: str
     events: tuple[TrajectoryEvent, ...]
     failure_code: str
+    accounting_closure: AccountingClosure
     sealed: Literal[True] = True
 
 
 TrajectoryResult = CompletedTrajectory | InvalidatedTrajectory
 
 
+@dataclass(frozen=True, slots=True)
+class AuthorizedTrajectoryExecution:
+    authorization: VerifiedRuntimeAuthorization
+    request: TrajectoryRequest
+
+    def __post_init__(self) -> None:
+        if self.authorization != self.request.verified.authorization:
+            raise ValueError("AUTHORIZATION_REQUEST_MISMATCH")
+
+
 __all__ = (
     "CompletedTrajectory",
+    "AuthorizedTrajectoryExecution",
     "InvalidatedTrajectory",
     "TrajectoryEvent",
     "TrajectoryRequest",

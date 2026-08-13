@@ -2,11 +2,17 @@ from __future__ import annotations
 
 import argparse
 import json
+from dataclasses import asdict, is_dataclass
 from pathlib import Path
+from pydantic import BaseModel
 
 from memcontam.clients.base import LLMClient
 from memcontam.readiness.phase13_provider_models import ExecutionTemplateIdentity
 from memcontam.readiness.phase13_provider_runtime import Phase13V2ProviderRuntime
+from memcontam.readiness.phase13_calibration_v2_runtime import (
+    AuthorizedTrajectoryExecution,
+    execute_calibration_trajectory,
+)
 
 from memcontam.readiness.phase13_clean_prefix import (
     Phase13CalibrationError,
@@ -70,6 +76,13 @@ def run(args: argparse.Namespace) -> None:
             "validate-calibration-v2-archive",
         }:
             validate_calibration_v2(args.config)
+            authorized = getattr(args, "authorized_execution", None)
+            if args.phase13_command == "run-calibration-v2" and isinstance(
+                authorized, AuthorizedTrajectoryExecution
+            ):
+                result = execute_calibration_trajectory(authorized.request)
+                print(json.dumps(result, default=_json_value, sort_keys=True))
+                return
             raise SystemExit(render_terminal(CalibrationV2ExternalBlock()))
         if args.phase13_command == "prepare-clean-prefix":
             payload = prepare_clean_prefix(args.config, args.run_id, args.output)
@@ -124,3 +137,11 @@ def run(args: argparse.Namespace) -> None:
         raise SystemExit(error.code) from error
     except CalibrationV2ConfigError as error:
         raise SystemExit(error.code) from error
+
+
+def _json_value(value: object) -> object:
+    if isinstance(value, BaseModel):
+        return value.model_dump(mode="json")
+    if is_dataclass(value) and not isinstance(value, type):
+        return asdict(value)
+    raise TypeError(type(value).__name__)

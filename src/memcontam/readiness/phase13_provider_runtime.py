@@ -10,6 +10,7 @@ from memcontam.readiness.phase13_provider_accounting import (
 from memcontam.readiness.phase13_provider_models import (
     AccountingReport,
     ExecutionTemplateIdentity,
+    ProviderDispatchPayload,
 )
 
 
@@ -44,3 +45,15 @@ class Phase13V2ProviderRuntime:
 
     def reconcile(self) -> AccountingReport:
         return self._client.reconcile()
+
+    @property
+    def dispatched_payloads(self) -> tuple[ProviderDispatchPayload, ...]:
+        return self._client.dispatched_payloads
+
+    @property
+    def execution_template_id(self) -> str:
+        return self._client.execution_template_id
+
+    @property
+    def execution_owner_id(self) -> str:
+        return self._client.execution_owner_id

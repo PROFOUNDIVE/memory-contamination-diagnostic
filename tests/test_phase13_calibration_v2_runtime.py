@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import argparse
 from pathlib import Path
 
 import pytest
@@ -8,11 +9,24 @@ import pytest
 from memcontam.baselines.contracts import BaselineExecutionOutcome
 from memcontam.clients.base import LLMResponse
 from memcontam.experiment.phase12.game24_runner import Game24RuntimeContext, RuntimeIdentities
-from memcontam.experiment.phase12.live_branch import LiveArmBranch, LiveThreeArmBranches
+from memcontam.experiment.phase12.live_branch import (
+    LiveArmBranch,
+    LiveBranchEvent,
+    LiveThreeArmBranches,
+)
 from memcontam.experiment.phase12.runtime_registry import RuntimeEntry, RuntimeTrialResult
-from memcontam.memory.checkpoint_v3 import NativeState, serialize_checkpoint
+from memcontam.memory.checkpoint_v3 import (
+    NativeEntry,
+    NativeState,
+    append_native_entry,
+    serialize_checkpoint,
+)
+from memcontam.contamination.phase12.controls import construct_correct_control, construct_irrelevant_control
+from memcontam.contamination.phase12.registry import load_candidate_registry
+from memcontam.contamination.phase12.renderers import RendererRegistry
 from memcontam.readiness.phase13_calibration_v2 import load_calibration_v2_config
 from memcontam.readiness.phase13_calibration_v2_runtime import (
+    AuthorizedTrajectoryExecution,
     CalibrationV2RuntimeError,
     InvalidatedTrajectory,
     TrajectoryRequest,
@@ -23,6 +37,7 @@ from memcontam.readiness.phase13_calibration_v2_runtime import (
 from memcontam.readiness.phase13_provider_models import ExecutionTemplateIdentity
 from memcontam.readiness.phase13_provider_runtime import Phase13V2ProviderRuntime
 from memcontam.tasks.base import TaskInstance
+from memcontam.readiness import phase13_cli
 
 ROOT = Path(__file__).resolve().parents[1]
 BASELINES = ("fh_bounded", "rag_frozen", "bot_style", "reflexion_style")
@@ -54,7 +69,13 @@ def _runtime(
     )
 
 
-def _fixture(*, leak: bool = False, rewind: bool = False, rag_write: bool = False):
+def _fixture(
+    *,
+    leak: bool = False,
+    rewind: bool = False,
+    rag_write: bool = False,
+    replace_state: bool = False,
+):
     provider = _Provider()
     clients = {(baseline, arm): _runtime(provider, baseline, arm) for baseline in BASELINES for arm in ARMS}
     clients[("nomem", "clean")] = Phase13V2ProviderRuntime.from_provider(
@@ -68,6 +89,34 @@ def _fixture(*, leak: bool = False, rewind: bool = False, rag_write: bool = Fals
         "bot_style": serialize_checkpoint(NativeState("bot_style", (), {"templates": [], "checkpoint_index": 1, "clean_competitor_ids": [], "active_capacity": 8})),
         "reflexion_style": serialize_checkpoint(NativeState("reflexion_style", (), {"checkpoint_index": 1, "reflections": [], "active_capacity": 8})),
     }
+    candidate_registry = load_candidate_registry(
+        ROOT / "data/phase12/registries/candidate_registry_v1.json"
+    )
+    triplet = next(row for row in candidate_registry.triplets if row.task == "game24")
+    renderers = RendererRegistry.native()
+    branch_checkpoints = {
+        (baseline, arm): (
+            checkpoints[baseline]
+            if arm == "clean"
+            else append_native_entry(
+                checkpoints[baseline],
+                construct_correct_control(baseline, triplet, checkpoints[baseline])
+                if arm == "correct"
+                else construct_irrelevant_control(baseline, triplet, checkpoints[baseline])
+                if arm == "irrelevant"
+                else renderers.render_false(baseline, triplet, checkpoints[baseline]),
+            )
+        )
+        for baseline in BASELINES
+        for arm in ARMS
+    }
+    roots: dict[tuple[str, str], NativeEntry] = {}
+    for key, checkpoint in branch_checkpoints.items():
+        if key[1] == "clean":
+            continue
+        root = checkpoint.state.entries[-1]
+        assert isinstance(root, NativeEntry)
+        roots[key] = root
     branches = {
         baseline: LiveThreeArmBranches(
             baseline,
@@ -75,13 +124,44 @@ def _fixture(*, leak: bool = False, rewind: bool = False, rag_write: bool = Fals
             {"temperature": 0.0, **({"future_horizon": 10} if leak else {})},
             {
                 arm: LiveArmBranch(
-                    arm, checkpoints[baseline].identity.checkpoint_id, checkpoints[baseline].identity.checkpoint_id,
-                    checkpoints[baseline], {"step": 0}, 0 if arm == "clean" else 1,
-                    None if arm == "clean" else f"root-{arm}",
+                    arm,
+                    checkpoints[baseline].identity.checkpoint_id,
+                    branch_checkpoints[(baseline, arm)].identity.checkpoint_id,
+                    branch_checkpoints[(baseline, arm)],
+                    {"step": 0}, 0 if arm == "clean" else 1,
+                    None
+                    if arm == "clean"
+                    else roots[(baseline, arm)].entry_id,
                 )
                 for arm in ARMS
             },
-            (),
+            tuple(
+                LiveBranchEvent(
+                    "branch_constructed",
+                    arm,
+                    checkpoints[baseline].identity.checkpoint_id,
+                    branch_checkpoints[(baseline, arm)].identity.checkpoint_id,
+                    None
+                    if arm == "clean"
+                    else roots[(baseline, arm)].entry_id,
+                    None,
+                    None,
+                )
+                for arm in ARMS
+            )
+            + tuple(
+                LiveBranchEvent(
+                    "intervention_applied",
+                    arm,
+                    checkpoints[baseline].identity.checkpoint_id,
+                    branch_checkpoints[(baseline, arm)].identity.checkpoint_id,
+                    roots[(baseline, arm)].entry_id,
+                    triplet.triplet_id,
+                    roots[(baseline, arm)].render_id,
+                )
+                for arm in ARMS
+                if arm != "clean"
+            ),
         )
         for baseline in BASELINES
     }
@@ -108,12 +188,20 @@ def _fixture(*, leak: bool = False, rewind: bool = False, rag_write: bool = Fals
     )
 
     def execute(context, state):  # noqa: ANN001, ANN202
-        context.client.chat([{"role": "user", "content": "solve"}], context.model, {**context.decoding})
+        calls = 2 if context.identities.condition_id in {"bot_style", "reflexion_style"} else 1
+        for _ in range(calls):
+            context.client.chat(
+                [{"role": "user", "content": "solve"}],
+                context.model,
+                {**context.decoding, **context.baseline_configs.get(context.identities.condition_id, {})},
+            )
         prior = state["step"]
         state["step"] = prior - 1 if rewind and prior == 4 else prior + 1
         writes = ("forbidden",) if rag_write and context.identities.condition_id == "rag_frozen" else ()
         return RuntimeTrialResult(
-            outcome=BaselineExecutionOutcome("succeeded"), state=state, write_envelopes=writes
+            outcome=BaselineExecutionOutcome("succeeded"),
+            state={"step": state["step"]} if replace_state else state,
+            write_envelopes=writes,
         )
 
     def serialize(state):  # noqa: ANN001, ANN202
@@ -169,7 +257,7 @@ def test_executes_one_causal_h10_source_with_owned_calls_and_nomem_singleton() -
         if (left.baseline, left.arm) == (right.baseline, right.arm)
     )
     assert result.nomem_underlying_execution_count == 1
-    assert len(provider.configs) == 170
+    assert len(provider.configs) == 250
     assert {event.source_checkpoint_id for event in result.events if event.baseline == "fh_bounded"} == {
         "checkpoint-3de74961a1870cb9"
     }
@@ -219,3 +307,122 @@ def test_rejects_raw_provider_and_future_suffix_task_before_dispatch() -> None:
             replace(request, contexts=(replace(request.contexts[0], task=wrong_task), *request.contexts[1:]))
         )
     assert provider.configs == []
+
+
+def test_rejects_future_field_added_by_baseline_config_before_provider_dispatch() -> None:
+    provider, _, request = _fixture()
+    contexts = tuple(
+        replace(context, baseline_configs={"fh_bounded": {"future_horizon": 10}})
+        for context in request.contexts
+    )
+
+    result = execute_calibration_trajectory(replace(request, contexts=contexts))
+
+    assert isinstance(result, InvalidatedTrajectory)
+    assert result.failure_code == "PROVIDER_CONFIG_LEAKAGE"
+    assert not any("future_horizon" in config for config in provider.configs)
+
+
+def test_owned_runtime_exposes_exact_dispatched_payloads() -> None:
+    _, _, request = _fixture()
+
+    result = execute_calibration_trajectory(request)
+
+    assert result.status == "completed"
+    runtime = request.providers[("fh_bounded", "clean")]
+    assert len(runtime.dispatched_payloads) == 10
+    assert all(payload.config["execution_template_id"] == "game24-fh_bounded-clean" for payload in runtime.dispatched_payloads)
+    assert {payload.session_id for payload in runtime.dispatched_payloads} == {"session-10000"}
+    assert all("seed" not in payload.config and "task" not in payload.config for payload in runtime.dispatched_payloads)
+
+
+def test_rejects_swapped_branch_checkpoint_source_and_root() -> None:
+    provider, _, request = _fixture()
+    branches = dict(request.branches_by_baseline)
+    panel = branches["fh_bounded"]
+    arms = dict(panel.arms)
+    arms["correct"] = replace(
+        arms["correct"],
+        checkpoint=arms["contam"].checkpoint,
+        source_identity="swapped-source",
+        injected_root_id="swapped-root",
+    )
+    object.__setattr__(panel, "arms", arms)
+
+    with pytest.raises(CalibrationV2RuntimeError, match="BRANCH_LINEAGE_MISMATCH"):
+        execute_calibration_trajectory(replace(request, branches_by_baseline=branches))
+    assert provider.configs == []
+
+
+def test_rejects_swapped_intervention_identity() -> None:
+    provider, _, request = _fixture()
+    panel = request.branches_by_baseline["fh_bounded"]
+    events = list(panel.events)
+    event = next(index for index, row in enumerate(events) if row.arm == "correct" and row.kind == "intervention_applied")
+    events[event] = replace(events[event], candidate_triplet_id="swapped-triplet")
+    object.__setattr__(panel, "events", tuple(events))
+
+    with pytest.raises(CalibrationV2RuntimeError, match="INTERVENTION_LINEAGE_MISMATCH"):
+        execute_calibration_trajectory(request)
+    assert provider.configs == []
+
+
+def test_rejects_unrelated_state_replacement_and_seals_accounting_closure() -> None:
+    _, _, request = _fixture(replace_state=True)
+
+    result = execute_calibration_trajectory(request)
+
+    assert isinstance(result, InvalidatedTrajectory)
+    assert result.failure_code == "STATE_IDENTITY_DRIFT"
+    assert result.accounting_closure.status == "closed_partial"
+    assert result.accounting_closure.settled_semantic_calls == 1
+    assert result.accounting_closure.expected_semantic_calls == 250
+    assert result.accounting_closure.templates[0].calls[0].attempts[0].raw_evidence
+
+
+def test_reconciles_exact_template_call_counts_and_sessions() -> None:
+    _, _, request = _fixture()
+
+    result = execute_calibration_trajectory(request)
+
+    assert result.status == "completed"
+    assert result.accounting_closure.status == "closed_complete"
+    assert result.accounting_closure.settled_semantic_calls == 250
+    assert result.accounting_closure.expected_semantic_calls == 250
+    assert {row.session_id for row in result.accounting_closure.templates} == {"session-10000"}
+
+
+def test_rejects_nominal_template_call_shortfall() -> None:
+    _, registry, request = _fixture()
+    original = registry["bot_style"]
+
+    def one_call(context, state):  # noqa: ANN001, ANN202
+        context.client.chat([{"role": "user", "content": "solve"}], context.model, dict(context.decoding))
+        state["step"] += 1
+        return RuntimeTrialResult(BaselineExecutionOutcome("succeeded"), state)
+
+    registry["bot_style"] = replace(original, execute_trial=one_call)
+
+    result = execute_calibration_trajectory(replace(request, registry=registry))
+
+    assert isinstance(result, InvalidatedTrajectory)
+    assert result.failure_code == "PROVIDER_CALL_LEDGER_MISMATCH"
+    assert result.accounting_closure.status == "closed_partial"
+
+
+def test_typed_authorized_cli_branch_reaches_trajectory_executor(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _, _, request = _fixture()
+
+    phase13_cli.run(
+        argparse.Namespace(
+            phase13_command="run-calibration-v2",
+            config=ROOT / "configs/phase13/pre_main_calibration_v2.yaml",
+            authorized_execution=AuthorizedTrajectoryExecution(
+                request.verified.authorization, request
+            ),
+        )
+    )
+
+    assert '"status": "completed"' in capsys.readouterr().out

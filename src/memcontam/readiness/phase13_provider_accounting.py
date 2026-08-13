@@ -19,6 +19,7 @@ from memcontam.readiness.phase13_provider_models import (
     OfflineAccounting,
     ProviderAccountingError,
     ProviderDispatchFailure,
+    ProviderDispatchPayload,
     ProviderTotals,
     SettledCall,
     TransportAttempt,
@@ -29,6 +30,7 @@ from memcontam.readiness.phase13_provider_normalization import (
     normalize_openai_response,
     sum_attempts,
 )
+from memcontam.readiness.phase13_provider_payload import provider_config, validate_messages
 
 
 class OwnedProviderAccounting:
@@ -67,6 +69,7 @@ class OwnedProviderAccounting:
         self._planned_ids: set[str] = set()
         self._calls: list[SettledCall] = []
         self._dispatches = 0
+        self._dispatched_payloads: list[ProviderDispatchPayload] = []
 
     def chat(
         self,
@@ -75,18 +78,32 @@ class OwnedProviderAccounting:
         config: dict,
     ) -> LLMResponse:
         self._validate_dispatch(config)
+        dispatch_config = provider_config(config)
+        validate_messages(messages)
         semantic_call_id = str(uuid4())
         if semantic_call_id in self._planned_ids:
             raise ProviderAccountingError("DUPLICATE_SEMANTIC_CALL_ID")
         self._planned_ids.add(semantic_call_id)
         self._dispatches += 1
-        provider_config = dict(config)
-        provider_config["execution_owner_id"] = self._execution_owner_id
-        provider_config["semantic_call_id"] = semantic_call_id
-        provider_config["execution_template_id"] = self._intended_template_id
+        dispatch_config["execution_owner_id"] = self._execution_owner_id
+        dispatch_config["semantic_call_id"] = semantic_call_id
+        dispatch_config["execution_template_id"] = self._intended_template_id
+        self._dispatched_payloads.append(
+            ProviderDispatchPayload(
+                messages=tuple(messages),
+                model=model,
+                config=dispatch_config,
+                session_id=str(dispatch_config.get("session_id", "")),
+                intervention_id=(
+                    str(dispatch_config["intervention_id"])
+                    if dispatch_config.get("intervention_id") is not None
+                    else None
+                ),
+            )
+        )
         started = time.perf_counter()
         try:
-            response = self._client.chat(messages, model, provider_config)
+            response = self._client.chat(messages, model, dispatch_config)
         except ProviderDispatchFailure as failure:
             try:
                 call = self._settle(
@@ -131,6 +148,19 @@ class OwnedProviderAccounting:
             raise ProviderAccountingError("PLANNED_ACTUAL_SETTLEMENT_MISMATCH")
         totals = self._aggregate(self._calls)
         return AccountingReport(calls=tuple(self._calls), offline=self._offline_rows, totals=totals)
+
+    @property
+    def dispatched_payloads(self) -> tuple[ProviderDispatchPayload, ...]:
+        return tuple(self._dispatched_payloads)
+
+    @property
+    def execution_template_id(self) -> str:
+        return self._intended_template_id
+
+    @property
+    def execution_owner_id(self) -> str:
+        return self._execution_owner_id
+
 
     def _validate_dispatch(self, config: dict) -> None:
         claimed_owner = config.get("execution_owner_id")
