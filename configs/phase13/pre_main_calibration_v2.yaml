@@ -1,0 +1,24 @@
+config_kind: phase13_pre_main_calibration_v2
+config_id: phase13-pre-main-calibration-v2
+authority:
+  calibration_partition:
+    path: data/phase13/calibration_v2/seed_partition_registry_v1.json
+    file_sha256: a31b731244f5c56b4aafa5ed83bbe720c8623563cfbd800e7a478a0025aff4ba
+  execution:
+    path: data/phase13/authority/execution_registry_v1.json
+    file_sha256: 7c92189f645b74381f3fedf2d3ffbc8c4768a7019eaeb621edb8c22fb4a34970
+    registry_hash: acb769e1e1adbc3eb69e4302322c8eac81829dc836611519caea2ba960900c38
+  analysis:
+    path: data/phase13/authority/analysis_registry_v1.json
+    file_sha256: b58e6aec8acc040fb934e9b25842eb68c702d098a08b41ba0eab9502a198a0f3
+    registry_hash: 82960a8f65d316c53bcf55da3e215f0c4b62781643c21155307b40aa9adf4eee
+scientific:
+  H_primary: 5
+  H_run: 10
+ownership:
+  prefix_owner_id: phase13-clean-prefix-owner-v1
+  execution_owner_id: phase13-h10-execution-owner-v1
+  offline_owner_id: phase13-offline-compute-owner-v1
+output:
+  artifact_root: runs/phase13-calibration-v2
+main_execution: forbidden

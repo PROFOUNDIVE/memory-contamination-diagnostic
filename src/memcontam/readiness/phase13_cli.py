@@ -15,6 +15,15 @@ from memcontam.readiness.phase13_clean_prefix import (
 )
 from memcontam.readiness.phase13_clean_prefix_authorization import verify_authorization
 from memcontam.readiness.phase13_clean_prefix_runtime import execute_clean_prefix_calibration
+from memcontam.readiness.phase13_calibration_v2 import (
+    CalibrationV2ConfigError,
+    prepare_calibration_v2,
+    validate_calibration_v2,
+)
+from memcontam.readiness.phase13_terminal import (
+    CalibrationV2ExternalBlock,
+    render_terminal,
+)
 from memcontam.readiness.retrieval_smoke import resolve_bge_cache_path
 
 
@@ -32,10 +41,31 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
     run.add_argument("--authorization", type=Path, required=True)
     run.add_argument("--expected-authorization-sha256", required=True)
     run.add_argument("--allow-live-calls", action="store_true")
+    for command in (
+        "validate-calibration-v2",
+        "prepare-calibration-v2",
+        "run-calibration-v2",
+        "validate-calibration-v2-archive",
+    ):
+        calibration_v2 = commands.add_parser(command)
+        calibration_v2.add_argument("--config", type=Path, required=True)
 
 
 def run(args: argparse.Namespace) -> None:
     try:
+        if args.phase13_command == "validate-calibration-v2":
+            print(render_terminal(validate_calibration_v2(args.config)))
+            return
+        if args.phase13_command == "prepare-calibration-v2":
+            print(render_terminal(prepare_calibration_v2(args.config)))
+            print("AWAITING_CALIBRATION_V2_AUTHORIZATION")
+            return
+        if args.phase13_command in {
+            "run-calibration-v2",
+            "validate-calibration-v2-archive",
+        }:
+            validate_calibration_v2(args.config)
+            raise SystemExit(render_terminal(CalibrationV2ExternalBlock()))
         if args.phase13_command == "prepare-clean-prefix":
             payload = prepare_clean_prefix(args.config, args.run_id, args.output)
             print(json.dumps(payload, sort_keys=True))
@@ -78,4 +108,6 @@ def run(args: argparse.Namespace) -> None:
         )
         print(json.dumps(result, sort_keys=True))
     except Phase13CalibrationError as error:
+        raise SystemExit(error.code) from error
+    except CalibrationV2ConfigError as error:
         raise SystemExit(error.code) from error
