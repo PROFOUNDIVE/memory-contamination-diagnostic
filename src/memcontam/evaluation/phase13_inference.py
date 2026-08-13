@@ -19,6 +19,8 @@ from memcontam.readiness.phase13_support_authority import authenticate_conforman
 ANALYSIS_PATH: Final = Path("data/phase13/authority/analysis_registry_v1.json")
 ANALYSIS_SHA256: Final = "b58e6aec8acc040fb934e9b25842eb68c702d098a08b41ba0eab9502a198a0f3"
 BASELINES: Final = ("fh_bounded", "rag_frozen", "bot_style", "reflexion_style")
+ARMS: Final = ("clean", "correct", "irrelevant", "contam")
+SEEDS: Final = tuple(range(10000, 10012))
 PAIRS: Final = ((0, 1), (0, 2), (0, 3))
 
 
@@ -29,18 +31,10 @@ class InferenceError(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
-class ArmTrajectory:
-    baseline: str
-    clean: tuple[Literal[0, 1], ...]
-    contam: tuple[Literal[0, 1], ...]
-
-
-@dataclass(frozen=True, slots=True)
 class SeedBundle:
     request: TrajectoryRequest
     source: CompletedTrajectory
     prefix: PrefixDerivationArtifact
-    arms: tuple[ArmTrajectory, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,32 +111,61 @@ def _validate(request: TaskInferenceInput, root: Path):  # noqa: ANN202
         raise InferenceError("INFERENCE_SLOT_INVENTORY_INVALID")
     if supplied != populations:
         raise InferenceError("INFERENCE_SLOT_ORDER_INVALID")
-    if len(request.seeds) < 2:
+    if len(request.seeds) != 12:
         raise InferenceError("INCOMPLETE_SEED_DENOMINATOR")
     seed_ids = tuple(row.request.seed_id for row in request.seeds)
     if len(set(seed_ids)) != len(seed_ids):
         raise InferenceError("DUPLICATE_TRAJECTORY_SEED")
+    if seed_ids != SEEDS:
+        raise InferenceError("TRAJECTORY_SEED_INVENTORY_INVALID")
     for bundle in request.seeds:
         if bundle.request.task != request.task:
             raise InferenceError("INFERENCE_TASK_SOURCE_MISMATCH")
+        if (
+            bundle.request.stream_id != f"{request.task}-seed-{bundle.request.seed_id}"
+            or bundle.source.stream_id != bundle.request.stream_id
+            or bundle.source.source_manifest_id != bundle.request.stream_id
+            or bundle.source.source_seal.source_manifest_id != bundle.request.stream_id
+        ):
+            raise InferenceError("INFERENCE_SOURCE_IDENTITY_INVALID")
         try:
             authenticate_conformance(bundle.prefix, bundle.request, bundle.source)
         except ValueError as error:
             raise InferenceError("INFERENCE_SOURCE_AUTHORITY_INVALID") from error
-        if tuple(row.baseline for row in bundle.arms) != BASELINES:
-            raise InferenceError("INCOMPLETE_BASELINE_PANEL")
-        if any(len(row.clean) != 5 or len(row.contam) != 5 for row in bundle.arms):
-            raise InferenceError("INCOMPLETE_H5_TRAJECTORY")
     return analysis, family
 
 
-def _effects(request: TaskInferenceInput) -> tuple[tuple[float, ...], ...]:
-    baseline = tuple(
-        tuple(mean(arm.clean) - mean(arm.contam) for arm in seed.arms)
-        for seed in request.seeds
+def _seed_effects(bundle: SeedBundle) -> tuple[float, ...]:
+    request = bundle.request
+    expected = tuple((baseline, arm, event_time) for baseline in BASELINES
+                     for arm in ARMS for event_time in range(10))
+    events = bundle.source.events
+    observed = tuple((event.baseline, event.arm, event.event_time) for event in events)
+    if observed != expected or any(
+        event.task != request.task
+        or event.session_id != request.session_id
+        or event.execution_owner_id != request.verified.execution.execution_owner_id
+        or event.status != "succeeded"
+        for event in events
+    ):
+        raise InferenceError("INFERENCE_SOURCE_ROWS_INVALID")
+    if any(type(event.verified_score) is not int or event.verified_score not in (0, 1)
+           for event in events):
+        raise InferenceError("INFERENCE_OUTCOME_INVALID")
+    scores = {(event.baseline, event.arm, event.event_time): event.verified_score
+              for event in events}
+    l1 = tuple(
+        mean(scores[(baseline, "clean", time)] for time in range(5))
+        - mean(scores[(baseline, "contam", time)] for time in range(5))
+        for baseline in BASELINES
     )
+    return (*l1, *(l1[left] - l1[right] for left, right in PAIRS))
+
+
+def _effects(request: TaskInferenceInput) -> tuple[tuple[float, ...], ...]:
+    baseline = tuple(_seed_effects(seed) for seed in request.seeds)
     columns = tuple(tuple(row[index] for row in baseline) for index in range(4))
-    return (*columns, *(tuple(columns[left][seed] - columns[right][seed] for seed in range(len(baseline))) for left, right in PAIRS))
+    return (*columns, *(tuple(row[index] for row in baseline) for index in range(4, 7)))
 
 
 def _statistics(effects: tuple[tuple[float, ...], ...]) -> tuple[tuple[float, float, float, float], ...]:
@@ -160,7 +183,7 @@ def _statistics(effects: tuple[tuple[float, ...], ...]) -> tuple[tuple[float, fl
     for slot, estimate in enumerate(observed):
         ordered = sorted(bootstrap[slot])
         p_value = (1 + sum(abs(value) >= abs(estimate) for value in null[slot])) / 20_001
-        result.append((estimate, ordered[500], ordered[19_499], p_value))
+        result.append((estimate, ordered[500], ordered[19_500], p_value))
     return tuple(result)
 
 
@@ -224,6 +247,6 @@ def estimate_non_primary(
 
 
 __all__ = (
-    "ArmTrajectory", "InferenceError", "NonPrimaryEstimate", "PrimaryInference", "SeedBundle",
+    "InferenceError", "NonPrimaryEstimate", "PrimaryInference", "SeedBundle",
     "SlotSupport", "TaskInferenceInput", "estimate_non_primary", "infer_primary",
 )
