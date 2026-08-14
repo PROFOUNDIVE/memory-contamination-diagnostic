@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import asdict
 import json
 from pathlib import Path
 
@@ -15,6 +16,20 @@ from memcontam.readiness.phase13_clean_prefix import (
 )
 from memcontam.readiness.phase13_clean_prefix_authorization import verify_authorization
 from memcontam.readiness.phase13_clean_prefix_runtime import execute_clean_prefix_calibration
+from memcontam.readiness.phase13_authority import (
+    Phase13AuthorityError,
+    parse_authority_freeze,
+    parse_authority_requirements,
+)
+from memcontam.readiness.phase13_authority_files import read_regular_nofollow
+from memcontam.readiness.phase13_execution_contract import (
+    Phase13ExecutionError,
+    parse_execution_registry,
+)
+from memcontam.readiness.phase13_provenance import (
+    Phase13ProvenanceError,
+    validate_provenance_bundle,
+)
 from memcontam.readiness.retrieval_smoke import resolve_bge_cache_path
 
 
@@ -32,10 +47,32 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
     run.add_argument("--authorization", type=Path, required=True)
     run.add_argument("--expected-authorization-sha256", required=True)
     run.add_argument("--allow-live-calls", action="store_true")
+    authority = commands.add_parser("validate-authority-freeze")
+    authority.add_argument("--freeze", type=Path, required=True)
+    authority.add_argument("--requirements", type=Path, required=True)
+    execution = commands.add_parser("validate-execution-registry")
+    execution.add_argument("--registry", type=Path, required=True)
+    provenance = commands.add_parser("validate-provenance")
+    provenance.add_argument("--root", type=Path, required=True)
+    provenance.add_argument("--manifest", type=Path, required=True)
+    provenance.add_argument("--seal", type=Path, required=True)
 
 
 def run(args: argparse.Namespace) -> None:
     try:
+        if args.phase13_command == "validate-authority-freeze":
+            requirements = parse_authority_requirements(read_regular_nofollow(args.requirements))
+            freeze = parse_authority_freeze(read_regular_nofollow(args.freeze), requirements)
+            print(json.dumps({"freeze_id": freeze.freeze_id, "status": "valid"}, sort_keys=True))
+            return
+        if args.phase13_command == "validate-execution-registry":
+            registry = parse_execution_registry(read_regular_nofollow(args.registry))
+            print(json.dumps({"registry_id": registry.registry_id, "status": "valid"}, sort_keys=True))
+            return
+        if args.phase13_command == "validate-provenance":
+            report = validate_provenance_bundle(args.root, args.manifest, args.seal)
+            print(json.dumps(asdict(report), sort_keys=True))
+            return
         if args.phase13_command == "prepare-clean-prefix":
             payload = prepare_clean_prefix(args.config, args.run_id, args.output)
             print(json.dumps(payload, sort_keys=True))
@@ -77,5 +114,10 @@ def run(args: argparse.Namespace) -> None:
             allow_live_calls=args.allow_live_calls,
         )
         print(json.dumps(result, sort_keys=True))
-    except Phase13CalibrationError as error:
+    except (
+        Phase13AuthorityError,
+        Phase13CalibrationError,
+        Phase13ExecutionError,
+        Phase13ProvenanceError,
+    ) as error:
         raise SystemExit(error.code) from error
