@@ -5,32 +5,25 @@ from dataclasses import asdict
 import json
 from pathlib import Path
 
-from memcontam.clients.config import ProviderConfig
-from memcontam.clients.cost_guard import CostGuard
-from memcontam.clients.openai_responses import OpenAIResponsesClient
-from memcontam.memory.embeddings import BgeM3EmbeddingProvider
 from memcontam.readiness.phase13_clean_prefix import (
     Phase13CalibrationError,
     load_clean_prefix_config_bytes,
     prepare_clean_prefix,
 )
-from memcontam.readiness.phase13_clean_prefix_authorization import verify_authorization
-from memcontam.readiness.phase13_clean_prefix_runtime import execute_clean_prefix_calibration
 from memcontam.readiness.phase13_authority import (
     Phase13AuthorityError,
     parse_authority_freeze,
     parse_authority_requirements,
 )
-from memcontam.readiness.phase13_authority_files import read_regular_nofollow
+from memcontam.readiness.phase13_authority_files import AuthorityFileError, read_regular_nofollow
 from memcontam.readiness.phase13_execution_contract import (
     Phase13ExecutionError,
-    parse_execution_registry,
+    validate_execution_closure,
 )
 from memcontam.readiness.phase13_provenance import (
     Phase13ProvenanceError,
     validate_provenance_bundle,
 )
-from memcontam.readiness.retrieval_smoke import resolve_bge_cache_path
 
 
 def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -51,7 +44,9 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
     authority.add_argument("--freeze", type=Path, required=True)
     authority.add_argument("--requirements", type=Path, required=True)
     execution = commands.add_parser("validate-execution-registry")
-    execution.add_argument("--registry", type=Path, required=True)
+    execution.add_argument("--root", type=Path, required=True)
+    execution.add_argument("--freeze", type=Path, required=True)
+    execution.add_argument("--requirements", type=Path, required=True)
     provenance = commands.add_parser("validate-provenance")
     provenance.add_argument("--root", type=Path, required=True)
     provenance.add_argument("--manifest", type=Path, required=True)
@@ -66,7 +61,11 @@ def run(args: argparse.Namespace) -> None:
             print(json.dumps({"freeze_id": freeze.freeze_id, "status": "valid"}, sort_keys=True))
             return
         if args.phase13_command == "validate-execution-registry":
-            registry = parse_execution_registry(read_regular_nofollow(args.registry))
+            registry = validate_execution_closure(
+                read_regular_nofollow(args.freeze),
+                read_regular_nofollow(args.requirements),
+                args.root,
+            )
             print(json.dumps({"registry_id": registry.registry_id, "status": "valid"}, sort_keys=True))
             return
         if args.phase13_command == "validate-provenance":
@@ -77,6 +76,14 @@ def run(args: argparse.Namespace) -> None:
             payload = prepare_clean_prefix(args.config, args.run_id, args.output)
             print(json.dumps(payload, sort_keys=True))
             return
+        from memcontam.clients.config import ProviderConfig
+        from memcontam.clients.cost_guard import CostGuard
+        from memcontam.clients.openai_responses import OpenAIResponsesClient
+        from memcontam.memory.embeddings import BgeM3EmbeddingProvider
+        from memcontam.readiness.phase13_clean_prefix_authorization import verify_authorization
+        from memcontam.readiness.phase13_clean_prefix_runtime import execute_clean_prefix_calibration
+        from memcontam.readiness.retrieval_smoke import resolve_bge_cache_path
+
         verified = verify_authorization(
             config_path=args.config,
             run_id=args.run_id,
@@ -116,6 +123,7 @@ def run(args: argparse.Namespace) -> None:
         print(json.dumps(result, sort_keys=True))
     except (
         Phase13AuthorityError,
+        AuthorityFileError,
         Phase13CalibrationError,
         Phase13ExecutionError,
         Phase13ProvenanceError,
