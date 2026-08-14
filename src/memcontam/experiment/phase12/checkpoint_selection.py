@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
+from types import MappingProxyType
 from typing import Mapping, Sequence
 
 from memcontam.experiment.phase12.contracts import BaselineConditionSpec
 from memcontam.experiment.phase12.eligibility import JointEligibilityResult, compute_joint_eligibility
 from memcontam.experiment.phase12.maturity import MaturityDecision, evaluate_maturity
+from memcontam.experiment.phase12.native_state_facts import inspect_native_state
 from memcontam.experiment.phase12.timing import select_lower_quantile_checkpoint
 from memcontam.memory.checkpoint_v3 import Phase12Checkpoint
 
@@ -18,6 +20,15 @@ _EXPECTED_FAMILIES = {
     "bot_style": "bot",
     "reflexion_style": "reflexion",
 }
+
+
+@dataclass(frozen=True, slots=True)
+class BaselinePanel:
+    baselines: tuple[str, ...]
+    expected_families: Mapping[str, str]
+
+
+PRIMARY_BASELINE_PANEL = BaselinePanel(MEMORY_BASELINES, MappingProxyType(_EXPECTED_FAMILIES))
 
 
 class CheckpointSelectionError(ValueError):
@@ -59,13 +70,33 @@ def select_common_checkpoint(
     trial_indices: Sequence[int],
     suffix_horizon: int,
 ) -> CommonCheckpointSelection:
-    _validate_inputs(seed, checkpoints_by_baseline, conditions, trial_indices, suffix_horizon)
+    return select_checkpoint_for_panel(
+        seed=seed,
+        checkpoints_by_baseline=checkpoints_by_baseline,
+        conditions=conditions,
+        trial_indices=trial_indices,
+        suffix_horizon=suffix_horizon,
+        panel=PRIMARY_BASELINE_PANEL,
+    )
+
+
+def select_checkpoint_for_panel(
+    *,
+    seed: int,
+    checkpoints_by_baseline: Mapping[str, Sequence[Phase12Checkpoint]],
+    conditions: Mapping[str, BaselineConditionSpec],
+    trial_indices: Sequence[int],
+    suffix_horizon: int,
+    panel: BaselinePanel,
+) -> CommonCheckpointSelection:
+    validate_panel(panel)
+    _validate_inputs(seed, checkpoints_by_baseline, conditions, trial_indices, suffix_horizon, panel)
     positions = {index: position for position, index in enumerate(trial_indices)}
     decisions: list[MaturityDecision] = []
     assessments: list[tuple[str, Phase12Checkpoint, MaturityDecision]] = []
     checkpoints_by_index: dict[tuple[str, int], Phase12Checkpoint] = {}
 
-    for baseline in MEMORY_BASELINES:
+    for baseline in panel.baselines:
         condition = conditions[baseline]
         for checkpoint in sorted(
             checkpoints_by_baseline[baseline], key=lambda item: _checkpoint_index(item)
@@ -79,14 +110,18 @@ def select_common_checkpoint(
                 raise CheckpointSelectionError("DUPLICATE_BASELINE_CHECKPOINT")
             checkpoints_by_index[key] = checkpoint
             reasons = list(maturity.reason_codes)
-            reasons.extend(_baseline_readiness_reasons(baseline, checkpoint))
+            reasons.extend(_baseline_readiness_reasons(checkpoint))
             if len(trial_indices) - positions[index] - 1 < suffix_horizon:
                 reasons.append("INSUFFICIENT_SUFFIX_HORIZON")
             decision = _decision_with_reasons(maturity, reasons)
             decisions.append(decision)
             assessments.append((baseline, checkpoint, decision))
 
-    joint_eligibility = compute_joint_eligibility(decisions, suffix_horizon)
+    joint_eligibility = compute_joint_eligibility(
+        decisions,
+        suffix_horizon,
+        required_families=tuple(panel.expected_families[baseline] for baseline in panel.baselines),
+    )
     selected_trial_index = select_lower_quantile_checkpoint(
         joint_eligibility.joint_eligible_indices, Decimal("0.5")
     )
@@ -106,7 +141,7 @@ def select_common_checkpoint(
 
     selected_checkpoints = {
         baseline: checkpoints_by_index[(baseline, selected_trial_index)]
-        for baseline in MEMORY_BASELINES
+        for baseline in panel.baselines
     }
     suffix_start = positions[selected_trial_index] + 1
     return CommonCheckpointSelection(
@@ -128,6 +163,7 @@ def _validate_inputs(
     conditions: Mapping[str, BaselineConditionSpec],
     trial_indices: Sequence[int],
     suffix_horizon: int,
+    panel: BaselinePanel,
 ) -> None:
     if type(seed) is not int:
         raise CheckpointSelectionError("INVALID_CALIBRATION_SEED")
@@ -140,13 +176,24 @@ def _validate_inputs(
         or len(set(trial_indices)) != len(trial_indices)
     ):
         raise CheckpointSelectionError("INVALID_TRIAL_INDICES")
-    if set(checkpoints_by_baseline) != set(MEMORY_BASELINES):
+    if set(checkpoints_by_baseline) != set(panel.baselines):
         raise CheckpointSelectionError("PRIMARY_BASELINE_PANEL_REQUIRED")
-    if set(conditions) != set(MEMORY_BASELINES):
+    if set(conditions) != set(panel.baselines):
         raise CheckpointSelectionError("PRIMARY_CONDITION_PANEL_REQUIRED")
-    for baseline, family in _EXPECTED_FAMILIES.items():
+    for baseline, family in panel.expected_families.items():
         if conditions[baseline].baseline_family != family:
             raise CheckpointSelectionError("BASELINE_CONDITION_MISMATCH")
+
+
+def validate_panel(panel: BaselinePanel) -> None:
+    if (
+        not panel.baselines
+        or len(set(panel.baselines)) != len(panel.baselines)
+        or set(panel.expected_families) != set(panel.baselines)
+        or len(set(panel.expected_families.values())) != len(panel.baselines)
+        or any(baseline == "nomem" for baseline in panel.baselines)
+    ):
+        raise CheckpointSelectionError("INVALID_BASELINE_PANEL")
 
 
 def _checkpoint_index(checkpoint: Phase12Checkpoint) -> int:
@@ -156,37 +203,33 @@ def _checkpoint_index(checkpoint: Phase12Checkpoint) -> int:
     return index
 
 
-def _baseline_readiness_reasons(baseline: str, checkpoint: Phase12Checkpoint) -> tuple[str, ...]:
-    state = checkpoint.state.native_state
-    if baseline == "fh_bounded":
+def _baseline_readiness_reasons(checkpoint: Phase12Checkpoint) -> tuple[str, ...]:
+    facts = inspect_native_state(checkpoint)
+    if facts.baseline in {"fh_bounded", "full_history"}:
         return (
             ()
-            if state.get("first_eviction_trial_id") is None
+            if not facts.first_eviction_present
             else ("FH_POST_INJECTION_VISIBILITY_UNAVAILABLE",)
         )
-    if baseline == "rag_frozen":
-        return () if state.get("branch") == "clean" else ("RAG_CLEAN_CORPUS_REQUIRED",)
-    if baseline == "bot_style":
-        templates = state.get("templates")
-        competitors = state.get("clean_competitor_ids")
-        template_ids = {
-            item if isinstance(item, str) else item.get("id")
-            for item in templates
-            if isinstance(item, str) or isinstance(item, dict)
-        } if isinstance(templates, (list, tuple)) else set()
+    if facts.baseline in {"rag_frozen", "retrieval_rag"}:
+        return () if facts.branch == "clean" else ("RAG_CLEAN_CORPUS_REQUIRED",)
+    if facts.baseline == "bot_style":
+        competitors = facts.clean_competitor_ids
+        template_ids = set(facts.template_ids)
         if (
-            not isinstance(competitors, (list, tuple))
+            competitors is None
             or len(competitors) < 2
-            or any(not isinstance(item, str) or item not in template_ids for item in competitors)
+            or any(item not in template_ids for item in competitors)
         ):
             return ("BOT_CLEAN_COMPETITORS_UNAVAILABLE",)
         return ()
-    reflections = state.get("reflections")
-    return (
-        ()
-        if isinstance(reflections, (list, tuple)) and reflections
-        else ("REFLEXION_REFLECTIONS_UNAVAILABLE",)
-    )
+    if facts.baseline == "reflexion_style":
+        return (
+            ()
+            if facts.reflection_count is not None and facts.reflection_count > 0
+            else ("REFLEXION_REFLECTIONS_UNAVAILABLE",)
+        )
+    raise CheckpointSelectionError("BASELINE_READINESS_UNSUPPORTED")
 
 
 def _decision_with_reasons(
@@ -229,9 +272,13 @@ def _rejections(
 
 
 __all__ = [
+    "BaselinePanel",
     "CheckpointRejection",
     "CheckpointSelectionError",
     "CommonCheckpointSelection",
     "MEMORY_BASELINES",
+    "PRIMARY_BASELINE_PANEL",
+    "select_checkpoint_for_panel",
     "select_common_checkpoint",
+    "validate_panel",
 ]

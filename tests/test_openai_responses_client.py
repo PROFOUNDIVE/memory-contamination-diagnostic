@@ -140,6 +140,22 @@ def test_responses_client_does_not_retry_immediate_client_error(monkeypatch) -> 
     assert len(_OpenAI.instance.responses.calls) == 1
 
 
+def test_responses_client_retains_attempt_count_on_terminal_retry_failure(monkeypatch) -> None:
+    error = _StatusError(503)
+    client = _client(
+        monkeypatch,
+        [error, error, error],
+        retries_after_initial_attempt=2,
+        retry_delays_seconds=(0.0, 0.0),
+    )
+
+    with pytest.raises(_StatusError) as caught:
+        client.chat([{"role": "user", "content": "solve"}], "future-model", {})
+
+    assert caught.value.provider_attempts_count == 3
+    assert isinstance(caught.value.provider_latency_ms, int)
+
+
 def test_responses_client_fails_closed_when_provider_omits_usage(monkeypatch) -> None:
     response = _Response()
     setattr(response, "usage", None)

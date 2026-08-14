@@ -4,9 +4,11 @@ from dataclasses import dataclass
 from typing import Mapping, Sequence
 
 from memcontam.experiment.phase12.checkpoint_selection import (
-    MEMORY_BASELINES,
+    PRIMARY_BASELINE_PANEL,
+    BaselinePanel,
     CommonCheckpointSelection,
-    select_common_checkpoint,
+    select_checkpoint_for_panel,
+    validate_panel,
 )
 from memcontam.experiment.phase12.contracts import BaselineConditionSpec
 from memcontam.experiment.phase12.game24_runner import Game24RuntimeContext
@@ -37,14 +39,16 @@ def run_live_clean_prefix(
     contexts: Sequence[Game24RuntimeContext],
     conditions: Mapping[str, BaselineConditionSpec],
     suffix_horizon: int,
+    panel: BaselinePanel = PRIMARY_BASELINE_PANEL,
 ) -> LiveCleanPrefixResult:
-    _validate_contexts(seed, contexts, conditions, suffix_horizon)
+    validate_panel(panel)
+    _validate_contexts(seed, contexts, conditions, suffix_horizon, panel)
     trial_indices = tuple(context.identities.order_key for context in contexts)
     typed_indices = tuple(index for index in trial_indices if type(index) is int)
     checkpoints_by_baseline: dict[str, tuple[Phase12Checkpoint, ...]] = {}
     trial_results_by_baseline: dict[str, tuple[RuntimeTrialResult, ...]] = {}
 
-    for baseline in MEMORY_BASELINES:
+    for baseline in panel.baselines:
         entry = LIVE_BASELINE_REGISTRY.get(baseline)
         if entry is None:
             raise LivePrefixError("LIVE_MEMORY_BASELINE_MISSING")
@@ -64,12 +68,13 @@ def run_live_clean_prefix(
         checkpoints_by_baseline[baseline] = tuple(checkpoints)
         trial_results_by_baseline[baseline] = tuple(trial_results)
 
-    selection = select_common_checkpoint(
+    selection = select_checkpoint_for_panel(
         seed=seed,
         checkpoints_by_baseline=checkpoints_by_baseline,
         conditions=conditions,
         trial_indices=typed_indices,
         suffix_horizon=suffix_horizon,
+        panel=panel,
     )
     contexts_by_index = {context.identities.order_key: context for context in contexts}
     suffix_tasks = tuple(
@@ -90,6 +95,7 @@ def _validate_contexts(
     contexts: Sequence[Game24RuntimeContext],
     conditions: Mapping[str, BaselineConditionSpec],
     suffix_horizon: int,
+    panel: BaselinePanel,
 ) -> None:
     if type(seed) is not int:
         raise LivePrefixError("INVALID_CALIBRATION_SEED")
@@ -106,7 +112,7 @@ def _validate_contexts(
         or len(set(indices)) != len(indices)
     ):
         raise LivePrefixError("INVALID_PREFIX_TRIAL_ORDER")
-    if set(conditions) != set(MEMORY_BASELINES):
+    if set(conditions) != set(panel.baselines):
         raise LivePrefixError("PRIMARY_CONDITION_PANEL_REQUIRED")
 
 

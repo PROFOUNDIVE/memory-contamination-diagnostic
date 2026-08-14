@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from memcontam.experiment.phase12.contracts import BaselineConditionSpec
+from memcontam.experiment.phase12.native_state_facts import NativeStateFacts, inspect_native_state
 from memcontam.memory.checkpoint_v3 import Phase12Checkpoint
 
 
@@ -39,9 +40,8 @@ def evaluate_maturity(
 ) -> MaturityDecision:
     _validate_horizon(horizon)
     index = _checkpoint_index(checkpoint)
-    state = checkpoint.state.native_state
-    baseline = checkpoint.state.baseline
-    reason_codes = _baseline_reasons(condition, baseline, state, horizon)
+    facts = inspect_native_state(checkpoint)
+    reason_codes = _baseline_reasons(condition, facts, horizon)
     return MaturityDecision(
         condition_id=condition.condition_id,
         baseline_family=condition.baseline_family,
@@ -79,36 +79,36 @@ def evaluate_optional_dc_maturity(
 
 def _baseline_reasons(
     condition: BaselineConditionSpec,
-    checkpoint_baseline: str,
-    state: Mapping[str, Any],
+    facts: NativeStateFacts,
     horizon: int,
 ) -> list[str]:
-    reasons = _horizon_reasons(state, horizon)
+    reasons = _fact_horizon_reasons(facts, horizon)
     family = condition.baseline_family
-    if checkpoint_baseline not in _baseline_names(family):
+    if facts.baseline not in _baseline_names(family):
         reasons.append("CHECKPOINT_BASELINE_MISMATCH")
         return reasons
     if family == "full_history":
-        if not _nonempty_sequence(state.get("records")):
+        if facts.history_count is None or facts.history_count < 1:
             reasons.append("FH_RECORDS_UNAVAILABLE")
-        if condition.fh_mode == "exact" and state.get("full_fit") is not True:
+        if condition.fh_mode == "exact" and facts.full_fit is not True:
             reasons.append("FH_FULL_FIT_UNPROVEN")
     elif family == "rag":
-        if state.get("read_only") is not True:
+        if facts.read_only is not True:
             reasons.append("RAG_NOT_READ_ONLY")
-        if not _nonempty_string(state.get("corpus_id")) or not _nonempty_string(
-            state.get("index_id")
-        ):
+        if not _nonempty_string(facts.corpus_id) or not _nonempty_string(facts.index_id):
             reasons.append("RAG_INDEX_UNAVAILABLE")
     elif family == "bot":
-        if not _at_least(state.get("templates"), 2):
+        if facts.template_count is None or facts.template_count < 2:
             reasons.append("BOT_COMPETITORS_UNAVAILABLE")
     elif family == "reflexion":
-        reflections = state.get("reflections")
-        capacity = state.get("active_capacity", 3)
-        if not isinstance(reflections, (list, tuple)):
+        capacity = facts.active_capacity if facts.active_capacity is not None else 3
+        if facts.reflection_count is None:
             reasons.append("REFLEXION_STATE_UNAVAILABLE")
-        elif type(capacity) is not int or capacity < 1 or len(reflections) >= capacity:
+        elif (
+            (facts.active_capacity_present and facts.active_capacity is None)
+            or capacity < 1
+            or facts.reflection_count >= capacity
+        ):
             reasons.append("REFLEXION_CAPACITY_UNAVAILABLE")
     else:
         reasons.append("UNSUPPORTED_BASELINE")
@@ -129,6 +129,16 @@ def _horizon_reasons(state: Mapping[str, Any], horizon: int) -> list[str]:
     if registered_horizon is None:
         return []
     if type(registered_horizon) is not int or registered_horizon < horizon:
+        return ["INSUFFICIENT_HORIZON"]
+    return []
+
+
+def _fact_horizon_reasons(facts: NativeStateFacts, horizon: int) -> list[str]:
+    if facts.maturity_horizon_present and not facts.maturity_horizon_valid:
+        return ["INSUFFICIENT_HORIZON"]
+    if not facts.maturity_horizon_present or facts.maturity_horizon is None:
+        return []
+    if facts.maturity_horizon < horizon:
         return ["INSUFFICIENT_HORIZON"]
     return []
 

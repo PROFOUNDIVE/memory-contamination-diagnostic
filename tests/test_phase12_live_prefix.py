@@ -177,3 +177,46 @@ def test_rejects_a_nonclean_prefix_before_execution() -> None:
             conditions=_conditions(),
             suffix_horizon=1,
         )
+
+
+def test_runs_an_explicit_registered_memory_panel(monkeypatch) -> None:
+    live_prefix, selection = _modules()
+    calls: list[tuple[str, int, str, str]] = []
+    monkeypatch.setattr(live_prefix, "LIVE_BASELINE_REGISTRY", _registry(calls))
+    panel = selection.BaselinePanel(
+        baselines=("fh_bounded", "rag_frozen"),
+        expected_families={"fh_bounded": "full_history", "rag_frozen": "rag"},
+    )
+
+    result = live_prefix.run_live_clean_prefix(
+        seed=17,
+        contexts=tuple(_context(index) for index in range(1, 5)),
+        conditions={baseline: _conditions()[baseline] for baseline in panel.baselines},
+        suffix_horizon=1,
+        panel=panel,
+    )
+
+    assert {baseline for baseline, *_rest in calls} == set(panel.baselines)
+    assert set(result.checkpoints_by_baseline) == set(panel.baselines)
+    assert set(result.selection.selected_checkpoints) == set(panel.baselines)
+
+
+def test_rejects_invalid_panel_before_executing_any_prefix_trial(monkeypatch) -> None:
+    live_prefix, selection = _modules()
+    calls: list[tuple[str, int, str, str]] = []
+    monkeypatch.setattr(live_prefix, "LIVE_BASELINE_REGISTRY", _registry(calls))
+    invalid_panel = selection.BaselinePanel(
+        baselines=("fh_bounded", "rag_frozen"),
+        expected_families={"fh_bounded": "full_history", "rag_frozen": "full_history"},
+    )
+
+    with pytest.raises(selection.CheckpointSelectionError, match="INVALID_BASELINE_PANEL"):
+        live_prefix.run_live_clean_prefix(
+            seed=17,
+            contexts=tuple(_context(index) for index in range(1, 5)),
+            conditions={baseline: _conditions()[baseline] for baseline in invalid_panel.baselines},
+            suffix_horizon=1,
+            panel=invalid_panel,
+        )
+
+    assert calls == []

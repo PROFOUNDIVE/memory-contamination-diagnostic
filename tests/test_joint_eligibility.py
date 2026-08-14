@@ -107,3 +107,17 @@ def test_excludes_nomem_aliases_from_all_eligibility_results() -> None:
     assert result.optional_eligible == {"dc": [99]}
     assert result.primary_intersection == (3,)
     assert result.estimability_counts == {"eligible_checkpoints": 1, "primary_baselines": 4}
+
+
+def test_intersects_support_over_an_explicitly_supplied_family_set() -> None:
+    eligibility = _eligibility_module()
+
+    support = eligibility.intersect_eligible_support(
+        {"alpha": {2, 3}, "beta": {3, 4}, "unused": {99}},
+        required_families=("alpha", "beta"),
+    )
+
+    assert support == (3,)
+    assert eligibility.intersect_eligible_support(
+        {"alpha": {2, 3}}, required_families=("alpha", "missing")
+    ) == ()

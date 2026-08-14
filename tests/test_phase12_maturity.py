@@ -100,3 +100,89 @@ def test_maturity_recomputes_for_horizon_without_using_outcomes() -> None:
     assert eligible.eligible is True
     assert ineligible.eligible is False
     assert ineligible.reason_codes == ("INSUFFICIENT_HORIZON",)
+
+
+def test_native_state_facts_are_read_only_diagnostics_not_eligibility_decisions() -> None:
+    facts_module = importlib.import_module("memcontam.experiment.phase12.native_state_facts")
+    checkpoints = (
+        _checkpoint(
+            "fh_bounded",
+            3,
+            {"records": [{"input": "x"}], "full_fit": True, "first_eviction_trial_id": None},
+        ),
+        _checkpoint(
+            "rag_frozen",
+            3,
+            {"branch": "clean", "corpus_id": "corpus", "index_id": "index", "read_only": True},
+        ),
+        _checkpoint(
+            "bot_style",
+            3,
+            {
+                "templates": ["template-a", {"id": "template-b"}],
+                "clean_competitor_ids": ["template-a", "template-b"],
+                "active_capacity": 4,
+            },
+        ),
+        _checkpoint(
+            "reflexion_style",
+            3,
+            {"reflections": [], "active_capacity": 3},
+        ),
+    )
+
+    fh, rag, bot, reflexion = map(facts_module.inspect_native_state, checkpoints)
+
+    assert (fh.history_count, fh.full_fit, fh.first_eviction_trial_id) == (1, True, None)
+    assert (rag.corpus_id, rag.index_id, rag.read_only, rag.branch) == (
+        "corpus",
+        "index",
+        True,
+        "clean",
+    )
+    assert (bot.template_count, bot.template_ids, bot.clean_competitor_ids, bot.active_capacity) == (
+        2,
+        ("template-a", "template-b"),
+        ("template-a", "template-b"),
+        4,
+    )
+    assert (reflexion.reflection_count, reflexion.active_capacity) == (0, 3)
+    assert not hasattr(reflexion, "eligible")
+
+
+def test_malformed_reflexion_capacity_and_null_horizon_preserve_existing_semantics() -> None:
+    maturity = _maturity_module()
+    null_horizon = _checkpoint(
+        "reflexion_style",
+        3,
+        {"maturity_horizon": None, "reflections": ["reflection-a"], "active_capacity": 3},
+    )
+    malformed_capacity = _checkpoint(
+        "reflexion_style",
+        3,
+        {"reflections": ["reflection-a"], "active_capacity": "3"},
+    )
+
+    assert maturity.evaluate_maturity(_condition("reflexion"), null_horizon, 3).eligible is True
+    assert maturity.evaluate_maturity(
+        _condition("reflexion"), malformed_capacity, 3
+    ).reason_codes == ("REFLEXION_CAPACITY_UNAVAILABLE",)
+
+
+def test_malformed_horizon_remains_ineligible_while_explicit_null_is_unrestricted() -> None:
+    maturity = _maturity_module()
+    malformed = _checkpoint(
+        "fh_bounded",
+        3,
+        {"maturity_horizon": "3", "records": [{"input": "x"}]},
+    )
+    unrestricted = _checkpoint(
+        "fh_bounded",
+        3,
+        {"maturity_horizon": None, "records": [{"input": "x"}]},
+    )
+
+    assert maturity.evaluate_maturity(_condition("full_history"), malformed, 3).reason_codes == (
+        "INSUFFICIENT_HORIZON",
+    )
+    assert maturity.evaluate_maturity(_condition("full_history"), unrestricted, 3).eligible is True

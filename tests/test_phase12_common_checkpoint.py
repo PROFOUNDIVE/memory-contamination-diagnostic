@@ -130,3 +130,26 @@ def test_empty_joint_eligibility_blocks_without_replacement() -> None:
     assert result.suffix_trial_indices == ()
     assert result.blocked is True
     assert result.block_reason == "EMPTY_JOINT_ELIGIBILITY"
+
+
+def test_checkpoint_plumbing_accepts_an_explicit_registered_panel() -> None:
+    selection = _selection_module()
+    checkpoints = _checkpoints()
+    conditions = _conditions()
+    panel = selection.BaselinePanel(
+        baselines=("fh_bounded", "rag_frozen"),
+        expected_families={"fh_bounded": "full_history", "rag_frozen": "rag"},
+    )
+
+    result = selection.select_checkpoint_for_panel(
+        seed=19,
+        checkpoints_by_baseline={baseline: checkpoints[baseline] for baseline in panel.baselines},
+        conditions={baseline: conditions[baseline] for baseline in panel.baselines},
+        trial_indices=(1, 2, 3, 4, 5),
+        suffix_horizon=2,
+        panel=panel,
+    )
+
+    assert result.joint_eligibility.joint_eligible_indices == (2, 3)
+    assert result.selected_trial_index == 2
+    assert set(result.selected_checkpoints) == set(panel.baselines)
