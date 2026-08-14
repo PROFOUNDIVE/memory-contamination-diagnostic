@@ -7,6 +7,7 @@ from typing import assert_never, cast
 import pytest
 
 from memcontam.baselines.bot_phase12 import BoTStateV3
+from memcontam.baselines import dynamic_cheatsheet_phase12 as dc
 from memcontam.baselines.full_history_phase12 import FullHistoryStateV3
 from memcontam.baselines.reflexion_phase12 import ReflexionStateV3
 from memcontam.baselines.retrieval_rag_phase12 import RagFrozenStateV3
@@ -14,7 +15,7 @@ from memcontam.contamination.phase12.models import CandidateVariant, canonical_c
 from memcontam.contamination.phase12.registry import load_candidate_registry
 from memcontam.experiment.phase12.game24_runner import Game24RuntimeContext, RuntimeIdentities
 from memcontam.experiment.phase12.live_branch import Arm, build_live_reduced_main_branches
-from memcontam.experiment.phase12.runtime_registry import LIVE_BASELINE_REGISTRY
+from memcontam.experiment.phase12.runtime_registry import PHASE13_CORE_BASELINE_REGISTRY
 from memcontam.memory.checkpoint_v3 import NativeEntry, NativeState, serialize_checkpoint
 from memcontam.memory.stores import MemoryEntry
 from memcontam.rag.branch_index import build_branch_indices
@@ -22,7 +23,7 @@ from memcontam.rag.phase12_corpus import CleanCorpus, build_branch_corpora
 from memcontam.tasks.base import TaskInstance
 
 REGISTRY_PATH = Path("data/phase12/registries/candidate_registry_v1.json")
-LiveState = FullHistoryStateV3 | RagFrozenStateV3 | BoTStateV3 | ReflexionStateV3
+LiveState = FullHistoryStateV3 | RagFrozenStateV3 | BoTStateV3 | ReflexionStateV3 | dc.DcRsStateV3
 
 
 class _Client:
@@ -74,6 +75,8 @@ def _clean_state(baseline: str, embedder: _Embedder) -> LiveState:
             MemoryEntry(entry_id="bot-b", content="Check the answer.", memory_type="thought_template"),
         ]
         return BoTStateV3(entries=entries, clean_competitor_ids=("bot-a", "bot-b"))
+    if baseline == "dc_rs":
+        return dc.DcRsStateV3(archive=[])
     return ReflexionStateV3(reflections=[])
 
 
@@ -100,7 +103,14 @@ TASKS = (
 
 
 @pytest.mark.parametrize("task", TASKS)
-@pytest.mark.parametrize("baseline", tuple(LIVE_BASELINE_REGISTRY)[1:])
+@pytest.mark.parametrize(
+    "baseline",
+    tuple(
+        baseline
+        for baseline in PHASE13_CORE_BASELINE_REGISTRY
+        if baseline not in {"nomem", "dc_rs"}
+    ),
+)
 def test_reduced_main_materializes_native_roots_through_live_state_surface(
     task: TaskInstance, baseline: str
 ) -> None:
@@ -118,7 +128,7 @@ def test_reduced_main_materializes_native_roots_through_live_state_surface(
         baseline_configs={"fh_bounded": {"context_window_tokens": 10_000}},
         initial_states={baseline: clean_state},
     )
-    runtime = LIVE_BASELINE_REGISTRY[baseline]
+    runtime = PHASE13_CORE_BASELINE_REGISTRY[baseline]
     prefix = serialize_checkpoint(cast(NativeState, runtime.serialize_state(clean_state)))
     registry = load_candidate_registry(REGISTRY_PATH)
     triplet = next(item for item in registry.triplets if item.task == task.task_name)
@@ -126,6 +136,7 @@ def test_reduced_main_materializes_native_roots_through_live_state_surface(
         prefix=prefix,
         context=context,
         candidate_registry=registry,
+        registry=PHASE13_CORE_BASELINE_REGISTRY,
     )
 
     assert len({id(branch.state) for branch in branches.arms.values()}) == 4
@@ -155,6 +166,8 @@ def test_reduced_main_materializes_native_roots_through_live_state_surface(
                 root = reflections[-1]
                 assert isinstance(root, NativeEntry)
                 consumed_content = root.content
+            case dc.DcRsStateV3(archive=archive):
+                consumed_content = dc._archive_native(archive[-1]).content
             case unreachable:
                 assert_never(unreachable)
         checkpoint_root = branch.checkpoint.state.entries[-1]

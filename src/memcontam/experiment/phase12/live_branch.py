@@ -5,6 +5,7 @@ from dataclasses import dataclass, replace
 from typing import Literal, Mapping, cast
 
 from memcontam.baselines.bot_phase12 import BoTStateV3
+from memcontam.baselines.dynamic_cheatsheet_phase12 import DcRsStateV3, _archive_entry
 from memcontam.baselines.full_history_phase12 import FullHistoryStateV3
 from memcontam.baselines.reflexion_phase12 import ReflexionStateV3
 from memcontam.baselines.retrieval_rag_phase12 import RagFrozenStateV3
@@ -284,15 +285,15 @@ def _reduced_main_states(
         "contam": _last_entry(branches.contam.checkpoint),
     }
     if isinstance(clean_state, NativeState):
-        states: dict[Arm, object] = {"clean": clean_state}
+        native_states: dict[Arm, object] = {"clean": clean_state}
         for arm, entry in entries.items():
-            states[arm] = NativeState(
+            native_states[arm] = NativeState(
                 clean_state.baseline,
                 (*clean_state.entries, entry),
                 clean_state.native_state,
                 clean_state.schema_version,
             )
-        return states
+        return native_states
     states: dict[Arm, object] = {"clean": clean_state}
     for arm, root in entries.items():
         state = deepcopy(clean_state)
@@ -382,6 +383,10 @@ def _inject_root(state: object, root: NativeEntry) -> None:
         return
     if isinstance(state, ReflexionStateV3):
         state.reflections.append(root)
+        state.injected_root_id = root.entry_id
+        return
+    if isinstance(state, DcRsStateV3):
+        state.archive.append(_archive_entry(root))
         state.injected_root_id = root.entry_id
         return
     raise LiveBranchError("LIVE_BRANCH_STATE_UNSUPPORTED")

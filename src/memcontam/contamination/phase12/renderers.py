@@ -66,6 +66,8 @@ def _render(beta: str, candidate: CandidateVariant, checkpoint: Phase12Checkpoin
     except CheckpointError as error:
         raise RendererError(error.code) from error
     template = _NATIVE_CONTENT_TEMPLATES.get(beta)
+    if beta == "dc_rs":
+        raise RendererError("DC_RS_INTERVENTION_REGISTRY_REQUIRED")
     content = candidate.content if template is None else template.format(candidate=candidate.content)
     content_hash = canonical_content_hash(content)
     render_id = (
