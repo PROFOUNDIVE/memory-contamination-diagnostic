@@ -66,6 +66,7 @@ def test_dependency_policy_keeps_bounded_dependencies_and_includes_unsafe_closur
     assert project["dependencies"] == [
         "anyio>=4,<5",
         "cryptography>=42,<46",
+        "datasets>=3.1,<4",
         "httpx>=0.27,<0.29",
         "openai>=1.0,<3",
         "pydantic>=2.0,<3",
