@@ -2,12 +2,20 @@ from __future__ import annotations
 
 import hashlib
 import json
+from pathlib import Path
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from memcontam.experiment.phase12.filter_challenge.mft_state_models import JsonValue
-from memcontam.readiness.phase13_authority import ArtifactRef, Identifier, Sha256
+from memcontam.readiness.phase13_authority import (
+    ArtifactRef,
+    Identifier,
+    Sha256,
+    parse_authority_freeze,
+    parse_authority_requirements,
+)
+from memcontam.readiness.phase13_authority_files import AuthorityFileError, read_regular_nofollow
 
 
 PositiveInt = Annotated[int, Field(gt=0)]
@@ -47,11 +55,17 @@ class CapacityContract(_StrictModel):
     maximum_input_tokens_per_transport_attempt: PositiveInt
     maximum_output_tokens_per_transport_attempt: PositiveInt
 
+    @model_validator(mode="after")
+    def _ordered_prefix_limits(self) -> CapacityContract:
+        if self.prefix_nominal_calls_per_seed > self.prefix_maximum_calls_per_seed:
+            raise Phase13ExecutionError("PREFIX_CALL_LIMIT_INVALID")
+        return self
+
 
 class ExecutionRegistry(_StrictModel):
     schema_version: Annotated[str, Field(pattern=r"^phase13_execution_registry_v[0-9]+$")]
     registry_id: Identifier
-    authority_freeze_sha256: Sha256
+    authority_freeze_id: Identifier
     backbone_id: Identifier
     H_run: PositiveInt
     tasks: tuple[Identifier, ...]
@@ -104,6 +118,7 @@ def parse_execution_registry(raw_json: bytes | str) -> ExecutionRegistry:
         for code in (
             "TEMPLATE_DIMENSION_UNDECLARED",
             "TEMPLATE_CALL_LIMIT_INVALID",
+            "PREFIX_CALL_LIMIT_INVALID",
             "EXECUTION_DIMENSION_INVALID",
             "DUPLICATE_EXECUTION_TEMPLATE",
             "REGISTRY_HASH_MISMATCH",
@@ -111,3 +126,29 @@ def parse_execution_registry(raw_json: bytes | str) -> ExecutionRegistry:
             if code in message:
                 raise Phase13ExecutionError(code) from error
         raise Phase13ExecutionError("MALFORMED_EXECUTION_REGISTRY") from error
+
+
+def validate_execution_closure(
+    freeze_json: bytes | str,
+    requirements_json: bytes | str,
+    root: Path,
+) -> ExecutionRegistry:
+    requirements = parse_authority_requirements(requirements_json)
+    freeze = parse_authority_freeze(freeze_json, requirements)
+    references = tuple(row for row in freeze.registries if row.kind == "execution")
+    if len(references) != 1:
+        raise Phase13ExecutionError("EXECUTION_AUTHORITY_MISSING")
+    reference = references[0]
+    try:
+        registry_json = read_regular_nofollow(root / reference.artifact.path)
+    except AuthorityFileError as error:
+        raise Phase13ExecutionError(error.code) from error
+    if hashlib.sha256(registry_json).hexdigest() != reference.artifact.sha256:
+        raise Phase13ExecutionError("EXECUTION_AUTHORITY_HASH_MISMATCH")
+    registry = parse_execution_registry(registry_json)
+    if (
+        registry.registry_id != reference.registry_id
+        or registry.authority_freeze_id != freeze.freeze_id
+    ):
+        raise Phase13ExecutionError("EXECUTION_AUTHORITY_IDENTITY_MISMATCH")
+    return registry

@@ -9,6 +9,7 @@ from memcontam.experiment.phase12.filter_challenge.mft_state_models import JsonV
 from memcontam.readiness.phase13_execution_contract import (
     Phase13ExecutionError,
     parse_execution_registry,
+    validate_execution_closure,
 )
 from memcontam.readiness.phase13_route_capacity import recompute_capacity
 
@@ -17,7 +18,7 @@ def _registry() -> dict[str, JsonValue]:
     payload: dict[str, JsonValue] = {
         "schema_version": "phase13_execution_registry_v1",
         "registry_id": "prospective-execution",
-        "authority_freeze_sha256": "a" * 64,
+        "authority_freeze_id": "prospective-freeze",
         "backbone_id": "prospective-backbone",
         "H_run": 7,
         "tasks": ["task-a", "task-b"],
@@ -81,3 +82,65 @@ def test_execution_registry_rejects_templates_outside_declared_dimensions() -> N
 
     with pytest.raises(Phase13ExecutionError, match="TEMPLATE_DIMENSION_UNDECLARED"):
         parse_execution_registry(json.dumps(payload).encode())
+
+
+def test_execution_registry_rejects_prefix_nominal_calls_above_maximum() -> None:
+    payload = _registry()
+    capacity = payload["capacity"]
+    assert isinstance(capacity, dict)
+    capacity["prefix_nominal_calls_per_seed"] = 3
+    capacity["prefix_maximum_calls_per_seed"] = 2
+    unsigned = dict(payload)
+    unsigned.pop("registry_hash")
+    canonical = json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
+    payload["registry_hash"] = hashlib.sha256(canonical).hexdigest()
+
+    with pytest.raises(Phase13ExecutionError, match="PREFIX_CALL_LIMIT_INVALID"):
+        parse_execution_registry(json.dumps(payload).encode())
+
+
+def test_execution_closure_binds_freeze_id_registry_id_path_and_hash(tmp_path) -> None:
+    registry_payload = _registry()
+    registry_raw = json.dumps(registry_payload, sort_keys=True).encode()
+    registry_path = tmp_path / "registries" / "execution.json"
+    registry_path.parent.mkdir()
+    registry_path.write_bytes(registry_raw)
+    freeze_payload: dict[str, JsonValue] = {
+        "schema_version": "phase13_authority_freeze_v1",
+        "freeze_id": "prospective-freeze",
+        "authorities": [
+            {
+                "role": "protocol",
+                "artifact": {"path": "authority/protocol.json", "sha256": "1" * 64},
+            }
+        ],
+        "registries": [
+            {
+                "kind": "execution",
+                "registry_id": "prospective-execution",
+                "artifact": {
+                    "path": "registries/execution.json",
+                    "sha256": hashlib.sha256(registry_raw).hexdigest(),
+                },
+            }
+        ],
+        "parameters": {"backbone": "prospective-backbone"},
+    }
+    freeze_unsigned = json.dumps(
+        freeze_payload, sort_keys=True, separators=(",", ":")
+    ).encode()
+    freeze_payload["closure_hash"] = hashlib.sha256(freeze_unsigned).hexdigest()
+    requirements = {
+        "schema_version": "phase13_authority_requirements_v1",
+        "authority_hashes": {"protocol": "1" * 64},
+        "registry_kinds": ["execution"],
+        "parameter_names": ["backbone"],
+    }
+
+    registry = validate_execution_closure(
+        json.dumps(freeze_payload).encode(),
+        json.dumps(requirements).encode(),
+        tmp_path,
+    )
+
+    assert registry.registry_id == "prospective-execution"
