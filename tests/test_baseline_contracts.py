@@ -36,3 +36,18 @@ def test_canonical_task_json_is_compact_and_key_sorted() -> None:
     dispatch = importlib.import_module("memcontam.tasks.dispatch")
 
     assert dispatch.canonical_task_json({"z": [2, 1], "a": "value"}) == ('{"a":"value","z":[2,1]}')
+
+
+def test_historical_task_serialization_preserves_metadata() -> None:
+    from memcontam.tasks.base import TaskInstance
+
+    dispatch = importlib.import_module("memcontam.tasks.dispatch")
+    task = TaskInstance(
+        sample_id="game24:1",
+        task_name="game24",
+        input={"numbers": [1, 2, 3, 4]},
+        verifier_spec={"target": 24},
+        metadata={"historical_identity": "preserved"},
+    )
+
+    assert '"metadata":{"historical_identity":"preserved"}' in dispatch.canonical_task_json(task)
