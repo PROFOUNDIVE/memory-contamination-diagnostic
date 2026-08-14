@@ -16,9 +16,9 @@ from memcontam.logging import schema_v3
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = (
-    ROOT / "docs" / "phase12-implementation-contract.md",
-    ROOT / "docs" / "logging-v3-phase12.md",
-    ROOT / "docs" / "phase12-operator-runbook.md",
+    ROOT / "docs" / "historical" / "phase12-implementation-contract.md",
+    ROOT / "docs" / "historical" / "logging-v3-phase12.md",
+    ROOT / "docs" / "historical" / "phase12-operator-runbook.md",
 )
 AUDITED_HEAD = "830b89c8c169ffa9cdea472887fdae134dbae7cf"
 DESIGN_SHA256 = "984fe2881690d93a8ccced87abf03de4bf0012158462cf07ed23505414073eb0"

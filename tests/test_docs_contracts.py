@@ -9,11 +9,11 @@ from typing import Final
 
 import pytest
 
-from tests.support.docs_contracts import ProhibitedClaimError, reject_overclaims
+from .support.docs_contracts import ProhibitedClaimError, reject_overclaims
 
 ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
-STATUS = ROOT / "docs" / "phase12-filter-v5-build-status.md"
+STATUS = ROOT / "docs" / "historical" / "phase12-filter-v5-build-status.md"
 EVIDENCE = ROOT / ".sisyphus" / "evidence" / "phase12-filter-v5-build-v1"
 MANIFEST = EVIDENCE / "implementation_manifest.json"
 
@@ -96,27 +96,10 @@ def test_entrypoint_docs_reject_overclaims_directly(path: Path) -> None:
     reject_overclaims(path.read_text(encoding="utf-8"))
 
 
-def test_readme_binds_sealed_filter_v5_evidence() -> None:
+def test_readme_routes_filter_evidence_to_history() -> None:
     text = README.read_text(encoding="utf-8")
-    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    mft = json.loads((EVIDENCE / "mft_fv5_report.json").read_text(encoding="utf-8"))["report"]
-    bct = json.loads((EVIDENCE / "bct_readiness_report.json").read_text(encoding="utf-8"))["report"]
-
-    assert f"`{manifest['header']['implementation_commit']}`" in text
-    assert "`b814b0100f66a19a7111f8f06755e550e8704a52`" in text
-    assert mft["all_passed"] is True
-    assert len(mft["ordered_test_ids"]) == 16
-    assert f"All {len(mft['ordered_test_ids'])} deterministic MFT gates passed" in text
-    assert mft["provider_calls_issued"] == 0
-    assert f"provider calls `{mft['provider_calls_issued']}`" in text
-    assert bct["software_interface_status"] == "ready"
-    assert bct["execution_status"] == "blocked"
-    assert f"software interface is {bct['software_interface_status']}" in text
-    assert f"BCT execution is {bct['execution_status']}" in text
-    statuses = {item["status"] for item in bct["family_statuses"]}
-    assert statuses == {"not_executed"}
-    assert f"all {len(bct['family_statuses'])} BCTs are `not_executed`" in text
-    assert "descendant is not certified" in text
+    assert "docs/historical/README.md" in text
+    assert "docs/historical/phase12-filter-v5-build-status.md" not in text
 
 
 def test_sealed_evidence_inventory_and_report_hashes_match_manifest() -> None:

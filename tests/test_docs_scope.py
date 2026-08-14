@@ -10,18 +10,25 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
+HISTORICAL = DOCS / "historical"
 README = ROOT / "README.md"
-STATUS = DOCS / "phase12-filter-v5-build-status.md"
-V2_AUTHORITY = DOCS / "baseline-fidelity-v2.md"
-V2_EVIDENCE = DOCS / "baseline-fidelity-v2-evidence.md"
+STUDY = DOCS / "study-design-and-roadmap.md"
+OPERATOR = DOCS / "operator-guide.md"
+STATUS = HISTORICAL / "phase12-filter-v5-build-status.md"
+V2_AUTHORITY = HISTORICAL / "baseline-fidelity-v2.md"
+V2_EVIDENCE = HISTORICAL / "baseline-fidelity-v2-evidence.md"
 CONTRACT_CONFIG = ROOT / "configs" / "logging_contract_replay.yaml"
 PHASE11_CONFIG = ROOT / "configs" / "logging_contract_phase11_replay.yaml"
 FULL_MATRIX_CONFIG = ROOT / "configs" / "full_matrix.yaml"
 EVIDENCE = ROOT / ".sisyphus" / "evidence" / "phase12-filter-v5-build-v1"
 MANIFEST = EVIDENCE / "implementation_manifest.json"
 
-EXPECTED_DOCS = frozenset(
+EXPECTED_TOP_LEVEL_DOCS = frozenset(
+    {"operator-guide.md", "study-design-and-roadmap.md"}
+)
+EXPECTED_HISTORICAL_DOCS = frozenset(
     {
+        "README.md",
         "baseline-fidelity-v2-evidence.md", "baseline-fidelity-v2.md",
         "bge-m3-cache-setup.md", "logging-v3-phase12.md",
         "phase12-filter-v5-bct-methods-lock.md", "phase12-filter-v5-build-status.md", "phase12-implementation-contract.md",
@@ -78,12 +85,13 @@ def _git_blob_sha1(path: Path) -> str:
 
 
 def test_documentation_inventory_is_exact() -> None:
-    assert {path.name for path in DOCS.glob("*.md")} == EXPECTED_DOCS
+    assert {path.name for path in DOCS.glob("*.md")} == EXPECTED_TOP_LEVEL_DOCS
+    assert {path.name for path in HISTORICAL.glob("*.md")} == EXPECTED_HISTORICAL_DOCS
 
 
 def test_immutable_authority_artifacts_have_sealed_hashes() -> None:
     for name, expected in AUTHORITY_SHA256.items():
-        path = DOCS / name
+        path = HISTORICAL / name
         assert hashlib.sha256(path.read_bytes()).hexdigest() == expected
         if name in AUTHORITY_BLOB_SHA1:
             assert _git_blob_sha1(path) == AUTHORITY_BLOB_SHA1[name]
@@ -108,7 +116,7 @@ def test_baseline_fidelity_v2_uses_exact_bounded_method_claims() -> None:
     assert all(claim in text for claim in claims)
 
 
-def test_baseline_fidelity_v2_authority_reports_current_pass_status() -> None:
+def test_baseline_fidelity_v2_authority_preserves_historical_pass_status() -> None:
     text = V2_AUTHORITY.read_text(encoding="utf-8")
     assert "Overall V2 certification for the current compatible closeout tuple: **PASS**." in text
     assert "F1A structural integration replay: **PASS**." in text
@@ -143,12 +151,21 @@ def test_v2_evidence_historical_snapshot_has_exact_sealed_rows() -> None:
 def test_readme_is_current_authority_index() -> None:
     text = README.read_text(encoding="utf-8")
     assert set(re.findall(r"\]\((docs/[^)#]+)\)", text)) == {
-        f"docs/{name}" for name in EXPECTED_DOCS - {"phase12-filter-v5-bct-methods-lock.md"}
+        "docs/operator-guide.md",
+        "docs/study-design-and-roadmap.md",
+        "docs/historical/README.md",
     }
-    assert "## Documentation Authorities" in text
-    assert "Baseline-Fidelity-V2 authority and evidence are the sole current status authority" in text
-    assert "frozen Phase-12 contract snapshot" in text
-    assert "not a current BFV2 status source" in text
+
+
+def test_public_docs_are_portable_and_phase_neutral() -> None:
+    active = (README, STUDY, OPERATOR)
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in active)
+    assert "/home/" not in combined
+    assert "gdrive_undergrad_research" not in combined
+    assert "Phase 13" not in README.read_text(encoding="utf-8")
+    assert "Phase 13" not in STUDY.read_text(encoding="utf-8")
+    assert "python -m pip install -e '.[dev]'" in README.read_text(encoding="utf-8")
+    assert "python -m pip install -e '.[dev]'" in OPERATOR.read_text(encoding="utf-8")
 
 
 def test_filter_v5_status_matches_sealed_build_evidence() -> None:
