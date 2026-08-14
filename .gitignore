@@ -19,3 +19,8 @@ runs/*
 !runs/.gitkeep
 
 /docs/evidence/phase12-filter-v5-rootless-local/rehearsal-publication.json
+
+# GPQA is gated; local Core dataset bundles must never be committed.
+/data/phase13/core/materialized/
+/data/phase13/core/.materialized.*
+/data/embedding_cache/bfv2-*-replay-test/
