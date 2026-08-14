@@ -68,6 +68,8 @@ frozen confirmatory execution package.
 | `phase13 validate-authority-freeze` | No | Validate a freeze schema, closure hash, and declared requirement sets |
 | `phase13 validate-execution-registry` | No | Validate the execution registry referenced by a freeze |
 | `phase13 validate-provenance` | No | Validate a sealed provenance bundle and each listed artifact hash |
+| `phase13 materialize-core-datasets` | Dataset download only | Materialize pinned prospective MMLU-Pro and gated GPQA inputs without model execution |
+| `phase13 validate-core-datasets` | No | Validate the sealed local Core dataset bundle and report task-order hashes |
 | `phase13 prepare-clean-prefix` | No | Validate reduced-panel calibration inputs and write an authorization request |
 | `phase13 run-clean-prefix` | Yes | Execute the separately authorized reduced-panel GPT-4o clean-prefix calibration |
 
@@ -78,6 +80,23 @@ than implying a runnable scientific package.
 The shipped clean-prefix config also references a hash-bound readiness input that is not included
 in a public clone. `prepare-clean-prefix` therefore fails closed until an approved complete input
 bundle is supplied. It is not part of the fresh-clone installation check.
+
+The Core dataset commands are prospective preparation tools, not a frozen Main execution surface.
+Materialization requires prior GPQA access and accepts only the ignored
+`data/phase13/core/materialized` location inside the repository; an output outside the repository
+is also allowed. The command never prints question text, and the generic historical `run` command
+does not dispatch the three prospective multiple-choice tasks.
+
+```bash
+python -m memcontam.cli phase13 materialize-core-datasets \
+  --output data/phase13/core/materialized
+python -m memcontam.cli phase13 validate-core-datasets \
+  --root data/phase13/core/materialized \
+  --trajectory-seed 1729
+```
+
+The example seed is an operator check only. It does not allocate a Main seed or authorize model
+calls.
 
 ### Validate an authority freeze
 
