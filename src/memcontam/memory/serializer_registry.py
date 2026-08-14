@@ -26,6 +26,7 @@ NATIVE_SCHEMAS: Mapping[str, NativeSchema] = {
     "bot_style": NativeSchema("thought_template", "buffer"),
     "reflexion_style": NativeSchema("verbal_reflection", "reflections"),
     "dynamic_cheatsheet_rs_optional": NativeSchema("dc_rs_io_pair", "archive"),
+    "dc_rs": NativeSchema("dc_rs_io_pair", "archive"),
 }
 
 
@@ -61,9 +62,9 @@ class SerializerRegistry:
             raise CheckpointError("INVALID_NATIVE_ENTRY_SCHEMA")
         if baseline in {"rag_frozen", "retrieval_rag"} and entry.native_component == "index":
             raise CheckpointError("RAG_INDEX_ENTRY_FORBIDDEN")
-        if baseline == "dynamic_cheatsheet_rs_optional":
+        if baseline in {"dynamic_cheatsheet_rs_optional", "dc_rs"}:
             if (entry.semantic_kind, entry.native_component) == ("dynamic_cheatsheet", "strategy"):
-                if not entry.direct_parent_ids:
+                if baseline == "dynamic_cheatsheet_rs_optional" and not entry.direct_parent_ids:
                     raise CheckpointError("DIRECT_DC_STRATEGY_ROOT")
                 return
         if (entry.semantic_kind, entry.native_component) != (

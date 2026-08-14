@@ -88,6 +88,22 @@ NATIVE_WRITER_PERMISSIONS = (
         "strategy",
         True,
     ),
+    WriterPermission(
+        "dc_rs",
+        "dc_rs_io_pair",
+        "dc_archive_writer",
+        "dc_rs_generate",
+        "archive",
+        True,
+    ),
+    WriterPermission(
+        "dc_rs",
+        "dynamic_cheatsheet",
+        "dc_strategy_writer",
+        "dc_rs_synthesize",
+        "strategy",
+        True,
+    ),
 )
 
 
