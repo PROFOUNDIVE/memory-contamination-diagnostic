@@ -24,6 +24,8 @@ def test_phase13_help_exposes_only_prospective_generic_validators_for_new_surfac
     assert "validate-authority-freeze" in result.stdout
     assert "validate-execution-registry" in result.stdout
     assert "validate-provenance" in result.stdout
+    assert "materialize-core-datasets" in result.stdout
+    assert "validate-core-datasets" in result.stdout
     assert "calibration-v2" not in result.stdout
 
 
@@ -89,3 +91,17 @@ def test_authority_validator_reports_missing_file_as_contract_error(tmp_path: Pa
 
     assert result.returncode != 0
     assert "AUTHORITY_FILE_NOT_REGULAR" in result.stderr
+
+
+def test_core_dataset_validator_reports_missing_bundle_without_traceback(tmp_path: Path) -> None:
+    result = _run(
+        "validate-core-datasets",
+        "--root",
+        str(tmp_path / "missing"),
+        "--trajectory-seed",
+        "1729",
+    )
+
+    assert result.returncode != 0
+    assert "CORE_DATASET_FILE_NOT_REGULAR" in result.stderr
+    assert "Traceback" not in result.stderr

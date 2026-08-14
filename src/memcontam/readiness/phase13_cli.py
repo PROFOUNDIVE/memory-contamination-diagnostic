@@ -24,6 +24,7 @@ from memcontam.readiness.phase13_provenance import (
     Phase13ProvenanceError,
     validate_provenance_bundle,
 )
+from memcontam.readiness.phase13_core_datasets import CoreDatasetError
 
 
 def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -51,6 +52,11 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
     provenance.add_argument("--root", type=Path, required=True)
     provenance.add_argument("--manifest", type=Path, required=True)
     provenance.add_argument("--seal", type=Path, required=True)
+    materialize = commands.add_parser("materialize-core-datasets")
+    materialize.add_argument("--output", type=Path, required=True)
+    validate_core = commands.add_parser("validate-core-datasets")
+    validate_core.add_argument("--root", type=Path, required=True)
+    validate_core.add_argument("--trajectory-seed", type=int, required=True)
 
 
 def run(args: argparse.Namespace) -> None:
@@ -69,12 +75,24 @@ def run(args: argparse.Namespace) -> None:
             print(json.dumps({"registry_id": registry.registry_id, "status": "valid"}, sort_keys=True))
             return
         if args.phase13_command == "validate-provenance":
-            report = validate_provenance_bundle(args.root, args.manifest, args.seal)
-            print(json.dumps(asdict(report), sort_keys=True))
+            provenance_report = validate_provenance_bundle(args.root, args.manifest, args.seal)
+            print(json.dumps(asdict(provenance_report), sort_keys=True))
             return
         if args.phase13_command == "prepare-clean-prefix":
             payload = prepare_clean_prefix(args.config, args.run_id, args.output)
             print(json.dumps(payload, sort_keys=True))
+            return
+        if args.phase13_command == "materialize-core-datasets":
+            from memcontam.readiness.phase13_core_datasets import materialize_core_datasets
+
+            manifest = materialize_core_datasets(args.output)
+            print(json.dumps(manifest.model_dump(mode="json"), sort_keys=True))
+            return
+        if args.phase13_command == "validate-core-datasets":
+            from memcontam.readiness.phase13_core_datasets import validate_core_datasets
+
+            core_report = validate_core_datasets(args.root, trajectory_seed=args.trajectory_seed)
+            print(json.dumps(core_report.model_dump(mode="json"), sort_keys=True))
             return
         from memcontam.clients.config import ProviderConfig
         from memcontam.clients.cost_guard import CostGuard
@@ -127,5 +145,6 @@ def run(args: argparse.Namespace) -> None:
         Phase13CalibrationError,
         Phase13ExecutionError,
         Phase13ProvenanceError,
+        CoreDatasetError,
     ) as error:
         raise SystemExit(error.code) from error
