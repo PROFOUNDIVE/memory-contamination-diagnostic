@@ -48,13 +48,13 @@ def test_authority_validator_runs_without_importing_live_provider_module(tmp_pat
     script = """
 import builtins
 import sys
-from memcontam.cli import main
 original = builtins.__import__
 def guarded(name, *args, **kwargs):
     if name == "memcontam.clients.openai_responses":
         raise AssertionError(name)
     return original(name, *args, **kwargs)
 builtins.__import__ = guarded
+from memcontam.cli import main
 sys.argv = ["memcontam", "phase13", "validate-authority-freeze", *sys.argv[1:]]
 main()
 """

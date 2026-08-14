@@ -37,7 +37,6 @@ from memcontam.baselines.dynamic_cheatsheet_optional import (
 )
 from memcontam.clients.base import LLMClient, LLMResponse
 from memcontam.clients.config import ProviderConfig
-from memcontam.clients.factory import build_llm_client, validate_provider_selection
 from memcontam.clients.provider_profile import normalize_provider_profile
 from memcontam.clients.recording import summarize_calls
 from memcontam.clients.replay import ReplayClient
@@ -223,6 +222,8 @@ _STAGES = {"debug", "replay", "partial", "pilot", "main", "benchmark"}
 
 
 def _validate_protocol_gates(config: dict[str, Any]) -> None:
+    from memcontam.clients.factory import validate_provider_selection
+
     run_config = config.get("run", {})
     live_smoke_enabled = config.get("live_smoke", {}).get("enabled", False)
     stage = run_config.get("stage", "pilot" if live_smoke_enabled else "replay")
@@ -2064,6 +2065,8 @@ def run_config(
     *,
     allow_live_calls: bool = False,
 ) -> Path:
+    from memcontam.clients.factory import build_llm_client, validate_provider_selection
+
     _validate_run_id(run_id)
     _validate_run_config(config)
     provider_config = ProviderConfig.from_run_config(config)
