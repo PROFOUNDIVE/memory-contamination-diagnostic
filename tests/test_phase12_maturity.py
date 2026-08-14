@@ -167,3 +167,22 @@ def test_malformed_reflexion_capacity_and_null_horizon_preserve_existing_semanti
     assert maturity.evaluate_maturity(
         _condition("reflexion"), malformed_capacity, 3
     ).reason_codes == ("REFLEXION_CAPACITY_UNAVAILABLE",)
+
+
+def test_malformed_horizon_remains_ineligible_while_explicit_null_is_unrestricted() -> None:
+    maturity = _maturity_module()
+    malformed = _checkpoint(
+        "fh_bounded",
+        3,
+        {"maturity_horizon": "3", "records": [{"input": "x"}]},
+    )
+    unrestricted = _checkpoint(
+        "fh_bounded",
+        3,
+        {"maturity_horizon": None, "records": [{"input": "x"}]},
+    )
+
+    assert maturity.evaluate_maturity(_condition("full_history"), malformed, 3).reason_codes == (
+        "INSUFFICIENT_HORIZON",
+    )
+    assert maturity.evaluate_maturity(_condition("full_history"), unrestricted, 3).eligible is True

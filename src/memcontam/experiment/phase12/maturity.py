@@ -134,6 +134,8 @@ def _horizon_reasons(state: Mapping[str, Any], horizon: int) -> list[str]:
 
 
 def _fact_horizon_reasons(facts: NativeStateFacts, horizon: int) -> list[str]:
+    if facts.maturity_horizon_present and not facts.maturity_horizon_valid:
+        return ["INSUFFICIENT_HORIZON"]
     if not facts.maturity_horizon_present or facts.maturity_horizon is None:
         return []
     if facts.maturity_horizon < horizon:

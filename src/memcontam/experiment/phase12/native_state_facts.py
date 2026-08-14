@@ -12,6 +12,7 @@ class NativeStateFacts:
     checkpoint_index: int | None
     maturity_horizon: int | None
     maturity_horizon_present: bool
+    maturity_horizon_valid: bool
     history_count: int | None
     full_fit: bool | None
     first_eviction_trial_id: str | None
@@ -43,6 +44,7 @@ def inspect_native_state(checkpoint: Phase12Checkpoint) -> NativeStateFacts:
         checkpoint_index=checkpoint_index if type(checkpoint_index) is int else None,
         maturity_horizon=maturity_horizon if type(maturity_horizon) is int else None,
         maturity_horizon_present="maturity_horizon" in state,
+        maturity_horizon_valid=maturity_horizon is None or type(maturity_horizon) is int,
         history_count=len(records) if isinstance(records, (list, tuple)) else None,
         full_fit=True if state.get("full_fit") is True else None,
         first_eviction_trial_id=(
