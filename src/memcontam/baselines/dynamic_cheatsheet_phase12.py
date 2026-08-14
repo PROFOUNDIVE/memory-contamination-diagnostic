@@ -22,7 +22,7 @@ from memcontam.memory.filtered_state import (
 )
 from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
-from memcontam.tasks.dispatch import canonical_task_json
+from memcontam.tasks.dispatch import canonical_core_task_json, canonical_task_json
 from memcontam.tools.base import (
     ToolExecutionError,
     ToolExecutor,
@@ -96,11 +96,18 @@ class DcRsStateV3:
     injected_root_id: str | None = None
     filter_state: FilteredCheckpoint | None = None
     admission_context: AdmissionContext | None = None
+    allow_unparented_strategies: bool = False
 
     def __post_init__(self) -> None:
         self.strategies = list(self.strategies or ())
         archive_ids = [_archive_entry(entry).entry_id for entry in self.archive]
-        strategy_ids = [_strategy_entry(entry).entry_id for entry in self.strategies]
+        strategy_ids = [
+            _strategy_entry(
+                entry,
+                allow_unparented=self.allow_unparented_strategies,
+            ).entry_id
+            for entry in self.strategies
+        ]
         if len(set((*archive_ids, *strategy_ids))) != len((*archive_ids, *strategy_ids)):
             raise DcRsContractError("DUPLICATE_COMPONENT")
         if (self.filter_state is None) != (self.admission_context is None):
@@ -182,7 +189,11 @@ class DcRsPhase12Adapter:
             embedding_provider=provider,
             cache_dir=self.cache_dir,
         )
-        canonical_task = canonical_task_json(trial.task)
+        canonical_task = (
+            canonical_core_task_json(trial.task)
+            if _baseline_id(trial) == "dc_rs"
+            else canonical_task_json(trial.task)
+        )
         retrieved_records = retriever._retrieve_pairs(
             canonical_task, active_archive, trial.trial_id
         )
@@ -220,16 +231,31 @@ class DcRsPhase12Adapter:
             fallback_strategy=prior_content,
             retrieved_archive_ids=tuple(entry.entry_id for entry in retrieved_archive),
         )
+        core_dc_rs = _baseline_id(trial) == "dc_rs"
+        allowed_parent_ids = {
+            entry.entry_id for entry in (retrieved_archive if core_dc_rs else active_archive)
+        }
         if candidate.explicit_source_ids and not set(candidate.explicit_source_ids).issubset(
-            {entry.entry_id for entry in active_archive}
+            allowed_parent_ids
         ):
             candidate = replace(candidate, lineage_status="approximate")
+        if core_dc_rs:
+            _validate_core_cheatsheet_budget(candidate, trial)
         strategy_entry, strategy_envelope, strategy_admission, strategy_transition = (
-            _admit_strategy(candidate, state, trial, prior_strategy)
+            _admit_strategy(
+                candidate,
+                state,
+                trial,
+                prior_strategy,
+                persist=not core_dc_rs,
+            )
         )
 
         admitted_strategies = _active_strategies(state)
-        strategy_content = "" if not admitted_strategies else admitted_strategies[-1].content
+        if core_dc_rs and candidate.parser_status == "accepted":
+            strategy_content = candidate.content
+        else:
+            strategy_content = "" if not admitted_strategies else admitted_strategies[-1].content
         tool_mode = _tool_mode(call_config)
         generation_builder = (
             legacy_dc._dc_rs_tool_generation_message
@@ -268,6 +294,9 @@ class DcRsPhase12Adapter:
         archive_transition = _route_write(
             state, _archive_native(archive_entry), archive_envelope, trial
         )
+        if core_dc_rs and strategy_entry is not None:
+            assert state.strategies is not None
+            state.strategies.append(strategy_entry)
 
         try:
             parsed_answer = parse_final_answer(generated_output)
@@ -512,7 +541,10 @@ def _active_archive(state: DcRsStateV3) -> list[MemoryEntry]:
 
 
 def _active_strategies(state: DcRsStateV3) -> list[NativeEntry]:
-    strategies = [_strategy_entry(entry) for entry in state.strategies or ()]
+    strategies = [
+        _strategy_entry(entry, allow_unparented=state.allow_unparented_strategies)
+        for entry in state.strategies or ()
+    ]
     return _active_components(state, strategies, "FILTER_ACTIVE_STRATEGY_MISSING")
 
 
@@ -541,18 +573,29 @@ def _admit_strategy(
     state: DcRsStateV3,
     trial: DcRsTrialContextV3,
     prior_strategy: NativeEntry | None,
+    *,
+    persist: bool = True,
 ) -> tuple[
     NativeEntry | None,
     MemoryCardEnvelopeV3 | None,
     AdmissionDecision,
     FilterTransition | None,
 ]:
-    if candidate.parser_status != "accepted" or not candidate.explicit_source_ids:
+    core_dc_rs = _baseline_id(trial) == "dc_rs"
+    if candidate.parser_status != "accepted" or (
+        not candidate.explicit_source_ids and not core_dc_rs
+    ):
         return None, None, AdmissionDecision("", False, "UNAVAILABLE_LINEAGE"), None
-    active_ids = {entry.entry_id for entry in _active_archive(state)}
-    lineage_status: LineageStatus = (
-        "exact" if set(candidate.explicit_source_ids).issubset(active_ids) else "approximate"
+    active_ids = (
+        set(candidate.retrieved_archive_ids)
+        if core_dc_rs
+        else {entry.entry_id for entry in _active_archive(state)}
     )
+    lineage_status: LineageStatus = "unavailable"
+    if candidate.explicit_source_ids:
+        lineage_status = (
+            "exact" if set(candidate.explicit_source_ids).issubset(active_ids) else "approximate"
+        )
     entry = NativeEntry(
         entry_id=f"dc_rs_strategy:{trial.trial_id}",
         semantic_kind="dynamic_cheatsheet",
@@ -564,7 +607,7 @@ def _admit_strategy(
     )
     envelope = MemoryCardEnvelopeV3(
         entry_id=entry.entry_id,
-        baseline="dynamic_cheatsheet_rs_optional",
+        baseline=_baseline_id(trial),
         semantic_kind=entry.semantic_kind,
         schema_version=MEMORY_CARD_V3,
         writer_id="dc_strategy_writer",
@@ -577,11 +620,15 @@ def _admit_strategy(
         memory_support_ids=entry.direct_parent_ids,
         direct_parent_ids=entry.direct_parent_ids,
         version_predecessor_id=None if prior_strategy is None else prior_strategy.entry_id,
-        order_key=_strategy_order_key(trial.order_key),
+        order_key=_strategy_order_key(trial),
         native_component=entry.native_component,
         content=entry.content,
         content_hash=entry.content_hash,
     )
+    if not persist:
+        if lineage_status == "approximate":
+            raise DcRsContractError("EXPLICIT_PARENT_NOT_ACTIVE")
+        return entry, envelope, AdmissionDecision(entry.entry_id, True, "ADMITTED"), None
     if state.filter_state is None:
         if lineage_status != "exact":
             raise DcRsContractError("EXPLICIT_PARENT_NOT_ACTIVE")
@@ -661,7 +708,7 @@ def _archive_envelope(entry: MemoryEntry, trial: DcRsTrialContextV3) -> MemoryCa
     native = _archive_native(entry)
     return MemoryCardEnvelopeV3(
         entry_id=native.entry_id,
-        baseline="dynamic_cheatsheet_rs_optional",
+        baseline=_baseline_id(trial),
         semantic_kind=native.semantic_kind,
         schema_version=MEMORY_CARD_V3,
         writer_id="dc_archive_writer",
@@ -674,7 +721,7 @@ def _archive_envelope(entry: MemoryEntry, trial: DcRsTrialContextV3) -> MemoryCa
         memory_support_ids=(),
         direct_parent_ids=(),
         version_predecessor_id=None,
-        order_key=_archive_order_key(trial.order_key),
+        order_key=_archive_order_key(trial),
         native_component=native.native_component,
         content=native.content,
         content_hash=native.content_hash,
@@ -766,7 +813,11 @@ def _archive_entry(entry: MemoryEntry | NativeEntry) -> MemoryEntry:
     )
 
 
-def _strategy_entry(entry: MemoryEntry | NativeEntry) -> NativeEntry:
+def _strategy_entry(
+    entry: MemoryEntry | NativeEntry,
+    *,
+    allow_unparented: bool = False,
+) -> NativeEntry:
     if isinstance(entry, NativeEntry):
         native = entry
     elif isinstance(entry, MemoryEntry) and entry.memory_type == "dynamic_cheatsheet":
@@ -790,7 +841,7 @@ def _strategy_entry(entry: MemoryEntry | NativeEntry) -> NativeEntry:
         NATIVE_ENTRY_V1,
     ):
         raise DcRsContractError("INVALID_STRATEGY_COMPONENT")
-    if not native.direct_parent_ids:
+    if not allow_unparented and not native.direct_parent_ids:
         raise DcRsContractError("DIRECT_STRATEGY_INJECTION")
     return native
 
@@ -849,9 +900,31 @@ def _explicit_source_ids(output: str) -> tuple[str, ...]:
     return tuple(item.strip() for item in parsed)
 
 
-def _strategy_order_key(order_key: int | str) -> int | str:
-    return order_key * 1_000 + 1 if isinstance(order_key, int) else f"{order_key}:strategy"
+def _strategy_order_key(trial: DcRsTrialContextV3) -> int | str:
+    order_key = trial.order_key
+    offset = 2 if _baseline_id(trial) == "dc_rs" else 1
+    return order_key * 1_000 + offset if isinstance(order_key, int) else f"{order_key}:strategy"
 
 
-def _archive_order_key(order_key: int | str) -> int | str:
-    return order_key * 1_000 + 2 if isinstance(order_key, int) else f"{order_key}:archive"
+def _archive_order_key(trial: DcRsTrialContextV3) -> int | str:
+    order_key = trial.order_key
+    offset = 1 if _baseline_id(trial) == "dc_rs" else 2
+    return order_key * 1_000 + offset if isinstance(order_key, int) else f"{order_key}:archive"
+
+
+def _baseline_id(trial: DcRsTrialContextV3) -> str:
+    value = trial.config.get("baseline", "dynamic_cheatsheet_rs_optional")
+    if not isinstance(value, str) or not value:
+        raise DcRsContractError("INVALID_BASELINE_ID")
+    return value
+
+
+def _validate_core_cheatsheet_budget(
+    candidate: StrategyCandidateState,
+    trial: DcRsTrialContextV3,
+) -> None:
+    budget = trial.config.get("serialized_cheatsheet_budget_bytes")
+    if type(budget) is not int or budget <= 0:
+        raise DcRsContractError("DC_RS_CHEATSHEET_BUDGET_REQUIRED")
+    if len(candidate.content.encode("utf-8")) > budget:
+        raise DcRsContractError("DC_RS_CHEATSHEET_BUDGET_EXCEEDED")

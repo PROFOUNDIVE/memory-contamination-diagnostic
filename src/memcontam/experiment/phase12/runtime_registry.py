@@ -22,6 +22,7 @@ from memcontam.baselines.retrieval_rag_phase12 import (
     RagFrozenTrialContextV3,
 )
 from memcontam.experiment.phase12.maturity import evaluate_maturity
+from memcontam.experiment import phase13_dc_rs_runtime as dc_runtime
 from memcontam.memory.cards_v3 import canonical_content_hash
 from memcontam.memory.checkpoint_v3 import NATIVE_ENTRY_V1, NativeEntry, NativeState, serialize_checkpoint
 from memcontam.memory.stores import MemoryEntry, MemoryState
@@ -222,6 +223,54 @@ def _reflexion_execute(context: Any, state: object) -> RuntimeTrialResult:
         native_entries=result.native_reflections,
         write_envelopes=() if result.write_envelope is None else (result.write_envelope,),
     )
+
+
+def _dc_execute(context: Any, state: object) -> RuntimeTrialResult:
+    try:
+        execution = dc_runtime.execute(context, state)
+    except (dc_runtime.DcRsRuntimeError, dc_runtime.dc.DcRsContractError) as error:
+        raise RuntimeStateError(error.code) from error
+    result = execution.result
+    native_entries = tuple(
+        entry
+        for entry in (
+            dc_runtime.dc._archive_native(result.archive_entry),
+            result.strategy_entry,
+        )
+        if entry is not None
+    )
+    envelopes = tuple(
+        envelope
+        for envelope in (result.archive_envelope, result.strategy_envelope)
+        if envelope is not None
+    )
+    return RuntimeTrialResult(
+        result.outcome,
+        execution.state,
+        native_entries=native_entries,
+        write_envelopes=envelopes,
+    )
+
+
+def _dc_initial_state(context: Any) -> object:
+    try:
+        return dc_runtime.initial_state(context)
+    except (dc_runtime.DcRsRuntimeError, dc_runtime.dc.DcRsContractError) as error:
+        raise RuntimeStateError(error.code) from error
+
+
+def _dc_serialize(state: object) -> object:
+    try:
+        return dc_runtime.serialize(state)
+    except (dc_runtime.DcRsRuntimeError, dc_runtime.dc.DcRsContractError) as error:
+        raise RuntimeStateError(error.code) from error
+
+
+def _dc_restore(snapshot: object, context: Any) -> object:
+    try:
+        return dc_runtime.restore(snapshot, context)
+    except (dc_runtime.DcRsRuntimeError, dc_runtime.dc.DcRsContractError) as error:
+        raise RuntimeStateError(error.code) from error
 
 
 def _native_entry(entry: MemoryEntry | NativeEntry, semantic_kind: str, component: str) -> NativeEntry:
@@ -452,5 +501,17 @@ LIVE_BASELINE_REGISTRY: Mapping[str, RuntimeEntry] = {
         _reflexion_serialize,
         _reflexion_restore,
         lambda state, context: _maturity(_reflexion_serialize, state, context),
+    ),
+}
+
+
+PHASE13_CORE_BASELINE_REGISTRY: Mapping[str, RuntimeEntry] = {
+    **LIVE_BASELINE_REGISTRY,
+    "dc_rs": RuntimeEntry(
+        _dc_initial_state,
+        _dc_execute,
+        _dc_serialize,
+        _dc_restore,
+        lambda _state, _context: None,
     ),
 }
