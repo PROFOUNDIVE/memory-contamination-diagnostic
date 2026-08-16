@@ -88,7 +88,7 @@ def _state() -> DcRsStateV3:
                     '"task_name":"mmlu_pro_engineering"}'
                 ),
                 memory_type="dc_rs_io_pair",
-                source_trial_id="prior-trial",
+                source_trial_id="run-1:trial:1:mmlu_pro_engineering:prior",
                 metadata={
                     "generated_output": "full prior reasoning\nfinal: A",
                     "parsed_answer": "A",
@@ -96,6 +96,11 @@ def _state() -> DcRsStateV3:
             )
         ]
     )
+
+
+def _memory_entry(entry: MemoryEntry | NativeEntry) -> MemoryEntry:
+    assert isinstance(entry, MemoryEntry)
+    return entry
 
 
 def _context(*, tool_mode: str = "text_only") -> Phase13DcRsContext:
@@ -116,7 +121,12 @@ def _context(*, tool_mode: str = "text_only") -> Phase13DcRsContext:
         verifier=lambda answer, task: answer == task.verifier_spec["answer_label"],
         decoding={"temperature": 0.0},
         branch="clean",
-        identities=RuntimeIdentities("run-1", "trial-1", 1, "dc_rs"),
+        identities=RuntimeIdentities(
+            "run-1",
+            "run-1:trial:2:mmlu_pro_engineering:11775",
+            2,
+            "dc_rs",
+        ),
         embedding_provider=_EmbeddingProvider(),
         baseline_configs={
             "dc_rs": {
@@ -146,10 +156,11 @@ def test_dc_rs_runtime_is_first_class_text_only_retrieve_synthesize_generate() -
     assert "full prior reasoning\nfinal: A" not in generation_prompt
     assert result.outcome.verifier_result is True
     assert isinstance(result.state, DcRsStateV3)
-    assert result.state.archive[-1].metadata["generated_output"] == (
+    archive_entry = _memory_entry(result.state.archive[-1])
+    assert archive_entry.metadata["generated_output"] == (
         "visible current reasoning\nfinal: B"
     )
-    assert result.state.archive[-1].metadata["parsed_answer"] == "B"
+    assert archive_entry.metadata["parsed_answer"] == "B"
     assert result.native_entries[0].native_component == "archive"
     assert result.write_envelopes[0].writer_stage == "dc_rs_generate"
 
@@ -174,6 +185,8 @@ def test_dc_rs_first_trial_generates_from_transient_whole_cheatsheet() -> None:
 
     generation_prompt = result.outcome.method_calls[1].messages[0]["content"]
     assert "first-trial rewritten guide" in generation_prompt
+    assert isinstance(result.state, DcRsStateV3)
+    assert result.state.strategies is not None
     assert result.state.strategies[-1].content == "first-trial rewritten guide"
     assert len(result.state.archive) == 1
 
@@ -196,6 +209,8 @@ def test_dc_rs_accepted_rewrite_controls_generation_without_audit_source_tags() 
     result = entry.execute_trial(context, entry.initial_state(context))
 
     assert "fresh accepted rewrite" in result.outcome.method_calls[1].messages[0]["content"]
+    assert isinstance(result.state, DcRsStateV3)
+    assert result.state.strategies is not None
     assert result.state.strategies[-1].content == "fresh accepted rewrite"
 
 
@@ -209,7 +224,7 @@ def test_dc_rs_persists_archive_before_rewritten_strategy() -> None:
         "dc_rs_generate",
         "dc_rs_synthesize",
     ]
-    assert [envelope.order_key for envelope in result.write_envelopes] == [1001, 1002]
+    assert [envelope.order_key for envelope in result.write_envelopes] == [2001, 2002]
     assert [native.native_component for native in result.native_entries] == [
         "archive",
         "strategy",
@@ -222,15 +237,25 @@ def test_dc_rs_runtime_checkpoint_round_trip_preserves_full_visible_responses() 
     executed = entry.execute_trial(context, entry.initial_state(context))
 
     snapshot = entry.serialize_state(executed.state)
-    restored = entry.restore_state(snapshot, context)
+    next_context = replace(
+        context,
+        identities=RuntimeIdentities(
+            "run-1",
+            "run-1:trial:3:mmlu_pro_engineering:next",
+            3,
+            "dc_rs",
+        ),
+    )
+    restored = entry.restore_state(snapshot, next_context)
 
     assert isinstance(snapshot, NativeState)
     assert snapshot.baseline == "dc_rs"
     assert isinstance(restored, DcRsStateV3)
-    assert [row.metadata["generated_output"] for row in restored.archive] == [
+    assert [_memory_entry(row).metadata["generated_output"] for row in restored.archive] == [
         "full prior reasoning\nfinal: A",
         "visible current reasoning\nfinal: B",
     ]
+    assert isinstance(executed.state, DcRsStateV3)
     assert restored.archive == executed.state.archive
 
 
@@ -299,7 +324,7 @@ def test_dc_rs_runtime_rejects_false_core_strategy_mode() -> None:
     ],
 )
 def test_dc_rs_runtime_rejects_invalid_initial_state_before_llm(mutation: str) -> None:
-    archive = list(_state().archive)
+    archive = [_memory_entry(entry) for entry in _state().archive]
     content = "strategy"
     strategy = NativeEntry(
         entry_id="strategy",
@@ -333,8 +358,9 @@ def test_dc_rs_runtime_rejects_invalid_initial_state_before_llm(mutation: str) -
             }
         )
     client = _BombClient()
+    archive_state: list[MemoryEntry | NativeEntry] = [*archive]
     state = DcRsStateV3(
-        archive=archive,
+        archive=archive_state,
         strategies=[strategy],
         allow_unparented_strategies=True,
     )
@@ -350,6 +376,70 @@ def test_dc_rs_runtime_rejects_invalid_initial_state_before_llm(mutation: str) -
     entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
 
     with pytest.raises(RuntimeStateError, match="INVALID_DC_RS_STATE"):
+        entry.initial_state(context)
+    assert client.calls == 0
+
+
+@pytest.mark.parametrize(
+    "source_trial_id",
+    (
+        "run-1:trial:3:mmlu_pro_engineering:future",
+        "run-2:trial:1:mmlu_pro_engineering:other-run",
+        "unproven-prior-trial",
+    ),
+)
+def test_dc_rs_runtime_rejects_archive_without_proven_prior_trajectory(
+    source_trial_id: str,
+) -> None:
+    archive = _memory_entry(_state().archive[0]).model_copy(
+        update={"source_trial_id": source_trial_id}
+    )
+    client = _BombClient()
+    context = replace(
+        _context(),
+        client=client,
+        initial_states={"dc_rs": DcRsStateV3(archive=[archive])},
+    )
+    entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
+
+    with pytest.raises(RuntimeStateError, match="DC_RS_ORDINARY_HISTORY_UNPROVEN"):
+        entry.initial_state(context)
+    assert client.calls == 0
+
+
+def test_dc_rs_runtime_rejects_cross_task_archive_before_curator() -> None:
+    archive = _memory_entry(_state().archive[0]).model_copy(
+        update={
+            "content": (
+                '{"input":{"options":["one","two"],"question":"prior"},'
+                '"task_name":"mmlu_pro_physics"}'
+            )
+        }
+    )
+    client = _BombClient()
+    context = replace(
+        _context(),
+        client=client,
+        initial_states={"dc_rs": DcRsStateV3(archive=[archive])},
+    )
+    entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
+
+    with pytest.raises(RuntimeStateError, match="DC_RS_ORDINARY_HISTORY_UNPROVEN"):
+        entry.initial_state(context)
+    assert client.calls == 0
+
+
+def test_dc_rs_runtime_rejects_unproven_current_identity_on_empty_state() -> None:
+    client = _BombClient()
+    context = replace(
+        _context(),
+        client=client,
+        identities=RuntimeIdentities("run-1", "trial-1", 1, "dc_rs"),
+        initial_states={"dc_rs": DcRsStateV3(archive=[])},
+    )
+    entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
+
+    with pytest.raises(RuntimeStateError, match="DC_RS_ORDINARY_HISTORY_UNPROVEN"):
         entry.initial_state(context)
     assert client.calls == 0
 
@@ -398,7 +488,7 @@ def test_dc_rs_rejects_source_id_that_was_active_but_not_retrieved() -> None:
                 '"task_name":"mmlu_pro_engineering"}'
             ),
             memory_type="dc_rs_io_pair",
-            source_trial_id=f"prior-{index}",
+            source_trial_id=f"run-1:trial:{index + 2}:mmlu_pro_engineering:prior-{index}",
             metadata={"generated_output": f"reasoning {index}\nfinal: A"},
         )
         for index in range(3)
@@ -417,6 +507,12 @@ def test_dc_rs_rejects_source_id_that_was_active_but_not_retrieved() -> None:
             }
         ),
         initial_states={"dc_rs": state},
+        identities=RuntimeIdentities(
+            "run-1",
+            "run-1:trial:5:mmlu_pro_engineering:11775",
+            5,
+            "dc_rs",
+        ),
     )
     entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
 
@@ -511,28 +607,44 @@ def test_historical_dc_rs_keeps_active_archive_parent_rule() -> None:
     assert result.outcome.status == "succeeded"
 
 
-def test_dc_rs_runtime_rejects_historical_task_context() -> None:
+def test_dc_rs_runtime_accepts_historical_task_native_context() -> None:
+    task = TaskInstance(
+        sample_id="game24:1",
+        task_name="game24",
+        input={"numbers": [1, 3, 4, 6]},
+        verifier_spec={"target": 24},
+    )
     context = Game24RuntimeContext(
-        task=TaskInstance(
-            sample_id="game24:1",
-            task_name="game24",
-            input={"numbers": [1, 3, 4, 6]},
-            verifier_spec={"target": 24},
+        task=task,
+        client=ReplayClient(
+            responses_by_sample={
+                task.sample_id: {
+                    "dc_rs_synthesize": "<cheatsheet>game strategy</cheatsheet>",
+                    "dc_rs_generate": "final: (6 / (1 - 3 / 4))",
+                }
+            }
         ),
-        client=ReplayClient(responses_by_sample={}),
         model="replay",
         verifier=lambda _answer, _task: False,
         decoding={"temperature": 0.0},
         branch="clean",
-        identities=RuntimeIdentities("run-1", "trial-1", 1),
+        identities=RuntimeIdentities("run-1", "run-1:trial:1:game24:1", 1),
         embedding_provider=_EmbeddingProvider(),
-        baseline_configs={"dc_rs": {"serialized_cheatsheet_budget_bytes": 1024}},
+        baseline_configs={
+            "dc_rs": {
+                "embedding_mode": "test_double",
+                "serialized_cheatsheet_budget_bytes": 1024,
+            }
+        },
         initial_states={"dc_rs": DcRsStateV3(archive=[])},
     )
     entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
 
-    with pytest.raises(RuntimeStateError, match="PHASE13_CORE_TASK_REQUIRED"):
-        entry.execute_trial(context, entry.initial_state(context))
+    result = entry.execute_trial(context, entry.initial_state(context))
+
+    assert result.outcome.status == "succeeded"
+    assert isinstance(result.state, DcRsStateV3)
+    assert '"task_name":"game24"' in result.state.archive[0].content
 
 
 def test_dc_rs_runtime_rejects_gold_in_current_input_before_llm() -> None:

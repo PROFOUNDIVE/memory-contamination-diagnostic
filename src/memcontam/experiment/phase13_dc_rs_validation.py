@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from typing import Any
 
 from memcontam.baselines import dynamic_cheatsheet_phase12 as dc
@@ -10,12 +11,28 @@ from memcontam.tasks.base import TaskInstance
 
 
 CORE_TASKS = frozenset({"mmlu_pro_engineering", "mmlu_pro_physics", "gpqa_diamond"})
+ORDINARY_TASKS = frozenset(
+    {
+        "game24",
+        "math_equation_balancer",
+        "word_sorting",
+        *CORE_TASKS,
+    }
+)
 
 
 class DcRsRuntimeError(ValueError):
     def __init__(self, code: str) -> None:
         self.code = code
         super().__init__(code)
+
+
+@dataclass(frozen=True, slots=True)
+class OrdinaryHistoryIdentity:
+    task_name: str
+    run_id: str
+    trial_id: str
+    order_key: int | str
 
 
 def configured_budget(context: Any) -> int:
@@ -27,8 +44,11 @@ def configured_budget(context: Any) -> int:
     return budget
 
 
-def validate_core_task(task: TaskInstance, code: str) -> None:
-    _validate_core_fields(task.task_name, task.input, code)
+def validate_task(task: TaskInstance, code: str) -> None:
+    if task.task_name not in ORDINARY_TASKS:
+        raise DcRsRuntimeError(code)
+    if task.task_name in CORE_TASKS:
+        _validate_core_fields(task.task_name, task.input, code)
 
 
 def validate_state(state: dc.DcRsStateV3, budget: int | None, code: str) -> None:
@@ -49,7 +69,7 @@ def validate_state(state: dc.DcRsStateV3, budget: int | None, code: str) -> None
             raise DcRsRuntimeError(code)
         if "tool_trace" in archive_entry.metadata:
             raise DcRsRuntimeError(code)
-        _validate_core_input(archive_entry.content, code)
+        _validate_archive_input(archive_entry.content, code)
         archive_ids.append(archive_entry.entry_id)
     strategy_ids: list[str] = []
     for raw_entry in state.strategies or ():
@@ -71,23 +91,77 @@ def validate_state(state: dc.DcRsStateV3, budget: int | None, code: str) -> None
         raise DcRsRuntimeError(code)
 
 
-def _validate_core_input(content: str, code: str) -> None:
+def validate_ordinary_history(
+    state: dc.DcRsStateV3,
+    identity: OrdinaryHistoryIdentity,
+) -> None:
+    current_index = _trajectory_index(identity.trial_id, identity.run_id)
+    if type(identity.order_key) is not int or current_index != identity.order_key:
+        raise DcRsRuntimeError("DC_RS_ORDINARY_HISTORY_UNPROVEN")
+    if not state.archive:
+        return
+    for raw_entry in state.archive:
+        archive_entry = dc._archive_entry(raw_entry)
+        if (
+            _validate_archive_input(
+                archive_entry.content,
+                "DC_RS_ORDINARY_HISTORY_UNPROVEN",
+            )
+            != identity.task_name
+            or archive_entry.source_trial_id is None
+        ):
+            raise DcRsRuntimeError("DC_RS_ORDINARY_HISTORY_UNPROVEN")
+        source_index = _trajectory_index(archive_entry.source_trial_id, identity.run_id)
+        if source_index >= current_index:
+            raise DcRsRuntimeError("DC_RS_ORDINARY_HISTORY_UNPROVEN")
+
+
+def _trajectory_index(trial_id: str, run_id: str) -> int:
+    prefix = f"{run_id}:trial:"
+    if not trial_id.startswith(prefix):
+        raise DcRsRuntimeError("DC_RS_ORDINARY_HISTORY_UNPROVEN")
+    raw_index, separator, _suffix = trial_id.removeprefix(prefix).partition(":")
+    if not separator:
+        raise DcRsRuntimeError("DC_RS_ORDINARY_HISTORY_UNPROVEN")
+    try:
+        index = int(raw_index)
+    except ValueError as error:
+        raise DcRsRuntimeError("DC_RS_ORDINARY_HISTORY_UNPROVEN") from error
+    if index < 1:
+        raise DcRsRuntimeError("DC_RS_ORDINARY_HISTORY_UNPROVEN")
+    return index
+
+
+def _validate_archive_input(content: str, code: str) -> str:
     try:
         payload = json.loads(content)
     except (TypeError, json.JSONDecodeError) as error:
         raise DcRsRuntimeError(code) from error
-    if (
-        not isinstance(payload, dict)
-        or set(payload) != {"input", "task_name"}
-        or payload.get("task_name") not in CORE_TASKS
+    if not isinstance(payload, dict) or payload.get("task_name") not in ORDINARY_TASKS:
+        raise DcRsRuntimeError(code)
+    task_name = payload["task_name"]
+    if task_name in CORE_TASKS and (
+        set(payload) != {"input", "task_name"}
         or json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
         != content
     ):
         raise DcRsRuntimeError(code)
-    _validate_core_fields(payload["task_name"], payload["input"], code)
+    if task_name in CORE_TASKS:
+        _validate_core_fields(task_name, payload["input"], code)
+    elif (
+        set(payload) != {"input", "metadata", "sample_id", "task_name"}
+        or not isinstance(payload.get("sample_id"), str)
+        or not payload["sample_id"]
+        or not isinstance(payload.get("input"), dict)
+        or not isinstance(payload.get("metadata"), dict)
+        or json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+        != content
+    ):
+        raise DcRsRuntimeError(code)
+    return task_name
 
 
-def _validate_core_fields(task_name: object, task_input: object, code: str) -> None:
+def _validate_core_fields(task_name: Any, task_input: Any, code: str) -> None:
     if (
         not isinstance(task_name, str)
         or task_name not in CORE_TASKS

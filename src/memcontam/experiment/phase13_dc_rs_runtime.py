@@ -7,11 +7,13 @@ from typing import Any, Literal
 from memcontam.baselines import dynamic_cheatsheet_phase12 as dc
 from memcontam.clients.base import LLMClient
 from memcontam.experiment.phase13_dc_rs_validation import (
-    CORE_TASKS,
+    ORDINARY_TASKS,
     DcRsRuntimeError,
+    OrdinaryHistoryIdentity,
     configured_budget,
-    validate_core_task,
+    validate_ordinary_history,
     validate_state,
+    validate_task,
 )
 from memcontam.memory.cards_v3 import canonical_content_hash
 from memcontam.memory.checkpoint_v3 import CHECKPOINT_V3, NativeEntry, NativeState
@@ -20,7 +22,7 @@ from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Phase13DcRsContext:
     task: TaskInstance
     client: LLMClient
@@ -29,15 +31,15 @@ class Phase13DcRsContext:
     decoding: Mapping[str, Any]
     branch: Literal["clean", "correct", "irrelevant", "contam", "filter"]
     identities: Any
-    embedding_provider: object | None = None
+    embedding_provider: Any | None = None
     baseline_configs: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
-    initial_states: Mapping[str, object] = field(default_factory=dict)
+    initial_states: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if self.task.task_name not in CORE_TASKS:
-            raise ValueError("PHASE13_CORE_TASK_REQUIRED")
+        if self.task.task_name not in ORDINARY_TASKS:
+            raise DcRsRuntimeError("PROSPECTIVE_ORDINARY_TASK_REQUIRED")
         if not self.model or not self.identities.run_id or not self.identities.trial_id:
-            raise ValueError("RUNTIME_IDENTITIES_REQUIRED")
+            raise DcRsRuntimeError("RUNTIME_IDENTITIES_REQUIRED")
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,15 +57,16 @@ def initial_state(context: Any) -> dc.DcRsStateV3:
         raise DcRsRuntimeError("INVALID_DC_RS_STATE")
     state.allow_unparented_strategies = True
     validate_state(state, configured_budget(context), "INVALID_DC_RS_STATE")
+    validate_ordinary_history(state, _ordinary_identity(context))
     return state
 
 
-def execute(context: Any, state: object) -> DcRsRuntimeExecution:
+def execute(context: Any, state: Any) -> DcRsRuntimeExecution:
     if not isinstance(state, dc.DcRsStateV3):
         raise DcRsRuntimeError("INVALID_DC_RS_STATE")
-    if context.task.task_name not in CORE_TASKS:
-        raise DcRsRuntimeError("PHASE13_CORE_TASK_REQUIRED")
-    validate_core_task(context.task, "INVALID_DC_RS_TASK")
+    if context.task.task_name not in ORDINARY_TASKS:
+        raise DcRsRuntimeError("PROSPECTIVE_ORDINARY_TASK_REQUIRED")
+    validate_task(context.task, "INVALID_DC_RS_TASK")
     configured = dict(context.baseline_configs.get("dc_rs", {}))
     if context.branch == "filter":
         raise DcRsRuntimeError("DC_RS_FILTER_UNSUPPORTED")
@@ -71,6 +74,7 @@ def execute(context: Any, state: object) -> DcRsRuntimeExecution:
         raise DcRsRuntimeError("DC_RS_TEXT_ONLY_REQUIRED")
     budget = configured_budget(context)
     validate_state(state, budget, "INVALID_DC_RS_STATE")
+    validate_ordinary_history(state, _ordinary_identity(context))
     if context.embedding_provider is None:
         raise DcRsRuntimeError("DC_RS_EMBEDDING_PROVIDER_REQUIRED")
     metadata = context.embedding_provider.metadata
@@ -119,7 +123,16 @@ def execute(context: Any, state: object) -> DcRsRuntimeExecution:
     return DcRsRuntimeExecution(result, state)
 
 
-def serialize(state: object) -> NativeState:
+def _ordinary_identity(context: Any) -> OrdinaryHistoryIdentity:
+    return OrdinaryHistoryIdentity(
+        task_name=context.task.task_name,
+        run_id=context.identities.run_id,
+        trial_id=context.identities.trial_id,
+        order_key=context.identities.order_key,
+    )
+
+
+def serialize(state: Any) -> NativeState:
     if (
         not isinstance(state, dc.DcRsStateV3)
         or state.filter_state is not None
@@ -144,7 +157,7 @@ def serialize(state: object) -> NativeState:
     )
 
 
-def restore(snapshot: object, context: Any) -> dc.DcRsStateV3:
+def restore(snapshot: Any, context: Any) -> dc.DcRsStateV3:
     if (
         not isinstance(snapshot, NativeState)
         or snapshot.baseline != "dc_rs"
@@ -214,6 +227,7 @@ def restore(snapshot: object, context: Any) -> dc.DcRsStateV3:
     try:
         budget = configured_budget(context)
         validate_state(restored, budget, "INVALID_DC_RS_SNAPSHOT")
+        validate_ordinary_history(restored, _ordinary_identity(context))
     except DcRsRuntimeError as error:
         raise DcRsRuntimeError("INVALID_DC_RS_SNAPSHOT") from error
     return restored
