@@ -23,7 +23,7 @@ from memcontam.baselines.retrieval_rag_phase12 import (
 )
 from memcontam.experiment.phase12.maturity import evaluate_maturity
 from memcontam.experiment import phase13_dc_rs_runtime as dc_runtime
-from memcontam.memory.cards_v3 import canonical_content_hash
+from memcontam.memory.cards_v3 import MemoryCardEnvelopeV3, canonical_content_hash
 from memcontam.memory.checkpoint_v3 import NATIVE_ENTRY_V1, NativeEntry, NativeState, serialize_checkpoint
 from memcontam.memory.stores import MemoryEntry, MemoryState
 
@@ -48,7 +48,7 @@ class RuntimeTrialResult:
     retrieval_event: object | None = None
     context_event: object | None = None
     native_entries: tuple[NativeEntry, ...] = ()
-    write_envelopes: tuple[object, ...] = ()
+    write_envelopes: tuple[MemoryCardEnvelopeV3, ...] = ()
 
 
 @dataclass(frozen=True)
