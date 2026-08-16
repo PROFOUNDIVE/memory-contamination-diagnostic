@@ -12,6 +12,8 @@ from memcontam.clients.base import LLMResponse
 from memcontam.experiment.phase13_ordinary_runtime import (
     ORDINARY_BASELINES,
     ORDINARY_TASKS,
+    OrdinaryBaseline,
+    OrdinaryTask,
     ProspectiveOrdinaryError,
     ProspectiveOrdinaryRun,
     execute_prospective_ordinary,
@@ -19,6 +21,7 @@ from memcontam.experiment.phase13_ordinary_runtime import (
 from memcontam.readiness import phase13_core_datasets as core_datasets
 from memcontam.readiness.phase13_core_bundle import (
     CoreSources,
+    CoreTask,
     SelectionProvenance,
     SourceArtifact,
     write_bundle,
@@ -38,7 +41,8 @@ class _Client:
     def __init__(self) -> None:
         self.calls = 0
 
-    def chat(self, _messages: list[dict[str, str]], _model: str, config: dict) -> LLMResponse:
+    def chat(self, messages: list[dict[str, str]], model: str, config: dict) -> LLMResponse:
+        del messages, model
         self.calls += 1
         stage = config.get("method_stage")
         if stage == "dc_rs_synthesize":
@@ -99,6 +103,13 @@ def _core_row(task: str, sample_id: str, index: int) -> TaskInstance:
         verifier_spec={"answer_index": 1, "answer_label": "B"},
         metadata={"upstream_question_id": index},
     )
+
+
+def _archive_source_trial_id(state: DcRsStateV3) -> str:
+    entry = state.archive[0]
+    assert isinstance(entry, MemoryEntry)
+    assert entry.source_trial_id is not None
+    return entry.source_trial_id
 
 
 def _bundle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
@@ -223,7 +234,7 @@ def test_core_rag_remains_explicitly_unavailable_without_scientific_contract(
 
 @pytest.mark.parametrize("baseline", ("fh_bounded", "bot_style", "reflexion_style"))
 def test_existing_memory_runtimes_execute_core_ordinary_trajectory(
-    baseline: str,
+    baseline: OrdinaryBaseline,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -278,7 +289,7 @@ def test_existing_memory_runtimes_execute_core_ordinary_trajectory(
     ("mmlu_pro_engineering", "mmlu_pro_physics", "gpqa_diamond"),
 )
 def test_dc_rs_ordinary_execution_accepts_each_core_task_stream(
-    task_name: str,
+    task_name: CoreTask,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -310,32 +321,44 @@ def test_dc_rs_ordinary_execution_accepts_each_core_task_stream(
 
 
 @pytest.mark.parametrize(
-    "task",
+    ("task_name", "task"),
     (
-        TaskInstance(
-            sample_id="game24:1",
-            task_name="game24",
-            input={"numbers": [1, 3, 4, 6], "target": 24},
-            verifier_spec={"target": 24},
+        (
+            "game24",
+            TaskInstance(
+                sample_id="game24:1",
+                task_name="game24",
+                input={"numbers": [1, 3, 4, 6], "target": 24},
+                verifier_spec={"target": 24},
+            ),
         ),
-        TaskInstance(
-            sample_id="meb:1",
-            task_name="math_equation_balancer",
-            input={"input": "1 + 1 = 2"},
-            verifier_spec={"target": "1 + 1 = 2"},
+        (
+            "math_equation_balancer",
+            TaskInstance(
+                sample_id="meb:1",
+                task_name="math_equation_balancer",
+                input={"input": "1 + 1 = 2"},
+                verifier_spec={"target": "1 + 1 = 2"},
+            ),
         ),
-        TaskInstance(
-            sample_id="words:1",
-            task_name="word_sorting",
-            input={"words": ["a", "b"]},
-            verifier_spec={"sorted_words": ["a", "b"]},
+        (
+            "word_sorting",
+            TaskInstance(
+                sample_id="words:1",
+                task_name="word_sorting",
+                input={"words": ["a", "b"]},
+                verifier_spec={"sorted_words": ["a", "b"]},
+            ),
         ),
     ),
 )
-def test_dc_rs_ordinary_execution_accepts_original_task_native_inputs(task: TaskInstance) -> None:
+def test_dc_rs_ordinary_execution_accepts_original_task_native_inputs(
+    task_name: OrdinaryTask,
+    task: TaskInstance,
+) -> None:
     result = execute_prospective_ordinary(
         ProspectiveOrdinaryRun(
-            task_name=task.task_name,
+            task_name=task_name,
             baseline="dc_rs",
             run_id=f"ordinary-{task.task_name}",
             model="replay",
@@ -356,6 +379,7 @@ def test_dc_rs_ordinary_execution_accepts_original_task_native_inputs(task: Task
     )
 
     assert result.trials[0].outcome.status == "succeeded"
-    assert result.trials[0].state.archive[0].source_trial_id.startswith(
+    assert isinstance(result.trials[0].state, DcRsStateV3)
+    assert _archive_source_trial_id(result.trials[0].state).startswith(
         f"ordinary-{task.task_name}:trial:1:"
     )
