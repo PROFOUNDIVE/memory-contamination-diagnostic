@@ -30,11 +30,15 @@ from memcontam.tasks.base import TaskInstance
 
 MMLU_PRO_REVISION: Final = "475d58ba0cc18a15fd5d4221f41919199e692331"
 GPQA_REVISION: Final = "633f5ee89ab8ad4522a9f850766b73f62147ffdd"
-MMLU_PRO_REPO: Final = "TIGER-Lab/MMLU-Pro"
-GPQA_REPO: Final = "Idavidrein/gpqa"
+MMLU_PRO_REPO, GPQA_REPO = "TIGER-Lab/MMLU-Pro", "Idavidrein/gpqa"
 MMLU_PRO_TEST_SHA256: Final = "23e607af63e384127a344aa13efa207144215d951d914a572aed907b38879ba4"
 GPQA_SOURCE_SHA256: Final = "41d1213cd7a4998605a26c2798500652572007161b3a92817ba46b35befcd305"
 DYNAMIC_CHEATSHEET_REVISION: Final = "5cfe3c37e8e52b1d858d0f3df46e7f17c50991b9"
+CANONICAL_CORE_ARTIFACT_SHA256: Final[Mapping[CoreTask, str]] = {
+    "mmlu_pro_engineering": "c8ff52f9f797ee91c69692a9802f421f2b1117695727da2502140e6e4e92ad36",
+    "mmlu_pro_physics": "adcb50a3ab7303470a07df495f822ad06cf7b14fc6a78c357558e2aad7871743",
+    "gpqa_diamond": "d6413fa81bdbc1bf08a83cc81c1a369bcbaf9a51d27c027e0b3f219e584be372",
+}
 SELECTION_PATH: Final = Path(
     str(
         importlib.resources.files("memcontam.readiness").joinpath(
@@ -98,7 +102,7 @@ def materialize_core_datasets(
             )
         except CoreDatasetError:
             raise
-        except Exception as error:
+        except (ImportError, KeyError, OSError, TypeError, ValueError) as error:
             raise CoreDatasetError("CORE_DATASET_MATERIALIZATION_FAILED") from error
     sources = CoreSources(
         mmlu_pro=SourceArtifact(
@@ -124,7 +128,11 @@ def materialize_core_datasets(
 
 
 def load_core_task(root: Path, task: CoreTask) -> tuple[TaskInstance, ...]:
-    return load_bundle_task(root, task)
+    return load_bundle_task(
+        root,
+        task,
+        expected_sha256=CANONICAL_CORE_ARTIFACT_SHA256[task],
+    )
 
 
 def paired_trajectory_order(
@@ -134,8 +142,7 @@ def paired_trajectory_order(
 ) -> tuple[TaskInstance, ...]:
     if not rows:
         raise CoreDatasetError("EMPTY_TASK_TRAJECTORY")
-    task_names = {row.task_name for row in rows}
-    sample_ids = {row.sample_id for row in rows}
+    task_names, sample_ids = {row.task_name for row in rows}, {row.sample_id for row in rows}
     if len(task_names) != 1 or len(sample_ids) != len(rows):
         raise CoreDatasetError("TASK_TRAJECTORY_NOT_ISOLATED")
     task = next(iter(task_names))
@@ -160,11 +167,9 @@ def validate_core_datasets(
     trajectory_seed: int,
     expected_counts: Mapping[CoreTask, int] | None = None,
 ) -> CoreDatasetReport:
-    expected = (
-        {"mmlu_pro_engineering": 250, "mmlu_pro_physics": 250, "gpqa_diamond": 198}
-        if expected_counts is None
-        else expected_counts
-    )
+    expected = {"mmlu_pro_engineering": 250, "mmlu_pro_physics": 250, "gpqa_diamond": 198}
+    if expected_counts is not None:
+        expected = expected_counts
     manifest, manifest_sha = load_bundle_manifest(root)
     selection_sha = hashlib.sha256(SELECTION_PATH.read_bytes()).hexdigest()
     if (
@@ -184,6 +189,11 @@ def validate_core_datasets(
         or manifest.sources.gpqa.sha256 != GPQA_SOURCE_SHA256
     ):
         raise CoreDatasetError("CORE_DATASET_SOURCE_MISMATCH")
+    if any(
+        manifest.artifacts[task].sha256 != CANONICAL_CORE_ARTIFACT_SHA256[task]
+        for task in CORE_TASKS
+    ):
+        raise CoreDatasetError("CORE_DATASET_CANONICAL_MISMATCH")
     reports: dict[CoreTask, TaskDatasetReport] = {}
     for task in CORE_TASKS:
         rows = load_core_task(root, task)
@@ -262,15 +272,7 @@ def _validate_materialization_root(root: Path) -> None:
 
 
 __all__ = [
-    "Artifact",
-    "CoreDatasetError",
-    "CoreDatasetManifest",
-    "CoreDatasetReport",
-    "GPQA_REVISION",
-    "MMLU_PRO_REVISION",
-    "SELECTION_PATH",
-    "load_core_task",
-    "materialize_core_datasets",
-    "paired_trajectory_order",
-    "validate_core_datasets",
+    "Artifact", "CoreDatasetError", "CoreDatasetManifest", "CoreDatasetReport",
+    "GPQA_REVISION", "MMLU_PRO_REVISION", "SELECTION_PATH", "load_core_task", "materialize_core_datasets",
+    "paired_trajectory_order", "validate_core_datasets",
 ]

@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import subprocess
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,7 @@ from memcontam.readiness.phase13_core_datasets import (
 )
 from memcontam.readiness.phase13_core_bundle import (
     CoreSources,
+    CoreTask,
     SelectionProvenance,
     SourceArtifact,
     write_bundle,
@@ -36,6 +38,15 @@ MMLU_SELECTION = SELECTION_PATH
 def _selection_digest(question_ids: list[int]) -> str:
     payload = json.dumps(sorted(question_ids), separators=(",", ":")).encode()
     return hashlib.sha256(payload).hexdigest()
+
+
+def _trust_tiny_bundle(bundle: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    manifest = json.loads((bundle / "manifest.json").read_text())
+    monkeypatch.setattr(
+        core_datasets,
+        "CANONICAL_CORE_ARTIFACT_SHA256",
+        {task: artifact["sha256"] for task, artifact in manifest["artifacts"].items()},
+    )
 
 
 def test_mmlu_selection_manifest_fixes_the_two_released_250_identity_sets() -> None:
@@ -59,8 +70,12 @@ def test_mmlu_selection_manifest_fixes_the_two_released_250_identity_sets() -> N
     )
 
 
-def test_paired_trajectory_order_is_seeded_paired_and_task_isolated(tmp_path: Path) -> None:
+def test_paired_trajectory_order_is_seeded_paired_and_task_isolated(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     bundle = _write_tiny_bundle(tmp_path)
+    _trust_tiny_bundle(bundle, monkeypatch)
     engineering = load_core_task(bundle, "mmlu_pro_engineering")
     physics = load_core_task(bundle, "mmlu_pro_physics")
 
@@ -79,8 +94,10 @@ def test_paired_trajectory_order_is_seeded_paired_and_task_isolated(tmp_path: Pa
 
 def test_core_loader_preserves_upstream_identity_without_exposing_gold_in_input(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     bundle = _write_tiny_bundle(tmp_path)
+    _trust_tiny_bundle(bundle, monkeypatch)
 
     row = load_core_task(bundle, "gpqa_diamond")[0]
 
@@ -102,7 +119,16 @@ def test_core_loader_preserves_upstream_identity_without_exposing_gold_in_input(
 
 
 def test_materialization_fails_closed_when_gpqa_access_is_unavailable(tmp_path: Path) -> None:
-    def denied_download(*_args: str, **_kwargs: str) -> str:
+    def denied_download(
+        *,
+        repo_id: str,
+        repo_type: str,
+        filename: str,
+        revision: str,
+        token: bool | None = None,
+        cache_dir: str | None = None,
+    ) -> str:
+        del repo_id, repo_type, filename, revision, token, cache_dir
         raise PermissionError("gated")
 
     with pytest.raises(CoreDatasetError, match="GPQA_ACCESS_REQUIRED"):
@@ -112,7 +138,16 @@ def test_materialization_fails_closed_when_gpqa_access_is_unavailable(tmp_path: 
 def test_materialization_rejects_unignored_repository_output_before_download() -> None:
     called = False
 
-    def unexpected_download(*_args: str, **_kwargs: str) -> str:
+    def unexpected_download(
+        *,
+        repo_id: str,
+        repo_type: str,
+        filename: str,
+        revision: str,
+        token: bool | None = None,
+        cache_dir: str | None = None,
+    ) -> str:
+        del repo_id, repo_type, filename, revision, token, cache_dir
         nonlocal called
         called = True
         raise AssertionError("download must not run")
@@ -199,7 +234,7 @@ def test_hugging_face_download_forces_xet_off(monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_bundle_publication_rejects_existing_root_and_symlinked_ancestor(tmp_path: Path) -> None:
-    rows = {
+    rows: dict[CoreTask, Sequence[TaskInstance]] = {
         "mmlu_pro_engineering": (TaskInstance.model_validate(_row("mmlu_pro_engineering", "e", 0)),),
         "mmlu_pro_physics": (TaskInstance.model_validate(_row("mmlu_pro_physics", "p", 0)),),
         "gpqa_diamond": (TaskInstance.model_validate(_row("gpqa_diamond", "g", 0)),),
@@ -247,8 +282,12 @@ def test_repository_ignores_interrupted_core_bundle_staging() -> None:
     assert result.returncode == 0
 
 
-def test_bundle_validation_reports_task_counts_and_seeded_order_hashes(tmp_path: Path) -> None:
+def test_bundle_validation_reports_task_counts_and_seeded_order_hashes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     bundle = _write_tiny_bundle(tmp_path)
+    _trust_tiny_bundle(bundle, monkeypatch)
 
     report = validate_core_datasets(bundle, trajectory_seed=23, expected_counts={})
 
@@ -273,6 +312,44 @@ def test_bundle_manifest_and_seal_are_cryptographically_closed(tmp_path: Path) -
     manifest.write_text(manifest.read_text() + " ", encoding="utf-8")
 
     with pytest.raises(CoreDatasetError, match="CORE_DATASET_SEAL_MISMATCH"):
+        load_core_task(bundle, "mmlu_pro_engineering")
+
+
+def test_bundle_validation_rejects_fabricated_rows_after_self_reseal(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bundle = _write_tiny_bundle(tmp_path)
+    manifest_path = bundle / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    monkeypatch.setattr(
+        core_datasets,
+        "CANONICAL_CORE_ARTIFACT_SHA256",
+        {task: artifact["sha256"] for task, artifact in manifest["artifacts"].items()},
+    )
+    artifact_path = bundle / "mmlu_pro_engineering.jsonl"
+    rows = artifact_path.read_text().splitlines()
+    fabricated = json.loads(rows[0])
+    fabricated["input"]["question"] = "fabricated replacement"
+    rows[0] = json.dumps(fabricated, sort_keys=True)
+    artifact_path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    manifest["artifacts"]["mmlu_pro_engineering"]["sha256"] = hashlib.sha256(
+        artifact_path.read_bytes()
+    ).hexdigest()
+    manifest_bytes = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
+    manifest_path.write_bytes(manifest_bytes)
+    seal = {
+        "schema_version": "phase13_core_dataset_seal_v1",
+        "manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
+    }
+    (bundle / "seal.json").write_text(
+        json.dumps(seal, sort_keys=True, separators=(",", ":")),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(CoreDatasetError, match="CORE_DATASET_CANONICAL_MISMATCH"):
+        validate_core_datasets(bundle, trajectory_seed=23, expected_counts={})
+    with pytest.raises(CoreDatasetError, match="CORE_DATASET_CANONICAL_MISMATCH"):
         load_core_task(bundle, "mmlu_pro_engineering")
 
 

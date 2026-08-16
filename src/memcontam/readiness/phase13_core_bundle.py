@@ -72,7 +72,7 @@ class CoreDatasetManifest(_FrozenModel):
     @model_validator(mode="after")
     def exact_artifacts(self) -> CoreDatasetManifest:
         if set(self.artifacts) != set(CORE_TASKS):
-            raise ValueError("CORE_DATASET_ARTIFACT_SET_MISMATCH")
+            raise CoreDatasetError("CORE_DATASET_ARTIFACT_SET_MISMATCH")
         return self
 
 
@@ -173,7 +173,12 @@ def load_bundle_manifest(root: Path) -> tuple[CoreDatasetManifest, str]:
     return manifest, digest
 
 
-def load_bundle_task(root: Path, task: CoreTask) -> tuple[TaskInstance, ...]:
+def load_bundle_task(
+    root: Path,
+    task: CoreTask,
+    *,
+    expected_sha256: str | None = None,
+) -> tuple[TaskInstance, ...]:
     manifest, _ = load_bundle_manifest(root)
     artifact = manifest.artifacts[task]
     if artifact.path != f"{task}.jsonl":
@@ -181,6 +186,8 @@ def load_bundle_task(root: Path, task: CoreTask) -> tuple[TaskInstance, ...]:
     raw = _read(root / artifact.path)
     if hashlib.sha256(raw).hexdigest() != artifact.sha256:
         raise CoreDatasetError("CORE_DATASET_HASH_MISMATCH")
+    if expected_sha256 is not None and artifact.sha256 != expected_sha256:
+        raise CoreDatasetError("CORE_DATASET_CANONICAL_MISMATCH")
     try:
         result = tuple(build_instance(json.loads(line)) for line in raw.splitlines())
     except (KeyError, TypeError, ValueError) as error:
