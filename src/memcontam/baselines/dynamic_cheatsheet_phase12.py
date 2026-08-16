@@ -192,6 +192,8 @@ class DcRsPhase12Adapter:
         canonical_task = (
             canonical_core_task_json(trial.task)
             if _baseline_id(trial) == "dc_rs"
+            and trial.task.task_name
+            in {"mmlu_pro_engineering", "mmlu_pro_physics", "gpqa_diamond"}
             else canonical_task_json(trial.task)
         )
         retrieved_records = retriever._retrieve_pairs(

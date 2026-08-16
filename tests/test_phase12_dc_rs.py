@@ -106,6 +106,42 @@ def test_archive_root_yields_exact_strategy_only_with_declared_parent(tmp_path) 
     assert result.archive_entry.metadata["generated_output"] == "final: 24"
 
 
+def test_historical_optional_dc_rs_keeps_full_core_task_serialization(tmp_path) -> None:
+    task = TaskInstance(
+        sample_id="mmlu_pro_engineering:11775",
+        task_name="mmlu_pro_engineering",
+        input={"question": "Which option?", "options": ["A", "B"]},
+        verifier_spec={"answer_index": 1, "answer_label": "B"},
+    )
+    result = DcRsPhase12Adapter(
+        embedding_provider=_EmbeddingProvider(), cache_dir=tmp_path
+    ).execute(
+        DcRsTrialContextV3(
+            task=task,
+            client=ReplayClient(
+                responses_by_sample={
+                    task.sample_id: {
+                        "dc_rs_synthesize": "<cheatsheet>historical strategy</cheatsheet>",
+                        "dc_rs_generate": "final: B",
+                    }
+                }
+            ),
+            model="replay",
+            run_id="historical-run",
+            trial_id="historical-trial",
+            condition_id="clean",
+            branch="clean",
+            config={"baseline": "dynamic_cheatsheet_rs_optional", "tool_mode": "text_only"},
+            order_key=1,
+        ),
+        DcRsStateV3(archive=[]),
+    )
+
+    assert '"sample_id":"mmlu_pro_engineering:11775"' in (
+        result.outcome.method_calls[0].messages[0]["content"]
+    )
+
+
 def test_rejects_direct_strategy_post_outcome_and_implicit_parent_union(tmp_path) -> None:
     direct_strategy = MemoryEntry(
         entry_id="strategy-root",
