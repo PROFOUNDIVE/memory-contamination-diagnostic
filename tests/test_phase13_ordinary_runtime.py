@@ -226,7 +226,7 @@ def test_core_rag_remains_explicitly_unavailable_without_scientific_contract(
 
     with pytest.raises(
         ProspectiveOrdinaryError,
-        match="CORE_RAG_SCIENTIFIC_PREREQUISITE_UNAVAILABLE",
+        match="NEW_MCQ_RAG_REQUIRED_ARTIFACTS_UNFROZEN",
     ):
         execute_prospective_ordinary(run)
     assert client.calls == 0

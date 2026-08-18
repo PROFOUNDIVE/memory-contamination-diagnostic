@@ -167,7 +167,7 @@ class ProspectiveOrdinaryResult:
 
 def execute_prospective_ordinary(run: ProspectiveOrdinaryRun) -> ProspectiveOrdinaryResult:
     if run.task_name in _CORE_TASKS and run.baseline == "rag_frozen":
-        raise ProspectiveOrdinaryError("CORE_RAG_SCIENTIFIC_PREREQUISITE_UNAVAILABLE")
+        raise ProspectiveOrdinaryError("NEW_MCQ_RAG_REQUIRED_ARTIFACTS_UNFROZEN")
     tasks = _ordered_tasks(run)
     entry = PHASE13_CORE_BASELINE_REGISTRY[run.baseline]
     contexts = tuple(_context(run, task, index) for index, task in enumerate(tasks, start=1))
