@@ -12,7 +12,11 @@ from memcontam.readiness.phase13_execution_contract import (
     parse_execution_registry,
     validate_execution_closure,
 )
-from memcontam.readiness.phase13_route_capacity import recompute_capacity
+from memcontam.readiness.phase13_route_capacity import (
+    CommonCapacityAudit,
+    materialize_common_capacity,
+    recompute_capacity,
+)
 
 
 def _registry() -> dict[str, JsonValue]:
@@ -70,6 +74,36 @@ def test_execution_registry_and_capacity_are_driven_by_prospective_inputs() -> N
     assert plan.raw_maximum_semantic_calls == 143
     assert plan.reserved_semantic_calls == 158
     assert plan.reserved_transport_attempts == 474
+
+
+def test_common_capacity_is_mechanically_materialized_from_frozen_audit() -> None:
+    tasks = CORE_MAIN_REGISTRY.tasks
+    audit = CommonCapacityAudit(
+        model_runtime_identity="gpt-5.6-luna|openai-python-2.46.0",
+        context_contract_id="luna-context-contract-v1",
+        context_tokens=100_000,
+        provider_output_contract_id="luna-output-contract-v1",
+        provider_max_output_tokens=8192,
+        tokenizer_encoding_identity="frozen-encoding",
+        tokenizer_revision_version="frozen-revision",
+        serialization_identity="phase13-visible-memory-v1",
+        special_token_handling_identity="phase13-special-token-v1",
+        message_framing_law_identity="openai-responses-framing-v1",
+        token_count_implementation_hash_version="a" * 64,
+        per_task_R_FH={task: 5_000 for task in tasks},
+        per_task_I_DC_writer={task: 10_000 for task in tasks},
+        per_task_F_DC_out={task: 192 for task in tasks},
+        fh_bounded_core_contract_id="fh-bounded-core-v1",
+        retention_truncation_rule_id="oldest-first-pair-atomic-v1",
+        context_resource_contract_id="luna-context-resource-v1",
+    )
+
+    record = materialize_common_capacity(audit)
+
+    assert record.B_FH_feasible == 95_000
+    assert record.B_DC_feasible == 8_000
+    assert record.B_mem_tokens == record.L_DC_tokens == 8_000
+    assert len(record.capacity_law_hash) == 64
 
 
 def test_core_main_registry_matches_final_phase13_authority() -> None:

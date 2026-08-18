@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import asdict, dataclass
+import hashlib
+import json
 import math
 
-from memcontam.readiness.phase13_execution_contract import ExecutionRegistry
+from memcontam.readiness.phase13_execution_contract import CORE_MAIN_REGISTRY, ExecutionRegistry
 
 
 class CapacityPlanningError(ValueError):
@@ -21,6 +24,95 @@ class CapacityPlan:
     reserved_transport_attempts: int
     maximum_input_tokens: int
     maximum_output_tokens: int
+
+
+@dataclass(frozen=True, slots=True)
+class CommonCapacityAudit:
+    model_runtime_identity: str
+    context_contract_id: str
+    context_tokens: int
+    provider_output_contract_id: str
+    provider_max_output_tokens: int
+    tokenizer_encoding_identity: str
+    tokenizer_revision_version: str
+    serialization_identity: str
+    special_token_handling_identity: str
+    message_framing_law_identity: str
+    token_count_implementation_hash_version: str
+    per_task_R_FH: Mapping[str, int]
+    per_task_I_DC_writer: Mapping[str, int]
+    per_task_F_DC_out: Mapping[str, int]
+    fh_bounded_core_contract_id: str
+    retention_truncation_rule_id: str
+    context_resource_contract_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class CommonCapacityRecord:
+    audit: CommonCapacityAudit
+    B_FH_feasible: int
+    B_DC_feasible: int
+    B_mem_tokens: int
+    L_DC_tokens: int
+    capacity_law_hash: str
+
+
+def materialize_common_capacity(audit: CommonCapacityAudit) -> CommonCapacityRecord:
+    task_set = set(CORE_MAIN_REGISTRY.tasks)
+    reserve_rows = (
+        audit.per_task_R_FH,
+        audit.per_task_I_DC_writer,
+        audit.per_task_F_DC_out,
+    )
+    identities = (
+        audit.model_runtime_identity,
+        audit.context_contract_id,
+        audit.provider_output_contract_id,
+        audit.tokenizer_encoding_identity,
+        audit.tokenizer_revision_version,
+        audit.serialization_identity,
+        audit.special_token_handling_identity,
+        audit.message_framing_law_identity,
+        audit.token_count_implementation_hash_version,
+        audit.fh_bounded_core_contract_id,
+        audit.retention_truncation_rule_id,
+        audit.context_resource_contract_id,
+    )
+    if (
+        any(set(rows) != task_set for rows in reserve_rows)
+        or any(type(value) is not int or value < 0 for rows in reserve_rows for value in rows.values())
+        or audit.context_tokens <= 0
+        or audit.provider_max_output_tokens < CORE_MAIN_REGISTRY.writer_max_output_tokens
+        or any(not identity for identity in identities)
+    ):
+        raise CapacityPlanningError("COMMON_CAPACITY_AUDIT_INVALID")
+    b_fh = min(audit.context_tokens - audit.per_task_R_FH[task] for task in task_set)
+    b_dc = min(
+        min(
+            CORE_MAIN_REGISTRY.writer_max_output_tokens - audit.per_task_F_DC_out[task],
+            audit.context_tokens
+            - audit.per_task_I_DC_writer[task]
+            - audit.per_task_F_DC_out[task],
+        )
+        for task in task_set
+    )
+    b_mem = min(b_fh, b_dc)
+    if b_mem <= 0:
+        raise CapacityPlanningError("COMMON_CAPACITY_NOT_READY")
+    payload = {
+        "audit": asdict(audit),
+        "B_FH_feasible": b_fh,
+        "B_DC_feasible": b_dc,
+        "B_mem_tokens": b_mem,
+        "L_DC_tokens": b_mem,
+        "capacity_law_id": CORE_MAIN_REGISTRY.capacity_law_id,
+        "capacity_unit": CORE_MAIN_REGISTRY.capacity_unit,
+        "O_writer_reg": CORE_MAIN_REGISTRY.writer_max_output_tokens,
+    }
+    capacity_law_hash = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    return CommonCapacityRecord(audit, b_fh, b_dc, b_mem, b_mem, capacity_law_hash)
 
 
 def recompute_capacity(
