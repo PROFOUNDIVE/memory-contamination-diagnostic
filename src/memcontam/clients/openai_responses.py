@@ -19,6 +19,12 @@ class LiveCallNotAuthorized(RuntimeError):
     """Raised before an unapproved live request can reach the provider."""
 
 
+class LunaContractError(ValueError):
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(code)
+
+
 class OpenAIResponsesClient:
     def __init__(
         self,
@@ -70,6 +76,24 @@ class OpenAIResponsesClient:
             "service_tier": self._config.service_tier,
             "store": self._config.store,
         }
+        if model == "gpt-5.6-luna":
+            if (
+                self._config.timeout_seconds != 180
+                or self._config.retries_after_initial_attempt != 2
+                or self._config.store
+                or "previous_response_id" in config
+            ):
+                raise LunaContractError("LUNA_RUNTIME_CONTRACT_MISMATCH")
+            expected_output_tokens = (
+                8192 if config.get("method_stage") == "dc_rs_synthesize" else 4096
+            )
+            if max_output_tokens != expected_output_tokens:
+                raise LunaContractError("LUNA_OUTPUT_CONTRACT_MISMATCH")
+            request.update(
+                reasoning={"mode": "standard", "effort": "none", "context": "current_turn"},
+                tools=[],
+                store=False,
+            )
         seed_parameter_sent = False
         if "requested_seed" in config and _responses_support_seed():
             request["seed"] = config["requested_seed"]

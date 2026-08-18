@@ -60,6 +60,9 @@ class _OpenAI:
 
 
 class _StatusError(Exception):
+    provider_attempts_count: int
+    provider_latency_ms: int
+
     def __init__(self, status_code: int) -> None:
         self.status_code = status_code
 
@@ -116,6 +119,39 @@ def test_responses_client_preserves_messages_and_records_safe_response_metadata(
             "store": False,
         }
     ]
+
+
+def test_luna_request_enforces_current_turn_text_only_contract(monkeypatch) -> None:
+    _OpenAI.outcomes = [_Response()]
+    monkeypatch.setattr(responses_module, "OpenAI", _OpenAI)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    client = OpenAIResponsesClient(
+        ProviderConfig(
+            provider="openai_responses",
+            live_calls_enabled=True,
+            timeout_seconds=180,
+            max_output_tokens=4096,
+            retries_after_initial_attempt=2,
+            retry_delays_seconds=(0.0, 0.0),
+        ),
+        allow_live_calls=True,
+    )
+
+    client.chat(
+        [{"role": "user", "content": "solve"}],
+        model="gpt-5.6-luna",
+        config={"max_output_tokens": 4096},
+    )
+
+    request = _OpenAI.instance.responses.calls[0]
+    assert request["reasoning"] == {
+        "mode": "standard",
+        "effort": "none",
+        "context": "current_turn",
+    }
+    assert request["store"] is False
+    assert request["tools"] == []
+    assert "previous_response_id" not in request
 
 
 @pytest.mark.parametrize("error", [TimeoutError(), _StatusError(429), _StatusError(503)])

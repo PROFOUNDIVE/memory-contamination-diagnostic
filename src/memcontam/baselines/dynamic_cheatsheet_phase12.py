@@ -222,6 +222,11 @@ class DcRsPhase12Adapter:
             model=trial.model,
             config={
                 **_curator_call_config(call_config),
+                **(
+                    {"max_output_tokens": 8192}
+                    if _baseline_id(trial) == "dc_rs"
+                    else {}
+                ),
                 "method_stage": "dc_rs_synthesize",
                 "source_spans": curation_spans,
             },
