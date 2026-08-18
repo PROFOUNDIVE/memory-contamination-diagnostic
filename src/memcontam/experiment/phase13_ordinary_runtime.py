@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, TypeAlias, assert_never
@@ -10,6 +11,7 @@ from memcontam.experiment.phase12.game24_runner import (
     RuntimeIdentities,
     RuntimeWriterCallbacks,
 )
+from memcontam.experiment.phase12.live_branch import LiveArmBranch
 from memcontam.experiment.phase12.runtime_registry import (
     PHASE13_CORE_BASELINE_REGISTRY,
     RuntimeTrialResult,
@@ -38,6 +40,7 @@ OrdinaryBaseline: TypeAlias = Literal[
     "reflexion_style",
     "dc_rs",
 ]
+OrdinaryArm: TypeAlias = Literal["clean", "correct", "irrelevant", "contam"]
 ORDINARY_TASKS: tuple[OrdinaryTask, ...] = (
     "game24",
     "math_equation_balancer",
@@ -70,7 +73,7 @@ class ProspectiveOrdinaryContext:
     verifier: Callable[[str, TaskInstance], Any]
     decoding: Mapping[str, Any]
     identities: RuntimeIdentities
-    branch: Literal["clean"] = "clean"
+    branch: OrdinaryArm = "clean"
     writer_callbacks: RuntimeWriterCallbacks = field(default_factory=RuntimeWriterCallbacks)
     embedding_provider: Any | None = None
     baseline_configs: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
@@ -91,6 +94,7 @@ class ProspectiveOrdinaryContext:
                 self.identities.order_key,
                 condition_id,
             ),
+            branch=self.branch,
             writer_callbacks=self.writer_callbacks,
             embedding_provider=self.embedding_provider,
             baseline_configs=self.baseline_configs,
@@ -109,6 +113,8 @@ class ProspectiveOrdinaryRun:
     client: LLMClient
     verifier: Callable[[str, TaskInstance], Any]
     decoding: Mapping[str, Any]
+    arm: OrdinaryArm = "clean"
+    branch: LiveArmBranch | None = None
     tasks: tuple[TaskInstance, ...] = ()
     core_bundle: Path | None = None
     trajectory_seed: int | None = None
@@ -124,6 +130,14 @@ class ProspectiveOrdinaryRun:
             raise ProspectiveOrdinaryError("ORDINARY_BASELINE_REQUIRED")
         if not self.run_id or not self.model:
             raise ProspectiveOrdinaryError("ORDINARY_RUNTIME_IDENTITY_REQUIRED")
+        if self.branch is None and self.arm != "clean":
+            raise ProspectiveOrdinaryError("ORDINARY_BRANCH_REQUIRED")
+        if self.branch is not None and (
+            self.branch.arm != self.arm
+            or self.branch.checkpoint.state.baseline != self.baseline
+            or self.branch.root_count != (0 if self.arm == "clean" else 1)
+        ):
+            raise ProspectiveOrdinaryError("ORDINARY_BRANCH_IDENTITY_MISMATCH")
         is_core = self.task_name in _CORE_TASKS
         if is_core and (
             self.core_bundle is None
@@ -146,6 +160,7 @@ class ProspectiveOrdinaryRun:
 class ProspectiveOrdinaryResult:
     task_name: OrdinaryTask
     baseline: OrdinaryBaseline
+    arm: OrdinaryArm
     sample_ids: tuple[str, ...]
     trials: tuple[RuntimeTrialResult, ...]
 
@@ -156,7 +171,7 @@ def execute_prospective_ordinary(run: ProspectiveOrdinaryRun) -> ProspectiveOrdi
     tasks = _ordered_tasks(run)
     entry = PHASE13_CORE_BASELINE_REGISTRY[run.baseline]
     contexts = tuple(_context(run, task, index) for index, task in enumerate(tasks, start=1))
-    state = entry.initial_state(contexts[0])
+    state = entry.initial_state(contexts[0]) if run.branch is None else deepcopy(run.branch.state)
     results: list[RuntimeTrialResult] = []
     for context in contexts:
         result = entry.execute_trial(context, state)
@@ -166,6 +181,7 @@ def execute_prospective_ordinary(run: ProspectiveOrdinaryRun) -> ProspectiveOrdi
     return ProspectiveOrdinaryResult(
         run.task_name,
         run.baseline,
+        run.arm,
         tuple(task.sample_id for task in tasks),
         tuple(results),
     )
@@ -204,10 +220,15 @@ def _context(
         decoding=run.decoding,
         identities=RuntimeIdentities(
             run.run_id,
-            f"{run.run_id}:trial:{order_key}:{task.sample_id}",
+            (
+                f"{run.run_id}:trial:{order_key}:{task.sample_id}"
+                if run.arm == "clean"
+                else f"{run.run_id}:{run.arm}:trial:{order_key}:{task.sample_id}"
+            ),
             order_key,
-            run.baseline,
+            run.baseline if run.arm == "clean" else f"{run.baseline}:{run.arm}",
         ),
+        branch=run.arm,
         writer_callbacks=run.writer_callbacks,
         embedding_provider=run.embedding_provider,
         baseline_configs=run.baseline_configs,
@@ -233,6 +254,7 @@ def _write(callbacks: RuntimeWriterCallbacks, result: RuntimeTrialResult) -> Non
 __all__ = [
     "ORDINARY_BASELINES",
     "ORDINARY_TASKS",
+    "OrdinaryArm",
     "ProspectiveOrdinaryContext",
     "ProspectiveOrdinaryError",
     "ProspectiveOrdinaryResult",

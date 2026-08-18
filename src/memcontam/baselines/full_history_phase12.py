@@ -159,7 +159,7 @@ class FullHistoryPhase12Adapter:
             model=trial.model,
             config={
                 **dict(trial.context_config),
-                "arm": "filter" if state.filter_state is not None else "clean",
+                "arm": "filter" if state.filter_state is not None else trial.context_config.get("arm", "clean"),
                 "baseline": _baseline_name(trial.fh_mode),
                 "model": trial.model,
                 "run_id": "phase12",
