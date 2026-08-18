@@ -7,6 +7,7 @@ import pytest
 
 from memcontam.experiment.phase12.filter_challenge.mft_state_models import JsonValue
 from memcontam.readiness.phase13_execution_contract import (
+    CORE_MAIN_REGISTRY,
     Phase13ExecutionError,
     parse_execution_registry,
     validate_execution_closure,
@@ -69,6 +70,49 @@ def test_execution_registry_and_capacity_are_driven_by_prospective_inputs() -> N
     assert plan.raw_maximum_semantic_calls == 143
     assert plan.reserved_semantic_calls == 158
     assert plan.reserved_transport_attempts == 474
+
+
+def test_core_main_registry_matches_final_phase13_authority() -> None:
+    registry = CORE_MAIN_REGISTRY
+
+    assert registry.tasks == (
+        "game24",
+        "math_equation_balancer",
+        "word_sorting",
+        "mmlu_pro_engineering",
+        "mmlu_pro_physics",
+        "gpqa_diamond",
+    )
+    assert registry.memory_baselines == (
+        "fh_bounded",
+        "rag_frozen",
+        "bot_style",
+        "reflexion_style",
+        "dc_rs",
+    )
+    assert registry.arms == ("clean", "correct", "irrelevant", "contam")
+    assert registry.nomem_policy == "singleton_per_task_seed"
+    assert registry.backbone_id == "gpt-5.6-luna"
+    assert (registry.H_run, registry.H_primary, registry.primary_analysis_window_id) == (
+        50,
+        50,
+        "core_prefix_50",
+    )
+    assert registry.capacity_unit == "registered_serialized_tokens"
+    assert registry.capacity_law_id == "luna_common_visible_memory_capacity_v1"
+    assert registry.capacity_formula == "min(B_FH_feasible,B_DC_feasible)"
+    assert registry.dc_rs_capacity_binding == "L_DC_tokens=B_mem_tokens"
+    assert registry.writer_max_output_tokens == 8192
+    assert (registry.preferred_seed_count, registry.fallback_seed_count) == (12, 10)
+    assert registry.rag_deadline == "2026-08-22T18:00:00+09:00"
+    assert registry.rag_deadline_policy == "all_three_or_prospective_extension"
+    assert registry.authority_sha256 == (
+        "34f63f37a49e92607c78ced038c4c70b4c9d5e3fa8fc57d6e97de1ee79db59a8",
+        "0bacce62718a93c14ce4da0c1b426e3823b75cf70b362f8f9a0632e83f4166c1",
+        "eac32c3eb0de5d48cb73a2dbd6cc943d01001650e6262d99aef49e1131071ed1",
+        "880ba261285758b8c5fea697a105690ffd1c0e4b0b6ab8409673f8408d457b11",
+        "624f3e9a198b7bdd14aa5fdfb3883eb141b5a5def8ef5ff4fff59667ca233280",
+    )
 
 
 def test_execution_registry_rejects_templates_outside_declared_dimensions() -> None:
