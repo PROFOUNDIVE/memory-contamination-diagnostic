@@ -14,7 +14,7 @@ def test_new_mcq_rag_cells_fail_closed_before_registered_cutoff() -> None:
     assert registry["cutoff"] == "2026-08-22T18:00:00+09:00"
     assert registry["cutoff_applied"] is False
     assert registry["candidate_package"]["status"] == (
-        "CLEAN_CANDIDATES_ACCEPTED_PROMOTION_BLOCKED"
+        "REVIEWED_CANDIDATES_PROMOTION_BLOCKED"
     )
     assert registry["retrieval_contract"] == {
         "embedding_model": "BAAI/bge-m3",
@@ -34,8 +34,13 @@ def test_new_mcq_rag_cells_fail_closed_before_registered_cutoff() -> None:
         assert cell["reason"] == "NEW_MCQ_RAG_REQUIRED_ARTIFACTS_UNFROZEN"
         assert cell["entry_condition_met"] is False
         assert cell["missing_objects"] == [
+            "complete_source_eligibility_registry",
+            "accepted_document_registry",
             "relevance_universe",
+            "complete_embedding_runtime_artifact",
+            "serialized_clean_index_artifacts",
+            "protocol_v7_near_duplicate_leakage_audit",
             "task_local_intervention_triplets",
             "clean_correct_irrelevant_contam_branch_indices",
         ]
-        assert "clean_index_identity_and_hash" in cell["materialized_objects"]
+        assert "provisional_clean_index_hash" in cell["provisional_objects"]

@@ -5,8 +5,8 @@
   "cutoff_applied": false,
   "candidate_package": {
     "path": "data/phase13/rag/new_mcq/package_manifest_v1.json",
-    "sha256": "c69eecdd447022dac00e27848ceaa93c7fe67c19dda56dadeb6ce5021ea04a7e",
-    "status": "CLEAN_CANDIDATES_ACCEPTED_PROMOTION_BLOCKED"
+    "sha256": "6c657df36e117411c74eb4fcf9b1a7a0f7780bfd7ef1712cc72e72c287f6bdfa",
+    "status": "REVIEWED_CANDIDATES_PROMOTION_BLOCKED"
   },
   "scientific_contract": {
     "documents_per_task": 24,
@@ -39,19 +39,21 @@
       "reason": "NEW_MCQ_RAG_REQUIRED_ARTIFACTS_UNFROZEN",
       "entry_condition_met": false,
       "missing_objects": [
+        "complete_source_eligibility_registry",
+        "accepted_document_registry",
         "relevance_universe",
+        "complete_embedding_runtime_artifact",
+        "serialized_clean_index_artifacts",
+        "protocol_v7_near_duplicate_leakage_audit",
         "task_local_intervention_triplets",
         "clean_correct_irrelevant_contam_branch_indices"
       ],
-      "materialized_objects": [
-        "clean_corpus_semantic_composition_registry",
-        "source_eligibility_and_source_registry",
-        "approved_task_local_authoring_material",
-        "atomic_document_registry",
-        "exact_24_document_corpus_identity_and_content_hashes",
-        "embedding_runtime_artifact",
-        "clean_index_identity_and_hash",
-        "task_specific_leakage_audit_record"
+      "provisional_objects": [
+        "reviewed_candidate_documents",
+        "candidate_corpus_hash",
+        "provisional_embedding_runtime",
+        "provisional_clean_index_hash",
+        "partial_leakage_report"
       ]
     },
     "mmlu_pro_physics": {
@@ -59,19 +61,21 @@
       "reason": "NEW_MCQ_RAG_REQUIRED_ARTIFACTS_UNFROZEN",
       "entry_condition_met": false,
       "missing_objects": [
+        "complete_source_eligibility_registry",
+        "accepted_document_registry",
         "relevance_universe",
+        "complete_embedding_runtime_artifact",
+        "serialized_clean_index_artifacts",
+        "protocol_v7_near_duplicate_leakage_audit",
         "task_local_intervention_triplets",
         "clean_correct_irrelevant_contam_branch_indices"
       ],
-      "materialized_objects": [
-        "clean_corpus_semantic_composition_registry",
-        "source_eligibility_and_source_registry",
-        "approved_task_local_authoring_material",
-        "atomic_document_registry",
-        "exact_24_document_corpus_identity_and_content_hashes",
-        "embedding_runtime_artifact",
-        "clean_index_identity_and_hash",
-        "task_specific_leakage_audit_record"
+      "provisional_objects": [
+        "reviewed_candidate_documents",
+        "candidate_corpus_hash",
+        "provisional_embedding_runtime",
+        "provisional_clean_index_hash",
+        "partial_leakage_report"
       ]
     },
     "gpqa_diamond": {
@@ -79,19 +83,21 @@
       "reason": "NEW_MCQ_RAG_REQUIRED_ARTIFACTS_UNFROZEN",
       "entry_condition_met": false,
       "missing_objects": [
+        "complete_source_eligibility_registry",
+        "accepted_document_registry",
         "relevance_universe",
+        "complete_embedding_runtime_artifact",
+        "serialized_clean_index_artifacts",
+        "protocol_v7_near_duplicate_leakage_audit",
         "task_local_intervention_triplets",
         "clean_correct_irrelevant_contam_branch_indices"
       ],
-      "materialized_objects": [
-        "clean_corpus_semantic_composition_registry",
-        "source_eligibility_and_source_registry",
-        "approved_task_local_authoring_material",
-        "atomic_document_registry",
-        "exact_24_document_corpus_identity_and_content_hashes",
-        "embedding_runtime_artifact",
-        "clean_index_identity_and_hash",
-        "task_specific_leakage_audit_record"
+      "provisional_objects": [
+        "reviewed_candidate_documents",
+        "candidate_corpus_hash",
+        "provisional_embedding_runtime",
+        "provisional_clean_index_hash",
+        "partial_leakage_report"
       ]
     }
   }
