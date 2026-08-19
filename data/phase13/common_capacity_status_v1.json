@@ -1,0 +1,66 @@
+{
+  "schema_version": "phase13_common_capacity_status_v1",
+  "status": "NOT_READY",
+  "reason": "DC_RS_MODEL_VISIBLE_SOURCE_ID_FOOTPRINT_UNBOUNDED",
+  "authority": {
+    "decision_packet": "2026-08-19_PreMain_Technical_Realization_User_Decisions_Recommended_Answers_revised-v3.md",
+    "decision_packet_sha256": "ee223981ccdf6da1cec68d11d63403454739e63a6992bee73101e143fe6f1f0e",
+    "approved_decisions": [
+      "TR-1:A",
+      "TR-2:A"
+    ]
+  },
+  "runtime_contract": {
+    "provider": "OpenAI",
+    "endpoint": "Responses API",
+    "requested_model_id": "gpt-5.6-luna",
+    "dated_provider_snapshot": "not_exposed",
+    "freeze_timestamp_utc": "2026-08-19T08:09:39Z",
+    "context_window_tokens": 1050000,
+    "provider_max_output_tokens": 128000,
+    "answer_max_output_tokens": 4096,
+    "writer_max_output_tokens": 8192,
+    "reasoning_effort": "none",
+    "reasoning_context": "current_turn",
+    "store": false,
+    "tools": "none"
+  },
+  "token_contract": {
+    "contract_id": "phase13_registered_token_accounting_v1",
+    "capacity_unit": "registered_serialized_tokens",
+    "encoding": "o200k_base",
+    "tokenizer_implementation": "tiktoken",
+    "tiktoken_version": "0.13.0",
+    "requirements_lock_sha256": "c644c8f5f9517461f2545e49e3f5f4907c83ad6340d639b54e7bbac15f126465",
+    "per_message_serialization": "role + LF + content",
+    "message_separator": "LF + LF",
+    "line_endings": "LF",
+    "unicode_normalization": "none",
+    "special_token_handling": "disallowed_special=()",
+    "fixed_prompt_overhead_tokens": 0,
+    "registered_safety_margin_tokens": 0,
+    "provider_token_equivalence_claimed": false,
+    "counting_implementation_sha256": "93b1efea3cefcd9c930e96da7268dfc778cd635cf7b310e023bc4af6d1c435ce"
+  },
+  "production_builder_hashes": {
+    "dc_rs_runtime_builder_sha256": "7127678c07d1de7c57840f5582808996dc3f25377c138d6a6156d025eb4b68eb",
+    "dc_rs_prompt_builder_sha256": "b03d99ff77583acf55a5ce8a7797fe7b55cb7f34b7ca2289ff481ec9696456f0"
+  },
+  "incompatibility": {
+    "field": "DC-RS curator source IDs",
+    "production_behavior": "literal retrieved archive entry IDs are rendered into the writer request and may be emitted in the writer response",
+    "missing_bound": "no maximum registered-token length is frozen for run-derived archive entry IDs",
+    "effect": "per_task_I_DC_writer and per_task_F_DC_out have no finite production maximum",
+    "forbidden_implicit_repairs": [
+      "invent a source-ID length cap",
+      "replace literal IDs with rank aliases",
+      "omit source provenance",
+      "materialize reserves from a non-maximum example"
+    ]
+  },
+  "completion": {
+    "capacity_record_materialized": false,
+    "runtime_bound": false,
+    "next_required_action": "prospectively freeze and enforce either a maximum source-ID token footprint or a reversible bounded source-alias codec"
+  }
+}
