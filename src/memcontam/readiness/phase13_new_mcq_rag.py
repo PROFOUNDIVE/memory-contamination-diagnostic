@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,8 +10,6 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from memcontam.contamination.phase12.models import canonical_json_hash
-
-
 TASKS = ("mmlu_pro_engineering", "mmlu_pro_physics", "gpqa_diamond")
 STRATA = (
     "requirement_quantifier_constraint_interpretation",
@@ -85,9 +84,9 @@ class _EvaluationRow(BaseModel):
 class NewMcqRagReport:
     status: str
     reason: str
-    accepted_documents: dict[str, int]
+    reviewed_candidates: dict[str, int]
     source_classes: dict[str, str]
-    clean_corpus_hashes: dict[str, str]
+    candidate_corpus_hashes: dict[str, str]
     candidate_artifact_hashes: dict[str, str]
     review_artifact_hashes: dict[str, str]
     remaining_objects: tuple[str, ...]
@@ -109,7 +108,7 @@ def validate_new_mcq_rag_package(root: Path, evaluation_root: Path) -> NewMcqRag
     if set(registry.task_sources) != set(TASKS) or len(sources) != len(registry.sources):
         raise NewMcqRagError("NEW_MCQ_RAG_SOURCE_REGISTRY_INVALID")
 
-    accepted: dict[str, int] = {}
+    reviewed: dict[str, int] = {}
     source_classes: dict[str, str] = {}
     corpus_hashes: dict[str, str] = {}
     candidate_hashes: dict[str, str] = {}
@@ -128,7 +127,7 @@ def validate_new_mcq_rag_package(root: Path, evaluation_root: Path) -> NewMcqRag
             review,
             _TaskValidationContext(task, registry, sources, all_texts, evaluation_root),
         )
-        accepted[task] = len(candidates)
+        reviewed[task] = len(candidates)
         source_classes[task] = sources[candidates[0].source_registry_ids[0]].source_class
         corpus_hashes[task] = canonical_json_hash(
             [{"id": row.document_id, "text": row.text} for row in candidates]
@@ -136,19 +135,41 @@ def validate_new_mcq_rag_package(root: Path, evaluation_root: Path) -> NewMcqRag
         candidate_hashes[task] = _sha256(candidate_path)
         review_hashes[task] = _sha256(review_path)
 
+    remaining_objects = (
+        "complete_source_eligibility_registry",
+        "accepted_document_registry",
+        "relevance_universe",
+        "complete_embedding_runtime_artifact",
+        "serialized_clean_index_artifacts",
+        "protocol_v7_near_duplicate_leakage_audit",
+        "task_local_intervention_triplets",
+        "clean_correct_irrelevant_contam_branch_indices",
+    )
+    try:
+        manifest_module = importlib.import_module(
+            "memcontam.readiness.phase13_new_mcq_rag_manifest"
+        )
+        manifest_module.validate_package_manifest(
+            root,
+            manifest_module.ManifestEvidence(
+                candidate_hashes,
+                review_hashes,
+                corpus_hashes,
+                remaining_objects,
+            ),
+        )
+    except ValueError as error:
+        code = getattr(error, "code", "NEW_MCQ_RAG_PACKAGE_MANIFEST_STALE")
+        raise NewMcqRagError(code) from error
     return NewMcqRagReport(
         status="NOT_READY",
         reason="NEW_MCQ_RAG_REQUIRED_ARTIFACTS_UNFROZEN",
-        accepted_documents=accepted,
+        reviewed_candidates=reviewed,
         source_classes=source_classes,
-        clean_corpus_hashes=corpus_hashes,
+        candidate_corpus_hashes=corpus_hashes,
         candidate_artifact_hashes=candidate_hashes,
         review_artifact_hashes=review_hashes,
-        remaining_objects=(
-            "relevance_universe",
-            "task_local_intervention_triplets",
-            "clean_correct_irrelevant_contam_branch_indices",
-        ),
+        remaining_objects=remaining_objects,
         promotion_ready=False,
     )
 
