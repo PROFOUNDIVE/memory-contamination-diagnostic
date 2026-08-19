@@ -1,0 +1,46 @@
+{
+  "schema_version": "new_mcq_rag_source_registry_v1",
+  "sources": [
+    {
+      "source_registry_id": "mmlu_pro_spec_v1",
+      "source_class": "public_task_specification",
+      "repo": "TIGER-Lab/MMLU-Pro",
+      "revision": "475d58ba0cc18a15fd5d4221f41919199e692331",
+      "path": "README.md",
+      "sha256": "6c218f5410d2ab9bce17320426525c874d715f4b6b2ee3d62c0eceac6ac8db0a",
+      "allowed_sections": [
+        "dataset summary and task format",
+        "reasoning-focused multiple-choice design",
+        "Engineering and Physics category identities"
+      ],
+      "evaluation_rows_eligible": false,
+      "gold_fields_eligible": false
+    },
+    {
+      "source_registry_id": "gpqa_spec_v1",
+      "source_class": "public_task_specification",
+      "repo": "Idavidrein/gpqa",
+      "revision": "633f5ee89ab8ad4522a9f850766b73f62147ffdd",
+      "path": "README.md",
+      "sha256": "c703e934fa58d9ab66e470e5283de7d4c6ef02fe4ccb3e2d7fe97e5399e6eb36",
+      "allowed_sections": [
+        "dataset description",
+        "task categories and scientific domains",
+        "intended scalable-oversight and capabilities uses"
+      ],
+      "evaluation_rows_eligible": false,
+      "gold_fields_eligible": false
+    }
+  ],
+  "task_sources": {
+    "mmlu_pro_engineering": [
+      "mmlu_pro_spec_v1"
+    ],
+    "mmlu_pro_physics": [
+      "mmlu_pro_spec_v1"
+    ],
+    "gpqa_diamond": [
+      "gpqa_spec_v1"
+    ]
+  }
+}

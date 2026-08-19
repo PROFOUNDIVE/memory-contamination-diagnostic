@@ -1,0 +1,26 @@
+{
+  "schema_version": "new_mcq_rag_authoring_contract_v1",
+  "authority_decisions": [
+    "RAG-1:A",
+    "RAG-2:A"
+  ],
+  "authoring_template_id": "new_mcq_procedural_atomic_v1",
+  "review_contract_id": "new_mcq_procedural_review_v1",
+  "document_schema_version": "new_mcq_rag_clean_doc_v1",
+  "semantic_strata": [
+    "requirement_quantifier_constraint_interpretation",
+    "option_wise_evidence_comparison_elimination",
+    "contradiction_counterexample_consistency_checking",
+    "uncertainty_management_final_answer_verification"
+  ],
+  "documents_per_stratum": 6,
+  "documents_per_task": 24,
+  "additional_scientific_micro_roles": false,
+  "fixed_word_or_paragraph_threshold": false,
+  "candidate_authoring_mode": "agent_assisted",
+  "author_self_approval_allowed": false,
+  "acceptance_gate": [
+    "deterministic_validation",
+    "independent_semantic_review_pass"
+  ]
+}
