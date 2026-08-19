@@ -1,17 +1,40 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
+
+import pytest
+
+from memcontam.baselines.dynamic_cheatsheet_phase12 import (
+    DcRsContractError,
+    SourceAliasTable,
+)
 
 
 STATUS_PATH = Path("data/phase13/common_capacity_status_v1.json")
 
 
-def test_approved_token_contract_fails_closed_on_unbounded_writer_framing() -> None:
+def test_source_aliases_are_bounded_reversible_and_collision_safe() -> None:
+    table = SourceAliasTable.from_source_ids(("archive:" + "x" * 500, "archive:second"))
+
+    assert table.visible_ids == ("src01", "src02")
+    assert table.resolve(("src02", "src01")) == ("archive:second", "archive:" + "x" * 500)
+    with pytest.raises(DcRsContractError, match="INVALID_EXPLICIT_SOURCE_IDS"):
+        table.resolve(("src01", "src01"))
+    with pytest.raises(DcRsContractError, match="INVALID_EXPLICIT_SOURCE_IDS"):
+        table.resolve(("src03",))
+    with pytest.raises(DcRsContractError, match="INVALID_EXPLICIT_SOURCE_IDS"):
+        SourceAliasTable.from_source_ids(("duplicate", "duplicate"))
+    with pytest.raises(DcRsContractError, match="INVALID_EXPLICIT_SOURCE_IDS"):
+        SourceAliasTable.from_source_ids(tuple(f"source-{index}" for index in range(100)))
+
+
+def test_approved_token_contract_records_completed_alias_repair_and_narrow_blockers() -> None:
     status = json.loads(STATUS_PATH.read_text(encoding="utf-8"))
 
     assert status["status"] == "NOT_READY"
-    assert status["reason"] == "DC_RS_MODEL_VISIBLE_SOURCE_ID_FOOTPRINT_UNBOUNDED"
+    assert status["reason"] == "REGISTERED_WRITER_IO_BOUNDS_UNFROZEN"
     expected_runtime = {
         "provider": "OpenAI",
         "endpoint": "Responses API",
@@ -21,6 +44,8 @@ def test_approved_token_contract_fails_closed_on_unbounded_writer_framing() -> N
         "provider_max_output_tokens": 128_000,
         "answer_max_output_tokens": 4096,
         "writer_max_output_tokens": 8192,
+        "service_tier_decision_code": 3,
+        "service_tier_provider_literal": None,
     }
     assert {
         key: status["runtime_contract"][key] for key in expected_runtime
@@ -39,10 +64,33 @@ def test_approved_token_contract_fails_closed_on_unbounded_writer_framing() -> N
             "16710d2e27765db224ad9a678076375ac1bba8c684e79edc55a5a52ac0fcfb9f"
         ),
     }
-    assert status["completion"]["remaining_prerequisites"] == [
-        "bounded_dc_rs_model_visible_source_id_contract",
-        "official_provider_contract_source_identity",
-        "service_tier",
-    ]
-    assert status["completion"]["capacity_record_materialized"] is False
-    assert status["completion"]["runtime_bound"] is False
+    assert status["source_alias_contract"]["visible_format"] == "srcNN"
+    assert status["source_alias_contract"]["maximum_visible_alias_tokens"] == 2
+    assert status["source_alias_contract"]["runtime_bound"] is True
+    implementation = Path("src/memcontam/baselines/dynamic_cheatsheet_phase12.py")
+    assert status["source_alias_contract"]["implementation_sha256"] == hashlib.sha256(
+        implementation.read_bytes()
+    ).hexdigest()
+    assert status["token_contract"]["counting_implementation_sha256"] == hashlib.sha256(
+        Path("src/memcontam/baselines/prompt_budget.py").read_bytes()
+    ).hexdigest()
+    assert status["production_builder_hashes"] == {
+        "dc_rs_runtime_builder_sha256": hashlib.sha256(
+            Path("src/memcontam/experiment/phase13_dc_rs_runtime.py").read_bytes()
+        ).hexdigest(),
+        "dc_rs_prompt_builder_sha256": hashlib.sha256(implementation.read_bytes()).hexdigest(),
+    }
+    assert status["completion"] == {
+        "capacity_record_materialized": False,
+        "runtime_bound": False,
+        "remaining_prerequisites": [
+            "registered_raw_answer_token_ceiling",
+            "strict_curator_response_grammar",
+            "official_provider_contract_source_identity",
+            "service_tier_provider_literal",
+        ],
+        "next_required_action": (
+            "freeze the local registered-token answer ceiling, strict curator grammar, "
+            "official provider-contract source identity, and literal OpenAI service tier"
+        ),
+    }

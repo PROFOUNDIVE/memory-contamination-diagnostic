@@ -1,7 +1,7 @@
 {
   "schema_version": "phase13_common_capacity_status_v1",
   "status": "NOT_READY",
-  "reason": "DC_RS_MODEL_VISIBLE_SOURCE_ID_FOOTPRINT_UNBOUNDED",
+  "reason": "REGISTERED_WRITER_IO_BOUNDS_UNFROZEN",
   "authority": {
     "decision_packet": "2026-08-19_PreMain_Technical_Realization_User_Decisions_Recommended_Answers_revised-v3.md",
     "decision_packet_sha256": "ee223981ccdf6da1cec68d11d63403454739e63a6992bee73101e143fe6f1f0e",
@@ -20,6 +20,8 @@
     "provider_max_output_tokens": 128000,
     "answer_max_output_tokens": 4096,
     "writer_max_output_tokens": 8192,
+    "service_tier_decision_code": 3,
+    "service_tier_provider_literal": null,
     "reasoning_effort": "none",
     "reasoning_context": "current_turn",
     "store": false,
@@ -40,11 +42,23 @@
     "fixed_prompt_overhead_tokens": 0,
     "registered_safety_margin_tokens": 0,
     "provider_token_equivalence_claimed": false,
-    "counting_implementation_sha256": "93b1efea3cefcd9c930e96da7268dfc778cd635cf7b310e023bc4af6d1c435ce"
+    "counting_implementation_sha256": "87fefb5dbb42a469d26acbbf08e53048f8de58dc2506a97085ba87c7cf4ea713"
+  },
+  "source_alias_contract": {
+    "contract_id": "dc_rs_visible_source_alias_v1",
+    "visible_format": "srcNN",
+    "maximum_aliases_per_call": 99,
+    "maximum_visible_alias_tokens": 2,
+    "ordering": "retrieval_order_one_based",
+    "resolution": "per_call_alias_table_to_exact_archive_entry_id",
+    "collision_policy": "duplicate_source_ids_unknown_aliases_and_duplicate_aliases_fail_closed",
+    "canonical_provenance_preserved": true,
+    "runtime_bound": true,
+    "implementation_sha256": "1fe5d9800976a095bcd7f0cc639883cfc83b48389f3f51e58cf85cff0e41ad38"
   },
   "production_builder_hashes": {
-    "dc_rs_runtime_builder_sha256": "7127678c07d1de7c57840f5582808996dc3f25377c138d6a6156d025eb4b68eb",
-    "dc_rs_prompt_builder_sha256": "b03d99ff77583acf55a5ce8a7797fe7b55cb7f34b7ca2289ff481ec9696456f0"
+    "dc_rs_runtime_builder_sha256": "66274d3056457e5dd0c6e84c3df5a5f8bbf2380404bea59000928478c831723f",
+    "dc_rs_prompt_builder_sha256": "1fe5d9800976a095bcd7f0cc639883cfc83b48389f3f51e58cf85cff0e41ad38"
   },
   "runtime_implementation": {
     "openai_sdk_version": "2.46.0",
@@ -54,14 +68,14 @@
     "client_implementation_sha256": "16710d2e27765db224ad9a678076375ac1bba8c684e79edc55a5a52ac0fcfb9f"
   },
   "incompatibility": {
-    "field": "DC-RS curator source IDs",
-    "production_behavior": "literal retrieved archive entry IDs are rendered into the writer request and may be emitted in the writer response",
-    "missing_bound": "no maximum registered-token length is frozen for run-derived archive entry IDs",
-    "effect": "per_task_I_DC_writer and per_task_F_DC_out have no finite production maximum",
+    "field": "DC-RS registered writer I/O",
+    "production_behavior": "the curator input includes persisted raw answer text and the curator parser permits text outside the first cheatsheet block",
+    "missing_bound": "no local o200k_base ceiling is frozen for persisted raw answers and no strict no-extra-text curator response grammar is frozen",
+    "effect": "per_task_I_DC_writer and per_task_F_DC_out have no finite exact registered-token maximum",
     "forbidden_implicit_repairs": [
-      "invent a source-ID length cap",
-      "replace literal IDs with rank aliases",
-      "omit source provenance",
+      "treat provider max_output_tokens as an o200k_base ceiling",
+      "discard curator text outside the cheatsheet without a frozen grammar",
+      "map service tier decision code 3 to an OpenAI API string",
       "materialize reserves from a non-maximum example"
     ]
   },
@@ -69,10 +83,11 @@
     "capacity_record_materialized": false,
     "runtime_bound": false,
     "remaining_prerequisites": [
-      "bounded_dc_rs_model_visible_source_id_contract",
+      "registered_raw_answer_token_ceiling",
+      "strict_curator_response_grammar",
       "official_provider_contract_source_identity",
-      "service_tier"
+      "service_tier_provider_literal"
     ],
-    "next_required_action": "freeze the remaining runtime prerequisites and enforce either a maximum source-ID token footprint or a reversible bounded source-alias codec"
+    "next_required_action": "freeze the local registered-token answer ceiling, strict curator grammar, official provider-contract source identity, and literal OpenAI service tier"
   }
 }
