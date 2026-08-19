@@ -1,0 +1,23 @@
+{
+  "schema_version": "new_mcq_rag_embedding_runtime_v1",
+  "model_id": "BAAI/bge-m3",
+  "revision": "5617a9f61b028005a4858fdac845db406aefb181",
+  "model_snapshot_tree_sha256": "36b12c5d34c027708130f46fb57645ceb7c5bffe3a72a6b78408440f363bb94a",
+  "model_snapshot_file_count": 30,
+  "vector_dimension": 1024,
+  "normalize_embeddings": true,
+  "similarity": "cosine",
+  "top_k": 3,
+  "reranker": null,
+  "score_threshold": null,
+  "tie_break": "lexical_document_id",
+  "device": "cpu",
+  "dtype": "float32",
+  "batch_size": 32,
+  "local_files_only": true,
+  "sentence_transformers_version": "5.6.0",
+  "transformers_version": "5.14.1",
+  "torch_version": "2.13.0+cu130",
+  "numpy_version": "2.4.6",
+  "index_version": "index-v3"
+}

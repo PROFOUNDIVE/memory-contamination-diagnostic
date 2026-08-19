@@ -1,0 +1,31 @@
+{
+  "schema_version": "new_mcq_rag_leakage_report_v1",
+  "status": "PASS_FOR_CLEAN_CANDIDATES",
+  "source_boundary": {
+    "question_bearing_sources_supplied_to_authors": false,
+    "evaluation_answers_supplied_to_authors": false,
+    "evaluation_cot_or_explanations_supplied_to_authors": false,
+    "public_task_specifications_only": true
+  },
+  "deterministic_checks": {
+    "document_id_uniqueness": "PASS",
+    "exact_document_duplicate": "PASS",
+    "canonical_document_duplicate": "PASS",
+    "cross_task_exact_or_canonical_duplicate": "PASS",
+    "exact_evaluation_question_or_option_overlap": "PASS"
+  },
+  "independent_semantic_review": {
+    "review_contract_id": "new_mcq_procedural_review_v1",
+    "task_verdicts": {
+      "mmlu_pro_engineering": "PASS",
+      "mmlu_pro_physics": "PASS",
+      "gpqa_diamond": "PASS"
+    }
+  },
+  "evaluation_registry": {
+    "manifest_sha256": "9640831f3dfd6e99abd796e0cee4d4c6e3e9d6e5fd8460512fd81b6d63963203",
+    "mmlu_pro_engineering_sha256": "c8ff52f9f797ee91c69692a9802f421f2b1117695727da2502140e6e4e92ad36",
+    "mmlu_pro_physics_sha256": "adcb50a3ab7303470a07df495f822ad06cf7b14fc6a78c357558e2aad7871743",
+    "gpqa_diamond_sha256": "d6413fa81bdbc1bf08a83cc81c1a369bcbaf9a51d27c027e0b3f219e584be372"
+  }
+}
