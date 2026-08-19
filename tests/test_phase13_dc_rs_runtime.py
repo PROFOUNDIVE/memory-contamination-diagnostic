@@ -132,7 +132,7 @@ def _context(*, tool_mode: str = "text_only") -> Phase13DcRsContext:
             "dc_rs": {
                 "embedding_mode": "test_double",
                 "tool_mode": tool_mode,
-                "serialized_cheatsheet_budget_bytes": 1024,
+                "serialized_cheatsheet_budget_tokens": 1024,
             }
         },
         initial_states={"dc_rs": _state()},
@@ -471,7 +471,7 @@ def test_dc_rs_runtime_allows_spoofable_provider_only_in_explicit_replay_mode() 
         baseline_configs={
             "dc_rs": {
                 "tool_mode": "text_only",
-                "serialized_cheatsheet_budget_bytes": 1024,
+                "serialized_cheatsheet_budget_tokens": 1024,
             }
         },
     )
@@ -531,7 +531,9 @@ def test_dc_rs_rejects_rewrite_over_explicit_serialized_budget() -> None:
         client=ReplayClient(
             responses_by_sample={
                 task.sample_id: {
-                    "dc_rs_synthesize": f"<cheatsheet>{'x' * 1025}</cheatsheet>",
+                    "dc_rs_synthesize": (
+                        f"<cheatsheet>{' '.join(['x'] * 1025)}</cheatsheet>"
+                    ),
                     "dc_rs_generate": "final: B",
                 }
             }
@@ -555,8 +557,8 @@ def test_dc_rs_rejects_oversized_existing_strategy_before_curation() -> None:
                         semantic_kind="dynamic_cheatsheet",
                         schema_version="phase12_native_entry_v1",
                         native_component="strategy",
-                        content="x" * 1025,
-                        content_hash=canonical_content_hash("x" * 1025),
+                        content=" ".join(["x"] * 1025),
+                        content_hash=canonical_content_hash(" ".join(["x"] * 1025)),
                     )
                 ],
                 allow_unparented_strategies=True,
@@ -637,7 +639,7 @@ def test_dc_rs_runtime_accepts_historical_task_native_context() -> None:
         baseline_configs={
             "dc_rs": {
                 "embedding_mode": "test_double",
-                "serialized_cheatsheet_budget_bytes": 1024,
+                "serialized_cheatsheet_budget_tokens": 1024,
             }
         },
         initial_states={"dc_rs": DcRsStateV3(archive=[])},

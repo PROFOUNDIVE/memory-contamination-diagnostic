@@ -36,6 +36,10 @@ def count_prompt_tokens(messages: Sequence[Mapping[str, str]], encoding_name: st
     return len(encoding.encode("\n\n".join(blocks), disallowed_special=()))
 
 
+def count_text_tokens(text: str, encoding_name: str) -> int:
+    return len(tiktoken.get_encoding(encoding_name).encode(text, disallowed_special=()))
+
+
 def effective_prompt_budget(spec: PromptBudgetSpec, current_task_tokens: int) -> int:
     """Return history capacity after reserving output, fixed overhead, safety, and the current task."""
     _require_nonnegative("current_task_tokens", current_task_tokens)

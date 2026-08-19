@@ -8,6 +8,7 @@ from typing import Any, Literal, Mapping, Sequence
 from memcontam.baselines import dynamic_cheatsheet_optional as legacy_dc
 from memcontam.baselines.common import parse_final_answer
 from memcontam.baselines.contracts import BaselineExecutionOutcome
+from memcontam.baselines.prompt_budget import count_text_tokens
 from memcontam.clients.base import LLMClient
 from memcontam.clients.recording import MethodCallRecorder
 from memcontam.memory.admission import AdmissionContext, AdmissionDecision, AdmissionError
@@ -53,6 +54,7 @@ LineageStatus = Literal["exact", "unavailable", "approximate"]
 _MAX_TOOL_TRACE_EVENTS = 3
 _MAX_TOOL_TRACE_CHARS = 4096
 _MAX_SOURCE_ALIASES = 99
+_REGISTERED_TOKEN_ENCODING = "o200k_base"
 
 
 class DcRsContractError(ValueError):
@@ -976,8 +978,8 @@ def _validate_core_cheatsheet_budget(
     candidate: StrategyCandidateState,
     trial: DcRsTrialContextV3,
 ) -> None:
-    budget = trial.config.get("serialized_cheatsheet_budget_bytes")
+    budget = trial.config.get("serialized_cheatsheet_budget_tokens")
     if type(budget) is not int or budget <= 0:
         raise DcRsContractError("DC_RS_CHEATSHEET_BUDGET_REQUIRED")
-    if len(candidate.content.encode("utf-8")) > budget:
+    if count_text_tokens(candidate.content, _REGISTERED_TOKEN_ENCODING) > budget:
         raise DcRsContractError("DC_RS_CHEATSHEET_BUDGET_EXCEEDED")

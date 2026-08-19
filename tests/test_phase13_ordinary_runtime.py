@@ -308,7 +308,7 @@ def test_dc_rs_ordinary_execution_accepts_each_core_task_stream(
             baseline_configs={
                 "dc_rs": {
                     "embedding_mode": "test_double",
-                    "serialized_cheatsheet_budget_bytes": 1024,
+                    "serialized_cheatsheet_budget_tokens": 1024,
                     "tool_mode": "text_only",
                 }
             },
@@ -370,7 +370,7 @@ def test_dc_rs_ordinary_execution_accepts_original_task_native_inputs(
             baseline_configs={
                 "dc_rs": {
                     "embedding_mode": "test_double",
-                    "serialized_cheatsheet_budget_bytes": 1024,
+                    "serialized_cheatsheet_budget_tokens": 1024,
                     "tool_mode": "text_only",
                 }
             },
