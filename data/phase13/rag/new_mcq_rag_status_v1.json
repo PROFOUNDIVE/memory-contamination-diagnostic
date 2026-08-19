@@ -3,6 +3,11 @@
   "authority_sha256": "880ba261285758b8c5fea697a105690ffd1c0e4b0b6ab8409673f8408d457b11",
   "cutoff": "2026-08-22T18:00:00+09:00",
   "cutoff_applied": false,
+  "candidate_package": {
+    "path": "data/phase13/rag/new_mcq/package_manifest_v1.json",
+    "sha256": "c69eecdd447022dac00e27848ceaa93c7fe67c19dda56dadeb6ce5021ea04a7e",
+    "status": "CLEAN_CANDIDATES_ACCEPTED_PROMOTION_BLOCKED"
+  },
   "scientific_contract": {
     "documents_per_task": 24,
     "documents_per_stratum": 6,
@@ -34,17 +39,19 @@
       "reason": "NEW_MCQ_RAG_REQUIRED_ARTIFACTS_UNFROZEN",
       "entry_condition_met": false,
       "missing_objects": [
+        "relevance_universe",
+        "task_local_intervention_triplets",
+        "clean_correct_irrelevant_contam_branch_indices"
+      ],
+      "materialized_objects": [
         "clean_corpus_semantic_composition_registry",
         "source_eligibility_and_source_registry",
         "approved_task_local_authoring_material",
         "atomic_document_registry",
         "exact_24_document_corpus_identity_and_content_hashes",
-        "relevance_universe",
         "embedding_runtime_artifact",
-        "index_identity_and_hash",
-        "runtime_hash",
-        "task_specific_leakage_audit_record",
-        "clean_correct_irrelevant_contam_branch_indices"
+        "clean_index_identity_and_hash",
+        "task_specific_leakage_audit_record"
       ]
     },
     "mmlu_pro_physics": {
@@ -52,17 +59,19 @@
       "reason": "NEW_MCQ_RAG_REQUIRED_ARTIFACTS_UNFROZEN",
       "entry_condition_met": false,
       "missing_objects": [
+        "relevance_universe",
+        "task_local_intervention_triplets",
+        "clean_correct_irrelevant_contam_branch_indices"
+      ],
+      "materialized_objects": [
         "clean_corpus_semantic_composition_registry",
         "source_eligibility_and_source_registry",
         "approved_task_local_authoring_material",
         "atomic_document_registry",
         "exact_24_document_corpus_identity_and_content_hashes",
-        "relevance_universe",
         "embedding_runtime_artifact",
-        "index_identity_and_hash",
-        "runtime_hash",
-        "task_specific_leakage_audit_record",
-        "clean_correct_irrelevant_contam_branch_indices"
+        "clean_index_identity_and_hash",
+        "task_specific_leakage_audit_record"
       ]
     },
     "gpqa_diamond": {
@@ -70,17 +79,19 @@
       "reason": "NEW_MCQ_RAG_REQUIRED_ARTIFACTS_UNFROZEN",
       "entry_condition_met": false,
       "missing_objects": [
+        "relevance_universe",
+        "task_local_intervention_triplets",
+        "clean_correct_irrelevant_contam_branch_indices"
+      ],
+      "materialized_objects": [
         "clean_corpus_semantic_composition_registry",
         "source_eligibility_and_source_registry",
         "approved_task_local_authoring_material",
         "atomic_document_registry",
         "exact_24_document_corpus_identity_and_content_hashes",
-        "relevance_universe",
         "embedding_runtime_artifact",
-        "index_identity_and_hash",
-        "runtime_hash",
-        "task_specific_leakage_audit_record",
-        "clean_correct_irrelevant_contam_branch_indices"
+        "clean_index_identity_and_hash",
+        "task_specific_leakage_audit_record"
       ]
     }
   }

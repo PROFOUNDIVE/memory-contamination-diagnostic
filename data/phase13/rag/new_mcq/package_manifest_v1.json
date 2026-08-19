@@ -1,0 +1,49 @@
+{
+  "schema_version": "new_mcq_rag_package_manifest_v1",
+  "source_registry": {
+    "path": "source_registry_v1.json",
+    "sha256": "326efe2b32e3d1403deb37acb1450fb37179ef3ca61a9423db2f94198156a32d"
+  },
+  "authoring_contract": {
+    "path": "authoring_contract_v1.json",
+    "sha256": "e0a599b21f08d0b8ae6c17d9799cff28de7ebb98d643a6aeffce9fab0cbd3023"
+  },
+  "tasks": {
+    "mmlu_pro_engineering": {
+      "documents": 24,
+      "candidate_path": "candidates/mmlu_pro_engineering.jsonl",
+      "candidate_sha256": "4777859681ac282b7cb557ef3897a0a839d0e05e992922332ee7709af9aa8ffd",
+      "review_path": "reviews/mmlu_pro_engineering.json",
+      "review_sha256": "0380240d509c122d5c94ff51f69e1c68850c0433d840b2c723093e7c137a9e91",
+      "clean_corpus_hash": "cf7961807bdc482d9a28ee7d44537d56f77ccac8a6f7244eb74682f98f4b2ae1",
+      "clean_index_artifact_hash": "8dedaa5ea49abfe1ac57a7cd98b61d33d2546276207547d3d89835d7cb068d5b"
+    },
+    "mmlu_pro_physics": {
+      "documents": 24,
+      "candidate_path": "candidates/mmlu_pro_physics.jsonl",
+      "candidate_sha256": "6a221e0f2eb0781c338e17f71a35228fd48bafb0fe89ef9822a6ae7af08d5b81",
+      "review_path": "reviews/mmlu_pro_physics.json",
+      "review_sha256": "104f622ba9c7d6d8d499d276f3a305755c5addb4ef7ce0f6770593f1d1c24a8a",
+      "clean_corpus_hash": "9346565c76e59dc0c5a5121cf57529cab6d5cbb6803ff0fc74189717a9292108",
+      "clean_index_artifact_hash": "800076b964989f69fade30d969aa096cb967609417ea0a3bb92cdf9b89cab4de"
+    },
+    "gpqa_diamond": {
+      "documents": 24,
+      "candidate_path": "candidates/gpqa_diamond.jsonl",
+      "candidate_sha256": "6a581f76b5192b79ae45b5a1bd283f2068a90699db8168e3cec7a1abf914564e",
+      "review_path": "reviews/gpqa_diamond.json",
+      "review_sha256": "29df21485ae2d0cd5a41b27b20eea0d2fedb32467169136fea87dd9202b41a9c",
+      "clean_corpus_hash": "21ac3f5ec61421d8d889cbcb2932f7000bf4c3a4ee8f3f30d3a2cbc3e8d505d1",
+      "clean_index_artifact_hash": "0b47d852d8d3fe39f805f16cef44228438ab205008e9b3d691cda6256096a1d9"
+    }
+  },
+  "promotion": {
+    "status": "NOT_READY",
+    "reason": "NEW_MCQ_RAG_REQUIRED_ARTIFACTS_UNFROZEN",
+    "remaining_objects": [
+      "relevance_universe",
+      "task_local_intervention_triplets",
+      "clean_correct_irrelevant_contam_branch_indices"
+    ]
+  }
+}
