@@ -1,6 +1,11 @@
 {
   "schema_version": "new_mcq_rag_leakage_report_v1",
-  "status": "PASS_FOR_CLEAN_CANDIDATES",
+  "status": "PARTIAL",
+  "missing_checks": [
+    "frozen_protocol_v7_canonicalizer_identity",
+    "frozen_semantic_near_duplicate_threshold",
+    "semantic_near_duplicate_result"
+  ],
   "source_boundary": {
     "question_bearing_sources_supplied_to_authors": false,
     "evaluation_answers_supplied_to_authors": false,

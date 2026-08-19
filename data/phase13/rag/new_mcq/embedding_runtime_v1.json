@@ -1,5 +1,14 @@
 {
-  "schema_version": "new_mcq_rag_embedding_runtime_v1",
+  "schema_version": "new_mcq_rag_provisional_embedding_runtime_v1",
+  "status": "INCOMPLETE",
+  "missing_fields": [
+    "tokenizer_identity_and_revision",
+    "pooling_configuration_hash",
+    "maximum_sequence_length",
+    "truncation_and_padding_policy",
+    "deterministic_algorithm_setting",
+    "runtime_implementation_hash"
+  ],
   "model_id": "BAAI/bge-m3",
   "revision": "5617a9f61b028005a4858fdac845db406aefb181",
   "model_snapshot_tree_sha256": "36b12c5d34c027708130f46fb57645ceb7c5bffe3a72a6b78408440f363bb94a",
