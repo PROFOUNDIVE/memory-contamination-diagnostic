@@ -41,6 +41,7 @@ __all__ = [
     "DcRsStateV3",
     "DcRsToolContractError",
     "DcRsTrialContextV3",
+    "SourceAliasTable",
     "StrategyCandidateState",
     "curate_pre_generation",
 ]
@@ -51,6 +52,7 @@ LineageStatus = Literal["exact", "unavailable", "approximate"]
 
 _MAX_TOOL_TRACE_EVENTS = 3
 _MAX_TOOL_TRACE_CHARS = 4096
+_MAX_SOURCE_ALIASES = 99
 
 
 class DcRsContractError(ValueError):
@@ -61,6 +63,35 @@ class DcRsContractError(ValueError):
 
 class DcRsToolContractError(DcRsContractError):
     pass
+
+
+@dataclass(frozen=True, slots=True)
+class SourceAliasTable:
+    bindings: tuple[tuple[str, str], ...]
+
+    @classmethod
+    def from_source_ids(cls, source_ids: Sequence[str]) -> SourceAliasTable:
+        if (
+            len(source_ids) > _MAX_SOURCE_ALIASES
+            or len(source_ids) != len(set(source_ids))
+            or any(not source_id for source_id in source_ids)
+        ):
+            raise DcRsContractError("INVALID_EXPLICIT_SOURCE_IDS")
+        return cls(
+            tuple((f"src{index:02d}", source_id) for index, source_id in enumerate(source_ids, 1))
+        )
+
+    @property
+    def visible_ids(self) -> tuple[str, ...]:
+        return tuple(alias for alias, _source_id in self.bindings)
+
+    def resolve(self, aliases: Sequence[str]) -> tuple[str, ...]:
+        if len(aliases) != len(set(aliases)):
+            raise DcRsContractError("INVALID_EXPLICIT_SOURCE_IDS")
+        by_alias = dict(self.bindings)
+        if any(alias not in by_alias for alias in aliases):
+            raise DcRsContractError("INVALID_EXPLICIT_SOURCE_IDS")
+        return tuple(by_alias[alias] for alias in aliases)
 
 
 @dataclass(frozen=True)
@@ -147,12 +178,15 @@ def curate_pre_generation(
     fallback_strategy: str,
     retrieved_archive_ids: Sequence[str],
     inferred_parent_ids: Sequence[str] = (),
+    source_aliases: SourceAliasTable | None = None,
 ) -> StrategyCandidateState:
     """Parse a curator result without turning visible archive entries into parents."""
     if inferred_parent_ids:
         raise DcRsContractError("IMPLICIT_PARENT_UNION")
     content, parser_status = legacy_dc._extract_cheatsheet(curator_output, fallback_strategy)
     source_ids = _explicit_source_ids(curator_output)
+    if source_aliases is not None:
+        source_ids = source_aliases.resolve(source_ids)
     if len(source_ids) != len(set(source_ids)) or any(not entry_id for entry_id in source_ids):
         raise DcRsContractError("INVALID_EXPLICIT_SOURCE_IDS")
     return StrategyCandidateState(
@@ -201,6 +235,12 @@ class DcRsPhase12Adapter:
         )
         archive_by_id = {entry.entry_id: entry for entry in active_archive}
         retrieved_archive = [archive_by_id[record.document_id] for record in retrieved_records]
+        core_dc_rs = _baseline_id(trial) == "dc_rs"
+        source_aliases = (
+            SourceAliasTable.from_source_ids(tuple(entry.entry_id for entry in retrieved_archive))
+            if core_dc_rs
+            else None
+        )
         recorder = MethodCallRecorder(trial.client)
         call_config = {**dict(trial.config), "sample_id": trial.task.sample_id}
         curation_message, curation_spans = legacy_dc._synthesis_message_with_sources(
@@ -208,13 +248,19 @@ class DcRsPhase12Adapter:
             [] if prior_strategy is None else [_strategy_memory(prior_strategy)],
             retrieved_archive,
         )
+        visible_source_ids = (
+            source_aliases.visible_ids
+            if source_aliases is not None
+            else tuple(entry.entry_id for entry in retrieved_archive)
+        )
+        source_label = "aliases" if source_aliases is not None else "IDs"
         curation_message = {
             **curation_message,
             "content": (
                 f"{curation_message['content']}\n\n"
                 "If you directly use archive interactions, append "
-                "<source_ids>comma-separated archive IDs</source_ids>. "
-                f"Available archive IDs: {', '.join(entry.entry_id for entry in retrieved_archive)}"
+                f"<source_ids>comma-separated archive {source_label}</source_ids>. "
+                f"Available archive {source_label}: {', '.join(visible_source_ids)}"
             ),
         }
         curated = recorder.chat(
@@ -237,8 +283,8 @@ class DcRsPhase12Adapter:
             curated.content,
             fallback_strategy=prior_content,
             retrieved_archive_ids=tuple(entry.entry_id for entry in retrieved_archive),
+            source_aliases=source_aliases,
         )
-        core_dc_rs = _baseline_id(trial) == "dc_rs"
         allowed_parent_ids = {
             entry.entry_id for entry in (retrieved_archive if core_dc_rs else active_archive)
         }

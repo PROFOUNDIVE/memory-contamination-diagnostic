@@ -111,7 +111,7 @@ def _context(*, tool_mode: str = "text_only") -> Phase13DcRsContext:
                 _task().sample_id: {
                     "dc_rs_synthesize": (
                         "<cheatsheet>rewritten engineering strategy</cheatsheet>"
-                        "<source_ids>archive-root</source_ids>"
+                        "<source_ids>src01</source_ids>"
                     ),
                     "dc_rs_generate": "visible current reasoning\nfinal: B",
                 }
@@ -152,6 +152,8 @@ def test_dc_rs_runtime_is_first_class_text_only_retrieve_synthesize_generate() -
     synthesis_prompt = result.outcome.method_calls[0].messages[0]["content"]
     generation_prompt = result.outcome.method_calls[1].messages[0]["content"]
     assert "full prior reasoning\nfinal: A" in synthesis_prompt
+    assert "Available archive aliases: src01" in synthesis_prompt
+    assert "Available archive IDs: archive-root" not in synthesis_prompt
     assert "rewritten engineering strategy" in generation_prompt
     assert "full prior reasoning\nfinal: A" not in generation_prompt
     assert result.outcome.verifier_result is True
@@ -163,6 +165,8 @@ def test_dc_rs_runtime_is_first_class_text_only_retrieve_synthesize_generate() -
     assert archive_entry.metadata["parsed_answer"] == "B"
     assert result.native_entries[0].native_component == "archive"
     assert result.write_envelopes[0].writer_stage == "dc_rs_generate"
+    assert result.state.strategies is not None
+    assert cast(NativeEntry, result.state.strategies[-1]).direct_parent_ids == ("archive-root",)
 
 
 def test_dc_rs_first_trial_generates_from_transient_whole_cheatsheet() -> None:
@@ -477,7 +481,7 @@ def test_dc_rs_runtime_allows_spoofable_provider_only_in_explicit_replay_mode() 
         entry.execute_trial(context, entry.initial_state(context))
 
 
-def test_dc_rs_rejects_source_id_that_was_active_but_not_retrieved() -> None:
+def test_dc_rs_rejects_source_alias_that_was_not_offered() -> None:
     task = _task()
     state = _state()
     state.archive.extend(
@@ -500,7 +504,7 @@ def test_dc_rs_rejects_source_id_that_was_active_but_not_retrieved() -> None:
                 task.sample_id: {
                     "dc_rs_synthesize": (
                         "<cheatsheet>unsupported rewrite</cheatsheet>"
-                        "<source_ids>archive-root</source_ids>"
+                        "<source_ids>src04</source_ids>"
                     ),
                     "dc_rs_generate": "final: B",
                 }
@@ -516,7 +520,7 @@ def test_dc_rs_rejects_source_id_that_was_active_but_not_retrieved() -> None:
     )
     entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
 
-    with pytest.raises(RuntimeStateError, match="EXPLICIT_PARENT_NOT_ACTIVE"):
+    with pytest.raises(RuntimeStateError, match="INVALID_EXPLICIT_SOURCE_IDS"):
         entry.execute_trial(context, entry.initial_state(context))
 
 
