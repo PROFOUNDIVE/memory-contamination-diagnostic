@@ -46,6 +46,13 @@
     "dc_rs_runtime_builder_sha256": "7127678c07d1de7c57840f5582808996dc3f25377c138d6a6156d025eb4b68eb",
     "dc_rs_prompt_builder_sha256": "b03d99ff77583acf55a5ce8a7797fe7b55cb7f34b7ca2289ff481ec9696456f0"
   },
+  "runtime_implementation": {
+    "openai_sdk_version": "2.46.0",
+    "httpx_version": "0.28.1",
+    "httpcore_version": "1.0.9",
+    "pydantic_version": "2.13.4",
+    "client_implementation_sha256": "16710d2e27765db224ad9a678076375ac1bba8c684e79edc55a5a52ac0fcfb9f"
+  },
   "incompatibility": {
     "field": "DC-RS curator source IDs",
     "production_behavior": "literal retrieved archive entry IDs are rendered into the writer request and may be emitted in the writer response",
@@ -61,6 +68,11 @@
   "completion": {
     "capacity_record_materialized": false,
     "runtime_bound": false,
-    "next_required_action": "prospectively freeze and enforce either a maximum source-ID token footprint or a reversible bounded source-alias codec"
+    "remaining_prerequisites": [
+      "bounded_dc_rs_model_visible_source_id_contract",
+      "official_provider_contract_source_identity",
+      "service_tier"
+    ],
+    "next_required_action": "freeze the remaining runtime prerequisites and enforce either a maximum source-ID token footprint or a reversible bounded source-alias codec"
   }
 }

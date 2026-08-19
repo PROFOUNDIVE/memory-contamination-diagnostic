@@ -30,5 +30,19 @@ def test_approved_token_contract_fails_closed_on_unbounded_writer_framing() -> N
     assert status["token_contract"]["tiktoken_version"] == "0.13.0"
     assert status["token_contract"]["fixed_prompt_overhead_tokens"] == 0
     assert status["token_contract"]["registered_safety_margin_tokens"] == 0
+    assert status["runtime_implementation"] == {
+        "openai_sdk_version": "2.46.0",
+        "httpx_version": "0.28.1",
+        "httpcore_version": "1.0.9",
+        "pydantic_version": "2.13.4",
+        "client_implementation_sha256": (
+            "16710d2e27765db224ad9a678076375ac1bba8c684e79edc55a5a52ac0fcfb9f"
+        ),
+    }
+    assert status["completion"]["remaining_prerequisites"] == [
+        "bounded_dc_rs_model_visible_source_id_contract",
+        "official_provider_contract_source_identity",
+        "service_tier",
+    ]
     assert status["completion"]["capacity_record_materialized"] is False
     assert status["completion"]["runtime_bound"] is False
