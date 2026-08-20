@@ -16,11 +16,15 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+phase13-construction = [
+  "unicodedata2==15.1.0",
+]
 dev = [
   "pytest>=8.0,<10",
   "ruff>=0.5,<1",
   "mypy>=1.10,<2",
   "pip-tools==7.6.0",
+  "unicodedata2==15.1.0",
 ]
 
 [project.scripts]

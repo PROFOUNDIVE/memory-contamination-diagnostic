@@ -79,6 +79,10 @@ def test_dependency_policy_keeps_bounded_dependencies_and_includes_unsafe_closur
         "ruff>=0.5,<1",
         "mypy>=1.10,<2",
         "pip-tools==7.6.0",
+        "unicodedata2==15.1.0",
+    ]
+    assert project["optional-dependencies"]["phase13-construction"] == [
+        "unicodedata2==15.1.0"
     ]
     assert _metadata()["tool"]["pip-tools"]["compile"]["allow-unsafe"] is True
 
