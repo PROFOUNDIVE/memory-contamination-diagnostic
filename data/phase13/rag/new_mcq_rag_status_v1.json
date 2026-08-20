@@ -1,37 +1,10 @@
 {
-  "schema_version": "phase13_new_mcq_rag_status_v1",
   "authority_sha256": "880ba261285758b8c5fea697a105690ffd1c0e4b0b6ab8409673f8408d457b11",
-  "cutoff": "2026-08-22T18:00:00+09:00",
-  "cutoff_applied": false,
   "candidate_package": {
     "path": "data/phase13/rag/new_mcq/package_manifest_v1.json",
-    "sha256": "6c657df36e117411c74eb4fcf9b1a7a0f7780bfd7ef1712cc72e72c287f6bdfa",
-    "status": "REVIEWED_CANDIDATES_PROMOTION_BLOCKED"
-  },
-  "scientific_contract": {
-    "documents_per_task": 24,
-    "documents_per_stratum": 6,
-    "semantic_strata": [
-      "requirement_quantifier_constraint_interpretation",
-      "option_wise_evidence_comparison_elimination",
-      "contradiction_counterexample_consistency_checking",
-      "uncertainty_management_final_answer_verification"
-    ],
-    "task_specific": true,
-    "procedural_only": true,
-    "answer_free": true,
-    "atomic_documents": true
-  },
-  "retrieval_contract": {
-    "embedding_model": "BAAI/bge-m3",
-    "embedding_revision": "5617a9f61b028005a4858fdac845db406aefb181",
-    "similarity": "cosine",
-    "top_k": 3,
-    "reranker": null,
-    "score_threshold": null,
-    "tie_break": "lexical_document_id",
-    "corpus_scope": "same_task_only",
-    "update_mode": "frozen_read_only"
+    "sha256": "58c15396cc59538aa3f9e2b3f2d2384359b91af751d9e56d0155217a61b2f69e",
+    "status": "CLEAN_PACKAGE_NOT_READY",
+    "reconstruction_identity": "fa803cb766517256c2007ce570925ba8016f4a32959563d2726148a2fe1beec3"
   },
   "cells": {
     "mmlu_pro_engineering": {
@@ -39,66 +12,73 @@
       "reason": "NEW_MCQ_RAG_REQUIRED_ARTIFACTS_UNFROZEN",
       "entry_condition_met": false,
       "missing_objects": [
-        "complete_source_eligibility_registry",
-        "accepted_document_registry",
-        "relevance_universe",
-        "complete_embedding_runtime_artifact",
-        "serialized_clean_index_artifacts",
-        "protocol_v7_near_duplicate_leakage_audit",
-        "task_local_intervention_triplets",
+        "authority_required_leakage_gate_artifacts",
+        "verified_bge_m3_snapshot_tree_and_runtime_binding",
+        "task_local_candidate_selection_and_certification",
+        "task_local_intervention_relevance",
         "clean_correct_irrelevant_contam_branch_indices"
       ],
-      "provisional_objects": [
-        "reviewed_candidate_documents",
-        "candidate_corpus_hash",
-        "provisional_embedding_runtime",
-        "provisional_clean_index_hash",
-        "partial_leakage_report"
-      ]
+      "index_hashes": {
+        "clean": "8dedaa5ea49abfe1ac57a7cd98b61d33d2546276207547d3d89835d7cb068d5b"
+      }
     },
     "mmlu_pro_physics": {
       "status": "NOT_READY",
       "reason": "NEW_MCQ_RAG_REQUIRED_ARTIFACTS_UNFROZEN",
       "entry_condition_met": false,
       "missing_objects": [
-        "complete_source_eligibility_registry",
-        "accepted_document_registry",
-        "relevance_universe",
-        "complete_embedding_runtime_artifact",
-        "serialized_clean_index_artifacts",
-        "protocol_v7_near_duplicate_leakage_audit",
-        "task_local_intervention_triplets",
+        "authority_required_leakage_gate_artifacts",
+        "verified_bge_m3_snapshot_tree_and_runtime_binding",
+        "task_local_candidate_selection_and_certification",
+        "task_local_intervention_relevance",
         "clean_correct_irrelevant_contam_branch_indices"
       ],
-      "provisional_objects": [
-        "reviewed_candidate_documents",
-        "candidate_corpus_hash",
-        "provisional_embedding_runtime",
-        "provisional_clean_index_hash",
-        "partial_leakage_report"
-      ]
+      "index_hashes": {
+        "clean": "800076b964989f69fade30d969aa096cb967609417ea0a3bb92cdf9b89cab4de"
+      }
     },
     "gpqa_diamond": {
       "status": "NOT_READY",
       "reason": "NEW_MCQ_RAG_REQUIRED_ARTIFACTS_UNFROZEN",
       "entry_condition_met": false,
       "missing_objects": [
-        "complete_source_eligibility_registry",
-        "accepted_document_registry",
-        "relevance_universe",
-        "complete_embedding_runtime_artifact",
-        "serialized_clean_index_artifacts",
-        "protocol_v7_near_duplicate_leakage_audit",
-        "task_local_intervention_triplets",
+        "authority_required_leakage_gate_artifacts",
+        "verified_bge_m3_snapshot_tree_and_runtime_binding",
+        "task_local_candidate_selection_and_certification",
+        "task_local_intervention_relevance",
         "clean_correct_irrelevant_contam_branch_indices"
       ],
-      "provisional_objects": [
-        "reviewed_candidate_documents",
-        "candidate_corpus_hash",
-        "provisional_embedding_runtime",
-        "provisional_clean_index_hash",
-        "partial_leakage_report"
-      ]
+      "index_hashes": {
+        "clean": "0b47d852d8d3fe39f805f16cef44228438ab205008e9b3d691cda6256096a1d9"
+      }
     }
+  },
+  "cutoff": "2026-08-22T18:00:00+09:00",
+  "cutoff_applied": false,
+  "retrieval_contract": {
+    "corpus_scope": "same_task_only",
+    "embedding_model": "BAAI/bge-m3",
+    "embedding_revision": "5617a9f61b028005a4858fdac845db406aefb181",
+    "reranker": null,
+    "score_threshold": null,
+    "similarity": "cosine",
+    "tie_break": "lexical_document_id",
+    "top_k": 3,
+    "update_mode": "frozen_read_only"
+  },
+  "schema_version": "phase13_new_mcq_rag_status_v1",
+  "scientific_contract": {
+    "answer_free": true,
+    "atomic_documents": true,
+    "documents_per_stratum": 6,
+    "documents_per_task": 24,
+    "procedural_only": true,
+    "semantic_strata": [
+      "requirement_quantifier_constraint_interpretation",
+      "option_wise_evidence_comparison_elimination",
+      "contradiction_counterexample_consistency_checking",
+      "uncertainty_management_final_answer_verification"
+    ],
+    "task_specific": true
   }
 }
