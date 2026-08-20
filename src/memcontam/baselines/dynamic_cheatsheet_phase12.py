@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import re
 from dataclasses import dataclass, replace
 from typing import Any, Literal, Mapping, Sequence
 
@@ -44,6 +45,7 @@ __all__ = [
     "DcRsTrialContextV3",
     "SourceAliasTable",
     "StrategyCandidateState",
+    "core_synthesis_message",
     "curate_pre_generation",
 ]
 
@@ -55,6 +57,12 @@ _MAX_TOOL_TRACE_EVENTS = 3
 _MAX_TOOL_TRACE_CHARS = 4096
 _MAX_SOURCE_ALIASES = 99
 _REGISTERED_TOKEN_ENCODING = "o200k_base"
+_REGISTERED_PERSISTED_RAW_ANSWER_CEILING = 8192
+_WHOLE_CHEATSHEET_PATTERN = re.compile(
+    r"<cheatsheet>(?P<content>.*?)</cheatsheet>"
+    r"(?:<source_ids>[^<>]*</source_ids>)?",
+    re.DOTALL,
+)
 
 
 class DcRsContractError(ValueError):
@@ -181,12 +189,27 @@ def curate_pre_generation(
     retrieved_archive_ids: Sequence[str],
     inferred_parent_ids: Sequence[str] = (),
     source_aliases: SourceAliasTable | None = None,
+    strict_whole_response: bool = False,
 ) -> StrategyCandidateState:
     """Parse a curator result without turning visible archive entries into parents."""
     if inferred_parent_ids:
         raise DcRsContractError("IMPLICIT_PARENT_UNION")
-    content, parser_status = legacy_dc._extract_cheatsheet(curator_output, fallback_strategy)
-    source_ids = _explicit_source_ids(curator_output)
+    if strict_whole_response:
+        match = _WHOLE_CHEATSHEET_PATTERN.fullmatch(curator_output)
+        if match is None:
+            content, parser_status, source_ids = (
+                fallback_strategy,
+                "preserved_invalid_grammar",
+                (),
+            )
+        else:
+            inner_content = match.group("content").strip()
+            parser_status = "accepted" if inner_content else "preserved_empty"
+            content = curator_output if inner_content else fallback_strategy
+            source_ids = _explicit_source_ids(curator_output)
+    else:
+        content, parser_status = legacy_dc._extract_cheatsheet(curator_output, fallback_strategy)
+        source_ids = _explicit_source_ids(curator_output)
     if source_aliases is not None:
         source_ids = source_aliases.resolve(source_ids)
     if len(source_ids) != len(set(source_ids)) or any(not entry_id for entry_id in source_ids):
@@ -238,33 +261,30 @@ class DcRsPhase12Adapter:
         archive_by_id = {entry.entry_id: entry for entry in active_archive}
         retrieved_archive = [archive_by_id[record.document_id] for record in retrieved_records]
         core_dc_rs = _baseline_id(trial) == "dc_rs"
-        source_aliases = (
-            SourceAliasTable.from_source_ids(tuple(entry.entry_id for entry in retrieved_archive))
-            if core_dc_rs
-            else None
-        )
         recorder = MethodCallRecorder(trial.client)
         call_config = {**dict(trial.config), "sample_id": trial.task.sample_id}
-        curation_message, curation_spans = legacy_dc._synthesis_message_with_sources(
-            canonical_task,
-            [] if prior_strategy is None else [_strategy_memory(prior_strategy)],
-            retrieved_archive,
-        )
-        visible_source_ids = (
-            source_aliases.visible_ids
-            if source_aliases is not None
-            else tuple(entry.entry_id for entry in retrieved_archive)
-        )
-        source_label = "aliases" if source_aliases is not None else "IDs"
-        curation_message = {
-            **curation_message,
-            "content": (
-                f"{curation_message['content']}\n\n"
-                "If you directly use archive interactions, append "
-                f"<source_ids>comma-separated archive {source_label}</source_ids>. "
-                f"Available archive {source_label}: {', '.join(visible_source_ids)}"
-            ),
-        }
+        if core_dc_rs:
+            curation_message, curation_spans, source_aliases = core_synthesis_message(
+                canonical_task,
+                None if prior_strategy is None else _strategy_memory(prior_strategy),
+                retrieved_archive,
+            )
+        else:
+            source_aliases = None
+            curation_message, curation_spans = legacy_dc._synthesis_message_with_sources(
+                canonical_task,
+                [] if prior_strategy is None else [_strategy_memory(prior_strategy)],
+                retrieved_archive,
+            )
+            curation_message = {
+                **curation_message,
+                "content": (
+                    f"{curation_message['content']}\n\n"
+                    "If you directly use archive interactions, append "
+                    "<source_ids>comma-separated archive IDs</source_ids>. "
+                    f"Available archive IDs: {', '.join(entry.entry_id for entry in retrieved_archive)}"
+                ),
+            }
         curated = recorder.chat(
             [curation_message],
             model=trial.model,
@@ -279,6 +299,10 @@ class DcRsPhase12Adapter:
                 "source_spans": curation_spans,
             },
         )
+        if core_dc_rs and count_text_tokens(
+            curated.content, _REGISTERED_TOKEN_ENCODING
+        ) > _REGISTERED_PERSISTED_RAW_ANSWER_CEILING:
+            raise DcRsContractError("DC_RS_WRITER_OUTPUT_BUDGET_EXCEEDED")
         if _is_tool_action(curated.content):
             raise DcRsToolContractError("CURATOR_TOOL_FORBIDDEN")
         candidate = curate_pre_generation(
@@ -286,7 +310,10 @@ class DcRsPhase12Adapter:
             fallback_strategy=prior_content,
             retrieved_archive_ids=tuple(entry.entry_id for entry in retrieved_archive),
             source_aliases=source_aliases,
+            strict_whole_response=core_dc_rs,
         )
+        if core_dc_rs and candidate.parser_status != "accepted":
+            raise DcRsContractError("DC_RS_WRITER_GRAMMAR_INVALID")
         allowed_parent_ids = {
             entry.entry_id for entry in (retrieved_archive if core_dc_rs else active_archive)
         }
@@ -341,6 +368,10 @@ class DcRsPhase12Adapter:
             tool_trace = _canonical_tool_trace(recorder, tool_events, generated_output)
         else:
             generated_output = generated.content
+        if core_dc_rs and count_text_tokens(
+            generated_output, _REGISTERED_TOKEN_ENCODING
+        ) > _REGISTERED_PERSISTED_RAW_ANSWER_CEILING:
+            raise DcRsContractError("DC_RS_RAW_ANSWER_BUDGET_EXCEEDED")
         archive_entry = _archive_write(
             generated_output, canonical_task, trial, tool_trace=tool_trace
         )
@@ -417,6 +448,34 @@ class DcRsPhase12Adapter:
             archive_envelope=archive_envelope,
             archive_transition=archive_transition,
         )
+
+
+def core_synthesis_message(
+    canonical_task: str,
+    prior_strategy: MemoryEntry | None,
+    retrieved_archive: Sequence[MemoryEntry],
+) -> tuple[dict[str, str], list[Any], SourceAliasTable]:
+    aliases = SourceAliasTable.from_source_ids(
+        tuple(entry.entry_id for entry in retrieved_archive)
+    )
+    message, spans = legacy_dc._synthesis_message_with_sources(
+        canonical_task,
+        [] if prior_strategy is None else [prior_strategy],
+        list(retrieved_archive),
+    )
+    return (
+        {
+            **message,
+            "content": (
+                f"{message['content']}\n\n"
+                "If you directly use archive interactions, append "
+                "<source_ids>comma-separated archive aliases</source_ids>. "
+                f"Available archive aliases: {', '.join(aliases.visible_ids)}"
+            ),
+        },
+        spans,
+        aliases,
+    )
 
 
 def _validate_trial_and_state(trial: DcRsTrialContextV3, state: DcRsStateV3) -> None:

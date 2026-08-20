@@ -8,6 +8,7 @@ from memcontam.baselines import dynamic_cheatsheet_phase12 as dc
 from memcontam.baselines.prompt_budget import count_text_tokens
 from memcontam.memory.cards_v3 import canonical_content_hash
 from memcontam.memory.checkpoint_v3 import NativeEntry
+from memcontam.readiness.phase13_route_capacity import COMMON_VISIBLE_MEMORY_TOKENS
 from memcontam.tasks.base import TaskInstance
 
 
@@ -40,7 +41,7 @@ def configured_budget(context: Any) -> int:
     budget = context.baseline_configs.get("dc_rs", {}).get(
         "serialized_cheatsheet_budget_tokens"
     )
-    if type(budget) is not int or budget <= 0:
+    if budget != COMMON_VISIBLE_MEMORY_TOKENS:
         raise DcRsRuntimeError("DC_RS_CHEATSHEET_BUDGET_REQUIRED")
     return budget
 

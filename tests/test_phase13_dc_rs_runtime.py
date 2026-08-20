@@ -7,7 +7,7 @@ from typing import cast
 import pytest
 
 from memcontam.baselines import dynamic_cheatsheet_phase12 as dc
-from memcontam.baselines.dynamic_cheatsheet_phase12 import DcRsStateV3
+from memcontam.baselines.dynamic_cheatsheet_phase12 import DcRsStateV3, curate_pre_generation
 from memcontam.clients.replay import ReplayClient
 from memcontam.contamination.phase12.registry import load_candidate_registry
 from memcontam.contamination.phase12.renderers import RendererError
@@ -132,7 +132,7 @@ def _context(*, tool_mode: str = "text_only") -> Phase13DcRsContext:
             "dc_rs": {
                 "embedding_mode": "test_double",
                 "tool_mode": tool_mode,
-                "serialized_cheatsheet_budget_tokens": 1024,
+                "serialized_cheatsheet_budget_tokens": 8192,
             }
         },
         initial_states={"dc_rs": _state()},
@@ -191,7 +191,9 @@ def test_dc_rs_first_trial_generates_from_transient_whole_cheatsheet() -> None:
     assert "first-trial rewritten guide" in generation_prompt
     assert isinstance(result.state, DcRsStateV3)
     assert result.state.strategies is not None
-    assert result.state.strategies[-1].content == "first-trial rewritten guide"
+    assert result.state.strategies[-1].content == (
+        "<cheatsheet>first-trial rewritten guide</cheatsheet>"
+    )
     assert len(result.state.archive) == 1
 
 
@@ -215,7 +217,9 @@ def test_dc_rs_accepted_rewrite_controls_generation_without_audit_source_tags() 
     assert "fresh accepted rewrite" in result.outcome.method_calls[1].messages[0]["content"]
     assert isinstance(result.state, DcRsStateV3)
     assert result.state.strategies is not None
-    assert result.state.strategies[-1].content == "fresh accepted rewrite"
+    assert result.state.strategies[-1].content == (
+        "<cheatsheet>fresh accepted rewrite</cheatsheet>"
+    )
 
 
 def test_dc_rs_persists_archive_before_rewritten_strategy() -> None:
@@ -471,7 +475,7 @@ def test_dc_rs_runtime_allows_spoofable_provider_only_in_explicit_replay_mode() 
         baseline_configs={
             "dc_rs": {
                 "tool_mode": "text_only",
-                "serialized_cheatsheet_budget_tokens": 1024,
+                "serialized_cheatsheet_budget_tokens": 8192,
             }
         },
     )
@@ -524,7 +528,7 @@ def test_dc_rs_rejects_source_alias_that_was_not_offered() -> None:
         entry.execute_trial(context, entry.initial_state(context))
 
 
-def test_dc_rs_rejects_rewrite_over_explicit_serialized_budget() -> None:
+def test_dc_rs_rejects_rewrite_over_registered_writer_output_budget() -> None:
     task = _task()
     context = replace(
         _context(),
@@ -532,7 +536,7 @@ def test_dc_rs_rejects_rewrite_over_explicit_serialized_budget() -> None:
             responses_by_sample={
                 task.sample_id: {
                     "dc_rs_synthesize": (
-                        f"<cheatsheet>{' '.join(['x'] * 1025)}</cheatsheet>"
+                        f"<cheatsheet>{' '.join(['x'] * 8193)}</cheatsheet>"
                     ),
                     "dc_rs_generate": "final: B",
                 }
@@ -541,8 +545,83 @@ def test_dc_rs_rejects_rewrite_over_explicit_serialized_budget() -> None:
     )
     entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
 
-    with pytest.raises(RuntimeStateError, match="DC_RS_CHEATSHEET_BUDGET_EXCEEDED"):
+    with pytest.raises(RuntimeStateError, match="DC_RS_WRITER_OUTPUT_BUDGET_EXCEEDED"):
         entry.execute_trial(context, entry.initial_state(context))
+
+
+def test_dc_rs_strict_writer_grammar_rejects_surrounding_text() -> None:
+    candidate = curate_pre_generation(
+        "commentary<cheatsheet>strategy</cheatsheet>",
+        fallback_strategy="prior strategy",
+        retrieved_archive_ids=(),
+        strict_whole_response=True,
+    )
+
+    assert candidate.parser_status == "preserved_invalid_grammar"
+    assert candidate.content == "prior strategy"
+
+
+def test_dc_rs_invalid_strict_writer_grammar_stops_before_generation_and_archive() -> None:
+    task = _task()
+    state = _state()
+    context = replace(
+        _context(),
+        client=ReplayClient(
+            responses_by_sample={
+                task.sample_id: {
+                    "dc_rs_synthesize": "commentary<cheatsheet>strategy</cheatsheet>",
+                    "dc_rs_generate": "final: B",
+                }
+            }
+        ),
+        initial_states={"dc_rs": state},
+    )
+    entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
+
+    with pytest.raises(RuntimeStateError, match="DC_RS_WRITER_GRAMMAR_INVALID"):
+        entry.execute_trial(context, entry.initial_state(context))
+    assert [archive.entry_id for archive in state.archive] == ["archive-root"]
+
+
+def test_dc_rs_rejects_whole_writer_response_over_registered_ceiling() -> None:
+    task = _task()
+    context = replace(
+        _context(),
+        client=ReplayClient(
+            responses_by_sample={
+                task.sample_id: {
+                    "dc_rs_synthesize": f"<cheatsheet>{' x' * 8192}</cheatsheet>",
+                    "dc_rs_generate": "final: B",
+                }
+            }
+        ),
+    )
+    entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
+
+    with pytest.raises(RuntimeStateError, match="DC_RS_WRITER_OUTPUT_BUDGET_EXCEEDED"):
+        entry.execute_trial(context, entry.initial_state(context))
+
+
+def test_dc_rs_rejects_raw_answer_over_registered_ceiling_without_persisting() -> None:
+    task = _task()
+    state = _state()
+    context = replace(
+        _context(),
+        client=ReplayClient(
+            responses_by_sample={
+                task.sample_id: {
+                    "dc_rs_synthesize": "<cheatsheet>bounded strategy</cheatsheet>",
+                    "dc_rs_generate": " ".join(["x"] * 8193),
+                }
+            }
+        ),
+        initial_states={"dc_rs": state},
+    )
+    entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
+
+    with pytest.raises(RuntimeStateError, match="DC_RS_RAW_ANSWER_BUDGET_EXCEEDED"):
+        entry.execute_trial(context, entry.initial_state(context))
+    assert [archive.entry_id for archive in state.archive] == ["archive-root"]
 
 
 def test_dc_rs_rejects_oversized_existing_strategy_before_curation() -> None:
@@ -557,8 +636,8 @@ def test_dc_rs_rejects_oversized_existing_strategy_before_curation() -> None:
                         semantic_kind="dynamic_cheatsheet",
                         schema_version="phase12_native_entry_v1",
                         native_component="strategy",
-                        content=" ".join(["x"] * 1025),
-                        content_hash=canonical_content_hash(" ".join(["x"] * 1025)),
+                        content=" ".join(["x"] * 8193),
+                        content_hash=canonical_content_hash(" ".join(["x"] * 8193)),
                     )
                 ],
                 allow_unparented_strategies=True,
@@ -639,7 +718,7 @@ def test_dc_rs_runtime_accepts_historical_task_native_context() -> None:
         baseline_configs={
             "dc_rs": {
                 "embedding_mode": "test_double",
-                "serialized_cheatsheet_budget_tokens": 1024,
+                "serialized_cheatsheet_budget_tokens": 8192,
             }
         },
         initial_states={"dc_rs": DcRsStateV3(archive=[])},
