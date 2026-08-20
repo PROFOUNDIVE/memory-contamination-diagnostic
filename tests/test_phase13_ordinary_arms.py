@@ -85,14 +85,14 @@ def test_prospective_ordinary_executes_each_registered_arm_from_native_branch() 
                 run_id=f"ordinary-{arm}",
                 model="replay",
                 client=client,
+                allow_test_client=True,
                 verifier=lambda _answer, _task: True,
                 decoding={"temperature": 0.0},
                 tasks=(task,),
-                baseline_configs={"fh_bounded": {"context_window_tokens": 10_000}},
             )
         )
         assert result.arm == arm
-        assert {config["arm"] for config in client.configs} == {arm}
+        assert [config["arm"] for config in client.configs] == [arm]
         assert isinstance(branch.state, FullHistoryStateV3)
         assert len(branch.state.records) == branch.root_count
         results.append(result)

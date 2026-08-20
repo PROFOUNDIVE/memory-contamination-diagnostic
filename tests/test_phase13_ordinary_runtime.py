@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from memcontam.experiment import phase13_ordinary_runtime as ordinary_runtime
 from memcontam.baselines.bot_phase12 import BoTStateV3
 from memcontam.baselines.dynamic_cheatsheet_phase12 import DcRsStateV3
 from memcontam.clients.base import LLMResponse
@@ -19,6 +20,7 @@ from memcontam.experiment.phase13_ordinary_runtime import (
     execute_prospective_ordinary,
 )
 from memcontam.readiness import phase13_core_datasets as core_datasets
+from memcontam.readiness import phase13_capacity_realization as capacity_realization
 from memcontam.readiness.phase13_core_bundle import (
     CoreSources,
     CoreTask,
@@ -40,10 +42,12 @@ from memcontam.tasks.base import TaskInstance
 class _Client:
     def __init__(self) -> None:
         self.calls = 0
+        self.configs: list[dict[str, object]] = []
 
     def chat(self, messages: list[dict[str, str]], model: str, config: dict) -> LLMResponse:
         del messages, model
         self.calls += 1
+        self.configs.append(dict(config))
         stage = config.get("method_stage")
         if stage == "dc_rs_synthesize":
             content = "<cheatsheet>ordinary strategy</cheatsheet>"
@@ -180,6 +184,193 @@ def test_ordinary_surface_declares_all_six_tasks_and_five_memory_baselines() -> 
     )
 
 
+def test_ordinary_runtime_binds_default_provider_service_tier() -> None:
+    task = TaskInstance(
+        sample_id="game24:service-tier",
+        task_name="game24",
+        input={"numbers": [1, 3, 4, 6], "target": 24},
+        verifier_spec={"target": 24},
+    )
+    client = _Client()
+
+    execute_prospective_ordinary(
+        ProspectiveOrdinaryRun(
+            task_name="game24",
+            baseline="fh_bounded",
+            run_id="ordinary-service-tier",
+            model="replay",
+            client=client,
+            allow_test_client=True,
+            verifier=lambda _answer, _task: True,
+            decoding={"temperature": 0.0},
+            tasks=(task,),
+        )
+    )
+
+    assert [config["service_tier"] for config in client.configs] == ["default"]
+
+
+def test_ordinary_runtime_binds_capacity_from_validated_artifact(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    task = TaskInstance(
+        sample_id="game24:validated-capacity",
+        task_name="game24",
+        input={"numbers": [1, 3, 4, 6], "target": 24},
+        verifier_spec={"target": 24},
+    )
+    client = _Client()
+    monkeypatch.setattr(
+        ordinary_runtime,
+        "_validated_common_capacity_tokens",
+        lambda: 7000,
+        raising=False,
+    )
+
+    execute_prospective_ordinary(
+        ProspectiveOrdinaryRun(
+            task_name="game24",
+            baseline="fh_bounded",
+            run_id="ordinary-validated-capacity",
+            model="replay",
+            client=client,
+            allow_test_client=True,
+            verifier=lambda _answer, _task: True,
+            decoding={"temperature": 0.0},
+            tasks=(task,),
+        )
+    )
+
+    assert [config["history_capacity_tokens"] for config in client.configs] == [7000]
+
+
+def test_ordinary_runtime_blocks_when_capacity_artifact_validation_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    task = TaskInstance(
+        sample_id="game24:invalid-capacity",
+        task_name="game24",
+        input={"numbers": [1, 3, 4, 6], "target": 24},
+        verifier_spec={"target": 24},
+    )
+
+    def reject(_artifact: Path, _root: Path):
+        raise capacity_realization.CapacityRealizationError("CAPACITY_ARTIFACT_BINDING_MISMATCH")
+
+    ordinary_runtime._validated_common_capacity_tokens.cache_clear()
+    monkeypatch.setattr(capacity_realization, "validate_common_capacity_artifact", reject)
+    with pytest.raises(
+        capacity_realization.CapacityRealizationError,
+        match="CAPACITY_ARTIFACT_BINDING_MISMATCH",
+    ):
+        ProspectiveOrdinaryRun(
+            task_name="game24",
+            baseline="fh_bounded",
+            run_id="ordinary-invalid-capacity",
+            model="replay",
+            client=_Client(),
+            allow_test_client=True,
+            verifier=lambda _answer, _task: True,
+            decoding={"temperature": 0.0},
+            tasks=(task,),
+        )
+    ordinary_runtime._validated_common_capacity_tokens.cache_clear()
+
+
+def test_ordinary_runtime_rejects_nondefault_provider_service_tier() -> None:
+    task = TaskInstance(
+        sample_id="game24:service-tier",
+        task_name="game24",
+        input={"numbers": [1, 3, 4, 6], "target": 24},
+        verifier_spec={"target": 24},
+    )
+
+    with pytest.raises(ProspectiveOrdinaryError, match="PROVIDER_SERVICE_TIER_MISMATCH"):
+        ProspectiveOrdinaryRun(
+            task_name="game24",
+            baseline="fh_bounded",
+            run_id="ordinary-service-tier",
+            model="replay",
+            client=_Client(),
+            allow_test_client=True,
+            verifier=lambda _answer, _task: True,
+            decoding={"temperature": 0.0, "service_tier": "priority"},
+            tasks=(task,),
+        )
+
+
+def test_ordinary_runtime_rejects_non_luna_live_model() -> None:
+    task = TaskInstance(
+        sample_id="game24:model",
+        task_name="game24",
+        input={"numbers": [1, 3, 4, 6], "target": 24},
+        verifier_spec={"target": 24},
+    )
+
+    with pytest.raises(ProspectiveOrdinaryError, match="PROVIDER_MODEL_MISMATCH"):
+        ProspectiveOrdinaryRun(
+            task_name="game24",
+            baseline="fh_bounded",
+            run_id="ordinary-model",
+            model="gpt-4o",
+            client=_Client(),
+            verifier=lambda _answer, _task: True,
+            decoding={"temperature": 0.0},
+            tasks=(task,),
+        )
+
+
+def test_ordinary_runtime_rejects_luna_model_with_fake_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    task = TaskInstance(
+        sample_id="game24:client",
+        task_name="game24",
+        input={"numbers": [1, 3, 4, 6], "target": 24},
+        verifier_spec={"target": 24},
+    )
+    monkeypatch.setattr(
+        ordinary_runtime,
+        "_validated_common_capacity_tokens",
+        lambda: 8192,
+    )
+
+    with pytest.raises(ProspectiveOrdinaryError, match="PROVIDER_CLIENT_MISMATCH"):
+        ProspectiveOrdinaryRun(
+            task_name="game24",
+            baseline="fh_bounded",
+            run_id="ordinary-client",
+            model="gpt-5.6-luna",
+            client=_Client(),
+            verifier=lambda _answer, _task: True,
+            decoding={"temperature": 0.0},
+            tasks=(task,),
+        )
+
+
+def test_ordinary_runtime_rejects_nonregistered_fh_capacity() -> None:
+    task = TaskInstance(
+        sample_id="game24:capacity",
+        task_name="game24",
+        input={"numbers": [1, 3, 4, 6], "target": 24},
+        verifier_spec={"target": 24},
+    )
+
+    with pytest.raises(ProspectiveOrdinaryError, match="FH_CAPACITY_CONTRACT_MISMATCH"):
+        ProspectiveOrdinaryRun(
+            task_name="game24",
+            baseline="fh_bounded",
+            run_id="ordinary-capacity",
+            model="replay",
+            client=_Client(),
+            allow_test_client=True,
+            verifier=lambda _answer, _task: True,
+            decoding={"temperature": 0.0},
+            tasks=(task,),
+            baseline_configs={"fh_bounded": {"context_window_tokens": 10_000}},
+        )
+
+
 def test_core_ordinary_execution_consumes_seeded_bundle_order(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -192,6 +383,7 @@ def test_core_ordinary_execution_consumes_seeded_bundle_order(
         run_id="ordinary-core",
         model="replay",
         client=client,
+        allow_test_client=True,
         verifier=lambda answer, task: answer == task.verifier_spec["answer_label"],
         decoding={"temperature": 0.0},
         core_bundle=bundle,
@@ -218,6 +410,7 @@ def test_core_rag_remains_explicitly_unavailable_without_scientific_contract(
         run_id="ordinary-rag",
         model="replay",
         client=client,
+        allow_test_client=True,
         verifier=lambda _answer, _task: False,
         decoding={"temperature": 0.0},
         core_bundle=_bundle(tmp_path, monkeypatch),
@@ -266,6 +459,7 @@ def test_existing_memory_runtimes_execute_core_ordinary_trajectory(
             run_id=f"ordinary-{baseline}",
             model="replay",
             client=_Client(),
+            allow_test_client=True,
             verifier=lambda answer, task: answer == task.verifier_spec["answer_label"],
             decoding={"temperature": 0.0},
             core_bundle=_bundle(tmp_path, monkeypatch),
@@ -300,6 +494,7 @@ def test_dc_rs_ordinary_execution_accepts_each_core_task_stream(
             run_id=f"ordinary-dc-{task_name}",
             model="replay",
             client=_Client(),
+            allow_test_client=True,
             verifier=lambda answer, task: answer == task.verifier_spec["answer_label"],
             decoding={"temperature": 0.0},
             core_bundle=_bundle(tmp_path, monkeypatch),
@@ -308,7 +503,7 @@ def test_dc_rs_ordinary_execution_accepts_each_core_task_stream(
             baseline_configs={
                 "dc_rs": {
                     "embedding_mode": "test_double",
-                    "serialized_cheatsheet_budget_tokens": 1024,
+                    "serialized_cheatsheet_budget_tokens": 8192,
                     "tool_mode": "text_only",
                 }
             },
@@ -363,6 +558,7 @@ def test_dc_rs_ordinary_execution_accepts_original_task_native_inputs(
             run_id=f"ordinary-{task.task_name}",
             model="replay",
             client=_Client(),
+            allow_test_client=True,
             verifier=lambda _answer, _task: True,
             decoding={"temperature": 0.0},
             tasks=(task,),
@@ -370,7 +566,7 @@ def test_dc_rs_ordinary_execution_accepts_original_task_native_inputs(
             baseline_configs={
                 "dc_rs": {
                     "embedding_mode": "test_double",
-                    "serialized_cheatsheet_budget_tokens": 1024,
+                    "serialized_cheatsheet_budget_tokens": 8192,
                     "tool_mode": "text_only",
                 }
             },

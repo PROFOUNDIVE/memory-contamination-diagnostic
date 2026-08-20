@@ -7,16 +7,16 @@ from pathlib import Path
 from typing import Any, Literal, TypeAlias, assert_never
 
 from memcontam.clients.base import LLMClient
-from memcontam.experiment.phase12.game24_runner import (
-    RuntimeIdentities,
-    RuntimeWriterCallbacks,
-)
+from memcontam.clients.provider_profile import model_client_binding_error, request_binding_error
+from memcontam.experiment.phase12.game24_runner import RuntimeIdentities, RuntimeWriterCallbacks
 from memcontam.experiment.phase12.live_branch import LiveArmBranch
 from memcontam.experiment.phase12.runtime_registry import (
     PHASE13_CORE_BASELINE_REGISTRY,
     RuntimeTrialResult,
 )
+from memcontam.readiness.phase13_route_capacity import bind_capacity_configs, capacity_contract_error
 from memcontam.readiness.phase13_core_bundle import CoreTask
+from memcontam.readiness import phase13_capacity_realization as capacity_realization
 from memcontam.readiness.phase13_core_datasets import (
     load_core_task,
     paired_trajectory_order,
@@ -24,6 +24,7 @@ from memcontam.readiness.phase13_core_datasets import (
 )
 from memcontam.tasks.base import TaskInstance
 
+_validated_common_capacity_tokens = capacity_realization.validated_common_capacity_tokens
 
 OrdinaryTask: TypeAlias = Literal[
     "game24",
@@ -34,11 +35,7 @@ OrdinaryTask: TypeAlias = Literal[
     "gpqa_diamond",
 ]
 OrdinaryBaseline: TypeAlias = Literal[
-    "fh_bounded",
-    "rag_frozen",
-    "bot_style",
-    "reflexion_style",
-    "dc_rs",
+    "fh_bounded", "rag_frozen", "bot_style", "reflexion_style", "dc_rs"
 ]
 OrdinaryArm: TypeAlias = Literal["clean", "correct", "irrelevant", "contam"]
 ORDINARY_TASKS: tuple[OrdinaryTask, ...] = (
@@ -50,13 +47,9 @@ ORDINARY_TASKS: tuple[OrdinaryTask, ...] = (
     "gpqa_diamond",
 )
 ORDINARY_BASELINES: tuple[OrdinaryBaseline, ...] = (
-    "fh_bounded",
-    "rag_frozen",
-    "bot_style",
-    "reflexion_style",
-    "dc_rs",
+    "fh_bounded", "rag_frozen", "bot_style", "reflexion_style", "dc_rs"
 )
-_CORE_TASKS = frozenset({"mmlu_pro_engineering", "mmlu_pro_physics", "gpqa_diamond"})
+CORE_TASKS = frozenset({"mmlu_pro_engineering", "mmlu_pro_physics", "gpqa_diamond"})
 
 
 class ProspectiveOrdinaryError(ValueError):
@@ -122,6 +115,7 @@ class ProspectiveOrdinaryRun:
     embedding_provider: Any | None = None
     baseline_configs: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     initial_states: Mapping[str, Any] = field(default_factory=dict)
+    allow_test_client: bool = False
 
     def __post_init__(self) -> None:
         if self.task_name not in ORDINARY_TASKS:
@@ -130,6 +124,22 @@ class ProspectiveOrdinaryRun:
             raise ProspectiveOrdinaryError("ORDINARY_BASELINE_REQUIRED")
         if not self.run_id or not self.model:
             raise ProspectiveOrdinaryError("ORDINARY_RUNTIME_IDENTITY_REQUIRED")
+        binding_error = model_client_binding_error(
+            self.model,
+            self.client,
+            self.allow_test_client,
+        ) or request_binding_error(
+            self.decoding.get("service_tier", "default"),
+            self.decoding.get("max_output_tokens", 4096),
+        )
+        if binding_error is not None:
+            raise ProspectiveOrdinaryError(binding_error)
+        contract_error = capacity_contract_error(
+            self.baseline_configs,
+            _validated_common_capacity_tokens(),
+        )
+        if contract_error is not None:
+            raise ProspectiveOrdinaryError(contract_error)
         if self.branch is None and self.arm != "clean":
             raise ProspectiveOrdinaryError("ORDINARY_BRANCH_REQUIRED")
         if self.branch is not None and (
@@ -138,7 +148,7 @@ class ProspectiveOrdinaryRun:
             or self.branch.root_count != (0 if self.arm == "clean" else 1)
         ):
             raise ProspectiveOrdinaryError("ORDINARY_BRANCH_IDENTITY_MISMATCH")
-        is_core = self.task_name in _CORE_TASKS
+        is_core = self.task_name in CORE_TASKS
         if is_core and (
             self.core_bundle is None
             or type(self.trajectory_seed) is not int
@@ -166,7 +176,7 @@ class ProspectiveOrdinaryResult:
 
 
 def execute_prospective_ordinary(run: ProspectiveOrdinaryRun) -> ProspectiveOrdinaryResult:
-    if run.task_name in _CORE_TASKS and run.baseline == "rag_frozen":
+    if run.task_name in CORE_TASKS and run.baseline == "rag_frozen":
         raise ProspectiveOrdinaryError("NEW_MCQ_RAG_REQUIRED_ARTIFACTS_UNFROZEN")
     tasks = _ordered_tasks(run)
     entry = PHASE13_CORE_BASELINE_REGISTRY[run.baseline]
@@ -188,7 +198,7 @@ def execute_prospective_ordinary(run: ProspectiveOrdinaryRun) -> ProspectiveOrdi
 
 
 def _ordered_tasks(run: ProspectiveOrdinaryRun) -> tuple[TaskInstance, ...]:
-    if run.task_name not in _CORE_TASKS:
+    if run.task_name not in CORE_TASKS:
         return run.tasks
     assert run.core_bundle is not None
     assert run.trajectory_seed is not None
@@ -217,7 +227,7 @@ def _context(
         client=run.client,
         model=run.model,
         verifier=run.verifier,
-        decoding=run.decoding,
+        decoding={**run.decoding, "max_output_tokens": 4096, "service_tier": "default"},
         identities=RuntimeIdentities(
             run.run_id,
             (
@@ -231,7 +241,10 @@ def _context(
         branch=run.arm,
         writer_callbacks=run.writer_callbacks,
         embedding_provider=run.embedding_provider,
-        baseline_configs=run.baseline_configs,
+        baseline_configs=bind_capacity_configs(
+            run.baseline_configs,
+            _validated_common_capacity_tokens(),
+        ),
         initial_states=run.initial_states,
     )
 
