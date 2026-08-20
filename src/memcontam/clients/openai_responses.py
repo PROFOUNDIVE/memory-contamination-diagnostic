@@ -80,6 +80,7 @@ class OpenAIResponsesClient:
             if (
                 self._config.timeout_seconds != 180
                 or self._config.retries_after_initial_attempt != 2
+                or self._config.service_tier != "default"
                 or self._config.store
                 or "previous_response_id" in config
             ):

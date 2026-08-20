@@ -9,7 +9,7 @@ import pytest
 from memcontam.clients.config import ProviderConfig
 from memcontam.clients.cost_guard import CostGuard, CostLimitExceeded, MissingUsageError
 from memcontam.clients import openai_responses as responses_module
-from memcontam.clients.openai_responses import OpenAIResponsesClient
+from memcontam.clients.openai_responses import LunaContractError, OpenAIResponsesClient
 
 
 class _Usage:
@@ -74,8 +74,7 @@ def _client(monkeypatch, outcomes: list[object], **config_values: Any) -> OpenAI
     config = ProviderConfig(
         provider="openai_responses",
         live_calls_enabled=True,
-        timeout_seconds=30,
-        **config_values,
+        **{"timeout_seconds": 30, **config_values},
     )
     return OpenAIResponsesClient(config, allow_live_calls=True, sleep=lambda _: None)
 
@@ -152,6 +151,27 @@ def test_luna_request_enforces_current_turn_text_only_contract(monkeypatch) -> N
     assert request["store"] is False
     assert request["tools"] == []
     assert "previous_response_id" not in request
+
+
+def test_luna_request_rejects_nondefault_provider_service_tier(monkeypatch) -> None:
+    client = _client(
+        monkeypatch,
+        [_Response()],
+        service_tier="priority",
+        timeout_seconds=180,
+        max_output_tokens=4096,
+        retries_after_initial_attempt=2,
+        retry_delays_seconds=(0.0, 0.0),
+    )
+
+    with pytest.raises(LunaContractError, match="LUNA_RUNTIME_CONTRACT_MISMATCH"):
+        client.chat(
+            [{"role": "user", "content": "solve"}],
+            model="gpt-5.6-luna",
+            config={"max_output_tokens": 4096},
+        )
+
+    assert _OpenAI.instance.responses.calls == []
 
 
 @pytest.mark.parametrize("error", [TimeoutError(), _StatusError(429), _StatusError(503)])

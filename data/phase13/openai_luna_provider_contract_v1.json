@@ -1,0 +1,27 @@
+{
+  "schema_version": "phase13_openai_luna_provider_contract_v1",
+  "provider": "OpenAI",
+  "endpoint": "Responses API",
+  "requested_model_id": "gpt-5.6-luna",
+  "dated_provider_snapshot": "not_exposed",
+  "freeze_timestamp_utc": "2026-08-19T08:09:39Z",
+  "official_source_identity": {
+    "models_url": "https://platform.openai.com/docs/models/gpt-5.6-luna",
+    "responses_api_url": "https://platform.openai.com/docs/api-reference/responses",
+    "pricing_url": "https://openai.com/api/pricing/"
+  },
+  "provider_envelope": {
+    "context_window_tokens": 1050000,
+    "provider_max_output_tokens": 128000
+  },
+  "study_request_contract": {
+    "answer_max_output_tokens": 4096,
+    "writer_max_output_tokens": 8192,
+    "service_tier": "default",
+    "reasoning_effort": "none",
+    "reasoning_context": "current_turn",
+    "store": false,
+    "tools": "none"
+  },
+  "claim_boundary": "alias identity and freeze-time exposed envelope; not an immutable dated snapshot"
+}
