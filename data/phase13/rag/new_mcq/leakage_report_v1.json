@@ -1,36 +1,37 @@
 {
-  "schema_version": "new_mcq_rag_leakage_report_v1",
-  "status": "PARTIAL",
-  "missing_checks": [
-    "frozen_protocol_v7_canonicalizer_identity",
-    "frozen_semantic_near_duplicate_threshold",
-    "semantic_near_duplicate_result"
-  ],
-  "source_boundary": {
-    "question_bearing_sources_supplied_to_authors": false,
-    "evaluation_answers_supplied_to_authors": false,
-    "evaluation_cot_or_explanations_supplied_to_authors": false,
-    "public_task_specifications_only": true
-  },
-  "deterministic_checks": {
-    "document_id_uniqueness": "PASS",
-    "exact_document_duplicate": "PASS",
+  "canonicalizer_id": "unicode_casefold_whitespace_v1",
+  "completed_deterministic_checks": {
     "canonical_document_duplicate": "PASS",
     "cross_task_exact_or_canonical_duplicate": "PASS",
+    "document_id_uniqueness": "PASS",
+    "exact_document_duplicate": "PASS",
     "exact_evaluation_question_or_option_overlap": "PASS"
   },
-  "independent_semantic_review": {
+  "evaluation_artifacts": {
+    "gpqa_diamond": "d6413fa81bdbc1bf08a83cc81c1a369bcbaf9a51d27c027e0b3f219e584be372",
+    "mmlu_pro_engineering": "c8ff52f9f797ee91c69692a9802f421f2b1117695727da2502140e6e4e92ad36",
+    "mmlu_pro_physics": "adcb50a3ab7303470a07df495f822ad06cf7b14fc6a78c357558e2aad7871743"
+  },
+  "evaluation_manifest_sha256": "9640831f3dfd6e99abd796e0cee4d4c6e3e9d6e5fd8460512fd81b6d63963203",
+  "missing_objects": [
+    "task_specific_canonicalizers",
+    "displayed_permutation_equivalence",
+    "near_duplicate_threshold",
+    "structural_similarity_threshold",
+    "lexical_overlap_threshold",
+    "source_span_registry",
+    "exclusion_manifest"
+  ],
+  "procedural_review_evidence": {
     "review_contract_id": "new_mcq_procedural_review_v1",
-    "task_verdicts": {
-      "mmlu_pro_engineering": "PASS",
-      "mmlu_pro_physics": "PASS",
-      "gpqa_diamond": "PASS"
+    "task_review_sha256": {
+      "gpqa_diamond": "29df21485ae2d0cd5a41b27b20eea0d2fedb32467169136fea87dd9202b41a9c",
+      "mmlu_pro_engineering": "0380240d509c122d5c94ff51f69e1c68850c0433d840b2c723093e7c137a9e91",
+      "mmlu_pro_physics": "104f622ba9c7d6d8d499d276f3a305755c5addb4ef7ce0f6770593f1d1c24a8a"
     }
   },
-  "evaluation_registry": {
-    "manifest_sha256": "9640831f3dfd6e99abd796e0cee4d4c6e3e9d6e5fd8460512fd81b6d63963203",
-    "mmlu_pro_engineering_sha256": "c8ff52f9f797ee91c69692a9802f421f2b1117695727da2502140e6e4e92ad36",
-    "mmlu_pro_physics_sha256": "adcb50a3ab7303470a07df495f822ad06cf7b14fc6a78c357558e2aad7871743",
-    "gpqa_diamond_sha256": "d6413fa81bdbc1bf08a83cc81c1a369bcbaf9a51d27c027e0b3f219e584be372"
-  }
+  "schema_version": "new_mcq_rag_leakage_report_v1",
+  "scope": "accepted_clean_documents_only",
+  "source_boundary": "public_task_specifications_only_no_question_rows",
+  "status": "NOT_READY_REQUIRED_LEAKAGE_GATE_UNFROZEN"
 }
