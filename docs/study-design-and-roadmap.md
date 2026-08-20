@@ -16,8 +16,10 @@ boundaries, not universal contamination detection or causal attribution of every
 
 ### Tasks and matched conditions
 
-The current confirmatory tasks are Game24, Math Equation Balancer, and Word Sorting. They remain
-separate task streams rather than one pooled benchmark.
+The intended Core registry contains six separate task strata: Game24, Math Equation Balancer,
+Word Sorting, MMLU-Pro Engineering, MMLU-Pro Physics, and GPQA Diamond. MMLU-Pro Engineering and
+Physics use distinct memory trajectories, and GPQA Diamond remains a separate task stream rather
+than being pooled with either MMLU-Pro stratum.
 
 Each memory-bearing baseline is branched from the same clean checkpoint:
 
@@ -38,18 +40,24 @@ insertion, occupancy, retrieval competition, relevance, and semantic falsehood. 
 Contam is closest to a semantic-polarity comparison only when matching is adequate;
 Irrelevant-versus-Contam still combines relevance and semantic-status differences.
 
+The scientific target is six task strata × five selected memory-bearing baselines × four matched
+arms, plus one NoMem singleton per applicable task/seed contract. Task-local readiness can still
+produce a partial-crossed execution package without redefining that intended target.
+
 ### Memory baselines
 
 | Baseline | Memory mechanism |
 |---|---|
-| FH / FH-bounded | Append-only prior interaction history under the exact registered context contract |
+| FH-bounded | Append-only prior interaction history under the registered complete-record retention and context contract |
 | RAG-Frozen | Retrieval-only access to a closed task corpus and immutable index/runtime contract |
 | BoT-style | Distilled reasoning templates in a bounded native thought buffer |
 | Reflexion-style | Verifier-triggered verbal reflections retained for later work |
+| DC-RS adapted | Cumulative raw-interaction archive with BGE-M3 retrieval, whole-cheatsheet curation/synthesis, and persistent complete-cheatsheet replacement |
 | NoMem | No persistent memory; a Clean-only singleton negative control |
 
-Exact FH and FH-bounded are separate strata. RAG-Frozen is also separate from online or
-self-updating RAG variants. `NoMem` is not crossed with Correct, Irrelevant, or Contam.
+`FH-bounded` is the sole selected Core FH identity; `FH-exact` remains distinct and is excluded
+from confirmatory Main-A. RAG-Frozen is also separate from online or self-updating RAG variants.
+`NoMem` is not crossed with Correct, Irrelevant, or Contam.
 
 Filter-Challenge-v1 / Filter-v5 is historical and exploratory mitigation work only. It cannot
 alter confirmatory timing, readiness, support, checkpoints, seeds, estimands, route selection,
@@ -57,10 +65,16 @@ authorization, or aggregates.
 
 ## Horizons, structural readiness, and support
 
-- `H_run` is the number of ordinary post-intervention trials actually provider-generated and
-  stored. It determines execution calls, tokens, latency, storage, and budget.
-- `H_primary` is an independently registered finite analysis window for the principal estimand.
-  It must satisfy `H_primary <= H_run`; neither value may be inferred from the other.
+- `H_run = 50` is the Core provider-backed execution horizon. It determines generated ordinary
+  post-intervention calls, tokens, latency, storage, and budget.
+- `H_primary = 50` is the independently registered primary analysis horizon, represented by
+  `core_prefix_50`. Prefixes 5, 10, and 20 are prespecified sensitivities; the equal numerical
+  values of `H_run` and `H_primary` do not make execution and analysis the same object.
+
+The selected Core backbone is OpenAI Responses API `gpt-5.6-luna` with
+`reasoning.effort=none`, current-turn reasoning context, `store=false`, default service tier, and
+no provider-native or external code execution. This text-only contract applies across the five
+selected memory-bearing baselines; it does not itself authorize provider-backed execution.
 
 Structural readiness is evaluated before outcomes. For a fixed seed, task, route, baseline, and
 checkpoint, the native state must accept every matched condition and complete the full registered
@@ -79,29 +93,37 @@ Retrieval and final-context inclusion are observed mechanism outcomes, not readi
 
 | Surface | Repository status | What it does not establish |
 |---|---|---|
-| Three reduced-Main task registries | Implemented and hash-manifested | Final expanded task scope or task × baseline injection support |
-| Native three-task contexts | Implemented | Scientific readiness for proposed additional tasks |
-| FH-bounded, RAG-Frozen, BoT-style, Reflexion-style branching | Implemented for the reduced panel | Final DC-RS registration |
-| NoMem singleton behavior | Implemented | A fifth crossed memory-bearing condition |
+| Six Core task registries | Three original registries are hash-manifested; sealed MMLU-Pro Engineering, MMLU-Pro Physics, and GPQA Diamond bundles and task-order validation are implemented | Task × baseline structural/injection support |
+| Native six-task ordinary runtime | All six task identities and the five selected memory-bearing baseline identities are registered in the prospective runtime | Readiness or authorization of every task × baseline cell |
+| FH-bounded, RAG-Frozen, BoT-style, Reflexion-style, and DC-RS adapted branching | Four matched arms execute through baseline-native state and branch contracts | Automatic promotion of cells that remain `NOT_READY` or pending gates |
+| DC-RS adapted runtime | Six-task validation, cumulative archive, BGE-M3 retrieval, retrieve-curate-generate-update order, state serialization, text-only enforcement, and complete-cheatsheet persistence are implemented | Main-A readiness, support, precision, cost, or authorization |
+| FH-bounded ↔ DC-RS capacity contract | The common registered-token law is materialized and runtime-bound at 8192 generator-visible tokens | Equality of native mechanisms or capacity matching of the cumulative DC-RS archive |
+| Luna provider contract | Model/client pairing, default service tier, answer/writer ceilings, and no-tool request boundaries are implemented | A dated provider snapshot, execution approval, or scientific result |
+| New-MCQ RAG clean package | Task-specific 24-document clean corpora, serialized clean indices, manifests, and deterministic validators are implemented | Promotion of the three new-MCQ RAG-Frozen cells, which remain `NOT_READY` with reason `NEW_MCQ_RAG_REQUIRED_ARTIFACTS_UNFROZEN` |
+| NoMem singleton behavior | Implemented | A crossed memory-bearing condition |
 | Authority, execution-registry, and provenance validators | Deterministic and no-provider | Approval or existence of a final freeze packet |
 | Clean-prefix calibration | Provider-backed reduced-panel feasibility/cost surface using a superseded all-baseline joint law | Current Main support, seeds, route, final budget, suffix intervention, Filter, NoMem, or scientific outcomes |
 | Earlier-phase and baseline-fidelity records | Retained as historical calibration/provenance | Current authority or confirmatory mitigation evidence |
 
-Generic execution code contains optional DC-RS support, and historical fidelity evidence describes
-an adapted optional comparator. This is not final integration into the confirmatory registry and
-does not freeze DC-RS checkpoints, estimands, capacity, or pairwise support.
+`DC-RS adapted` is now an intended confirmatory memory-bearing condition in the Experiment-owned
+registry rather than an optional extension. Its implementation does not bypass task-local
+Readiness-0, fixed-checkpoint, structural-support, required-pair, budget, freeze, or authorization
+gates.
 
 No confirmatory Main outcome has been inspected or reported.
 
 ## Main dataset paths and coverage
 
-The repository contains one hash-manifested reduced-Main source pool for each current task:
+The repository contains hash-bound source pools or sealed dataset bundles for all six task strata:
 
 | Task | Frozen repository path | Source identity recorded by the manifest | Pool coverage |
 |---|---|---|---|
 | Game24 | `data/phase13/main/game24_main_v1.jsonl` | `buffer-of-thought-llm@d771df690ca03c82ae84c206734b762110920d85:benchmarks/gameof24.jsonl` | 95 unique rows from 98 source rows; 3 duplicate canonical signatures removed |
 | Math Equation Balancer | `data/phase13/main/math_equation_balancer_main_v1.jsonl` | `dynamic-cheatsheet@5cfe3c37e8e52b1d858d0f3df46e7f17c50991b9:data/MathEquationBalancer` | 250 of 250 source rows |
 | Word Sorting | `data/phase13/main/word_sorting_main_v1.jsonl` | `buffer-of-thought-llm@d771df690ca03c82ae84c206734b762110920d85:benchmarks/word_sorting.jsonl` | 250 of 250 source rows |
+| MMLU-Pro Engineering | Sealed Core dataset bundle | `TIGER-Lab/MMLU-Pro@475d58ba0cc18a15fd5d4221f41919199e692331` with the registered selection identity | 250 rows |
+| MMLU-Pro Physics | Sealed Core dataset bundle | `TIGER-Lab/MMLU-Pro@475d58ba0cc18a15fd5d4221f41919199e692331` with the registered selection identity | 250 rows |
+| GPQA Diamond | Sealed Core dataset bundle | `Idavidrein/gpqa@633f5ee89ab8ad4522a9f850766b73f62147ffdd` | 198 rows |
 
 `data/phase13/main/main_registry_manifest_v1.json` records source identities, content hashes,
 counts, and exclusions. `data/phase13/main/exclusions_v1.json` records signatures reserved away
@@ -109,33 +131,26 @@ from Main because they occur in candidate, calibration, or pilot material.
 
 These counts describe dataset coverage only. They do not show that every row supports every
 baseline or condition, that contamination can be injected at every checkpoint, or that the full
-`H_run` suffix can execute. Final task × baseline readiness and injection support must be
-recomputed under the final backbone, baseline set, task set, RAG corpus, horizons, and native
-capacity contracts. These three files do not cover the proposed MMLU-Pro or GPQA additions.
+`H_run` suffix can execute. Final task × baseline readiness and injection support remain separate
+materialization and validation outputs.
 
 ## Prospective pre-Main roadmap
 
 The intended expansion stops at the following items. No further task or baseline expansion is
 planned for Core Main.
 
-1. **Integrate DC-RS as the additional adaptive-memory baseline.** Freeze its native adapter,
-   fidelity evidence, checkpoint semantics, capacity, Level-1 estimand, and pairwise support.
-2. **Add a prospectively fixed MMLU-Pro subset and GPQA Diamond.** Freeze exact item identities,
-   scoring/verifier contracts, contamination candidates, matched controls, and exclusions.
-3. **Revise and freeze the RAG-Frozen clean corpus.** Freeze contents, provenance, index,
-   embedding/runtime contract, branch deltas, and hashes before outcomes.
-4. **Evaluate GPT-5.6 Luna and choose the backbone prospectively.** Check task accuracy, format
-   failures, token/call use, and latency without inspecting Main outcomes. The current registered
-   GPT-4o package remains authoritative until a later freeze selects a replacement.
-5. **Freeze the horizons.** The roadmap proposes `H_run = 50` and retention of
-   `H_primary = 5` unless revised before Main. These values remain prospective until bound by the
-   final authority and execution closure.
-6. **Compute final structural readiness and contamination-injection support.** Produce
+1. **Complete the three new-MCQ RAG-Frozen artifact packages.** Freeze and validate the remaining
+   leakage-gate evidence, BGE-M3 snapshot/runtime binding, task-local candidate certification and
+   relevance objects, and matched branch indices before any cell promotion.
+2. **Compute final structural readiness and contamination-injection support.** Produce
    task × baseline Level-1 support, pairwise common-support status at one shared prospectively
    frozen task/route checkpoint, reason codes, and `NOT_ESTIMABLE` handling.
-7. **Produce the final prospective authority and execution freeze.** Bind all approved scope,
-   registries, parameters, hashes, analysis rules, budgets, provenance, and separate provider
-   authorization before confirmatory outcomes are inspected.
+3. **Close the six-task/five-baseline execution package.** Bind exact checkpoints, treatment and
+   control registries, GPQA display permutations, Luna snapshot/runtime metadata, execution
+   templates, supported seed allocation, and route feasibility.
+4. **Produce the final prospective execution freeze.** Bind all approved registries, hashes,
+   analysis rules, budgets, provenance, and separate provider authorization before confirmatory
+   outcomes are inspected.
 
 After the relevant scientific scope is frozen, implementation-ready cells may execute
 sequentially under that same contract. Sequential execution is an ordering choice, not permission
