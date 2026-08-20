@@ -113,6 +113,18 @@ class _TaskValidationContext:
 
 
 def validate_new_mcq_rag_package(root: Path, evaluation_root: Path) -> NewMcqRagReport:
+    try:
+        return _validate_new_mcq_rag_package(root, evaluation_root)
+    except NewMcqRagError:
+        raise
+    except OSError as error:
+        raise NewMcqRagError("NEW_MCQ_RAG_PACKAGE_MANIFEST_STALE") from error
+    except ValueError as error:
+        code = getattr(error, "code", "NEW_MCQ_RAG_PACKAGE_MANIFEST_STALE")
+        raise NewMcqRagError(code) from error
+
+
+def _validate_new_mcq_rag_package(root: Path, evaluation_root: Path) -> NewMcqRagReport:
     registry = SourceRegistry.model_validate_json((root / "source_registry_v1.json").read_bytes())
     sources = {source.source_registry_id: source for source in registry.sources}
     if set(registry.task_sources) != set(TASKS) or len(sources) != len(registry.sources):
@@ -199,6 +211,7 @@ def _validate_task(
     expected_sources = context.registry.task_sources[task]
     if (
         len(candidates) != 24
+        or not expected_sources
         or counts != Counter({stratum: 6 for stratum in STRATA})
         or len(set(ids)) != 24
         or len(normalized) != 24

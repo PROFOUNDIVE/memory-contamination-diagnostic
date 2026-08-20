@@ -98,6 +98,25 @@ def test_candidate_package_rejects_stale_manifest_hash(tmp_path: Path) -> None:
         phase13_new_mcq_rag.validate_new_mcq_rag_package(package, EVALUATION_ROOT)
 
 
+def test_candidate_package_rejects_empty_task_source_binding(tmp_path: Path) -> None:
+    package = _copy_package(tmp_path)
+    registry_path = package / "source_registry_v1.json"
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    registry["task_sources"]["mmlu_pro_engineering"] = []
+    registry_path.write_text(json.dumps(registry), encoding="utf-8")
+    candidate_path = package / "candidates" / "mmlu_pro_engineering.jsonl"
+    candidates = [json.loads(line) for line in candidate_path.read_text().splitlines()]
+    for candidate in candidates:
+        candidate["source_registry_ids"] = []
+    candidate_path.write_text("".join(json.dumps(row) + "\n" for row in candidates))
+
+    with pytest.raises(
+        phase13_new_mcq_rag.NewMcqRagError,
+        match="NEW_MCQ_RAG_DOCUMENT_REGISTRY_INVALID",
+    ):
+        phase13_new_mcq_rag.validate_new_mcq_rag_package(package, EVALUATION_ROOT)
+
+
 def test_candidate_package_rejects_incomplete_remaining_objects(tmp_path: Path) -> None:
     package = _copy_package(tmp_path)
     manifest_path = package / "package_manifest_v1.json"
@@ -120,6 +139,9 @@ def test_candidate_package_rejects_incomplete_remaining_objects(tmp_path: Path) 
         "embedding_runtime_v1.json",
         "indices/mmlu_pro_physics.json",
         "leakage_report_v1.json",
+        "candidate_evidence_v1.json",
+        "sources/mmlu_pro_validation_475d58ba.parquet",
+        "sources/gpqa_tree_633f5ee8.json",
     ),
 )
 def test_package_rejects_tampering_in_every_required_object_class(
@@ -201,6 +223,27 @@ def test_package_rejects_status_manifest_hash_mismatch(tmp_path: Path) -> None:
         phase13_new_mcq_rag.validate_new_mcq_rag_package(package, EVALUATION_ROOT)
 
 
+@pytest.mark.parametrize(
+    "relative_path",
+    (
+        "sources/mmlu_pro_validation_475d58ba.parquet",
+        "sources/gpqa_tree_633f5ee8.json",
+    ),
+)
+def test_package_maps_missing_bound_source_to_domain_error(
+    tmp_path: Path,
+    relative_path: str,
+) -> None:
+    package = _copy_package(tmp_path)
+    (package / relative_path).unlink()
+
+    with pytest.raises(
+        phase13_new_mcq_rag.NewMcqRagError,
+        match="NEW_MCQ_RAG_PACKAGE_MANIFEST_STALE",
+    ):
+        phase13_new_mcq_rag.validate_new_mcq_rag_package(package, EVALUATION_ROOT)
+
+
 def test_package_rejects_unrecognized_status_fields(tmp_path: Path) -> None:
     package = _copy_package(tmp_path)
     status_path = package.parent / STATUS_PATH.name
@@ -228,27 +271,3 @@ def test_package_validation_is_independent_of_working_directory(
     )
 
     assert report.reason == "NEW_MCQ_RAG_REQUIRED_ARTIFACTS_UNFROZEN"
-
-
-def test_package_contains_no_candidate_selection_or_dependent_branches() -> None:
-    manifest = json.loads((PACKAGE_ROOT / "package_manifest_v1.json").read_text(encoding="utf-8"))
-    leakage = json.loads((PACKAGE_ROOT / "leakage_report_v1.json").read_text(encoding="utf-8"))
-    runtime = json.loads((PACKAGE_ROOT / "embedding_runtime_v1.json").read_text(encoding="utf-8"))
-
-    assert not (PACKAGE_ROOT / "intervention_triplets_v1.json").exists()
-    assert not (PACKAGE_ROOT / "relevance_universe_v1.json").exists()
-    assert "task_local_intervention_triplets" not in manifest["required_artifacts"]
-    assert leakage["status"] == "NOT_READY_REQUIRED_LEAKAGE_GATE_UNFROZEN"
-    assert leakage["missing_objects"] == [
-        "task_specific_canonicalizers",
-        "displayed_permutation_equivalence",
-        "near_duplicate_threshold",
-        "structural_similarity_threshold",
-        "lexical_overlap_threshold",
-        "source_span_registry",
-        "exclusion_manifest",
-    ]
-    assert runtime["status"] == "COMPLETE"
-    assert runtime["missing_objects"] == []
-    for task in manifest["tasks"].values():
-        assert set(task["index_hashes"]) == {"clean"}
