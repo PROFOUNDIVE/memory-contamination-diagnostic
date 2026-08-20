@@ -17,6 +17,7 @@ from memcontam.readiness.phase13_new_mcq_bge import (
     validate_runtime_artifact,
     verify_runtime_binding,
 )
+from memcontam.readiness.phase13_new_mcq_p0_4_evidence import validate_candidate_evidence
 
 TASKS = ("mmlu_pro_engineering", "mmlu_pro_physics", "gpqa_diamond")
 _SOURCE_ROOT = Path(__file__).resolve().parents[1]
@@ -26,6 +27,7 @@ EXPECTED_CLASSES = (
     "verified_embedding_runtime_artifact",
     "serialized_clean_index_artifacts",
     "partial_clean_document_leakage_evidence",
+    "partial_task_local_candidate_evidence",
 )
 
 
@@ -87,6 +89,7 @@ def validate_frozen_artifacts(
     _validate_source_eligibility(root)
     validate_runtime_artifact(root)
     _validate_leakage(root, evaluation_root)
+    validate_candidate_evidence(root, evaluation_root)
     hashes: dict[str, str] = {}
     for task in TASKS:
         serialized = _serialized_index(root, task)

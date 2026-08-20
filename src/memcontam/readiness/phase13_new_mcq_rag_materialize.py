@@ -15,6 +15,7 @@ from memcontam.readiness.phase13_new_mcq_rag import (
     TASKS,
     validate_new_mcq_rag_package,
 )
+from memcontam.readiness.phase13_new_mcq_p0_4_evidence import materialize_candidate_evidence
 
 from .phase13_new_mcq_rag_artifacts import leakage, runtime, source_eligibility
 from .phase13_new_mcq_rag_frozen import EXPECTED_CLASSES, SerializedCleanIndex
@@ -50,6 +51,7 @@ class _CachedProvider:
 
 
 def materialize_new_mcq_rag_package(root: Path, evaluation_root: Path, cache_root: Path) -> None:
+    materialize_candidate_evidence(root, evaluation_root)
     provider = _CachedProvider(
         BgeM3EmbeddingProvider(cache_folder=cache_root, local_files_only=True, batch_size=32)
     )
@@ -157,8 +159,11 @@ def _write_manifest(
         "serialized_clean_index_artifacts": [
             _artifact(root, f"indices/{task}.json") for task in TASKS
         ],
-        "partial_clean_document_leakage_evidence": [
-            _artifact(root, "leakage_report_v1.json")
+        "partial_clean_document_leakage_evidence": [_artifact(root, "leakage_report_v1.json")],
+        "partial_task_local_candidate_evidence": [
+            _artifact(root, "candidate_evidence_v1.json"),
+            _artifact(root, "sources/mmlu_pro_validation_475d58ba.parquet"),
+            _artifact(root, "sources/gpqa_tree_633f5ee8.json"),
         ],
     }
     assert set(artifacts) == set(EXPECTED_CLASSES)
