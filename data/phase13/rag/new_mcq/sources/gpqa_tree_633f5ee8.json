@@ -1,0 +1,50 @@
+[
+  {
+    "type": "file",
+    "oid": "28df5f900b358436f0267334b3e3e9af33f917ba",
+    "size": 2307,
+    "path": ".gitattributes"
+  },
+  {
+    "type": "file",
+    "oid": "bda2aacc8cd56ddca34817c7fb469536e505dd4d",
+    "size": 3300,
+    "path": "README.md"
+  },
+  {
+    "type": "file",
+    "oid": "3795c561db29048bd2bd469368d41d17aff8a090",
+    "size": 1560,
+    "path": "eval.yaml"
+  },
+  {
+    "type": "file",
+    "oid": "7589e3e467d69a1dceb126a60c4108d6d4f1d166",
+    "size": 1373492,
+    "path": "gpqa_diamond.csv"
+  },
+  {
+    "type": "file",
+    "oid": "489f5153df4d1cd47be9ddce577302ab0826c8aa",
+    "size": 26636,
+    "path": "gpqa_experts.csv"
+  },
+  {
+    "type": "file",
+    "oid": "f2b4572784345f9e124f33fd3bc8f5b3ffd6258a",
+    "size": 4091077,
+    "path": "gpqa_extended.csv"
+  },
+  {
+    "type": "file",
+    "oid": "de9aca41d9ec01f8cc41dbcd8b66134962679e5a",
+    "size": 3214603,
+    "path": "gpqa_main.csv"
+  },
+  {
+    "type": "file",
+    "oid": "0f174b0a4d6f57d6661929df667516c7c77cc4fa",
+    "size": 241,
+    "path": "license.txt"
+  }
+]
