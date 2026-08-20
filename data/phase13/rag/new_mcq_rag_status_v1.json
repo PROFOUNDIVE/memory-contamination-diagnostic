@@ -2,9 +2,9 @@
   "authority_sha256": "880ba261285758b8c5fea697a105690ffd1c0e4b0b6ab8409673f8408d457b11",
   "candidate_package": {
     "path": "data/phase13/rag/new_mcq/package_manifest_v1.json",
-    "sha256": "5ac19f84824bae0e8e4dea4ca79d3666f5c43327641d0b3e206187e258d2422a",
+    "sha256": "f0137628e6f40dc37f73b51636cdf86e507dacecb4ff08d199bbffbaf7212cba",
     "status": "CLEAN_PACKAGE_NOT_READY",
-    "reconstruction_identity": "52f8f449b16a2df28ed362c33b1648d4496023bbec278e74cba2fd0c6840f7be"
+    "reconstruction_identity": "09700543a0143fdbef1b971373e4affb2c60d7a98d1e2d470a25718a2a945dee"
   },
   "cells": {
     "mmlu_pro_engineering": {

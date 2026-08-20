@@ -138,24 +138,29 @@ def validate_package_manifest(root: Path, evidence: ManifestEvidence) -> Package
         or manifest.promotion.remaining_objects != REMAINING_OBJECTS
     ):
         raise ManifestError("NEW_MCQ_RAG_PACKAGE_MANIFEST_STALE")
-    for artifacts in manifest.required_artifacts.values():
-        if not artifacts:
+    for required_artifacts in manifest.required_artifacts.values():
+        if not required_artifacts:
             raise ManifestError("NEW_MCQ_RAG_PACKAGE_MANIFEST_STALE")
-        for artifact in artifacts:
+        for artifact in required_artifacts:
             _require_artifact(root, artifact)
     if {
         key: {artifact.path for artifact in artifacts}
         for key, artifacts in manifest.required_artifacts.items()
     } != _expected_required_paths():
         raise ManifestError("NEW_MCQ_RAG_PACKAGE_MANIFEST_STALE")
-    for task, artifacts in manifest.tasks.items():
-        for artifact in (artifacts.candidate, artifacts.review, artifacts.accepted, artifacts.index):
+    for task, task_artifacts in manifest.tasks.items():
+        for artifact in (
+            task_artifacts.candidate,
+            task_artifacts.review,
+            task_artifacts.accepted,
+            task_artifacts.index,
+        ):
             _require_artifact(root, artifact)
         if (
-            artifacts.candidate.sha256 != evidence.candidate_hashes[task]
-            or artifacts.review.sha256 != evidence.review_hashes[task]
-            or artifacts.corpus_hash != evidence.candidate_corpus_hashes[task]
-            or set(artifacts.index_hashes) != {"clean"}
+            task_artifacts.candidate.sha256 != evidence.candidate_hashes[task]
+            or task_artifacts.review.sha256 != evidence.review_hashes[task]
+            or task_artifacts.corpus_hash != evidence.candidate_corpus_hashes[task]
+            or set(task_artifacts.index_hashes) != {"clean"}
         ):
             raise ManifestError("NEW_MCQ_RAG_PACKAGE_MANIFEST_STALE")
     expected_identity = package_reconstruction_identity(_manifest_artifacts(manifest))
@@ -199,6 +204,11 @@ def _expected_required_paths() -> dict[str, set[str]]:
         "verified_embedding_runtime_artifact": {"embedding_runtime_v1.json"},
         "serialized_clean_index_artifacts": {f"indices/{task}.json" for task in tasks},
         "partial_clean_document_leakage_evidence": {"leakage_report_v1.json"},
+        "partial_task_local_candidate_evidence": {
+            "candidate_evidence_v1.json",
+            "sources/mmlu_pro_validation_475d58ba.parquet",
+            "sources/gpqa_tree_633f5ee8.json",
+        },
     }
 
 
