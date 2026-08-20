@@ -1,7 +1,7 @@
 {
   "schema_version": "phase13_common_capacity_status_v1",
-  "status": "NOT_READY",
-  "reason": "REGISTERED_WRITER_IO_BOUNDS_UNFROZEN",
+  "status": "COMPLETE",
+  "reason": "COMMON_CAPACITY_MATERIALIZED",
   "authority": {
     "decision_packet": "2026-08-19_PreMain_Technical_Realization_User_Decisions_Recommended_Answers_revised-v3.md",
     "decision_packet_sha256": "ee223981ccdf6da1cec68d11d63403454739e63a6992bee73101e143fe6f1f0e",
@@ -21,7 +21,7 @@
     "answer_max_output_tokens": 4096,
     "writer_max_output_tokens": 8192,
     "service_tier_decision_code": 3,
-    "service_tier_provider_literal": null,
+    "service_tier_provider_literal": "default",
     "reasoning_effort": "none",
     "reasoning_context": "current_turn",
     "store": false,
@@ -54,40 +54,44 @@
     "collision_policy": "duplicate_source_ids_unknown_aliases_and_duplicate_aliases_fail_closed",
     "canonical_provenance_preserved": true,
     "runtime_bound": true,
-    "implementation_sha256": "1fe5d9800976a095bcd7f0cc639883cfc83b48389f3f51e58cf85cff0e41ad38"
+    "implementation_sha256": "2e4f2ed823ff0622cdac8b156892d787f24125132633cddfb1fab257b1344f9f"
   },
   "production_builder_hashes": {
+    "measurement_implementation_sha256": "6f939e144f417fa99ae986176fd3ffeccecee59bf6511c9fed6dac5676e1175b",
     "dc_rs_runtime_builder_sha256": "66274d3056457e5dd0c6e84c3df5a5f8bbf2380404bea59000928478c831723f",
-    "dc_rs_prompt_builder_sha256": "1fe5d9800976a095bcd7f0cc639883cfc83b48389f3f51e58cf85cff0e41ad38"
+    "dc_rs_prompt_builder_sha256": "2e4f2ed823ff0622cdac8b156892d787f24125132633cddfb1fab257b1344f9f",
+    "ordinary_runtime_builder_sha256": "85d2d5f8448dc3fd45c4a96455e08d4596596e865504e8cf64460be6f89f38a9"
   },
   "runtime_implementation": {
     "openai_sdk_version": "2.46.0",
     "httpx_version": "0.28.1",
     "httpcore_version": "1.0.9",
     "pydantic_version": "2.13.4",
-    "client_implementation_sha256": "16710d2e27765db224ad9a678076375ac1bba8c684e79edc55a5a52ac0fcfb9f"
+    "client_implementation_sha256": "a99f7b729069dd4011f1ad571e162a321bda7753bd0b213cef0033fdc1472df9"
   },
-  "incompatibility": {
-    "field": "DC-RS registered writer I/O",
-    "production_behavior": "the curator input includes persisted raw answer text and the curator parser permits text outside the first cheatsheet block",
-    "missing_bound": "no local o200k_base ceiling is frozen for persisted raw answers and no strict no-extra-text curator response grammar is frozen",
-    "effect": "per_task_I_DC_writer and per_task_F_DC_out have no finite exact registered-token maximum",
-    "forbidden_implicit_repairs": [
-      "treat provider max_output_tokens as an o200k_base ceiling",
-      "discard curator text outside the cheatsheet without a frozen grammar",
-      "map service tier decision code 3 to an OpenAI API string",
-      "materialize reserves from a non-maximum example"
-    ]
+  "provider_contract_artifact": {
+    "path": "data/phase13/openai_luna_provider_contract_v1.json",
+    "sha256": "7fa5f400d6193ec64229597c0f6f2b193f9613b636d4bfb69c46e831a92bff33"
+  },
+  "registered_writer_io_contract": {
+    "registered_persisted_raw_answer_ceiling": 8192,
+    "capacity_unit": "registered_serialized_tokens",
+    "overflow_policy": "fail_closed_without_persistent_archive_admission",
+    "writer_response_grammar": "exactly_one_complete_whole_cheatsheet_serialization_v1",
+    "F_DC_out_tokens": 0
+  },
+  "capacity_artifact": {
+    "path": "data/phase13/common_capacity_v1.json",
+    "sha256": "831564fef95831aacf78bbd3c2e92f34ca59771f1f76e402e3dc79ec189751ee"
+  },
+  "validator": {
+    "path": "src/memcontam/readiness/phase13_capacity_realization.py",
+    "sha256": "ca8eea05cbac59c2b0f0176f0c2bf3db7c025a1f2f74287124fe64e6355badbc"
   },
   "completion": {
-    "capacity_record_materialized": false,
-    "runtime_bound": false,
-    "remaining_prerequisites": [
-      "registered_raw_answer_token_ceiling",
-      "strict_curator_response_grammar",
-      "official_provider_contract_source_identity",
-      "service_tier_provider_literal"
-    ],
-    "next_required_action": "freeze the local registered-token answer ceiling, strict curator grammar, official provider-contract source identity, and literal OpenAI service tier"
+    "capacity_record_materialized": true,
+    "runtime_bound": true,
+    "remaining_prerequisites": [],
+    "next_required_action": null
   }
 }
