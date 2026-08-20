@@ -13,11 +13,10 @@ The workflow provides cooperative same-UID accounting and logical/session separa
 provide host root isolation. Running under the same UID, or setting Docker `USER`, must not be
 described as host isolation, independent authority, tamper resistance, or a security boundary.
 
-The three theoretical authority files may retain mode `0664` below `0775` ancestors only when the
-exact descriptor-bound bytes are observed through both the selected mount's `ro` option and
-`ST_RDONLY` in the current namespace. That observation is point-in-time, namespace-local,
-same-UID-bypassable, and non-authoritative. Do not `chmod`, `chown`, remount, copy, mirror, repair
-permissions on, or substitute a local copy for any Google Drive authority file.
+Externally maintained authority inputs are observed only through the recorded read-only
+verification boundary. That observation is point-in-time, namespace-local, same-UID-bypassable,
+and non-authoritative. Do not change permissions, remount, copy, mirror, repair, or substitute
+any authority input.
 
 No rootless receipt authorizes Pilot-B, readiness, selected-policy conversion, or further provider
 egress. A valid local BCT stops at `LOCAL_ROOTLESS_BCT_REVIEW_REQUIRED`.

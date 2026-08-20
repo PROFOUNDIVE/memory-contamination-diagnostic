@@ -16,6 +16,6 @@ stage, or making a provider call. Missing, reordered, additional, cross-profile,
 evidence fails closed. Rootless and historical/v1 artifacts remain schema-disjoint.
 
 Same-UID cooperation and Docker `USER` are not host isolation. Provider billing is externally
-unbounded by the cooperative local ledger. The theoretical Google Drive sources are observed only
-through the point-in-time namespace-local read-only predicate; permission repair, ownership
-changes, remounting, copying, mirroring, and local substitution are forbidden.
+unbounded by the cooperative local ledger. Externally maintained authority inputs are observed
+only through the recorded read-only verification boundary; permission repair, ownership changes,
+remounting, copying, mirroring, and local substitution are forbidden.
