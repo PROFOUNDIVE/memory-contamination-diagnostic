@@ -1,0 +1,80 @@
+{
+  "schema_version": "phase13_common_capacity_v1",
+  "status": "MATERIALIZED",
+  "materialized_at_utc": "2026-08-19T12:00:39Z",
+  "capacity_law_id": "luna_common_visible_memory_capacity_v1",
+  "capacity_unit": "registered_serialized_tokens",
+  "model_runtime_identity": "openai:gpt-5.6-luna:alias-freeze-2026-08-19",
+  "provider_contract": {
+    "path": "data/phase13/openai_luna_provider_contract_v1.json",
+    "sha256": "7fa5f400d6193ec64229597c0f6f2b193f9613b636d4bfb69c46e831a92bff33",
+    "context_tokens": 1050000,
+    "provider_max_output_tokens": 128000,
+    "provider_service_tier": "default"
+  },
+  "token_contract": {
+    "contract_id": "phase13_registered_token_accounting_v1",
+    "encoding": "o200k_base",
+    "tiktoken_version": "0.13.0",
+    "requirements_lock_sha256": "c644c8f5f9517461f2545e49e3f5f4907c83ad6340d639b54e7bbac15f126465",
+    "counting_implementation_sha256": "87fefb5dbb42a469d26acbbf08e53048f8de58dc2506a97085ba87c7cf4ea713",
+    "message_framing_law": "role + LF + content; messages joined by LF + LF",
+    "special_token_handling": "disallowed_special=()",
+    "provider_token_equivalence_claimed": false
+  },
+  "registered_writer_io_contract": {
+    "registered_persisted_raw_answer_ceiling": 8192,
+    "overflow_policy": "fail_closed_without_persistent_archive_admission",
+    "writer_response_grammar": "exactly_one_complete_whole_cheatsheet_serialization_v1",
+    "O_writer_reg": 8192,
+    "F_DC_out_tokens": 0
+  },
+  "measurement_contract": {
+    "task_scope": "all_frozen_task_instances_in_each_of_the_six_core_registries",
+    "R_FH": "maximum registered prompt tokens plus 4096 registered answer reservation",
+    "I_DC_writer": "maximum exact production writer prompt over the frozen task registry using one 8192-token prior whole cheatsheet and three 8192-token persisted raw answers",
+    "F_DC_out": "zero because the strict whole-cheatsheet serialization contains all registered writer-output syntax",
+    "outcome_selection_prohibited": true
+  },
+  "source_artifacts": {
+    "legacy_main_registry_manifest_sha256": "8b84820aa7e62cbcb71b035d002e5466ed6d5f32fbc3e4cd66ad636ca4303efb",
+    "new_mcq_core_manifest_sha256": "9640831f3dfd6e99abd796e0cee4d4c6e3e9d6e5fd8460512fd81b6d63963203"
+  },
+  "production_builder_hashes": {
+    "measurement_implementation_sha256": "6f939e144f417fa99ae986176fd3ffeccecee59bf6511c9fed6dac5676e1175b",
+    "openai_client_sha256": "a99f7b729069dd4011f1ad571e162a321bda7753bd0b213cef0033fdc1472df9",
+    "full_history_builder_sha256": "92f25e2cb8f8d937085bcae36030116956f2d47dbc927f3c4e2c4034b5d1eb89",
+    "dc_rs_builder_sha256": "2e4f2ed823ff0622cdac8b156892d787f24125132633cddfb1fab257b1344f9f",
+    "dc_rs_runtime_builder_sha256": "66274d3056457e5dd0c6e84c3df5a5f8bbf2380404bea59000928478c831723f",
+    "ordinary_runtime_builder_sha256": "85d2d5f8448dc3fd45c4a96455e08d4596596e865504e8cf64460be6f89f38a9"
+  },
+  "per_task_R_FH": {
+    "game24": 4149,
+    "math_equation_balancer": 4163,
+    "word_sorting": 4215,
+    "mmlu_pro_engineering": 5234,
+    "mmlu_pro_physics": 4875,
+    "gpqa_diamond": 7029
+  },
+  "per_task_I_DC_writer": {
+    "game24": 33032,
+    "math_equation_balancer": 33085,
+    "word_sorting": 33286,
+    "mmlu_pro_engineering": 36561,
+    "mmlu_pro_physics": 34972,
+    "gpqa_diamond": 37905
+  },
+  "per_task_F_DC_out": {
+    "game24": 0,
+    "math_equation_balancer": 0,
+    "word_sorting": 0,
+    "mmlu_pro_engineering": 0,
+    "mmlu_pro_physics": 0,
+    "gpqa_diamond": 0
+  },
+  "B_FH_feasible": 1042971,
+  "B_DC_feasible": 8192,
+  "B_mem_tokens": 8192,
+  "L_DC_tokens": 8192,
+  "capacity_law_hash": "8c87b3e6d18911349ea1b45dcd9403a659bad33caf8d986010906091844e00a9"
+}
