@@ -1,0 +1,316 @@
+{
+  "schema_version": "phase13_new_mcq_candidate_evidence_v1",
+  "authority_stack": [
+    "phase13_theory_revised_v1",
+    "phase13_baseline_revised_v5",
+    "phase13_protocol_revised_v7",
+    "phase13_experiment_revised_v7"
+  ],
+  "split_registry_status": "NOT_ESTABLISHED",
+  "source_role_evidence": [
+    "MMLU-Pro/evaluate_from_local.py@996df131:validation_few_shot_prompt_source",
+    "MMLU-Pro/evaluate_from_local.py@996df131:test_scored_evaluation_source",
+    "GPQA@633f5ee8:pinned_source_tree_inventory"
+  ],
+  "evaluation_artifact_hashes": {
+    "gpqa_diamond": "d6413fa81bdbc1bf08a83cc81c1a369bcbaf9a51d27c027e0b3f219e584be372",
+    "mmlu_pro_engineering": "c8ff52f9f797ee91c69692a9802f421f2b1117695727da2502140e6e4e92ad36",
+    "mmlu_pro_physics": "adcb50a3ab7303470a07df495f822ad06cf7b14fc6a78c357558e2aad7871743"
+  },
+  "tasks": {
+    "mmlu_pro_engineering": {
+      "status": "NOT_READY_SPLIT_REGISTRY_UNFROZEN",
+      "certification_status": "NOT_ESTABLISHED",
+      "upstream_revision": "475d58ba0cc18a15fd5d4221f41919199e692331",
+      "source_role": "upstream_validation_few_shot_development_unpartitioned",
+      "source_sha256": "a6db33e44c7a8d6a0a9665aabe6596a5e7436bebb62412d1219821283835e457",
+      "eligible_question_rows": 5,
+      "mechanical_candidate_id": null,
+      "mechanical_observations": {
+        "MCQ-H1-LEXICAL-OVERLAP-v1": {
+          "query_ids": [
+            "40",
+            "41",
+            "42",
+            "43",
+            "44"
+          ],
+          "applicable_query_ids": [
+            "41",
+            "43"
+          ],
+          "counterexample_query_ids": [
+            "41",
+            "43"
+          ],
+          "displayed_option_counts": [
+            10,
+            10,
+            10,
+            10,
+            10
+          ],
+          "selected_option_indices_audit_only": [
+            null,
+            4,
+            null,
+            0,
+            null
+          ],
+          "official_gold_indices_audit_only": [
+            2,
+            0,
+            2,
+            8,
+            0
+          ]
+        },
+        "MCQ-H2-DETAIL-LENGTH-v1": {
+          "query_ids": [
+            "40",
+            "41",
+            "42",
+            "43",
+            "44"
+          ],
+          "applicable_query_ids": [
+            "42",
+            "43"
+          ],
+          "counterexample_query_ids": [
+            "42",
+            "43"
+          ],
+          "displayed_option_counts": [
+            10,
+            10,
+            10,
+            10,
+            10
+          ],
+          "selected_option_indices_audit_only": [
+            null,
+            null,
+            3,
+            9,
+            null
+          ],
+          "official_gold_indices_audit_only": [
+            2,
+            0,
+            2,
+            8,
+            0
+          ]
+        }
+      },
+      "source_inventory": [],
+      "prohibited_source_configs": [],
+      "remaining_objects": [
+        "prospectively_frozen_build_calibration_split",
+        "candidate_coverage_contract",
+        "baseline_native_render_packets",
+        "three_evaluator_blinded_plausibility_panel",
+        "leakage_metric_threshold_registry",
+        "full_leakage_conformance",
+        "correct_i1_constructibility_and_validity",
+        "unicode_source_test_vector_provenance",
+        "candidate_freeze_identity",
+        "deterministic_relevance_affinity_constructibility"
+      ]
+    },
+    "mmlu_pro_physics": {
+      "status": "NOT_READY_SPLIT_REGISTRY_UNFROZEN",
+      "certification_status": "NOT_ESTABLISHED",
+      "upstream_revision": "475d58ba0cc18a15fd5d4221f41919199e692331",
+      "source_role": "upstream_validation_few_shot_development_unpartitioned",
+      "source_sha256": "a6db33e44c7a8d6a0a9665aabe6596a5e7436bebb62412d1219821283835e457",
+      "eligible_question_rows": 5,
+      "mechanical_candidate_id": null,
+      "mechanical_observations": {
+        "MCQ-H1-LEXICAL-OVERLAP-v1": {
+          "query_ids": [
+            "10",
+            "11",
+            "12",
+            "13",
+            "14"
+          ],
+          "applicable_query_ids": [
+            "10",
+            "12",
+            "13",
+            "14"
+          ],
+          "counterexample_query_ids": [
+            "10",
+            "12",
+            "13",
+            "14"
+          ],
+          "displayed_option_counts": [
+            10,
+            10,
+            10,
+            10,
+            10
+          ],
+          "selected_option_indices_audit_only": [
+            1,
+            null,
+            9,
+            5,
+            1
+          ],
+          "official_gold_indices_audit_only": [
+            4,
+            0,
+            7,
+            4,
+            0
+          ]
+        },
+        "MCQ-H2-DETAIL-LENGTH-v1": {
+          "query_ids": [
+            "10",
+            "11",
+            "12",
+            "13",
+            "14"
+          ],
+          "applicable_query_ids": [
+            "11",
+            "13"
+          ],
+          "counterexample_query_ids": [
+            "11",
+            "13"
+          ],
+          "displayed_option_counts": [
+            10,
+            10,
+            10,
+            10,
+            10
+          ],
+          "selected_option_indices_audit_only": [
+            null,
+            6,
+            null,
+            5,
+            null
+          ],
+          "official_gold_indices_audit_only": [
+            4,
+            0,
+            7,
+            4,
+            0
+          ]
+        }
+      },
+      "source_inventory": [],
+      "prohibited_source_configs": [],
+      "remaining_objects": [
+        "prospectively_frozen_build_calibration_split",
+        "candidate_coverage_contract",
+        "baseline_native_render_packets",
+        "three_evaluator_blinded_plausibility_panel",
+        "leakage_metric_threshold_registry",
+        "full_leakage_conformance",
+        "correct_i1_constructibility_and_validity",
+        "unicode_source_test_vector_provenance",
+        "candidate_freeze_identity",
+        "deterministic_relevance_affinity_constructibility"
+      ]
+    },
+    "gpqa_diamond": {
+      "status": "NOT_READY_NO_ELIGIBLE_SOURCE",
+      "certification_status": "NOT_ESTABLISHED",
+      "upstream_revision": "633f5ee89ab8ad4522a9f850766b73f62147ffdd",
+      "source_role": "pinned_tree_has_no_non_evaluation_question_partition",
+      "source_sha256": "3a722b406849c230a76cf797f0e5481a2dd17fe403be650b5798703ecfa54526",
+      "eligible_question_rows": 0,
+      "mechanical_candidate_id": null,
+      "mechanical_observations": {},
+      "source_inventory": [
+        {
+          "path": ".gitattributes",
+          "git_oid": "28df5f900b358436f0267334b3e3e9af33f917ba",
+          "size": 2307,
+          "question_bearing": false,
+          "eligibility": "INELIGIBLE_NON_QUESTION_FILE"
+        },
+        {
+          "path": "README.md",
+          "git_oid": "bda2aacc8cd56ddca34817c7fb469536e505dd4d",
+          "size": 3300,
+          "question_bearing": false,
+          "eligibility": "INELIGIBLE_NON_QUESTION_FILE"
+        },
+        {
+          "path": "eval.yaml",
+          "git_oid": "3795c561db29048bd2bd469368d41d17aff8a090",
+          "size": 1560,
+          "question_bearing": false,
+          "eligibility": "INELIGIBLE_NON_QUESTION_FILE"
+        },
+        {
+          "path": "gpqa_diamond.csv",
+          "git_oid": "7589e3e467d69a1dceb126a60c4108d6d4f1d166",
+          "size": 1373492,
+          "question_bearing": true,
+          "eligibility": "INELIGIBLE_EVALUATION_SET"
+        },
+        {
+          "path": "gpqa_experts.csv",
+          "git_oid": "489f5153df4d1cd47be9ddce577302ab0826c8aa",
+          "size": 26636,
+          "question_bearing": false,
+          "eligibility": "INELIGIBLE_METADATA_ONLY"
+        },
+        {
+          "path": "gpqa_extended.csv",
+          "git_oid": "f2b4572784345f9e124f33fd3bc8f5b3ffd6258a",
+          "size": 4091077,
+          "question_bearing": true,
+          "eligibility": "INELIGIBLE_EVALUATION_SET"
+        },
+        {
+          "path": "gpqa_main.csv",
+          "git_oid": "de9aca41d9ec01f8cc41dbcd8b66134962679e5a",
+          "size": 3214603,
+          "question_bearing": true,
+          "eligibility": "INELIGIBLE_EVALUATION_SET"
+        },
+        {
+          "path": "license.txt",
+          "git_oid": "0f174b0a4d6f57d6661929df667516c7c77cc4fa",
+          "size": 241,
+          "question_bearing": false,
+          "eligibility": "INELIGIBLE_NON_QUESTION_FILE"
+        }
+      ],
+      "prohibited_source_configs": [
+        "gpqa_diamond",
+        "gpqa_main",
+        "gpqa_extended"
+      ],
+      "remaining_objects": [
+        "eligible_question_bearing_construction_source",
+        "prospective_displayed_permutation_identity",
+        "prospectively_frozen_build_calibration_split",
+        "candidate_coverage_contract",
+        "baseline_native_render_packets",
+        "three_evaluator_blinded_plausibility_panel",
+        "leakage_metric_threshold_registry",
+        "full_leakage_conformance",
+        "correct_i1_constructibility_and_validity",
+        "unicode_source_test_vector_provenance",
+        "candidate_freeze_identity",
+        "deterministic_relevance_affinity_constructibility"
+      ]
+    }
+  },
+  "evidence_hash": "cac93515326093dd70a8c76ffc269267fb983e08604cfbf4051b86d9af9129f4"
+}
