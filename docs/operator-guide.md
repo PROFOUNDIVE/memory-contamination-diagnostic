@@ -2,8 +2,8 @@
 
 ## Install from a fresh clone
 
-The package supports Python `>=3.11,<3.14`. Clone the repository, create an isolated environment,
-and install the editable package before using the CLI:
+The package supports Python `>=3.11,<3.14`. Create an isolated environment and install the
+development extras before using the CLI:
 
 ```bash
 git clone https://github.com/PROFOUNDIVE/memory-contamination-diagnostic.git
@@ -14,188 +14,90 @@ python -m pip install --upgrade pip
 python -m pip install -e '.[dev]'
 ```
 
-On Windows PowerShell, activate the virtual environment with
-`.venv\Scripts\Activate.ps1` instead of `source .venv/bin/activate`.
+On Windows PowerShell, activate with `.venv\Scripts\Activate.ps1`.
 
-Conda is optional. The name `memcontam` is conventional, not a prerequisite:
+The installation provides both `memcontam` and `python -m memcontam.cli`; this guide uses the
+module form.
+
+## Inspect the installed surface
+
+Use `--help` rather than relying on examples from older records:
 
 ```bash
-conda create -n memcontam python=3.11
-conda activate memcontam
-python -m pip install -e '.[dev]'
+python -m memcontam.cli --help
+python -m memcontam.cli validate-config --help
+python -m memcontam.cli run --help
+python -m memcontam.cli aggregate --help
 ```
 
-Installation provides both the `memcontam` console script and the equivalent
-`python -m memcontam.cli` module entry point. Examples below use the module form.
+The root CLI exposes these public workflow entry points:
 
-## Safe deterministic installation check
+| Command | Purpose | Provider calls by default? |
+|---|---|---:|
+| `validate-config` | Parse and validate a run configuration | No |
+| `run` | Execute the configured workflow | No for replay configurations |
+| `aggregate` | Read a completed run directory and produce an aggregate report | No |
 
-The following command uses only tracked files, makes no provider calls, and incurs no cost:
+Versioned namespaces such as `phase12` and `phase13` are retained for compatibility and internal
+workflow separation. Their accepted arguments are discoverable through their own `--help` output;
+this public guide intentionally does not enumerate restricted inputs or local research artifacts.
+
+## Deterministic configuration check
+
+The shipped replay configuration provides a no-provider installation check:
 
 ```bash
 python -m memcontam.cli validate-config configs/pilot_multitask_replay.yaml
 ```
 
-Expected output begins with `valid config:`. This is a historical replay-config validation, not a
-scientific-readiness decision. A second fixture-backed deterministic check is:
+Success begins with `valid config:`. Validation checks the declared stage, provider, tasks,
+baselines, arms, logging contract, and replay fixture structure. It does not execute a run or
+make a network request.
+
+## Replay workflow
+
+Replay configurations supply fixture responses instead of contacting a model provider. After
+validation, create a run with a single-component identifier:
 
 ```bash
-python -m memcontam.cli phase12 validate \
-  --config tests/fixtures/phase12/FX-CONFIG-001.json
+python -m memcontam.cli run <config.yaml> --run-id <run-id>
 ```
 
-## Internal CLI namespace
+Run identifiers must not be absolute paths or contain parent-directory components. The configured
+output location determines where the run archive is written; do not assume a fixed output layout.
 
-The literal `phase13` CLI namespace is an internal implementation/versioning label retained to
-keep modules, schemas, configs, data paths, and automation stable. It is not the public scientific
-name of the study.
+`--allow-live-calls` is an explicit execution boundary. Supply it only for an approved
+provider-backed configuration with the required credential available in the environment. Never
+place credentials in configuration files, manifests, or logs.
 
-Inspect the actual command surface with:
+## Run archive
+
+A strict run records its configuration and machine-readable execution streams in the configured
+run directory. The archive includes:
+
+- `run.json`, `resolved_config.json`, and `provider_profile.json` for run identity and resolved
+  settings;
+- `trials.jsonl`, `calls.jsonl`, and `failures.jsonl` for execution records; and
+- `memory_events.jsonl` and `filter_events.jsonl` when the selected workflow emits those events.
+
+Resolved configuration and provider-profile records are designed to describe the execution
+contract without storing provider credentials.
+
+## Aggregation
+
+Aggregate a completed run directory with:
 
 ```bash
-python -m memcontam.cli --help
-python -m memcontam.cli phase13 --help
+python -m memcontam.cli aggregate <run-directory>
 ```
 
-The root CLI also exports `phase12`, `validate-config`, `run`, and `aggregate`. They remain useful
-for historical implementation and replay workflows but are not substitutes for a prospectively
-frozen confirmatory execution package.
-
-## Current internal validator and calibration commands
-
-| Command | Provider calls or cost? | Purpose |
-|---|---:|---|
-| `phase13 validate-authority-freeze` | No | Validate a freeze schema, closure hash, and declared requirement sets |
-| `phase13 validate-execution-registry` | No | Validate the execution registry referenced by a freeze |
-| `phase13 validate-provenance` | No | Validate a sealed provenance bundle and each listed artifact hash |
-| `phase13 materialize-core-datasets` | Dataset download only | Materialize pinned prospective MMLU-Pro and gated GPQA inputs without model execution |
-| `phase13 validate-core-datasets` | No | Validate the sealed local Core dataset bundle and report task-order hashes |
-| `phase13 prepare-clean-prefix` | No | Validate reduced-panel calibration inputs and write an authorization request |
-| `phase13 run-clean-prefix` | Yes | Execute the separately authorized reduced-panel GPT-4o clean-prefix calibration |
-
-The three generic validators require caller-supplied closure artifacts. The public repository does
-not ship a final authority/execution/provenance bundle, so their examples use placeholders rather
-than implying a runnable scientific package.
-
-The shipped clean-prefix config also references a hash-bound readiness input that is not included
-in a public clone. `prepare-clean-prefix` therefore fails closed until an approved complete input
-bundle is supplied. It is not part of the fresh-clone installation check.
-
-The Core dataset commands are prospective preparation tools, not a frozen Main execution surface.
-Materialization requires prior GPQA access and accepts only the ignored
-`data/phase13/core/materialized` location inside the repository; an output outside the repository
-is also allowed. The command never prints question text, and the generic historical `run` command
-does not dispatch the three prospective multiple-choice tasks.
-
-```bash
-python -m memcontam.cli phase13 materialize-core-datasets \
-  --output data/phase13/core/materialized
-python -m memcontam.cli phase13 validate-core-datasets \
-  --root data/phase13/core/materialized \
-  --trajectory-seed 1729
-```
-
-The example seed is an operator check only. It does not allocate a Main seed or authorize model
-calls.
-
-### Validate an authority freeze
-
-```bash
-python -m memcontam.cli phase13 validate-authority-freeze \
-  --freeze <authority-freeze.json> \
-  --requirements <authority-requirements.json>
-```
-
-Success prints `{"freeze_id": "...", "status": "valid"}`. The command validates schema,
-relative-reference safety, uniqueness, closure hash, and declared authority/registry/parameter
-sets. It does not open or hash the authority files named by the freeze and does not judge whether
-the scientific choices are substantively approved.
-
-### Validate an execution registry
-
-```bash
-python -m memcontam.cli phase13 validate-execution-registry \
-  --root <artifact-root> \
-  --freeze <authority-freeze.json> \
-  --requirements <authority-requirements.json>
-```
-
-The command validates the freeze, opens and hashes its single referenced execution registry, and
-checks registry identity, declared task/baseline/condition dimensions, template uniqueness,
-`H_run`, RAG corpus reference, and capacity ordering. It does not open or hash the RAG corpus and
-does not execute a template. Success prints `{"registry_id": "...", "status": "valid"}`.
-
-### Validate a provenance bundle
-
-```bash
-python -m memcontam.cli phase13 validate-provenance \
-  --root <bundle-root> \
-  --manifest <provenance-manifest.json> \
-  --seal <provenance-seal.json>
-```
-
-Artifact paths in the manifest resolve under `--root`. The command checks strict schemas, unique
-roles and paths, relative-path safety, manifest/seal identity, and every listed artifact SHA-256.
-Success prints the bundle ID, artifact count, and manifest hash.
-
-### Prepare the reduced-panel clean-prefix calibration
-
-```bash
-python -m memcontam.cli phase13 prepare-clean-prefix \
-  --config configs/phase13/clean_prefix_calibration_v1.yaml \
-  --run-id <one-component-run-id> \
-  --output <authorization-request.json>
-```
-
-This no-provider command validates the exact calibration kind, four-baseline panel,
-clean-prefix-only scope, schedules, input hashes, and call/token/cost ceilings. It writes the
-request to `--output`, which must not already exist. A valid request means only that the package is
-ready for separate calibration authorization. The implemented joint-eligibility law is superseded
-for current Main support planning.
-
-Run IDs must be one path component: no absolute paths, nested components, or `..`.
-
-### Run the authorized clean-prefix calibration
-
-```bash
-OPENAI_API_KEY=<credential> \
-python -m memcontam.cli phase13 run-clean-prefix \
-  --config configs/phase13/clean_prefix_calibration_v1.yaml \
-  --run-id <same-run-id> \
-  --request <authorization-request.json> \
-  --authorization <authorization.json> \
-  --expected-authorization-sha256 <64-hex-sha256> \
-  --allow-live-calls
-```
-
-This command can make paid OpenAI calls. It requires a matching separate authorization,
-`--allow-live-calls`, the configured credential, the pinned BGE-M3 model in a local cache, matching
-config/request/implementation/budget identities, and a new run directory. The current verifier
-does not enforce authorization expiration; freshness remains an external approval requirement.
-
-The command executes clean prefixes for the three current tasks across FH-bounded, RAG-Frozen,
-BoT-style, and Reflexion-style for four registered calibration seeds. It does not execute suffix
-trials, NoMem, Correct/Irrelevant/Contam interventions, Filter, or Main.
-
-Outputs follow the config-selected root:
-
-```text
-runs/phase13-clean-prefix-calibration-v1/<run-id>/
-```
-
-The run archive includes the resolved config, request, authorization, trials, calls, checkpoints,
-eligibility rows, seed status, rates, accounting, artifact manifest, and seal. Runtime failures
-retain partial accounting and mark the archive invalidated. A completed result is reduced-panel
-feasibility/cost evidence only; it cannot determine current Main support, seeds, route, or budget.
+Use `aggregate --help` to inspect compatibility options before processing an older run archive.
+Aggregation validates the selected archive contract before reporting results. It does not rerun
+trials or contact a provider.
 
 ## Operational boundaries
 
-- A validator reporting `valid` establishes internal schema/hash closure only, not scientific
-  approval, a backbone decision, a final freeze, or live-call authorization.
-- Do not substitute the clean-prefix calibration config for a Main execution registry.
-- Do not place secrets in configs, requests, manifests, logs, or committed documentation.
-- Replay and generic validation remain secret-free; only explicit live boundaries need provider
-  credentials.
-- Follow the approved config and returned run directory rather than assuming a legacy artifact
-  layout.
-- Do not inspect confirmatory outcomes before the final prospective closure is frozen.
+- A syntactically valid configuration is not scientific approval or live-call authorization.
+- Use replay fixtures for local development, testing, and review whenever possible.
+- Keep live execution approval separate from source control and configuration review.
+- Treat historical documents as provenance, not as current operator instructions.
