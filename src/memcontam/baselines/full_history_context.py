@@ -14,6 +14,12 @@ from memcontam.tasks.base import TaskInstance
 from memcontam.tasks.dispatch import canonical_task_json
 
 
+class FullHistoryContextError(ValueError):
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(code)
+
+
 @dataclass(frozen=True)
 class FullHistoryContextDecision:
     messages: list[dict[str, str]]
@@ -68,6 +74,11 @@ def select_visible_history(
     encoding_name = config["token_encoding"]
     current_task_tokens = count_prompt_tokens(_messages([], task_text), encoding_name)
     history_budget = effective_prompt_budget(spec, current_task_tokens)
+    configured_history_capacity = config.get("history_capacity_tokens")
+    if configured_history_capacity is not None:
+        if type(configured_history_capacity) is not int or configured_history_capacity <= 0:
+            raise FullHistoryContextError("history_capacity_tokens must be a positive integer")
+        history_budget = min(history_budget, configured_history_capacity)
     total_budget = current_task_tokens + history_budget
     pre_token_count = count_prompt_tokens(messages, encoding_name)
     while visible_records and count_prompt_tokens(messages, encoding_name) > total_budget:

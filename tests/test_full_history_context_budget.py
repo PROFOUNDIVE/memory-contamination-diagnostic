@@ -78,6 +78,18 @@ def test_context_budget_drops_oldest_whole_pair_and_never_clips_text() -> None:
     assert decision.post_token_count == _prompt_tokens([newest])
 
 
+def test_visible_memory_capacity_caps_history_below_provider_context() -> None:
+    oldest = _record("history-1", "oldest-pair-must-not-appear")
+    newest = _record("history-2", "newest-pair-must-remain-complete")
+    config = _config(1_050_000)
+    config["history_capacity_tokens"] = _prompt_tokens([newest]) - _prompt_tokens([])
+
+    decision = render_context_bounded_history(_task(), [oldest, newest], config)
+
+    assert [record.entry_id for record in decision.records] == ["history-2"]
+    assert decision.effective_prompt_budget_tokens == config["history_capacity_tokens"]
+
+
 def test_adapter_retains_all_pairs_but_records_only_visible_sources_on_verifier_failure() -> None:
     oldest = _record("history-1", "oldest-hidden-pair")
     newest = _record("history-2", "newest-visible-pair")

@@ -5,14 +5,69 @@ from dataclasses import asdict, dataclass
 import hashlib
 import json
 import math
+from typing import Any, Literal
 
 from memcontam.readiness.phase13_execution_contract import CORE_MAIN_REGISTRY, ExecutionRegistry
+
+COMMON_VISIBLE_MEMORY_TOKENS = CORE_MAIN_REGISTRY.writer_max_output_tokens
+CapacityContractErrorCode = Literal[
+    "FH_CAPACITY_CONTRACT_MISMATCH",
+    "DC_RS_CAPACITY_CONTRACT_MISMATCH",
+]
+FH_CAPACITY_CONFIG = {
+    "mode": "context_bounded_pair_atomic",
+    "token_encoding": "o200k_base",
+    "context_window_tokens": 1_050_000,
+    "max_output_tokens": 4096,
+    "fixed_prompt_overhead_tokens": 0,
+    "safety_margin_tokens": 0,
+    "history_capacity_tokens": COMMON_VISIBLE_MEMORY_TOKENS,
+    "eviction_policy": "oldest_first_pair_atomic",
+    "fh_mode": "bounded",
+    "context_budget_id": "luna-common-visible-memory-capacity-v1",
+}
 
 
 class CapacityPlanningError(ValueError):
     def __init__(self, code: str) -> None:
         super().__init__(code)
         self.code = code
+
+
+def capacity_contract_error(
+    configs: Mapping[str, Mapping[str, Any]],
+    visible_memory_tokens: int,
+) -> CapacityContractErrorCode | None:
+    fh_config = configs.get("fh_bounded", {})
+    expected_fh = {
+        **FH_CAPACITY_CONFIG,
+        "history_capacity_tokens": visible_memory_tokens,
+    }
+    if any(fh_config.get(key, value) != value for key, value in expected_fh.items()):
+        return "FH_CAPACITY_CONTRACT_MISMATCH"
+    dc_budget = configs.get("dc_rs", {}).get(
+        "serialized_cheatsheet_budget_tokens", visible_memory_tokens
+    )
+    if dc_budget != visible_memory_tokens:
+        return "DC_RS_CAPACITY_CONTRACT_MISMATCH"
+    return None
+
+
+def bind_capacity_configs(
+    configs: Mapping[str, Mapping[str, Any]],
+    visible_memory_tokens: int,
+) -> Mapping[str, Mapping[str, Any]]:
+    bound = {name: dict(config) for name, config in configs.items()}
+    bound["fh_bounded"] = {
+        **bound.get("fh_bounded", {}),
+        **FH_CAPACITY_CONFIG,
+        "history_capacity_tokens": visible_memory_tokens,
+    }
+    bound["dc_rs"] = {
+        **bound.get("dc_rs", {}),
+        "serialized_cheatsheet_budget_tokens": visible_memory_tokens,
+    }
+    return bound
 
 
 @dataclass(frozen=True, slots=True)
