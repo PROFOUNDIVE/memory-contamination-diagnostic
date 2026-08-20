@@ -3,12 +3,11 @@
     "path": "authoring_contract_v1.json",
     "sha256": "e0a599b21f08d0b8ae6c17d9799cff28de7ebb98d643a6aeffce9fab0cbd3023"
   },
-  "package_reconstruction_identity": "fa803cb766517256c2007ce570925ba8016f4a32959563d2726148a2fe1beec3",
+  "package_reconstruction_identity": "52f8f449b16a2df28ed362c33b1648d4496023bbec278e74cba2fd0c6840f7be",
   "promotion": {
     "reason": "NEW_MCQ_RAG_REQUIRED_ARTIFACTS_UNFROZEN",
     "remaining_objects": [
       "authority_required_leakage_gate_artifacts",
-      "verified_bge_m3_snapshot_tree_and_runtime_binding",
       "task_local_candidate_selection_and_certification",
       "task_local_intervention_relevance",
       "clean_correct_irrelevant_contam_branch_indices"
@@ -28,12 +27,6 @@
       {
         "path": "accepted/gpqa_diamond.jsonl",
         "sha256": "cc68b7b56ad1c2c13e50ec0aabdf4dd7d45650b1a60380301f745ade1caf9e9d"
-      }
-    ],
-    "partial_embedding_runtime_artifact": [
-      {
-        "path": "embedding_runtime_v1.json",
-        "sha256": "2171347886b44258d6990c1731a8489aea434eb95e833c3fcf2c2e003bf6f961"
       }
     ],
     "complete_source_eligibility_registry": [
@@ -60,6 +53,12 @@
       {
         "path": "indices/gpqa_diamond.json",
         "sha256": "e2cd36173acc9247a40c6180e1a8b613fa3820fe99fe5f8c32c9edf08e47e027"
+      }
+    ],
+    "verified_embedding_runtime_artifact": [
+      {
+        "path": "embedding_runtime_v1.json",
+        "sha256": "e9e1ad3331bba7e342d4dc35acafe2daffadf2a6464e8d4a2ef0e0f0e66f3816"
       }
     ]
   },

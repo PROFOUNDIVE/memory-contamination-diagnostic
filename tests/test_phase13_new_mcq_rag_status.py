@@ -8,7 +8,7 @@ STATUS_PATH = Path("data/phase13/rag/new_mcq_rag_status_v1.json")
 TASKS = ("mmlu_pro_engineering", "mmlu_pro_physics", "gpqa_diamond")
 
 
-def test_new_mcq_rag_cells_report_all_unfrozen_required_artifacts() -> None:
+def test_new_mcq_rag_cells_report_remaining_unfrozen_required_artifacts() -> None:
     registry = json.loads(STATUS_PATH.read_text(encoding="utf-8"))
 
     assert registry["cutoff"] == "2026-08-22T18:00:00+09:00"
@@ -33,7 +33,6 @@ def test_new_mcq_rag_cells_report_all_unfrozen_required_artifacts() -> None:
         assert cell["entry_condition_met"] is False
         assert cell["missing_objects"] == [
             "authority_required_leakage_gate_artifacts",
-            "verified_bge_m3_snapshot_tree_and_runtime_binding",
             "task_local_candidate_selection_and_certification",
             "task_local_intervention_relevance",
             "clean_correct_irrelevant_contam_branch_indices",

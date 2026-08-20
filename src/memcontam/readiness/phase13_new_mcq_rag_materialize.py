@@ -59,8 +59,12 @@ def materialize_new_mcq_rag_package(root: Path, evaluation_root: Path, cache_roo
         root / "source_eligibility_registry_v1.json",
         source_eligibility(root, evaluation_root),
     )
-    _write_json(root / "embedding_runtime_v1.json", runtime(cache_root, provider.provider))
-    _write_json(root / "leakage_report_v1.json", leakage(root, evaluation_root))
+    _write_json(
+        root / "embedding_runtime_v1.json",
+        runtime(cache_root, provider.provider),
+        pretty=True,
+    )
+    _write_json(root / "leakage_report_v1.json", leakage(root, evaluation_root), pretty=True)
     indices = {task: _clean_index(task, candidates[task], provider) for task in TASKS}
     (root / "indices").mkdir(exist_ok=True)
     for task, payload in indices.items():
@@ -149,7 +153,7 @@ def _write_manifest(
         "accepted_document_registry": [
             _artifact(root, f"accepted/{task}.jsonl") for task in TASKS
         ],
-        "partial_embedding_runtime_artifact": [_artifact(root, "embedding_runtime_v1.json")],
+        "verified_embedding_runtime_artifact": [_artifact(root, "embedding_runtime_v1.json")],
         "serialized_clean_index_artifacts": [
             _artifact(root, f"indices/{task}.json") for task in TASKS
         ],
@@ -212,6 +216,7 @@ def _write_manifest(
                 },
             }
         ),
+        pretty=True,
     )
 
 
@@ -234,18 +239,26 @@ def _write_status(root: Path) -> None:
         }
         for task in TASKS
     }
-    _write_json(root.parent / "new_mcq_rag_status_v1.json", status, pretty=True)
+    (root.parent / "new_mcq_rag_status_v1.json").write_text(
+        json.dumps(status, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
 
 def _artifact(root: Path, relative: str) -> dict[str, str]:
     return {"path": relative, "sha256": _sha256(root / relative)}
 
 
-def _write_json(path: Path, value: JsonValue, *, pretty: bool = False) -> None:
+def _write_json(
+    path: Path,
+    value: JsonValue,
+    *,
+    pretty: bool = False,
+) -> None:
     path.write_text(
         json.dumps(
             value,
-            sort_keys=not pretty,
+            sort_keys=True,
             indent=2 if pretty else None,
             separators=None if pretty else (",", ":"),
         )

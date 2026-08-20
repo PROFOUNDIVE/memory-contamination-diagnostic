@@ -177,7 +177,6 @@ def load_new_mcq_clean_rag_state(
     embedder: EmbeddingProvider,
     *,
     allow_test_embedder: bool = False,
-    allow_unverified_snapshot: bool = False,
 ) -> FrozenRagState:
     validate_new_mcq_rag_package(root, evaluation_root)
     return load_frozen_clean_state(
@@ -185,7 +184,6 @@ def load_new_mcq_clean_rag_state(
         task,
         embedder,
         allow_test_embedder=allow_test_embedder,
-        allow_unverified_snapshot=allow_unverified_snapshot,
     )
 
 

@@ -2,9 +2,9 @@
   "authority_sha256": "880ba261285758b8c5fea697a105690ffd1c0e4b0b6ab8409673f8408d457b11",
   "candidate_package": {
     "path": "data/phase13/rag/new_mcq/package_manifest_v1.json",
-    "sha256": "58c15396cc59538aa3f9e2b3f2d2384359b91af751d9e56d0155217a61b2f69e",
+    "sha256": "5ac19f84824bae0e8e4dea4ca79d3666f5c43327641d0b3e206187e258d2422a",
     "status": "CLEAN_PACKAGE_NOT_READY",
-    "reconstruction_identity": "fa803cb766517256c2007ce570925ba8016f4a32959563d2726148a2fe1beec3"
+    "reconstruction_identity": "52f8f449b16a2df28ed362c33b1648d4496023bbec278e74cba2fd0c6840f7be"
   },
   "cells": {
     "mmlu_pro_engineering": {
@@ -13,7 +13,6 @@
       "entry_condition_met": false,
       "missing_objects": [
         "authority_required_leakage_gate_artifacts",
-        "verified_bge_m3_snapshot_tree_and_runtime_binding",
         "task_local_candidate_selection_and_certification",
         "task_local_intervention_relevance",
         "clean_correct_irrelevant_contam_branch_indices"
@@ -28,7 +27,6 @@
       "entry_condition_met": false,
       "missing_objects": [
         "authority_required_leakage_gate_artifacts",
-        "verified_bge_m3_snapshot_tree_and_runtime_binding",
         "task_local_candidate_selection_and_certification",
         "task_local_intervention_relevance",
         "clean_correct_irrelevant_contam_branch_indices"
@@ -43,7 +41,6 @@
       "entry_condition_met": false,
       "missing_objects": [
         "authority_required_leakage_gate_artifacts",
-        "verified_bge_m3_snapshot_tree_and_runtime_binding",
         "task_local_candidate_selection_and_certification",
         "task_local_intervention_relevance",
         "clean_correct_irrelevant_contam_branch_indices"

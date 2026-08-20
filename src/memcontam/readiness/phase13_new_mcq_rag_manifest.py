@@ -11,7 +11,6 @@ from .phase13_new_mcq_rag_frozen import EXPECTED_CLASSES
 
 REMAINING_OBJECTS = (
     "authority_required_leakage_gate_artifacts",
-    "verified_bge_m3_snapshot_tree_and_runtime_binding",
     "task_local_candidate_selection_and_certification",
     "task_local_intervention_relevance",
     "clean_correct_irrelevant_contam_branch_indices",
@@ -197,7 +196,7 @@ def _expected_required_paths() -> dict[str, set[str]]:
     return {
         "complete_source_eligibility_registry": {"source_eligibility_registry_v1.json"},
         "accepted_document_registry": {f"accepted/{task}.jsonl" for task in tasks},
-        "partial_embedding_runtime_artifact": {"embedding_runtime_v1.json"},
+        "verified_embedding_runtime_artifact": {"embedding_runtime_v1.json"},
         "serialized_clean_index_artifacts": {f"indices/{task}.json" for task in tasks},
         "partial_clean_document_leakage_evidence": {"leakage_report_v1.json"},
     }

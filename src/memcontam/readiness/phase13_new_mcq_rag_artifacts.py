@@ -12,6 +12,7 @@ from memcontam.readiness.phase13_new_mcq_rag import SourceRegistry, TASKS
 
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
 _SOURCE_ROOT = Path(__file__).resolve().parents[1]
+_QUERY_PROBE = "phase13 bge-m3 production query probe v1"
 
 
 def source_eligibility(root: Path, evaluation_root: Path) -> dict[str, JsonValue]:
@@ -61,22 +62,35 @@ def runtime(cache_root: Path, provider: BgeM3EmbeddingProvider) -> dict[str, Jso
         / BgeM3EmbeddingProvider.REVISION
     )
     tokenizer = provider.model.tokenizer
+    snapshot_files = [
+        {
+            "path": path.relative_to(snapshot).as_posix(),
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "size": path.stat().st_size,
+        }
+        for path in sorted(snapshot.rglob("*"))
+        if path.is_file()
+    ]
+    query_vector = provider.encode_query(_QUERY_PROBE)
+    snapshot_tree_hash = canonical_json_hash(snapshot_files)
     return _JSON_OBJECT.validate_python(
         {
             "schema_version": "new_mcq_rag_embedding_runtime_v1",
-            "status": "NOT_READY_SNAPSHOT_TREE_UNVERIFIED",
+            "status": "COMPLETE",
             "production_identity": (
                 f"{BgeM3EmbeddingProvider.MODEL_ID}@{BgeM3EmbeddingProvider.REVISION}"
             ),
             **provider.metadata,
             "retrieval_mode": "dense_single_vector_only",
-            "model_snapshot_tree_sha256": (
-                "36b12c5d34c027708130f46fb57645ceb7c5bffe3a72a6b78408440f363bb94a"
-            ),
-            "missing_objects": [
-                "measured_model_snapshot_tree_sha256",
-                "production_query_snapshot_verification",
-            ],
+            "model_snapshot_tree_sha256": snapshot_tree_hash,
+            "model_snapshot_tree": {"files": snapshot_files, "sha256": snapshot_tree_hash},
+            "missing_objects": [],
+            "production_query_snapshot_verification": {
+                "probe_id": "new_mcq_rag_bge_m3_query_probe_v1",
+                "probe_sha256": canonical_json_hash(_QUERY_PROBE),
+                "vector_dimension": len(query_vector),
+                "vector_sha256": canonical_json_hash(query_vector),
+            },
             "tokenizer_identity": BgeM3EmbeddingProvider.MODEL_ID,
             "tokenizer_revision": BgeM3EmbeddingProvider.REVISION,
             "tokenizer_sha256": sha256(snapshot / "tokenizer.json"),

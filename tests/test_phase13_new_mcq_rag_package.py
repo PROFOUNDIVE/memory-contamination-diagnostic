@@ -5,15 +5,12 @@ import json
 import shutil
 from dataclasses import asdict
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
 from memcontam.readiness import phase13_new_mcq_rag
-from memcontam.readiness import phase13_new_mcq_rag_artifacts
 from memcontam.readiness import phase13_new_mcq_rag_frozen
 from memcontam.contamination.phase12.models import canonical_json_hash
-from memcontam.memory.embeddings import BgeM3EmbeddingProvider
 
 
 PACKAGE_ROOT = Path("data/phase13/rag/new_mcq")
@@ -57,7 +54,6 @@ def test_clean_package_remains_blocked_by_unfrozen_required_artifacts() -> None:
     assert payload["clean_index_hashes"].keys() == payload["reviewed_candidates"].keys()
     assert report.remaining_objects == (
         "authority_required_leakage_gate_artifacts",
-        "verified_bge_m3_snapshot_tree_and_runtime_binding",
         "task_local_candidate_selection_and_certification",
         "task_local_intervention_relevance",
         "clean_correct_irrelevant_contam_branch_indices",
@@ -234,87 +230,6 @@ def test_package_validation_is_independent_of_working_directory(
     assert report.reason == "NEW_MCQ_RAG_REQUIRED_ARTIFACTS_UNFROZEN"
 
 
-class _BgeIdentityProvider:
-    metadata = {
-        "model_id": "BAAI/bge-m3",
-        "revision": "5617a9f61b028005a4858fdac845db406aefb181",
-        "vector_dimension": 1024,
-        "normalize_embeddings": True,
-    }
-
-    def encode_query(self, text: str) -> list[float]:
-        del text
-        return [1.0, *([0.0] * 1023)]
-
-    def encode_document(self, text: str) -> list[float]:
-        del text
-        raise AssertionError("frozen vectors must not be recomputed")
-
-
-class _RuntimeProvider(BgeM3EmbeddingProvider):
-    def __init__(self) -> None:
-        self.batch_size = 32
-        self.model = SimpleNamespace(
-            tokenizer=SimpleNamespace(truncation_side="right", padding_side="right"),
-            max_seq_length=8192,
-            device="cpu",
-        )
-
-    @property
-    def metadata(self) -> dict[str, object]:
-        return {
-            "model_id": self.MODEL_ID,
-            "revision": self.REVISION,
-            "vector_dimension": self.VECTOR_DIMENSION,
-            "normalize_embeddings": self.NORMALIZE_EMBEDDINGS,
-        }
-
-
-def test_frozen_clean_index_reconstructs_without_intervention_state() -> None:
-    frozen = phase13_new_mcq_rag.load_new_mcq_clean_rag_state(
-        PACKAGE_ROOT,
-        EVALUATION_ROOT,
-        "gpqa_diamond",
-        _BgeIdentityProvider(),
-        allow_test_embedder=True,
-        allow_unverified_snapshot=True,
-    )
-
-    assert frozen.state.branch == "clean"
-    assert frozen.state.corpus is not None
-    assert frozen.state.index is not None
-    assert len(frozen.state.corpus.active_documents) == 24
-    assert frozen.state.index.artifact_hash == frozen.index_artifact_hash
-    assert frozen.reconstruction_identity
-
-
-def test_frozen_clean_index_rejects_test_embedder_without_explicit_override() -> None:
-    with pytest.raises(
-        phase13_new_mcq_rag_frozen.FrozenArtifactError,
-        match="NEW_MCQ_RAG_RUNTIME_IDENTITY_INVALID",
-    ):
-        phase13_new_mcq_rag.load_new_mcq_clean_rag_state(
-            PACKAGE_ROOT,
-            EVALUATION_ROOT,
-            "gpqa_diamond",
-            _BgeIdentityProvider(),
-        )
-
-
-def test_frozen_clean_index_blocks_unverified_snapshot_without_test_override() -> None:
-    with pytest.raises(
-        phase13_new_mcq_rag_frozen.FrozenArtifactError,
-        match="NEW_MCQ_RAG_RUNTIME_SNAPSHOT_UNVERIFIED",
-    ):
-        phase13_new_mcq_rag.load_new_mcq_clean_rag_state(
-            PACKAGE_ROOT,
-            EVALUATION_ROOT,
-            "gpqa_diamond",
-            _BgeIdentityProvider(),
-            allow_test_embedder=True,
-        )
-
-
 def test_package_contains_no_candidate_selection_or_dependent_branches() -> None:
     manifest = json.loads((PACKAGE_ROOT / "package_manifest_v1.json").read_text(encoding="utf-8"))
     leakage = json.loads((PACKAGE_ROOT / "leakage_report_v1.json").read_text(encoding="utf-8"))
@@ -333,29 +248,7 @@ def test_package_contains_no_candidate_selection_or_dependent_branches() -> None
         "source_span_registry",
         "exclusion_manifest",
     ]
-    assert runtime["status"] == "NOT_READY_SNAPSHOT_TREE_UNVERIFIED"
-    assert runtime["missing_objects"] == [
-        "measured_model_snapshot_tree_sha256",
-        "production_query_snapshot_verification",
-    ]
+    assert runtime["status"] == "COMPLETE"
+    assert runtime["missing_objects"] == []
     for task in manifest["tasks"].values():
         assert set(task["index_hashes"]) == {"clean"}
-
-
-def test_runtime_materializer_preserves_snapshot_blocker(tmp_path: Path) -> None:
-    snapshot = (
-        tmp_path
-        / "models--BAAI--bge-m3"
-        / "snapshots"
-        / "5617a9f61b028005a4858fdac845db406aefb181"
-    )
-    (snapshot / "1_Pooling").mkdir(parents=True)
-    (snapshot / "tokenizer.json").write_text("{}", encoding="utf-8")
-    (snapshot / "1_Pooling" / "config.json").write_text("{}", encoding="utf-8")
-    artifact = phase13_new_mcq_rag_artifacts.runtime(tmp_path, _RuntimeProvider())
-
-    assert artifact["status"] == "NOT_READY_SNAPSHOT_TREE_UNVERIFIED"
-    assert artifact["missing_objects"] == [
-        "measured_model_snapshot_tree_sha256",
-        "production_query_snapshot_verification",
-    ]

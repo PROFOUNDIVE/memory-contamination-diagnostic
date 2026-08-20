@@ -13,13 +13,17 @@ from memcontam.contamination.phase12.models import canonical_json_hash
 from memcontam.memory.embeddings import BgeM3EmbeddingProvider
 from memcontam.rag.branch_index import BGE_M3_PRIMARY_IDENTITY, BranchIndex, EmbeddingProvider
 from memcontam.rag.phase12_corpus import BranchCorpus, Document
+from memcontam.readiness.phase13_new_mcq_bge import (
+    validate_runtime_artifact,
+    verify_runtime_binding,
+)
 
 TASKS = ("mmlu_pro_engineering", "mmlu_pro_physics", "gpqa_diamond")
 _SOURCE_ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_CLASSES = (
     "complete_source_eligibility_registry",
     "accepted_document_registry",
-    "partial_embedding_runtime_artifact",
+    "verified_embedding_runtime_artifact",
     "serialized_clean_index_artifacts",
     "partial_clean_document_leakage_evidence",
 )
@@ -81,7 +85,7 @@ def validate_frozen_artifacts(
     ):
         raise FrozenArtifactError("NEW_MCQ_RAG_ACCEPTED_DOCUMENT_REGISTRY_INVALID")
     _validate_source_eligibility(root)
-    _validate_runtime(root)
+    validate_runtime_artifact(root)
     _validate_leakage(root, evaluation_root)
     hashes: dict[str, str] = {}
     for task in TASKS:
@@ -97,7 +101,24 @@ def load_frozen_clean_state(
     embedder: EmbeddingProvider,
     *,
     allow_test_embedder: bool = False,
-    allow_unverified_snapshot: bool = False,
+) -> FrozenRagState:
+    return _load_frozen_clean_state(root, task, embedder, allow_test_embedder, True)
+
+
+def _load_frozen_clean_state_for_test(
+    root: Path,
+    task: str,
+    embedder: EmbeddingProvider,
+) -> FrozenRagState:
+    return _load_frozen_clean_state(root, task, embedder, True, False)
+
+
+def _load_frozen_clean_state(
+    root: Path,
+    task: str,
+    embedder: EmbeddingProvider,
+    allow_test_embedder: bool,
+    verify_snapshot: bool,
 ) -> FrozenRagState:
     metadata = getattr(embedder, "metadata", {})
     if (
@@ -109,8 +130,10 @@ def load_frozen_clean_state(
         or (not allow_test_embedder and not isinstance(embedder, BgeM3EmbeddingProvider))
     ):
         raise FrozenArtifactError("NEW_MCQ_RAG_RUNTIME_IDENTITY_INVALID")
-    if not allow_unverified_snapshot:
-        raise FrozenArtifactError("NEW_MCQ_RAG_RUNTIME_SNAPSHOT_UNVERIFIED")
+    if verify_snapshot:
+        if not isinstance(embedder, BgeM3EmbeddingProvider):
+            raise FrozenArtifactError("NEW_MCQ_RAG_RUNTIME_SNAPSHOT_UNVERIFIED")
+        verify_runtime_binding(root, embedder)
     serialized = _serialized_index(root, task)
     _validate_clean_index(serialized, _accepted(root, task))
     documents = tuple(Document.from_mapping(row) for row in serialized.documents)
@@ -157,34 +180,6 @@ def _validate_source_eligibility(root: Path) -> None:
     source = json.loads((root / "source_eligibility_registry_v1.json").read_bytes())
     if source.get("status") != "COMPLETE" or set(source.get("tasks", {})) != set(TASKS):
         raise FrozenArtifactError("NEW_MCQ_RAG_SOURCE_ELIGIBILITY_INVALID")
-
-
-def _validate_runtime(root: Path) -> None:
-    runtime = json.loads((root / "embedding_runtime_v1.json").read_bytes())
-    required = {
-        "status": "NOT_READY_SNAPSHOT_TREE_UNVERIFIED",
-        "production_identity": BGE_M3_PRIMARY_IDENTITY,
-        "vector_dimension": 1024,
-        "normalize_embeddings": True,
-        "similarity": "cosine",
-        "top_k": 3,
-        "reranker": None,
-        "score_threshold": None,
-        "tie_break": "lexical_document_id",
-        "corpus_scope": "same_task_only",
-        "update_mode": "frozen_read_only",
-        "embedding_implementation_sha256": _sha256(_SOURCE_ROOT / "memory" / "embeddings.py"),
-        "index_implementation_sha256": _sha256(_SOURCE_ROOT / "rag" / "branch_index.py"),
-    }
-    if (
-        runtime.get("missing_objects")
-        != [
-            "measured_model_snapshot_tree_sha256",
-            "production_query_snapshot_verification",
-        ]
-        or any(runtime.get(key) != value for key, value in required.items())
-    ):
-        raise FrozenArtifactError("NEW_MCQ_RAG_EMBEDDING_RUNTIME_INVALID")
 
 
 def _validate_leakage(root: Path, evaluation_root: Path) -> None:
