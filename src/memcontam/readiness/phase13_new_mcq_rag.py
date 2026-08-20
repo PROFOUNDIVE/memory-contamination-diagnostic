@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import importlib
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,6 +9,16 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from memcontam.contamination.phase12.models import canonical_json_hash
+from memcontam.rag.branch_index import EmbeddingProvider
+from .phase13_new_mcq_rag_frozen import (
+    FrozenRagState,
+    load_frozen_clean_state,
+    validate_frozen_artifacts,
+)
+from .phase13_new_mcq_rag_manifest import (
+    ManifestEvidence,
+    validate_package_manifest,
+)
 TASKS = ("mmlu_pro_engineering", "mmlu_pro_physics", "gpqa_diamond")
 STRATA = (
     "requirement_quantifier_constraint_interpretation",
@@ -89,6 +98,7 @@ class NewMcqRagReport:
     candidate_corpus_hashes: dict[str, str]
     candidate_artifact_hashes: dict[str, str]
     review_artifact_hashes: dict[str, str]
+    clean_index_hashes: dict[str, str]
     remaining_objects: tuple[str, ...]
     promotion_ready: bool
 
@@ -135,29 +145,14 @@ def validate_new_mcq_rag_package(root: Path, evaluation_root: Path) -> NewMcqRag
         candidate_hashes[task] = _sha256(candidate_path)
         review_hashes[task] = _sha256(review_path)
 
-    remaining_objects = (
-        "complete_source_eligibility_registry",
-        "accepted_document_registry",
-        "relevance_universe",
-        "complete_embedding_runtime_artifact",
-        "serialized_clean_index_artifacts",
-        "protocol_v7_near_duplicate_leakage_audit",
-        "task_local_intervention_triplets",
-        "clean_correct_irrelevant_contam_branch_indices",
-    )
     try:
-        manifest_module = importlib.import_module(
-            "memcontam.readiness.phase13_new_mcq_rag_manifest"
-        )
-        manifest_module.validate_package_manifest(
+        manifest = validate_package_manifest(
             root,
-            manifest_module.ManifestEvidence(
-                candidate_hashes,
-                review_hashes,
-                corpus_hashes,
-                remaining_objects,
-            ),
+            ManifestEvidence(candidate_hashes, review_hashes, corpus_hashes),
         )
+        clean_hashes = validate_frozen_artifacts(root, evaluation_root, corpus_hashes)
+        if any(manifest.tasks[task].index_hashes != {"clean": clean_hashes[task]} for task in TASKS):
+            raise NewMcqRagError("NEW_MCQ_RAG_PACKAGE_MANIFEST_STALE")
     except ValueError as error:
         code = getattr(error, "code", "NEW_MCQ_RAG_PACKAGE_MANIFEST_STALE")
         raise NewMcqRagError(code) from error
@@ -169,8 +164,28 @@ def validate_new_mcq_rag_package(root: Path, evaluation_root: Path) -> NewMcqRag
         candidate_corpus_hashes=corpus_hashes,
         candidate_artifact_hashes=candidate_hashes,
         review_artifact_hashes=review_hashes,
-        remaining_objects=remaining_objects,
+        clean_index_hashes=clean_hashes,
+        remaining_objects=manifest.promotion.remaining_objects,
         promotion_ready=False,
+    )
+
+
+def load_new_mcq_clean_rag_state(
+    root: Path,
+    evaluation_root: Path,
+    task: str,
+    embedder: EmbeddingProvider,
+    *,
+    allow_test_embedder: bool = False,
+    allow_unverified_snapshot: bool = False,
+) -> FrozenRagState:
+    validate_new_mcq_rag_package(root, evaluation_root)
+    return load_frozen_clean_state(
+        root,
+        task,
+        embedder,
+        allow_test_embedder=allow_test_embedder,
+        allow_unverified_snapshot=allow_unverified_snapshot,
     )
 
 
@@ -234,4 +249,9 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-__all__ = ["NewMcqRagError", "NewMcqRagReport", "validate_new_mcq_rag_package"]
+__all__ = [
+    "NewMcqRagError",
+    "NewMcqRagReport",
+    "load_new_mcq_clean_rag_state",
+    "validate_new_mcq_rag_package",
+]
