@@ -1,0 +1,10 @@
+{
+  "gpqa_extension_status": "H2_BLINDED_PLAUSIBILITY_GATE_FAILED_EXTENSION_ONLY",
+  "protocol_authority_sha256": "022879f559b145e30e645b6ccbd139e9927899d370f1956d27a0562580acf85f",
+  "schema_version": "phase13_new_mcq_rag_authority_selection_v1",
+  "selection_law": "accepted_continuation_state_2026_08_21",
+  "task_selections": {
+    "mmlu_pro_engineering": "MCQ-H2-DETAIL-LENGTH-v1",
+    "mmlu_pro_physics": "MCQ-H2-DETAIL-LENGTH-v1"
+  }
+}

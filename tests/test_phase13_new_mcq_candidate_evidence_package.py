@@ -40,14 +40,14 @@ def _reconstruction_identity(payload: dict[str, JsonValue]) -> str:
     return package_reconstruction_identity(tuple(artifacts))
 
 
-def _reseal_candidate_evidence(package: Path, evidence: dict[str, JsonValue]) -> None:
-    evidence_path = package / "candidate_evidence_v1.json"
-    evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+def _reseal_interventions(package: Path, registry: dict[str, JsonValue]) -> None:
+    registry_path = package / "intervention_registry_v1.json"
+    registry_path.write_text(json.dumps(registry), encoding="utf-8")
     manifest_path = package / "package_manifest_v1.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    manifest["required_artifacts"]["partial_task_local_candidate_evidence"][0][
+    manifest["required_artifacts"]["retained_h2_intervention_registry"][0][
         "sha256"
-    ] = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+    ] = hashlib.sha256(registry_path.read_bytes()).hexdigest()
     manifest["package_reconstruction_identity"] = _reconstruction_identity(manifest)
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     status_path = package.parent / STATUS_PATH.name
@@ -59,59 +59,95 @@ def _reseal_candidate_evidence(package: Path, evidence: dict[str, JsonValue]) ->
     status_path.write_text(json.dumps(status), encoding="utf-8")
 
 
-def test_package_rejects_resealed_semantic_candidate_evidence_forgery(tmp_path: Path) -> None:
+def test_package_rejects_resealed_semantic_intervention_forgery(tmp_path: Path) -> None:
     package = _copy_package(tmp_path)
-    evidence = json.loads((package / "candidate_evidence_v1.json").read_text(encoding="utf-8"))
-    evidence["tasks"]["gpqa_diamond"]["source_role"] = "eligible_source_exists"
-    _reseal_candidate_evidence(package, evidence)
+    registry = json.loads((package / "intervention_registry_v1.json").read_text(encoding="utf-8"))
+    registry["tasks"]["mmlu_pro_engineering"]["documents"]["contam"][
+        "task_id"
+    ] = "mmlu_pro_physics"
+    _reseal_interventions(package, registry)
 
     with pytest.raises(
         phase13_new_mcq_rag.NewMcqRagError,
-        match="NEW_MCQ_CANDIDATE_EVIDENCE_INVALID",
+        match="NEW_MCQ_RAG_INTERVENTION_REGISTRY_INVALID",
     ):
         phase13_new_mcq_rag.validate_new_mcq_rag_package(package, EVALUATION_ROOT)
 
 
-@pytest.mark.parametrize("field", ("certification_status", "mechanical_candidate_id"))
-def test_package_rejects_resealed_candidate_evidence_with_missing_audit_field(
+@pytest.mark.parametrize("field", ("selected_candidate_id", "candidate_family_status"))
+def test_package_rejects_intervention_registry_with_missing_freeze_field(
     tmp_path: Path,
     field: str,
 ) -> None:
     package = _copy_package(tmp_path)
-    evidence = json.loads((package / "candidate_evidence_v1.json").read_text(encoding="utf-8"))
-    del evidence["tasks"]["mmlu_pro_engineering"][field]
-    _reseal_candidate_evidence(package, evidence)
+    registry = json.loads((package / "intervention_registry_v1.json").read_text(encoding="utf-8"))
+    del registry["tasks"]["mmlu_pro_engineering"][field]
+    _reseal_interventions(package, registry)
 
     with pytest.raises(
         phase13_new_mcq_rag.NewMcqRagError,
-        match="NEW_MCQ_CANDIDATE_EVIDENCE_INVALID",
+        match="NEW_MCQ_RAG_PACKAGE_MANIFEST_STALE",
     ):
         phase13_new_mcq_rag.validate_new_mcq_rag_package(package, EVALUATION_ROOT)
 
 
-def test_package_contains_partial_candidate_evidence_but_no_dependent_branches() -> None:
+def test_package_contains_complete_h2_interventions_and_branch_indices() -> None:
     manifest = json.loads((PACKAGE_ROOT / "package_manifest_v1.json").read_text(encoding="utf-8"))
-    evidence = json.loads((PACKAGE_ROOT / "candidate_evidence_v1.json").read_text(encoding="utf-8"))
+    registry = json.loads((PACKAGE_ROOT / "intervention_registry_v1.json").read_text(encoding="utf-8"))
     leakage = json.loads((PACKAGE_ROOT / "leakage_report_v1.json").read_text(encoding="utf-8"))
     runtime = json.loads((PACKAGE_ROOT / "embedding_runtime_v1.json").read_text(encoding="utf-8"))
 
-    assert not (PACKAGE_ROOT / "intervention_triplets_v1.json").exists()
-    assert not (PACKAGE_ROOT / "relevance_universe_v1.json").exists()
-    assert "task_local_intervention_triplets" not in manifest["required_artifacts"]
     assert {
         artifact["path"]
-        for artifact in manifest["required_artifacts"]["partial_task_local_candidate_evidence"]
-    } == {
-        "candidate_evidence_v1.json",
-        "sources/mmlu_pro_validation_475d58ba.parquet",
-        "sources/gpqa_tree_633f5ee8.json",
-    }
-    assert evidence["tasks"]["gpqa_diamond"]["status"] == "NOT_READY_NO_ELIGIBLE_SOURCE"
-    assert (
-        evidence["tasks"]["mmlu_pro_engineering"]["status"]
-        == "NOT_READY_SPLIT_REGISTRY_UNFROZEN"
+        for artifact in manifest["required_artifacts"]["retained_h2_intervention_registry"]
+    } == {"intervention_registry_v1.json"}
+    assert tuple(registry["tasks"]) == ("mmlu_pro_engineering", "mmlu_pro_physics")
+    assert all(
+        task["selected_candidate_id"] == "MCQ-H2-DETAIL-LENGTH-v1"
+        and tuple(task["documents"]) == ("contam", "correct", "irrelevant")
+        and "relevance" not in task
+        for task in registry["tasks"].values()
     )
-    assert leakage["status"] == "NOT_READY_REQUIRED_LEAKAGE_GATE_UNFROZEN"
+    assert leakage["status"] == "PASS"
     assert runtime["status"] == "COMPLETE"
     for task in manifest["tasks"].values():
-        assert set(task["index_hashes"]) == {"clean"}
+        assert set(task["index_hashes"]) == {"clean", "correct", "irrelevant", "contam"}
+
+
+def test_package_binds_protocol_selection_record() -> None:
+    manifest = json.loads((PACKAGE_ROOT / "package_manifest_v1.json").read_text(encoding="utf-8"))
+    selection = json.loads(
+        (PACKAGE_ROOT / "authority_selection_v1.json").read_text(encoding="utf-8")
+    )
+    interventions = json.loads(
+        (PACKAGE_ROOT / "intervention_registry_v1.json").read_text(encoding="utf-8")
+    )
+
+    assert {
+        artifact["path"]
+        for artifact in manifest["required_artifacts"]["accepted_h2_selection_record"]
+    } == {"authority_selection_v1.json"}
+    assert selection == {
+        "schema_version": "phase13_new_mcq_rag_authority_selection_v1",
+        "protocol_authority_sha256": (
+            "022879f559b145e30e645b6ccbd139e9927899d370f1956d27a0562580acf85f"
+        ),
+        "selection_law": "accepted_continuation_state_2026_08_21",
+        "task_selections": {
+            "mmlu_pro_engineering": "MCQ-H2-DETAIL-LENGTH-v1",
+            "mmlu_pro_physics": "MCQ-H2-DETAIL-LENGTH-v1",
+        },
+        "gpqa_extension_status": "H2_BLINDED_PLAUSIBILITY_GATE_FAILED_EXTENSION_ONLY",
+    }
+    assert interventions["authority_selection_sha256"] == hashlib.sha256(
+        (PACKAGE_ROOT / "authority_selection_v1.json").read_bytes()
+    ).hexdigest()
+
+
+def test_package_excludes_unfrozen_clean_relevance_universe() -> None:
+    manifest = json.loads((PACKAGE_ROOT / "package_manifest_v1.json").read_text(encoding="utf-8"))
+    leakage = json.loads((PACKAGE_ROOT / "leakage_report_v1.json").read_text(encoding="utf-8"))
+
+    assert "task_local_relevance_universe" not in manifest["required_artifacts"]
+    assert not (PACKAGE_ROOT / "relevance_universe_v1.json").exists()
+    assert "relevance_universe" not in dict(leakage["input_hashes"])
