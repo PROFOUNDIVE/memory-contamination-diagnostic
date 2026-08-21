@@ -3,14 +3,11 @@
     "path": "authoring_contract_v1.json",
     "sha256": "e0a599b21f08d0b8ae6c17d9799cff28de7ebb98d643a6aeffce9fab0cbd3023"
   },
-  "package_reconstruction_identity": "3081015764dba64fb0b606ccf6ecc31e7621e14a8291ca53472fd22c14580264",
+  "package_reconstruction_identity": "d8d732e75ef8a9573f1e601253ad5a5d67f0b2793d17bfec2df0547a4beecbd1",
   "promotion": {
     "reason": "NEW_MCQ_RAG_REQUIRED_ARTIFACTS_UNFROZEN",
     "remaining_objects": [
-      "authority_required_leakage_gate_artifacts",
-      "task_local_candidate_selection_and_certification",
-      "task_local_intervention_relevance",
-      "clean_correct_irrelevant_contam_branch_indices"
+      "clean_document_applicability_predicates_and_relevance_universe"
     ],
     "status": "NOT_READY"
   },
@@ -23,50 +20,40 @@
       {
         "path": "accepted/mmlu_pro_physics.jsonl",
         "sha256": "b5f13e2ac37d09db8021a9ef8bd5132116fe2f93154b99da2da6a365adbdf7a7"
-      },
+      }
+    ],
+    "accepted_h2_selection_record": [
       {
-        "path": "accepted/gpqa_diamond.jsonl",
-        "sha256": "cc68b7b56ad1c2c13e50ec0aabdf4dd7d45650b1a60380301f745ade1caf9e9d"
+        "path": "authority_selection_v1.json",
+        "sha256": "1717cf63dcffd3a7f2bed3db4bb3f7357bc3b4ec29ea7d980ce2bc8c07ce9fbc"
+      }
+    ],
+    "complete_leakage_evidence": [
+      {
+        "path": "leakage_report_v1.json",
+        "sha256": "a29906750f8061afa37fd82bf9d1f431d05fb0275e659b0899089518bd41386f"
       }
     ],
     "complete_source_eligibility_registry": [
       {
         "path": "source_eligibility_registry_v1.json",
-        "sha256": "3fed7d68d82df64482935723ebdafc9d65fa579a28e9200c2a17c0bdcfb185ab"
+        "sha256": "210e8c3491cbf9e7c4c7e3fc9d1d8832166f62980e902d51744e85e36bf30697"
       }
     ],
-    "partial_clean_document_leakage_evidence": [
+    "retained_h2_intervention_registry": [
       {
-        "path": "leakage_report_v1.json",
-        "sha256": "380f1fea8b325ea8ea52519c7cf8b855a5dc57a789b6502fb83ba8f57aeab6cc"
+        "path": "intervention_registry_v1.json",
+        "sha256": "7c827c59a353a081beb4d4c74f8af6a0053930b8f9f7e41b185f2ba65871f91c"
       }
     ],
-    "partial_task_local_candidate_evidence": [
-      {
-        "path": "candidate_evidence_v1.json",
-        "sha256": "96f62230b7fae75c88ddb6982e211ecfcf197de9ab71c175ee4a7fe13175810c"
-      },
-      {
-        "path": "sources/mmlu_pro_validation_475d58ba.parquet",
-        "sha256": "a6db33e44c7a8d6a0a9665aabe6596a5e7436bebb62412d1219821283835e457"
-      },
-      {
-        "path": "sources/gpqa_tree_633f5ee8.json",
-        "sha256": "3a722b406849c230a76cf797f0e5481a2dd17fe403be650b5798703ecfa54526"
-      }
-    ],
-    "serialized_clean_index_artifacts": [
+    "serialized_branch_index_artifacts": [
       {
         "path": "indices/mmlu_pro_engineering.json",
-        "sha256": "73af08f07f2cf7afac8e5205b05de9a6a5a4f205c02206e56d1cc32d71f32d20"
+        "sha256": "04ef63d4482baa072bedf9f70e6ab8dfef4e7bde2da437a61a1a4dafcce2636c"
       },
       {
         "path": "indices/mmlu_pro_physics.json",
-        "sha256": "e4f099294bfcb6758672da94754e33e4ab21f2538c78a09edf52e8d5efd898cc"
-      },
-      {
-        "path": "indices/gpqa_diamond.json",
-        "sha256": "e2cd36173acc9247a40c6180e1a8b613fa3820fe99fe5f8c32c9edf08e47e027"
+        "sha256": "d33e975034a37080535e2554110069eab5298adb32d2ef032686eccd7c000175"
       }
     ],
     "verified_embedding_runtime_artifact": [
@@ -79,32 +66,9 @@
   "schema_version": "new_mcq_rag_package_manifest_v1",
   "source_registry": {
     "path": "source_registry_v1.json",
-    "sha256": "326efe2b32e3d1403deb37acb1450fb37179ef3ca61a9423db2f94198156a32d"
+    "sha256": "853b51ff10def4d5241f41a9c8f2c300fad831e3ccf256244cd5322d09291bc3"
   },
   "tasks": {
-    "gpqa_diamond": {
-      "accepted": {
-        "path": "accepted/gpqa_diamond.jsonl",
-        "sha256": "cc68b7b56ad1c2c13e50ec0aabdf4dd7d45650b1a60380301f745ade1caf9e9d"
-      },
-      "candidate": {
-        "path": "candidates/gpqa_diamond.jsonl",
-        "sha256": "6a581f76b5192b79ae45b5a1bd283f2068a90699db8168e3cec7a1abf914564e"
-      },
-      "corpus_hash": "21ac3f5ec61421d8d889cbcb2932f7000bf4c3a4ee8f3f30d3a2cbc3e8d505d1",
-      "documents": 24,
-      "index": {
-        "path": "indices/gpqa_diamond.json",
-        "sha256": "e2cd36173acc9247a40c6180e1a8b613fa3820fe99fe5f8c32c9edf08e47e027"
-      },
-      "index_hashes": {
-        "clean": "0b47d852d8d3fe39f805f16cef44228438ab205008e9b3d691cda6256096a1d9"
-      },
-      "review": {
-        "path": "reviews/gpqa_diamond.json",
-        "sha256": "29df21485ae2d0cd5a41b27b20eea0d2fedb32467169136fea87dd9202b41a9c"
-      }
-    },
     "mmlu_pro_engineering": {
       "accepted": {
         "path": "accepted/mmlu_pro_engineering.jsonl",
@@ -118,10 +82,13 @@
       "documents": 24,
       "index": {
         "path": "indices/mmlu_pro_engineering.json",
-        "sha256": "73af08f07f2cf7afac8e5205b05de9a6a5a4f205c02206e56d1cc32d71f32d20"
+        "sha256": "04ef63d4482baa072bedf9f70e6ab8dfef4e7bde2da437a61a1a4dafcce2636c"
       },
       "index_hashes": {
-        "clean": "8dedaa5ea49abfe1ac57a7cd98b61d33d2546276207547d3d89835d7cb068d5b"
+        "clean": "8dedaa5ea49abfe1ac57a7cd98b61d33d2546276207547d3d89835d7cb068d5b",
+        "contam": "2b0a4f879684204d5c5d15918c5515e99451bc6d53bdb699419d0518758d7b20",
+        "correct": "ef9b2076ff41c2ea3ff5bd8b9705456a18fa015a768d7d20518b70b4977f21db",
+        "irrelevant": "15687dcd69666c7e36c06ead7fba48cfd5b89a1802a77bf9beee06199d0a8957"
       },
       "review": {
         "path": "reviews/mmlu_pro_engineering.json",
@@ -141,10 +108,13 @@
       "documents": 24,
       "index": {
         "path": "indices/mmlu_pro_physics.json",
-        "sha256": "e4f099294bfcb6758672da94754e33e4ab21f2538c78a09edf52e8d5efd898cc"
+        "sha256": "d33e975034a37080535e2554110069eab5298adb32d2ef032686eccd7c000175"
       },
       "index_hashes": {
-        "clean": "800076b964989f69fade30d969aa096cb967609417ea0a3bb92cdf9b89cab4de"
+        "clean": "800076b964989f69fade30d969aa096cb967609417ea0a3bb92cdf9b89cab4de",
+        "contam": "cb9cc0b2381ee843a1bff47a56b6db35a9b94e626579703d34e3aa3f827232ad",
+        "correct": "ade82f3cd85396a67cbe8b8875fff14980c2e18b25b955e858c0e925c9c77ad3",
+        "irrelevant": "370e21d771c6eddd00d60cb2ff783d2d0ede350ebdc16f646b40a141bde16db2"
       },
       "review": {
         "path": "reviews/mmlu_pro_physics.json",
