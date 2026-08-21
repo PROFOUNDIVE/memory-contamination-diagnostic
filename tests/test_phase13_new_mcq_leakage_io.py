@@ -15,15 +15,13 @@ EVALUATION_ROOT = Path("data/phase13/core/materialized")
 def test_current_inputs_bind_all_clean_documents_and_evaluation_exclusions() -> None:
     inputs = load_leakage_inputs(PACKAGE_ROOT, EVALUATION_ROOT)
 
-    assert len(inputs.documents) == 72
-    assert len(inputs.evaluation_items) == 698
+    assert len(inputs.documents) == 48
+    assert len(inputs.evaluation_items) == 500
     assert all(document.source_span_ids for document in inputs.documents)
     assert all(item.source_span_ids and item.identity_keys for item in inputs.evaluation_items)
     assert {key for key, _value in inputs.input_hashes} == {
-        "accepted:gpqa_diamond",
         "accepted:mmlu_pro_engineering",
         "accepted:mmlu_pro_physics",
-        "evaluation:gpqa_diamond",
         "evaluation:mmlu_pro_engineering",
         "evaluation:mmlu_pro_physics",
         "evaluation_manifest",

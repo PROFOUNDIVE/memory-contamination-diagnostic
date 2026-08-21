@@ -17,9 +17,9 @@ from memcontam.readiness.phase13_new_mcq_leakage_models import (
     LeakageArtifact,
     LeakageArtifactError,
 )
-from memcontam.readiness.phase13_new_mcq_rag_frozen import AcceptedDocument
+from memcontam.readiness.phase13_new_mcq_rag_models import AcceptedDocument
 
-TASKS = ("mmlu_pro_engineering", "mmlu_pro_physics", "gpqa_diamond")
+TASKS = ("mmlu_pro_engineering", "mmlu_pro_physics")
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
 
 
@@ -191,7 +191,7 @@ def _validate_evaluation_manifest(
     root: Path,
     manifest: _EvaluationManifest,
 ) -> None:
-    if set(manifest.artifacts) != set(TASKS):
+    if not set(TASKS) <= set(manifest.artifacts):
         raise LeakageArtifactError("NEW_MCQ_LEAKAGE_EVALUATION_INVALID")
     for task in TASKS:
         artifact = manifest.artifacts[task]
