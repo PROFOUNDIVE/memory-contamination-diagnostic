@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import hashlib
 import json
+import shutil
+from tempfile import TemporaryDirectory
 from pathlib import Path
 
 from pydantic import JsonValue, TypeAdapter
@@ -9,20 +10,26 @@ from pydantic import JsonValue, TypeAdapter
 from memcontam.contamination.phase12.models import canonical_json_hash
 from memcontam.memory.embeddings import BgeM3EmbeddingProvider
 from memcontam.rag.branch_index import build_branch_indices
-from memcontam.rag.phase12_corpus import BranchCorpus, BranchCorpusSet, CleanCorpus
-from memcontam.readiness.phase13_new_mcq_rag import (
-    Candidate,
-    TASKS,
-    validate_new_mcq_rag_package,
+from memcontam.rag.phase12_corpus import BranchCorpusSet, CleanCorpus, build_branch_corpora
+from memcontam.readiness.phase13_new_mcq_candidate_evidence_v2_models import semantics
+from memcontam.readiness.phase13_new_mcq_leakage import AuditDocument, audit_documents
+from memcontam.readiness.phase13_new_mcq_leakage_io import (
+    load_leakage_inputs,
+    write_leakage_artifact,
 )
-from memcontam.readiness.phase13_new_mcq_p0_4_evidence import materialize_candidate_evidence
+from memcontam.readiness.phase13_new_mcq_rag import Candidate, TASKS, validate_new_mcq_rag_package
 
-from .phase13_new_mcq_rag_artifacts import leakage, runtime, source_eligibility
-from .phase13_new_mcq_rag_frozen import EXPECTED_CLASSES, SerializedCleanIndex
-from .phase13_new_mcq_rag_manifest import (
-    REMAINING_OBJECTS,
-    Artifact,
-    package_reconstruction_identity,
+from .phase13_new_mcq_rag_artifacts import runtime, source_eligibility
+from .phase13_new_mcq_rag_authority import authority_selection
+from .phase13_new_mcq_rag_models import (
+    BRANCHES,
+    InterventionRegistry,
+)
+from .phase13_new_mcq_rag_materialize_output import (
+    sha256,
+    write_json,
+    write_manifest,
+    write_status,
 )
 
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
@@ -41,6 +48,15 @@ class _CachedProvider:
             "provider": BgeM3EmbeddingProvider.MODEL_ID,
         }
 
+    @property
+    def metadata(self) -> dict[str, str | int | bool]:
+        return {
+            "model_id": BgeM3EmbeddingProvider.MODEL_ID,
+            "revision": BgeM3EmbeddingProvider.REVISION,
+            "vector_dimension": BgeM3EmbeddingProvider.VECTOR_DIMENSION,
+            "normalize_embeddings": BgeM3EmbeddingProvider.NORMALIZE_EMBEDDINGS,
+        }
+
     def encode_query(self, text: str) -> list[float]:
         return self.provider.encode_query(text)
 
@@ -51,37 +67,61 @@ class _CachedProvider:
 
 
 def materialize_new_mcq_rag_package(root: Path, evaluation_root: Path, cache_root: Path) -> None:
-    materialize_candidate_evidence(root, evaluation_root)
+    with TemporaryDirectory(dir=root.parent, prefix=".new_mcq-stage-") as directory:
+        stage_root = Path(directory) / root.name
+        shutil.copytree(root, stage_root)
+        _materialize_staged_package(stage_root, evaluation_root, cache_root)
+        validate_new_mcq_rag_package(stage_root, evaluation_root)
+        _publish_staged_package(stage_root, root)
+
+
+def _materialize_staged_package(root: Path, evaluation_root: Path, cache_root: Path) -> None:
+    (root / "relevance_universe_v1.json").unlink(missing_ok=True)
     provider = _CachedProvider(
         BgeM3EmbeddingProvider(cache_folder=cache_root, local_files_only=True, batch_size=32)
     )
     candidates = {task: _candidates(root, task) for task in TASKS}
     _write_accepted(root, candidates)
-    _write_json(
-        root / "source_eligibility_registry_v1.json",
-        source_eligibility(root, evaluation_root),
-    )
-    _write_json(
-        root / "embedding_runtime_v1.json",
-        runtime(cache_root, provider.provider),
-        pretty=True,
-    )
-    _write_json(root / "leakage_report_v1.json", leakage(root, evaluation_root), pretty=True)
-    indices = {task: _clean_index(task, candidates[task], provider) for task in TASKS}
+    write_json(root / "source_eligibility_registry_v1.json", source_eligibility(root, evaluation_root))
+    write_json(root / "embedding_runtime_v1.json", runtime(cache_root, provider.provider), pretty=True)
+    selection = authority_selection()
+    write_json(root / "authority_selection_v1.json", selection.model_dump(mode="json"), pretty=True)
+    registry = _intervention_registry(sha256(root / "authority_selection_v1.json"))
+    write_json(root / "intervention_registry_v1.json", registry.model_dump(mode="json"), pretty=True)
+    indices = {
+        task: _branch_indices(task, candidates[task], registry, provider) for task in TASKS
+    }
     (root / "indices").mkdir(exist_ok=True)
     for task, payload in indices.items():
-        _write_json(root / "indices" / f"{task}.json", payload)
-    _write_manifest(root, candidates, indices)
-    _write_status(root)
-    validate_new_mcq_rag_package(root, evaluation_root)
+        write_json(root / "indices" / f"{task}.json", payload)
+    _write_leakage(root, evaluation_root, registry, provider)
+    write_manifest(root, candidates, indices)
+    write_status(root)
+
+
+def _publish_staged_package(stage_root: Path, root: Path) -> None:
+    stage_status = stage_root.parent / "new_mcq_rag_status_v1.json"
+    live_status = root.parent / "new_mcq_rag_status_v1.json"
+    backup_root = stage_root.parent / "previous-package"
+    backup_status = stage_root.parent / "previous-status.json"
+    root.replace(backup_root)
+    try:
+        stage_root.replace(root)
+        live_status.replace(backup_status)
+        stage_status.replace(live_status)
+    except OSError:
+        if root.exists():
+            root.replace(stage_root)
+        backup_root.replace(root)
+        if backup_status.exists():
+            backup_status.replace(live_status)
+        raise
 
 
 def _candidates(root: Path, task: str) -> tuple[Candidate, ...]:
     return tuple(
         Candidate.model_validate_json(line)
-        for line in (root / "candidates" / f"{task}.jsonl")
-        .read_text(encoding="utf-8")
-        .splitlines()
+        for line in (root / "candidates" / f"{task}.jsonl").read_text(encoding="utf-8").splitlines()
     )
 
 
@@ -104,176 +144,123 @@ def _write_accepted(root: Path, candidates: dict[str, tuple[Candidate, ...]]) ->
         (root / "accepted" / f"{task}.jsonl").write_text(payload, encoding="utf-8")
 
 
-def _clean_index(
+def _intervention_registry(authority_selection_sha256: str) -> InterventionRegistry:
+    roles = {"false": "contam", "correct": "correct", "irrelevant": "irrelevant"}
+    tasks: dict[str, JsonValue] = {}
+    for task in TASKS:
+        documents: dict[str, JsonValue] = {}
+        for role, semantic_id, text in semantics("MCQ-H2-DETAIL-LENGTH-v1"):
+            branch = roles[role]
+            documents[branch] = {
+                "document_id": f"new_mcq_h2::{task}::{branch}",
+                "task_id": task,
+                "role": branch,
+                "semantic_id": semantic_id,
+                "text": text,
+                "source_registry_ids": ["phase13_protocol_revised_v8"],
+                "content_hash": canonical_json_hash(text),
+            }
+        tasks[task] = _JSON_OBJECT.validate_python({
+            "selected_candidate_id": "MCQ-H2-DETAIL-LENGTH-v1",
+            "candidate_family_status": "ACCEPTED_H2",
+            "documents": documents,
+        })
+    return InterventionRegistry.model_validate(
+        _JSON_OBJECT.validate_python({
+            "schema_version": "phase13_new_mcq_rag_intervention_registry_v1",
+            "protocol_authority_sha256": (
+                "022879f559b145e30e645b6ccbd139e9927899d370f1956d27a0562580acf85f"
+            ),
+            "experiment_authority_sha256": (
+                "4b1db4e55e68ec8e00fe022b9bea1685bebb340138df0e39fddc7823aafdc374"
+            ),
+            "authority_selection_sha256": authority_selection_sha256,
+            "authority_stack": [
+                "phase13_theory_revised_v1",
+                "phase13_baseline_revised_v5",
+                "phase13_protocol_revised_v8",
+                "phase13_experiment_revised_v8",
+            ],
+            "tasks": tasks,
+        })
+    )
+
+
+def _branch_indices(
     task: str,
     rows: tuple[Candidate, ...],
+    registry: InterventionRegistry,
     provider: _CachedProvider,
 ) -> dict[str, JsonValue]:
     clean = CleanCorpus.from_documents(
         [{"id": row.document_id, "text": row.text} for row in rows],
         corpus_id=f"new_mcq_rag_v1::{task}",
     )
-    corpus = BranchCorpus(
-        branch="clean",
-        documents=clean.documents,
-        active_document_ids=tuple(row.document_id for row in clean.documents),
-        serialization_id=f"{clean.corpus_id}|clean|branch-corpus-v3",
+    documents = registry.tasks[task].documents
+    corpora = build_branch_corpora(
+        clean,
+        {
+            "false": documents["contam"].model_dump(mode="json"),
+            "correct": documents["correct"].model_dump(mode="json"),
+            "irrelevant": documents["irrelevant"].model_dump(mode="json"),
+        },
     )
-    corpus_set = BranchCorpusSet(
-        clean=clean,
-        branches={"clean": corpus},
-        serialization_id=f"{clean.corpus_id}|base",
+    retained = BranchCorpusSet(
+        clean,
+        {branch: corpora.branches[branch] for branch in BRANCHES},
+        corpora.serialization_id,
     )
-    index = build_branch_indices(corpus_set, provider, None).branches["clean"]
+    indices = build_branch_indices(retained, provider, None).branches
     return _JSON_OBJECT.validate_python(
         {
-            "schema_version": "new_mcq_rag_serialized_clean_index_v1",
+            "schema_version": "new_mcq_rag_serialized_branch_indices_v1",
             "task_id": task,
-            "corpus_serialization_id": corpus.serialization_id,
-            "corpus_content_hash": corpus.content_hash,
-            "index_serialization_id": index.serialization_id,
-            "index_artifact_hash": index.artifact_hash,
-            "embedding_contract": dict(index.embedding_contract),
             "top_k": 3,
-            "documents": [document.payload() for document in index.documents],
-            "vectors": {
-                document_id: list(vector) for document_id, vector in index.vectors.items()
+            "branches": {
+                branch: {
+                    "branch": branch,
+                    "corpus_serialization_id": retained.branches[branch].serialization_id,
+                    "corpus_content_hash": retained.branches[branch].content_hash,
+                    "index_serialization_id": indices[branch].serialization_id,
+                    "index_artifact_hash": indices[branch].artifact_hash,
+                    "embedding_contract": dict(indices[branch].embedding_contract),
+                    "documents": [document.payload() for document in indices[branch].documents],
+                    "vectors": {key: list(value) for key, value in indices[branch].vectors.items()},
+                }
+                for branch in BRANCHES
             },
         }
     )
 
 
-def _write_manifest(
+def _write_leakage(
     root: Path,
-    candidates: dict[str, tuple[Candidate, ...]],
-    indices: dict[str, dict[str, JsonValue]],
+    evaluation_root: Path,
+    registry: InterventionRegistry,
+    provider: _CachedProvider,
 ) -> None:
-    artifacts = {
-        "complete_source_eligibility_registry": [
-            _artifact(root, "source_eligibility_registry_v1.json")
-        ],
-        "accepted_document_registry": [
-            _artifact(root, f"accepted/{task}.jsonl") for task in TASKS
-        ],
-        "verified_embedding_runtime_artifact": [_artifact(root, "embedding_runtime_v1.json")],
-        "serialized_clean_index_artifacts": [
-            _artifact(root, f"indices/{task}.json") for task in TASKS
-        ],
-        "partial_clean_document_leakage_evidence": [_artifact(root, "leakage_report_v1.json")],
-        "partial_task_local_candidate_evidence": [
-            _artifact(root, "candidate_evidence_v1.json"),
-            _artifact(root, "sources/mmlu_pro_validation_475d58ba.parquet"),
-            _artifact(root, "sources/gpqa_tree_633f5ee8.json"),
-        ],
-    }
-    assert set(artifacts) == set(EXPECTED_CLASSES)
-    tasks: dict[str, JsonValue] = {}
-    task_artifacts: list[dict[str, str]] = []
-    for task, rows in candidates.items():
-        serialized = SerializedCleanIndex.model_validate(indices[task])
-        candidate_artifact = _artifact(root, f"candidates/{task}.jsonl")
-        review_artifact = _artifact(root, f"reviews/{task}.json")
-        accepted_artifact = _artifact(root, f"accepted/{task}.jsonl")
-        index_artifact = _artifact(root, f"indices/{task}.json")
-        task_artifacts.extend(
-            (candidate_artifact, review_artifact, accepted_artifact, index_artifact)
+    inputs = load_leakage_inputs(root, evaluation_root)
+    interventions = tuple(
+        AuditDocument(
+            document.document_id,
+            task,
+            document.text,
+            document.source_registry_ids,
+            (),
         )
-        tasks[task] = _JSON_OBJECT.validate_python(
-            {
-                "documents": 24,
-                "candidate": candidate_artifact,
-                "review": review_artifact,
-                "accepted": accepted_artifact,
-                "index": index_artifact,
-                "corpus_hash": canonical_json_hash(
-                    [{"id": row.document_id, "text": row.text} for row in rows]
-                ),
-                "index_hashes": {"clean": serialized.index_artifact_hash},
-            }
-        )
-    source_registry = _artifact(root, "source_registry_v1.json")
-    authoring_contract = _artifact(root, "authoring_contract_v1.json")
-    reconstruction = package_reconstruction_identity(
-        tuple(
-            Artifact.model_validate(artifact)
-            for artifact in (
-                source_registry,
-                authoring_contract,
-                *(item for values in artifacts.values() for item in values),
-                *task_artifacts,
-            )
-        )
+        for task, task_registry in registry.tasks.items()
+        for document in task_registry.documents.values()
     )
-    _write_json(
-        root / "package_manifest_v1.json",
-        _JSON_OBJECT.validate_python(
-            {
-                "schema_version": "new_mcq_rag_package_manifest_v1",
-                "source_registry": source_registry,
-                "authoring_contract": authoring_contract,
-                "required_artifacts": artifacts,
-                "tasks": tasks,
-                "package_reconstruction_identity": reconstruction,
-                "promotion": {
-                    "status": "NOT_READY",
-                    "reason": "NEW_MCQ_RAG_REQUIRED_ARTIFACTS_UNFROZEN",
-                    "remaining_objects": list(REMAINING_OBJECTS),
-                },
-            }
-        ),
-        pretty=True,
+    hashes = dict(inputs.input_hashes)
+    hashes["intervention_registry"] = sha256(root / "intervention_registry_v1.json")
+    hashes["authority_selection"] = sha256(root / "authority_selection_v1.json")
+    artifact = audit_documents(
+        inputs.documents + interventions,
+        inputs.evaluation_items,
+        provider,
+        hashes,
     )
-
-
-def _write_status(root: Path) -> None:
-    manifest = json.loads((root / "package_manifest_v1.json").read_text(encoding="utf-8"))
-    status = json.loads((root.parent / "new_mcq_rag_status_v1.json").read_text(encoding="utf-8"))
-    status["candidate_package"] = {
-        "path": str(root / "package_manifest_v1.json"),
-        "sha256": _sha256(root / "package_manifest_v1.json"),
-        "status": "CLEAN_PACKAGE_NOT_READY",
-        "reconstruction_identity": manifest["package_reconstruction_identity"],
-    }
-    status["cells"] = {
-        task: {
-            "status": "NOT_READY",
-            "reason": "NEW_MCQ_RAG_REQUIRED_ARTIFACTS_UNFROZEN",
-            "entry_condition_met": False,
-            "missing_objects": list(REMAINING_OBJECTS),
-            "index_hashes": manifest["tasks"][task]["index_hashes"],
-        }
-        for task in TASKS
-    }
-    (root.parent / "new_mcq_rag_status_v1.json").write_text(
-        json.dumps(status, indent=2) + "\n",
-        encoding="utf-8",
-    )
-
-
-def _artifact(root: Path, relative: str) -> dict[str, str]:
-    return {"path": relative, "sha256": _sha256(root / relative)}
-
-
-def _write_json(
-    path: Path,
-    value: JsonValue,
-    *,
-    pretty: bool = False,
-) -> None:
-    path.write_text(
-        json.dumps(
-            value,
-            sort_keys=True,
-            indent=2 if pretty else None,
-            separators=None if pretty else (",", ":"),
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-
-
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    write_leakage_artifact(root / "leakage_report_v1.json", artifact)
 
 
 __all__ = ["materialize_new_mcq_rag_package"]
