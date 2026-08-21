@@ -59,7 +59,7 @@ class _RuntimeProvider(BgeM3EmbeddingProvider):
 def test_frozen_clean_index_reconstructs_without_intervention_state() -> None:
     frozen = phase13_new_mcq_rag_frozen._load_frozen_clean_state_for_test(
         PACKAGE_ROOT,
-        "gpqa_diamond",
+        "mmlu_pro_engineering",
         _BgeIdentityProvider(),
     )
 
@@ -71,6 +71,22 @@ def test_frozen_clean_index_reconstructs_without_intervention_state() -> None:
     assert frozen.reconstruction_identity
 
 
+def test_frozen_non_clean_index_reconstructs_with_one_h2_intervention() -> None:
+    frozen = phase13_new_mcq_rag_frozen._load_frozen_rag_state_for_test(
+        PACKAGE_ROOT,
+        "mmlu_pro_engineering",
+        "contam",
+        _BgeIdentityProvider(),
+    )
+
+    assert frozen.state.branch == "contam"
+    assert frozen.state.corpus is not None
+    assert frozen.state.index is not None
+    assert len(frozen.state.corpus.active_documents) == 25
+    assert frozen.state.index.documents[-1].document_id.endswith("::contam")
+    assert frozen.state.index.artifact_hash == frozen.index_artifact_hash
+
+
 def test_frozen_clean_index_rejects_test_embedder_without_explicit_override() -> None:
     with pytest.raises(
         phase13_new_mcq_rag_frozen.FrozenArtifactError,
@@ -79,7 +95,7 @@ def test_frozen_clean_index_rejects_test_embedder_without_explicit_override() ->
         phase13_new_mcq_rag.load_new_mcq_clean_rag_state(
             PACKAGE_ROOT,
             EVALUATION_ROOT,
-            "gpqa_diamond",
+            "mmlu_pro_engineering",
             _BgeIdentityProvider(),
         )
 
@@ -92,7 +108,7 @@ def test_frozen_clean_index_blocks_unverified_snapshot_without_test_override() -
         phase13_new_mcq_rag.load_new_mcq_clean_rag_state(
             PACKAGE_ROOT,
             EVALUATION_ROOT,
-            "gpqa_diamond",
+            "mmlu_pro_engineering",
             _BgeIdentityProvider(),
             allow_test_embedder=True,
         )

@@ -4,67 +4,30 @@ import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
-
-from pydantic import BaseModel, ConfigDict
-
 from memcontam.baselines.retrieval_rag_phase12 import RagFrozenStateV3
 from memcontam.contamination.phase12.models import canonical_json_hash
 from memcontam.memory.embeddings import BgeM3EmbeddingProvider
-from memcontam.rag.branch_index import BGE_M3_PRIMARY_IDENTITY, BranchIndex, EmbeddingProvider
+from memcontam.rag.branch_index import BranchIndex, EmbeddingProvider
 from memcontam.rag.phase12_corpus import BranchCorpus, Document
-from memcontam.readiness.phase13_new_mcq_bge import (
-    validate_runtime_artifact,
-    verify_runtime_binding,
+from memcontam.readiness.phase13_new_mcq_bge import validate_runtime_artifact, verify_runtime_binding
+from memcontam.readiness.phase13_new_mcq_candidate_evidence_v2_models import semantics
+from memcontam.readiness.phase13_new_mcq_rag_authority import authority_selection
+from .phase13_new_mcq_rag_index_validation import (
+    load_serialized_indices,
+    validate_serialized_branch,
+    validate_serialized_bundle,
 )
-from memcontam.readiness.phase13_new_mcq_p0_4_evidence import validate_candidate_evidence
-
-TASKS = ("mmlu_pro_engineering", "mmlu_pro_physics", "gpqa_diamond")
-_SOURCE_ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_CLASSES = (
-    "complete_source_eligibility_registry",
-    "accepted_document_registry",
-    "verified_embedding_runtime_artifact",
-    "serialized_clean_index_artifacts",
-    "partial_clean_document_leakage_evidence",
-    "partial_task_local_candidate_evidence",
+from memcontam.readiness.phase13_new_mcq_rag_models import (
+    BRANCHES,
+    EXPECTED_CLASSES,
+    TASKS,
+    AcceptedDocument,
+    AuthoritySelection,
+    BranchName,
+    FrozenArtifactError,
+    InterventionRegistry,
+    SerializedIndexBundle,
 )
-
-
-class FrozenArtifactError(ValueError):
-    def __init__(self, code: str) -> None:
-        self.code = code
-        super().__init__(code)
-
-
-class _FrozenModel(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-
-class AcceptedDocument(_FrozenModel):
-    schema_version: Literal["new_mcq_rag_clean_doc_v1"]
-    document_id: str
-    task_id: str
-    semantic_stratum: str
-    document_ordinal: int
-    text: str
-    source_registry_ids: tuple[str, ...]
-    authoring_template_id: Literal["new_mcq_procedural_atomic_v1"]
-    review_status: Literal["accepted"]
-    content_hash: str
-
-
-class SerializedCleanIndex(_FrozenModel):
-    schema_version: Literal["new_mcq_rag_serialized_clean_index_v1"]
-    task_id: str
-    corpus_serialization_id: str
-    corpus_content_hash: str
-    index_serialization_id: str
-    index_artifact_hash: str
-    embedding_contract: dict[str, str | int | bool]
-    top_k: Literal[3]
-    documents: tuple[dict[str, str], ...]
-    vectors: dict[str, tuple[float, ...]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,7 +41,12 @@ def validate_frozen_artifacts(
     root: Path,
     evaluation_root: Path,
     expected_corpus_hashes: dict[str, str],
-) -> dict[str, str]:
+) -> dict[str, dict[BranchName, str]]:
+    from memcontam.readiness.phase13_new_mcq_leakage_io import (
+        load_leakage_artifact,
+        load_leakage_inputs,
+    )
+
     accepted = {task: _accepted(root, task) for task in TASKS}
     if any(
         canonical_json_hash([{"id": row.document_id, "text": row.text} for row in accepted[task]])
@@ -88,14 +56,45 @@ def validate_frozen_artifacts(
         raise FrozenArtifactError("NEW_MCQ_RAG_ACCEPTED_DOCUMENT_REGISTRY_INVALID")
     _validate_source_eligibility(root)
     validate_runtime_artifact(root)
-    _validate_leakage(root, evaluation_root)
-    validate_candidate_evidence(root, evaluation_root)
-    hashes: dict[str, str] = {}
+    _authority_selection(root)
+    interventions = _interventions(root)
+    leakage = load_leakage_artifact(root / "leakage_report_v1.json")
+    leakage_inputs = load_leakage_inputs(root, evaluation_root)
+    expected_hashes = dict(leakage_inputs.input_hashes)
+    expected_hashes["intervention_registry"] = _sha256(root / "intervention_registry_v1.json")
+    expected_hashes["authority_selection"] = _sha256(root / "authority_selection_v1.json")
+    expected_document_ids = {
+        document.document_id for document in leakage_inputs.documents
+    } | {
+        document.document_id
+        for task in interventions.tasks.values()
+        for document in task.documents.values()
+    }
+    if (
+        leakage.status != "PASS"
+        or dict(leakage.input_hashes) != expected_hashes
+        or {row.document_id for row in leakage.document_evidence} != expected_document_ids
+    ):
+        raise FrozenArtifactError("NEW_MCQ_RAG_LEAKAGE_AUDIT_INVALID")
+    hashes: dict[str, dict[BranchName, str]] = {}
     for task in TASKS:
-        serialized = _serialized_index(root, task)
-        _validate_clean_index(serialized, accepted[task])
-        hashes[task] = serialized.index_artifact_hash
+        bundle = load_serialized_indices(root, task)
+        validate_serialized_bundle(bundle, accepted[task], interventions.tasks[task])
+        hashes[task] = {
+            branch: bundle.branches[branch].index_artifact_hash for branch in BRANCHES
+        }
     return hashes
+
+
+def load_frozen_rag_state(
+    root: Path,
+    task: str,
+    branch: BranchName,
+    embedder: EmbeddingProvider,
+    *,
+    allow_test_embedder: bool = False,
+) -> FrozenRagState:
+    return _load_frozen_rag_state(root, task, branch, embedder, allow_test_embedder, True)
 
 
 def load_frozen_clean_state(
@@ -105,20 +104,27 @@ def load_frozen_clean_state(
     *,
     allow_test_embedder: bool = False,
 ) -> FrozenRagState:
-    return _load_frozen_clean_state(root, task, embedder, allow_test_embedder, True)
+    return load_frozen_rag_state(
+        root, task, "clean", embedder, allow_test_embedder=allow_test_embedder
+    )
 
 
 def _load_frozen_clean_state_for_test(
-    root: Path,
-    task: str,
-    embedder: EmbeddingProvider,
+    root: Path, task: str, embedder: EmbeddingProvider
 ) -> FrozenRagState:
-    return _load_frozen_clean_state(root, task, embedder, True, False)
+    return _load_frozen_rag_state(root, task, "clean", embedder, True, False)
 
 
-def _load_frozen_clean_state(
+def _load_frozen_rag_state_for_test(
+    root: Path, task: str, branch: BranchName, embedder: EmbeddingProvider
+) -> FrozenRagState:
+    return _load_frozen_rag_state(root, task, branch, embedder, True, False)
+
+
+def _load_frozen_rag_state(
     root: Path,
     task: str,
+    branch: BranchName,
     embedder: EmbeddingProvider,
     allow_test_embedder: bool,
     verify_snapshot: bool,
@@ -137,29 +143,30 @@ def _load_frozen_clean_state(
         if not isinstance(embedder, BgeM3EmbeddingProvider):
             raise FrozenArtifactError("NEW_MCQ_RAG_RUNTIME_SNAPSHOT_UNVERIFIED")
         verify_runtime_binding(root, embedder)
-    serialized = _serialized_index(root, task)
-    _validate_clean_index(serialized, _accepted(root, task))
+    serialized = load_serialized_indices(root, task).branches[branch]
+    validate_serialized_branch(
+        task,
+        branch,
+        serialized,
+        _accepted(root, task),
+        _interventions(root).tasks[task],
+    )
     documents = tuple(Document.from_mapping(row) for row in serialized.documents)
     corpus = BranchCorpus(
-        branch="clean",
-        documents=documents,
-        active_document_ids=tuple(row.document_id for row in documents),
-        serialization_id=serialized.corpus_serialization_id,
+        branch, documents, tuple(row.document_id for row in documents), serialized.corpus_serialization_id
     )
     index = BranchIndex(
-        branch="clean",
-        documents=documents,
-        embedding_contract=serialized.embedding_contract,
-        vectors=serialized.vectors,
-        serialization_id=serialized.index_serialization_id,
-        _embedder=embedder,
+        branch,
+        documents,
+        serialized.embedding_contract,
+        serialized.vectors,
+        serialized.index_serialization_id,
+        embedder,
     )
-    if corpus.content_hash != serialized.corpus_content_hash or index.artifact_hash != serialized.index_artifact_hash:
-        raise FrozenArtifactError("NEW_MCQ_RAG_SERIALIZED_INDEX_INVALID")
     identity = canonical_json_hash(
-        {"task": task, "branch": "clean", "index": index.artifact_hash, "schema": serialized.schema_version}
+        {"task": task, "branch": branch, "index": index.artifact_hash, "schema": "v1"}
     )
-    return FrozenRagState(RagFrozenStateV3("clean", corpus, index), index.artifact_hash, identity)
+    return FrozenRagState(RagFrozenStateV3(branch, corpus, index), index.artifact_hash, identity)
 
 
 def _accepted(root: Path, task: str) -> tuple[AcceptedDocument, ...]:
@@ -167,16 +174,56 @@ def _accepted(root: Path, task: str) -> tuple[AcceptedDocument, ...]:
         AcceptedDocument.model_validate_json(line)
         for line in (root / "accepted" / f"{task}.jsonl").read_text(encoding="utf-8").splitlines()
     )
-    if (
-        len(rows) != 24
-        or len({row.document_id for row in rows}) != 24
-        or any(
-            row.task_id != task or row.content_hash != canonical_json_hash(row.text)
-            for row in rows
-        )
+    if len(rows) != 24 or len({row.document_id for row in rows}) != 24 or any(
+        row.task_id != task or row.content_hash != canonical_json_hash(row.text) for row in rows
     ):
         raise FrozenArtifactError("NEW_MCQ_RAG_ACCEPTED_DOCUMENT_REGISTRY_INVALID")
     return rows
+
+
+def _interventions(root: Path) -> InterventionRegistry:
+    registry = InterventionRegistry.model_validate_json(
+        (root / "intervention_registry_v1.json").read_bytes()
+    )
+    roles = {"false": "contam", "correct": "correct", "irrelevant": "irrelevant"}
+    expected = {
+        roles[role]: (semantic_id, text)
+        for role, semantic_id, text in semantics("MCQ-H2-DETAIL-LENGTH-v1")
+    }
+    if (
+        registry.authority_selection_sha256 != _sha256(root / "authority_selection_v1.json")
+        or set(registry.tasks) != set(TASKS)
+        or registry.authority_stack != (
+        "phase13_theory_revised_v1",
+        "phase13_baseline_revised_v5",
+        "phase13_protocol_revised_v8",
+        "phase13_experiment_revised_v8",
+        )
+    ):
+        raise FrozenArtifactError("NEW_MCQ_RAG_INTERVENTION_REGISTRY_INVALID")
+    for task, task_registry in registry.tasks.items():
+        if (
+            set(task_registry.documents) != set(expected)
+            or any(
+            document.task_id != task
+            or document.role != role
+            or (document.semantic_id, document.text) != expected[role]
+            or document.source_registry_ids != ("phase13_protocol_revised_v8",)
+            or document.content_hash != canonical_json_hash(document.text)
+            for role, document in task_registry.documents.items()
+            )
+        ):
+            raise FrozenArtifactError("NEW_MCQ_RAG_INTERVENTION_REGISTRY_INVALID")
+    return registry
+
+
+def _authority_selection(root: Path) -> AuthoritySelection:
+    selection = AuthoritySelection.model_validate_json(
+        (root / "authority_selection_v1.json").read_bytes()
+    )
+    if selection != authority_selection():
+        raise FrozenArtifactError("NEW_MCQ_RAG_AUTHORITY_SELECTION_INVALID")
+    return selection
 
 
 def _validate_source_eligibility(root: Path) -> None:
@@ -185,93 +232,20 @@ def _validate_source_eligibility(root: Path) -> None:
         raise FrozenArtifactError("NEW_MCQ_RAG_SOURCE_ELIGIBILITY_INVALID")
 
 
-def _validate_leakage(root: Path, evaluation_root: Path) -> None:
-    report = json.loads((root / "leakage_report_v1.json").read_bytes())
-    artifacts = report.get("evaluation_artifacts")
-    review_evidence = report.get("procedural_review_evidence")
-    completed_checks = {
-        "document_id_uniqueness": "PASS",
-        "exact_document_duplicate": "PASS",
-        "canonical_document_duplicate": "PASS",
-        "cross_task_exact_or_canonical_duplicate": "PASS",
-        "exact_evaluation_question_or_option_overlap": "PASS",
-    }
-    if (
-        report.get("status") != "NOT_READY_REQUIRED_LEAKAGE_GATE_UNFROZEN"
-        or report.get("scope") != "accepted_clean_documents_only"
-        or report.get("completed_deterministic_checks") != completed_checks
-        or report.get("missing_objects")
-        != [
-            "task_specific_canonicalizers",
-            "displayed_permutation_equivalence",
-            "near_duplicate_threshold",
-            "structural_similarity_threshold",
-            "lexical_overlap_threshold",
-            "source_span_registry",
-            "exclusion_manifest",
-        ]
-        or report.get("evaluation_manifest_sha256")
-        != _sha256(evaluation_root / "manifest.json")
-        or not isinstance(artifacts, dict)
-        or not isinstance(review_evidence, dict)
-        or review_evidence.get("review_contract_id") != "new_mcq_procedural_review_v1"
-        or not isinstance(review_evidence.get("task_review_sha256"), dict)
-        or any(
-            artifacts.get(task) != _sha256(evaluation_root / f"{task}.jsonl")
-            or review_evidence["task_review_sha256"].get(task)
-            != _sha256(root / "reviews" / f"{task}.json")
-            for task in TASKS
-        )
-    ):
-        raise FrozenArtifactError("NEW_MCQ_RAG_LEAKAGE_AUDIT_INVALID")
-
-
-def _serialized_index(root: Path, task: str) -> SerializedCleanIndex:
-    value = SerializedCleanIndex.model_validate_json((root / "indices" / f"{task}.json").read_bytes())
-    if value.task_id != task:
-        raise FrozenArtifactError("NEW_MCQ_RAG_SERIALIZED_INDEX_INVALID")
-    return value
-
-
-def _validate_clean_index(
-    serialized: SerializedCleanIndex,
-    accepted: tuple[AcceptedDocument, ...],
-) -> None:
-    documents = tuple(Document.from_mapping(row) for row in serialized.documents)
-    expected_documents = tuple(
-        {"id": row.document_id, "text": row.text} for row in accepted
-    )
-    expected_ids = {row.document_id for row in accepted}
-    computed_corpus_hash = canonical_json_hash([document.payload() for document in documents])
-    computed_index_hash = canonical_json_hash(
-        {
-            "documents": [document.payload() for document in documents],
-            "embedding_contract": serialized.embedding_contract,
-            "vectors": {document_id: list(vector) for document_id, vector in serialized.vectors.items()},
-        }
-    )
-    if (
-        serialized.embedding_contract.get("production_identity") != BGE_M3_PRIMARY_IDENTITY
-        or len(documents) != 24
-        or tuple(document.payload() for document in documents) != expected_documents
-        or {row.document_id for row in documents} != expected_ids
-        or set(serialized.vectors) != expected_ids
-        or any(len(vector) != 1024 for vector in serialized.vectors.values())
-        or computed_corpus_hash != serialized.corpus_content_hash
-        or computed_index_hash != serialized.index_artifact_hash
-    ):
-        raise FrozenArtifactError("NEW_MCQ_RAG_SERIALIZED_INDEX_INVALID")
-
-
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 __all__ = [
+    "BRANCHES",
     "EXPECTED_CLASSES",
+    "AcceptedDocument",
+    "BranchName",
     "FrozenArtifactError",
     "FrozenRagState",
-    "SerializedCleanIndex",
+    "InterventionRegistry",
+    "SerializedIndexBundle",
     "load_frozen_clean_state",
+    "load_frozen_rag_state",
     "validate_frozen_artifacts",
 ]
