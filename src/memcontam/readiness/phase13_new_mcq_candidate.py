@@ -1,23 +1,20 @@
 from __future__ import annotations
 
-import hashlib
-import importlib
 from dataclasses import dataclass
 from fractions import Fraction
-from pathlib import Path
 from typing import Final, TypeVar
+
+from memcontam.readiness.phase13_unicode_15_1 import (
+    UnicodeProvenance,
+    mcq_normalize,
+    mcq_tokens,
+    unicode_provenance,
+)
 
 H1_ID: Final = "MCQ-H1-LEXICAL-OVERLAP-v1"
 H2_ID: Final = "MCQ-H2-DETAIL-LENGTH-v1"
 I1_ID: Final = "MCQ-I1-SINGLETON-OPTION-v1"
-UNICODE_VERSION: Final = "15.1.0"
-_WHITE_SPACE: Final = frozenset(
-    "\u0009\u000a\u000b\u000c\u000d\u0020\u0085\u00a0\u1680"
-    "\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a"
-    "\u2028\u2029\u202f\u205f\u3000"
-)
 _Comparable = TypeVar("_Comparable")
-_unicode_data = importlib.import_module("unicodedata2")
 
 
 class CandidateContractError(ValueError):
@@ -62,41 +59,6 @@ class InterventionRelevance:
     contam: bool
     correct: bool
     irrelevant: bool
-
-
-def mcq_normalize(text: str) -> str:
-    version = getattr(_unicode_data, "unidata_version", None)
-    if version != UNICODE_VERSION:
-        raise CandidateContractError("NEW_MCQ_UNICODE_VERSION_MISMATCH")
-    normalize = getattr(_unicode_data, "normalize", None)
-    if not callable(normalize):
-        raise CandidateContractError("NEW_MCQ_UNICODE_DATA_UNAVAILABLE")
-    normalized_value = normalize("NFKC", text)
-    if not isinstance(normalized_value, str):
-        raise CandidateContractError("NEW_MCQ_UNICODE_DATA_UNAVAILABLE")
-    normalized = normalized_value.casefold()
-    spaced = "".join(" " if character in _WHITE_SPACE else character for character in normalized)
-    return " ".join(spaced.split())
-
-
-def mcq_tokens(text: str) -> tuple[str, ...]:
-    tokens: list[str] = []
-    current: list[str] = []
-    for character in mcq_normalize(text):
-        category_function = getattr(_unicode_data, "category", None)
-        if not callable(category_function):
-            raise CandidateContractError("NEW_MCQ_UNICODE_DATA_UNAVAILABLE")
-        category = category_function(character)
-        if not isinstance(category, str):
-            raise CandidateContractError("NEW_MCQ_UNICODE_DATA_UNAVAILABLE")
-        if category[0] in {"L", "N"} or (category[0] == "M" and current):
-            current.append(character)
-        elif current:
-            tokens.append("".join(current))
-            current = []
-    if current:
-        tokens.append("".join(current))
-    return tuple(tokens)
 
 
 def h1_selection(item: DisplayedMcq) -> int | None:
@@ -172,11 +134,7 @@ def _unique_max_index(values: tuple[_Comparable, ...], maximum: _Comparable) -> 
 
 
 def _unicode_manifest_hash() -> str:
-    module_file = getattr(_unicode_data, "__file__", None)
-    if not isinstance(module_file, str):
-        raise CandidateContractError("NEW_MCQ_UNICODE_DATA_UNAVAILABLE")
-    module_path = Path(module_file)
-    return hashlib.sha256(module_path.read_bytes()).hexdigest()
+    return unicode_provenance().unicode_data_manifest_hash
 
 
 __all__ = [
@@ -184,10 +142,12 @@ __all__ = [
     "CandidateContractError",
     "DisplayedMcq",
     "InterventionRelevance",
+    "UnicodeProvenance",
     "build_intervention_relevance",
     "certify_task_candidate",
     "h1_selection",
     "h2_selection",
     "mcq_normalize",
     "mcq_tokens",
+    "unicode_provenance",
 ]

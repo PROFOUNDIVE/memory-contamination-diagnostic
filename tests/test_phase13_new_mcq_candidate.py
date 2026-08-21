@@ -7,7 +7,9 @@ from memcontam.readiness.phase13_new_mcq_candidate import (
     certify_task_candidate,
     h1_selection,
     h2_selection,
+    mcq_normalize,
     mcq_tokens,
+    unicode_provenance,
 )
 
 
@@ -39,6 +41,29 @@ def test_h2_uses_token_count_then_nonspace_codepoints() -> None:
 
 def test_tokenizer_keeps_unicode_marks_only_after_letter_or_number() -> None:
     assert mcq_tokens(" ◌́ Á １２ ") == ("á", "12")
+
+
+def test_normalizer_collapses_only_unicode_15_1_white_space() -> None:
+    assert mcq_normalize("\u001cA\u00a0 B\u001f") == "\u001ca b\u001f"
+
+
+def test_unicode_provenance_binds_data_source_and_conformance_vectors() -> None:
+    provenance = unicode_provenance()
+
+    assert provenance.unicode_data_version == "15.1.0"
+    assert provenance.case_folding_data_sha256 == (
+        "4e55acfdc32825a22e87670e9056a3bf94ad7c5400065778e9e10f8314372bcf"
+    )
+    assert provenance.case_folding_semantic_sha256 == (
+        "661466e49c100e00238e2bde53b9b6895cc82ff63dbeb5f2a7dace01c779b0fb"
+    )
+    assert provenance.white_space_data_sha256 == (
+        "05672956317b6296bc2ec3d6cef1f6452b57ff4f2efc6dc55b0a19277d5fcfd1"
+    )
+    assert provenance.conformance_vector_count == 4
+    assert len(provenance.unicode_data_manifest_hash) == 64
+    assert len(provenance.executable_source_sha256) == 64
+    assert len(provenance.conformance_vectors_sha256) == 64
 
 
 def test_candidate_certification_uses_h1_then_h2_without_gold_in_applicability() -> None:
