@@ -23,7 +23,6 @@ from memcontam.readiness import phase13_core_datasets as core_datasets
 from memcontam.readiness import phase13_capacity_realization as capacity_realization
 from memcontam.readiness.phase13_core_bundle import (
     CoreSources,
-    CoreTask,
     SelectionProvenance,
     SourceArtifact,
     write_bundle,
