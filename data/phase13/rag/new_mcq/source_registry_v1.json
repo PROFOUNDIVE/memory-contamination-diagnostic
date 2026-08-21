@@ -38,9 +38,6 @@
     ],
     "mmlu_pro_physics": [
       "mmlu_pro_spec_v1"
-    ],
-    "gpqa_diamond": [
-      "gpqa_spec_v1"
     ]
   }
 }
