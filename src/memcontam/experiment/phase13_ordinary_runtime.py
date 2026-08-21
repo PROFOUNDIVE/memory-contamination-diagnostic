@@ -32,7 +32,6 @@ OrdinaryTask: TypeAlias = Literal[
     "word_sorting",
     "mmlu_pro_engineering",
     "mmlu_pro_physics",
-    "gpqa_diamond",
 ]
 OrdinaryBaseline: TypeAlias = Literal[
     "fh_bounded", "rag_frozen", "bot_style", "reflexion_style", "dc_rs"
@@ -44,12 +43,11 @@ ORDINARY_TASKS: tuple[OrdinaryTask, ...] = (
     "word_sorting",
     "mmlu_pro_engineering",
     "mmlu_pro_physics",
-    "gpqa_diamond",
 )
 ORDINARY_BASELINES: tuple[OrdinaryBaseline, ...] = (
     "fh_bounded", "rag_frozen", "bot_style", "reflexion_style", "dc_rs"
 )
-CORE_TASKS = frozenset({"mmlu_pro_engineering", "mmlu_pro_physics", "gpqa_diamond"})
+CORE_TASKS = frozenset({"mmlu_pro_engineering", "mmlu_pro_physics"})
 
 
 class ProspectiveOrdinaryError(ValueError):
@@ -209,7 +207,7 @@ def _ordered_tasks(run: ProspectiveOrdinaryRun) -> tuple[TaskInstance, ...]:
 
 def _core_task(task: OrdinaryTask) -> CoreTask:
     match task:
-        case "mmlu_pro_engineering" | "mmlu_pro_physics" | "gpqa_diamond":
+        case "mmlu_pro_engineering" | "mmlu_pro_physics":
             return task
         case "game24" | "math_equation_balancer" | "word_sorting":
             raise ProspectiveOrdinaryError("CORE_TRAJECTORY_INPUT_REQUIRED")

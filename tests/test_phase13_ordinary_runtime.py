@@ -166,14 +166,13 @@ def _bundle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return root
 
 
-def test_ordinary_surface_declares_all_six_tasks_and_five_memory_baselines() -> None:
+def test_ordinary_surface_declares_five_core_tasks_and_five_memory_baselines() -> None:
     assert ORDINARY_TASKS == (
         "game24",
         "math_equation_balancer",
         "word_sorting",
         "mmlu_pro_engineering",
         "mmlu_pro_physics",
-        "gpqa_diamond",
     )
     assert ORDINARY_BASELINES == (
         "fh_bounded",
@@ -454,7 +453,7 @@ def test_existing_memory_runtimes_execute_core_ordinary_trajectory(
     )
     result = execute_prospective_ordinary(
         ProspectiveOrdinaryRun(
-            task_name="gpqa_diamond",
+            task_name="mmlu_pro_engineering",
             baseline=baseline,
             run_id=f"ordinary-{baseline}",
             model="replay",
@@ -469,7 +468,7 @@ def test_existing_memory_runtimes_execute_core_ordinary_trajectory(
         )
     )
 
-    assert len(result.trials) == 198
+    assert len(result.trials) == 250
     failures = [
         trial.outcome.failure_disposition
         for trial in result.trials
@@ -480,10 +479,10 @@ def test_existing_memory_runtimes_execute_core_ordinary_trajectory(
 
 @pytest.mark.parametrize(
     "task_name",
-    ("mmlu_pro_engineering", "mmlu_pro_physics", "gpqa_diamond"),
+    ("mmlu_pro_engineering", "mmlu_pro_physics"),
 )
 def test_dc_rs_ordinary_execution_accepts_each_core_task_stream(
-    task_name: CoreTask,
+    task_name: OrdinaryTask,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -12,7 +12,7 @@ from memcontam.readiness.phase13_route_capacity import COMMON_VISIBLE_MEMORY_TOK
 from memcontam.tasks.base import TaskInstance
 
 
-CORE_TASKS = frozenset({"mmlu_pro_engineering", "mmlu_pro_physics", "gpqa_diamond"})
+CORE_TASKS = frozenset({"mmlu_pro_engineering", "mmlu_pro_physics"})
 ORDINARY_TASKS = frozenset(
     {
         "game24",
