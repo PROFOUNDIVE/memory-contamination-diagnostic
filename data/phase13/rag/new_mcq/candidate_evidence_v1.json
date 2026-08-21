@@ -9,8 +9,11 @@
   "split_registry_status": "NOT_ESTABLISHED",
   "unicode_provenance": {
     "unicode_data_version": "15.1.0",
-    "unicode_data_manifest_hash": "7d17eb4282fb19ca71c8050facd78a89aa11dfd03450a3b87d01aa00cd3588d4",
-    "executable_source_sha256": "eb15d7ce19fecea9492fcd344dfe07b76686920c5e95723149a8e88b74ab7ef3",
+    "unicode_data_manifest_hash": "d6ed1baf60602c3c6fa60c15bf3a14809d1874c38cf89ecfd04ecd4913f2935d",
+    "case_folding_data_sha256": "4e55acfdc32825a22e87670e9056a3bf94ad7c5400065778e9e10f8314372bcf",
+    "case_folding_semantic_sha256": "661466e49c100e00238e2bde53b9b6895cc82ff63dbeb5f2a7dace01c779b0fb",
+    "white_space_data_sha256": "05672956317b6296bc2ec3d6cef1f6452b57ff4f2efc6dc55b0a19277d5fcfd1",
+    "executable_source_sha256": "b61ade0bbb5d1c01f4421856acd33ae6000836614ea191e04fb76f9cb79f886d",
     "conformance_vectors_sha256": "7d4e363b184925d9066a93750a6ead81070cc4447a7b706868c045ae18e170f9",
     "conformance_vector_count": 4
   },
@@ -316,5 +319,5 @@
       ]
     }
   },
-  "evidence_hash": "92d17beb1f5849c39003cc6b0c5e32b437b4052d9f0ee87d659ae934e6ef3c2e"
+  "evidence_hash": "afce35c60377d161c1c4139a85956c1353b3f2864ea2c50edf2d058e46638ad4"
 }

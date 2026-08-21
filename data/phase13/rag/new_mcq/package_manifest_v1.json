@@ -3,7 +3,7 @@
     "path": "authoring_contract_v1.json",
     "sha256": "e0a599b21f08d0b8ae6c17d9799cff28de7ebb98d643a6aeffce9fab0cbd3023"
   },
-  "package_reconstruction_identity": "5364f8caa226faf6adf3d6ea599c7b6410af0d9bdfab1c5efa140018e8c2874a",
+  "package_reconstruction_identity": "3081015764dba64fb0b606ccf6ecc31e7621e14a8291ca53472fd22c14580264",
   "promotion": {
     "reason": "NEW_MCQ_RAG_REQUIRED_ARTIFACTS_UNFROZEN",
     "remaining_objects": [
@@ -44,7 +44,7 @@
     "partial_task_local_candidate_evidence": [
       {
         "path": "candidate_evidence_v1.json",
-        "sha256": "20551d7c9e04f3e8cb4a7cc346b614d3410c56e923770eb624549044a5529cac"
+        "sha256": "96f62230b7fae75c88ddb6982e211ecfcf197de9ab71c175ee4a7fe13175810c"
       },
       {
         "path": "sources/mmlu_pro_validation_475d58ba.parquet",
