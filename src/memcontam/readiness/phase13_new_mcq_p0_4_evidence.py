@@ -17,6 +17,8 @@ from memcontam.readiness.phase13_new_mcq_candidate import (
     H2_ID,
     h1_selection,
     h2_selection,
+    UnicodeProvenance,
+    unicode_provenance,
 )
 
 _MMLU_REVISION: Final = "475d58ba0cc18a15fd5d4221f41919199e692331"
@@ -25,15 +27,12 @@ _GPQA_REVISION: Final = "633f5ee89ab8ad4522a9f850766b73f62147ffdd"
 _GPQA_TREE_SHA256: Final = "3a722b406849c230a76cf797f0e5481a2dd17fe403be650b5798703ecfa54526"
 _COMMON_BLOCKERS: Final = (
     "prospectively_frozen_build_calibration_split",
-    "candidate_coverage_contract",
-    "baseline_native_render_packets",
+    "candidate_coverage_contract", "baseline_native_render_packets",
     "three_evaluator_blinded_plausibility_panel",
     "leakage_metric_threshold_registry",
     "full_leakage_conformance",
     "correct_i1_constructibility_and_validity",
-    "unicode_source_test_vector_provenance",
-    "candidate_freeze_identity",
-    "deterministic_relevance_affinity_constructibility",
+    "candidate_freeze_identity", "deterministic_relevance_affinity_constructibility",
 )
 _EVALUATION_PATHS: Final[dict[CoreTask, str]] = {
     "gpqa_diamond": "gpqa_diamond.jsonl",
@@ -107,6 +106,7 @@ class CandidateEvidence(_FrozenModel):
     schema_version: Literal["phase13_new_mcq_candidate_evidence_v1"]
     authority_stack: tuple[str, ...]
     split_registry_status: Literal["NOT_ESTABLISHED"]
+    unicode_provenance: UnicodeProvenance
     source_role_evidence: tuple[str, ...]
     evaluation_artifact_hashes: dict[str, str]
     tasks: dict[str, TaskCandidateEvidence]
@@ -146,6 +146,7 @@ def build_candidate_evidence(root: Path, evaluation_root: Path) -> CandidateEvid
             "phase13_experiment_revised_v7",
         ),
         split_registry_status="NOT_ESTABLISHED",
+        unicode_provenance=unicode_provenance(),
         source_role_evidence=(
             "MMLU-Pro/evaluate_from_local.py@996df131:validation_few_shot_prompt_source",
             "MMLU-Pro/evaluate_from_local.py@996df131:test_scored_evaluation_source",

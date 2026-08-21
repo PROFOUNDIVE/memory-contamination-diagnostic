@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from memcontam.readiness import phase13_new_mcq_p0_4_evidence as candidate_evidence
+from memcontam.readiness.phase13_new_mcq_candidate import unicode_provenance
 
 
 ROOT = Path("data/phase13/rag/new_mcq")
@@ -27,6 +28,7 @@ def test_mmlu_evidence_records_unpartitioned_observations_without_certification(
         "phase13_experiment_revised_v7",
     )
     assert evidence.split_registry_status == "NOT_ESTABLISHED"
+    assert evidence.unicode_provenance == unicode_provenance()
     assert engineering.status == "NOT_READY_SPLIT_REGISTRY_UNFROZEN"
     assert engineering.mechanical_candidate_id is None
     assert engineering_h1.query_ids == ("40", "41", "42", "43", "44")
@@ -72,7 +74,6 @@ def test_terminal_blocker_ledger_covers_unfrozen_protocol_objects() -> None:
         "leakage_metric_threshold_registry",
         "full_leakage_conformance",
         "correct_i1_constructibility_and_validity",
-        "unicode_source_test_vector_provenance",
         "candidate_freeze_identity",
         "deterministic_relevance_affinity_constructibility",
     }
