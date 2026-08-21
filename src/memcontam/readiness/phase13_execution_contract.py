@@ -26,6 +26,7 @@ NonNegativeInt = Annotated[int, Field(ge=0)]
 @dataclass(frozen=True, slots=True)
 class CoreMainRegistry:
     tasks: tuple[str, ...]
+    task_extensions: tuple[tuple[str, str], ...]
     memory_baselines: tuple[str, ...]
     arms: tuple[str, ...]
     nomem_policy: str
@@ -52,7 +53,13 @@ CORE_MAIN_REGISTRY = CoreMainRegistry(
         "word_sorting",
         "mmlu_pro_engineering",
         "mmlu_pro_physics",
-        "gpqa_diamond",
+    ),
+    task_extensions=(
+        (
+            "gpqa_diamond",
+            "DEFERRED_TO_PROSPECTIVE_EXTENSION -- "
+            "CORE_CONTAMINATION_CANDIDATE_FAMILY_NOT_READY",
+        ),
     ),
     memory_baselines=(
         "fh_bounded",
@@ -75,12 +82,12 @@ CORE_MAIN_REGISTRY = CoreMainRegistry(
     preferred_seed_count=12,
     fallback_seed_count=10,
     rag_deadline="2026-08-22T18:00:00+09:00",
-    rag_deadline_policy="all_three_or_prospective_extension",
+    rag_deadline_policy="both_retained_new_mcq_rag_cells_or_prospective_extension",
     authority_sha256=(
         "34f63f37a49e92607c78ced038c4c70b4c9d5e3fa8fc57d6e97de1ee79db59a8",
         "0bacce62718a93c14ce4da0c1b426e3823b75cf70b362f8f9a0632e83f4166c1",
-        "eac32c3eb0de5d48cb73a2dbd6cc943d01001650e6262d99aef49e1131071ed1",
-        "880ba261285758b8c5fea697a105690ffd1c0e4b0b6ab8409673f8408d457b11",
+        "022879f559b145e30e645b6ccbd139e9927899d370f1956d27a0562580acf85f",
+        "4b1db4e55e68ec8e00fe022b9bea1685bebb340138df0e39fddc7823aafdc374",
         "624f3e9a198b7bdd14aa5fdfb3883eb141b5a5def8ef5ff4fff59667ca233280",
     ),
 )

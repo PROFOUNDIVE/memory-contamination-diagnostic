@@ -13,6 +13,7 @@ from memcontam.readiness.phase13_execution_contract import (
     validate_execution_closure,
 )
 from memcontam.readiness.phase13_route_capacity import (
+    CAPACITY_AUDIT_TASKS,
     CommonCapacityAudit,
     materialize_common_capacity,
     recompute_capacity,
@@ -77,7 +78,7 @@ def test_execution_registry_and_capacity_are_driven_by_prospective_inputs() -> N
 
 
 def test_common_capacity_is_mechanically_materialized_from_frozen_audit() -> None:
-    tasks = CORE_MAIN_REGISTRY.tasks
+    tasks = CAPACITY_AUDIT_TASKS
     audit = CommonCapacityAudit(
         model_runtime_identity="gpt-5.6-luna|openai-python-2.46.0",
         context_contract_id="luna-context-contract-v1",
@@ -115,7 +116,13 @@ def test_core_main_registry_matches_final_phase13_authority() -> None:
         "word_sorting",
         "mmlu_pro_engineering",
         "mmlu_pro_physics",
-        "gpqa_diamond",
+    )
+    assert registry.task_extensions == (
+        (
+            "gpqa_diamond",
+            "DEFERRED_TO_PROSPECTIVE_EXTENSION -- "
+            "CORE_CONTAMINATION_CANDIDATE_FAMILY_NOT_READY",
+        ),
     )
     assert registry.memory_baselines == (
         "fh_bounded",
@@ -139,12 +146,14 @@ def test_core_main_registry_matches_final_phase13_authority() -> None:
     assert registry.writer_max_output_tokens == 8192
     assert (registry.preferred_seed_count, registry.fallback_seed_count) == (12, 10)
     assert registry.rag_deadline == "2026-08-22T18:00:00+09:00"
-    assert registry.rag_deadline_policy == "all_three_or_prospective_extension"
+    assert registry.rag_deadline_policy == (
+        "both_retained_new_mcq_rag_cells_or_prospective_extension"
+    )
     assert registry.authority_sha256 == (
         "34f63f37a49e92607c78ced038c4c70b4c9d5e3fa8fc57d6e97de1ee79db59a8",
         "0bacce62718a93c14ce4da0c1b426e3823b75cf70b362f8f9a0632e83f4166c1",
-        "eac32c3eb0de5d48cb73a2dbd6cc943d01001650e6262d99aef49e1131071ed1",
-        "880ba261285758b8c5fea697a105690ffd1c0e4b0b6ab8409673f8408d457b11",
+        "022879f559b145e30e645b6ccbd139e9927899d370f1956d27a0562580acf85f",
+        "4b1db4e55e68ec8e00fe022b9bea1685bebb340138df0e39fddc7823aafdc374",
         "624f3e9a198b7bdd14aa5fdfb3883eb141b5a5def8ef5ff4fff59667ca233280",
     )
 

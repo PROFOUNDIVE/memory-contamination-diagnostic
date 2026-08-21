@@ -10,6 +10,14 @@ from typing import Any, Literal
 from memcontam.readiness.phase13_execution_contract import CORE_MAIN_REGISTRY, ExecutionRegistry
 
 COMMON_VISIBLE_MEMORY_TOKENS = CORE_MAIN_REGISTRY.writer_max_output_tokens
+CAPACITY_AUDIT_TASKS = (
+    "game24",
+    "math_equation_balancer",
+    "word_sorting",
+    "mmlu_pro_engineering",
+    "mmlu_pro_physics",
+    "gpqa_diamond",
+)
 CapacityContractErrorCode = Literal[
     "FH_CAPACITY_CONTRACT_MISMATCH",
     "DC_RS_CAPACITY_CONTRACT_MISMATCH",
@@ -113,7 +121,7 @@ class CommonCapacityRecord:
 
 
 def materialize_common_capacity(audit: CommonCapacityAudit) -> CommonCapacityRecord:
-    task_set = set(CORE_MAIN_REGISTRY.tasks)
+    task_set = set(CAPACITY_AUDIT_TASKS)
     reserve_rows = (
         audit.per_task_R_FH,
         audit.per_task_I_DC_writer,
