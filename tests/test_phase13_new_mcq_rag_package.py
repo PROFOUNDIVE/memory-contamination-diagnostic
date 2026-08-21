@@ -7,6 +7,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 import pytest
+from pydantic import JsonValue
 
 from memcontam.readiness import phase13_new_mcq_rag
 from memcontam.readiness import phase13_new_mcq_rag_frozen
@@ -34,7 +35,64 @@ def _update_status_manifest_hash(package: Path) -> None:
     status_path.write_text(json.dumps(status), encoding="utf-8")
 
 
-def test_clean_package_remains_blocked_by_unfrozen_required_artifacts() -> None:
+def _reseal_index(package: Path, task: str, index: dict[str, JsonValue]) -> None:
+    index_path = package / "indices" / f"{task}.json"
+    index_path.write_text(json.dumps(index), encoding="utf-8")
+    index_sha256 = hashlib.sha256(index_path.read_bytes()).hexdigest()
+    manifest_path = package / "package_manifest_v1.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["tasks"][task]["index"]["sha256"] = index_sha256
+    for artifact in manifest["required_artifacts"]["serialized_branch_index_artifacts"]:
+        if artifact["path"] == f"indices/{task}.json":
+            artifact["sha256"] = index_sha256
+    branches_value: JsonValue = index["branches"]
+    assert isinstance(branches_value, dict)
+    branches: dict[str, JsonValue] = branches_value
+    index_hashes: dict[str, str] = {}
+    for branch, payload in branches.items():
+        assert isinstance(payload, dict)
+        artifact_hash = payload["index_artifact_hash"]
+        assert isinstance(artifact_hash, str)
+        index_hashes[branch] = artifact_hash
+    manifest["tasks"][task]["index_hashes"] = index_hashes
+    from memcontam.readiness.phase13_new_mcq_rag_manifest import (
+        Artifact,
+        PackageManifest,
+        package_reconstruction_identity,
+    )
+
+    parsed = PackageManifest.model_validate(manifest)
+    artifacts = (parsed.source_registry, parsed.authoring_contract)
+    artifacts += tuple(
+        artifact
+        for artifact_class in parsed.required_artifacts.values()
+        for artifact in artifact_class
+    )
+    artifacts += tuple(
+        artifact
+        for task_artifacts in parsed.tasks.values()
+        for artifact in (
+            task_artifacts.candidate,
+            task_artifacts.review,
+            task_artifacts.accepted,
+            task_artifacts.index,
+        )
+    )
+    manifest["package_reconstruction_identity"] = package_reconstruction_identity(
+        tuple(Artifact.model_validate(artifact) for artifact in artifacts)
+    )
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    status_path = package.parent / STATUS_PATH.name
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    status["candidate_package"]["reconstruction_identity"] = manifest[
+        "package_reconstruction_identity"
+    ]
+    status["candidate_package"]["sha256"] = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    status["cells"][task]["index_hashes"] = manifest["tasks"][task]["index_hashes"]
+    status_path.write_text(json.dumps(status), encoding="utf-8")
+
+
+def test_retained_package_is_blocked_only_on_clean_relevance_universe() -> None:
     report = phase13_new_mcq_rag.validate_new_mcq_rag_package(PACKAGE_ROOT, EVALUATION_ROOT)
     payload = asdict(report)
 
@@ -43,22 +101,48 @@ def test_clean_package_remains_blocked_by_unfrozen_required_artifacts() -> None:
     assert payload["reviewed_candidates"] == {
         "mmlu_pro_engineering": 24,
         "mmlu_pro_physics": 24,
-        "gpqa_diamond": 24,
     }
     assert report.source_classes == {
         "mmlu_pro_engineering": "public_task_specification",
         "mmlu_pro_physics": "public_task_specification",
-        "gpqa_diamond": "public_task_specification",
     }
     assert payload["candidate_corpus_hashes"].keys() == payload["reviewed_candidates"].keys()
     assert payload["clean_index_hashes"].keys() == payload["reviewed_candidates"].keys()
     assert report.remaining_objects == (
-        "authority_required_leakage_gate_artifacts",
-        "task_local_candidate_selection_and_certification",
-        "task_local_intervention_relevance",
-        "clean_correct_irrelevant_contam_branch_indices",
+        "clean_document_applicability_predicates_and_relevance_universe",
     )
     assert report.promotion_ready is False
+
+
+def test_source_registry_preserves_gpqa_as_dormant_provenance() -> None:
+    registry = json.loads((PACKAGE_ROOT / "source_registry_v1.json").read_text(encoding="utf-8"))
+    sources = {source["source_registry_id"]: source for source in registry["sources"]}
+    manifest = json.loads((PACKAGE_ROOT / "package_manifest_v1.json").read_text(encoding="utf-8"))
+    status = json.loads(STATUS_PATH.read_text(encoding="utf-8"))
+    leakage = json.loads((PACKAGE_ROOT / "leakage_report_v1.json").read_text(encoding="utf-8"))
+
+    assert sources["gpqa_spec_v1"] == {
+        "source_registry_id": "gpqa_spec_v1",
+        "source_class": "public_task_specification",
+        "repo": "Idavidrein/gpqa",
+        "revision": "633f5ee89ab8ad4522a9f850766b73f62147ffdd",
+        "path": "README.md",
+        "sha256": "c703e934fa58d9ab66e470e5283de7d4c6ef02fe4ccb3e2d7fe97e5399e6eb36",
+        "allowed_sections": [
+            "dataset description",
+            "task categories and scientific domains",
+            "intended scalable-oversight and capabilities uses",
+        ],
+        "evaluation_rows_eligible": False,
+        "gold_fields_eligible": False,
+    }
+    assert tuple(registry["task_sources"]) == (
+        "mmlu_pro_engineering",
+        "mmlu_pro_physics",
+    )
+    assert "gpqa_diamond" not in manifest["tasks"]
+    assert "gpqa_diamond" not in status["cells"]
+    assert all("gpqa" not in row["document_id"] for row in leakage["document_evidence"])
 
 
 def test_candidate_corpus_rejects_exact_evaluation_text(tmp_path: Path) -> None:
@@ -121,7 +205,7 @@ def test_candidate_package_rejects_incomplete_remaining_objects(tmp_path: Path) 
     package = _copy_package(tmp_path)
     manifest_path = package / "package_manifest_v1.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    manifest["promotion"]["remaining_objects"].pop()
+    manifest["promotion"]["remaining_objects"].append("stale_blocker")
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
     with pytest.raises(
@@ -139,9 +223,7 @@ def test_candidate_package_rejects_incomplete_remaining_objects(tmp_path: Path) 
         "embedding_runtime_v1.json",
         "indices/mmlu_pro_physics.json",
         "leakage_report_v1.json",
-        "candidate_evidence_v1.json",
-        "sources/mmlu_pro_validation_475d58ba.parquet",
-        "sources/gpqa_tree_633f5ee8.json",
+        "intervention_registry_v1.json",
     ),
 )
 def test_package_rejects_tampering_in_every_required_object_class(
@@ -161,15 +243,16 @@ def test_package_rejects_tampering_in_every_required_object_class(
 
 def test_clean_index_rejects_text_not_bound_to_accepted_registry(tmp_path: Path) -> None:
     package = _copy_package(tmp_path)
-    index_path = package / "indices" / "gpqa_diamond.json"
+    index_path = package / "indices" / "mmlu_pro_physics.json"
     index = json.loads(index_path.read_text(encoding="utf-8"))
-    index["documents"][0]["text"] += " altered"
-    index["corpus_content_hash"] = canonical_json_hash(index["documents"])
-    index["index_artifact_hash"] = canonical_json_hash(
+    clean = index["branches"]["clean"]
+    clean["documents"][0]["text"] += " altered"
+    clean["corpus_content_hash"] = canonical_json_hash(clean["documents"])
+    clean["index_artifact_hash"] = canonical_json_hash(
         {
-            "documents": index["documents"],
-            "embedding_contract": index["embedding_contract"],
-            "vectors": index["vectors"],
+            "documents": clean["documents"],
+            "embedding_contract": clean["embedding_contract"],
+            "vectors": clean["vectors"],
         }
     )
     index_path.write_text(json.dumps(index), encoding="utf-8")
@@ -191,12 +274,12 @@ def test_clean_index_rejects_text_not_bound_to_accepted_registry(tmp_path: Path)
 
 def test_reconstruction_identity_binds_task_review(tmp_path: Path) -> None:
     package = _copy_package(tmp_path)
-    review_path = package / "reviews" / "gpqa_diamond.json"
+    review_path = package / "reviews" / "mmlu_pro_physics.json"
     review = json.loads(review_path.read_text(encoding="utf-8"))
     review_path.write_text(json.dumps(review, indent=2), encoding="utf-8")
     manifest_path = package / "package_manifest_v1.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    manifest["tasks"]["gpqa_diamond"]["review"]["sha256"] = hashlib.sha256(
+    manifest["tasks"]["mmlu_pro_physics"]["review"]["sha256"] = hashlib.sha256(
         review_path.read_bytes()
     ).hexdigest()
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
@@ -226,8 +309,8 @@ def test_package_rejects_status_manifest_hash_mismatch(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     "relative_path",
     (
-        "sources/mmlu_pro_validation_475d58ba.parquet",
-        "sources/gpqa_tree_633f5ee8.json",
+        "source_registry_v1.json",
+        "intervention_registry_v1.json",
     ),
 )
 def test_package_maps_missing_bound_source_to_domain_error(
@@ -271,3 +354,55 @@ def test_package_validation_is_independent_of_working_directory(
     )
 
     assert report.reason == "NEW_MCQ_RAG_REQUIRED_ARTIFACTS_UNFROZEN"
+
+
+def test_package_rejects_leakage_evidence_bound_to_stale_evaluation(tmp_path: Path) -> None:
+    evaluation_root = tmp_path / "materialized"
+    shutil.copytree(EVALUATION_ROOT, evaluation_root)
+    evaluation_path = evaluation_root / "mmlu_pro_engineering.jsonl"
+    rows = evaluation_path.read_text(encoding="utf-8").splitlines()
+    first = json.loads(rows[0])
+    first["input"]["question"] += " changed after leakage certification"
+    rows[0] = json.dumps(first, separators=(",", ":"))
+    evaluation_path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+    with pytest.raises(
+        phase13_new_mcq_rag.NewMcqRagError,
+        match="NEW_MCQ_LEAKAGE_EVALUATION_INVALID",
+    ):
+        phase13_new_mcq_rag.validate_new_mcq_rag_package(PACKAGE_ROOT, evaluation_root)
+
+
+def test_package_rejects_resealed_branch_key_swap(tmp_path: Path) -> None:
+    package = _copy_package(tmp_path)
+    task = "mmlu_pro_engineering"
+    index = json.loads((package / "indices" / f"{task}.json").read_text(encoding="utf-8"))
+    index["branches"]["clean"], index["branches"]["contam"] = (
+        index["branches"]["contam"],
+        index["branches"]["clean"],
+    )
+    _reseal_index(package, task, index)
+
+    with pytest.raises(
+        phase13_new_mcq_rag.NewMcqRagError,
+        match="NEW_MCQ_RAG_SERIALIZED_INDEX_INVALID",
+    ):
+        phase13_new_mcq_rag.validate_new_mcq_rag_package(package, EVALUATION_ROOT)
+
+
+@pytest.mark.parametrize("field", ("corpus_serialization_id", "index_serialization_id"))
+def test_package_rejects_resealed_serialization_identity_forgery(
+    tmp_path: Path,
+    field: str,
+) -> None:
+    package = _copy_package(tmp_path)
+    task = "mmlu_pro_physics"
+    index = json.loads((package / "indices" / f"{task}.json").read_text(encoding="utf-8"))
+    index["branches"]["correct"][field] = "forged"
+    _reseal_index(package, task, index)
+
+    with pytest.raises(
+        phase13_new_mcq_rag.NewMcqRagError,
+        match="NEW_MCQ_RAG_SERIALIZED_INDEX_INVALID",
+    ):
+        phase13_new_mcq_rag.validate_new_mcq_rag_package(package, EVALUATION_ROOT)

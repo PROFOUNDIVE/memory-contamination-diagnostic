@@ -9,12 +9,11 @@ from pydantic import BaseModel, ConfigDict
 
 from .phase13_new_mcq_rag_frozen import EXPECTED_CLASSES
 
-REMAINING_OBJECTS = (
-    "authority_required_leakage_gate_artifacts",
-    "task_local_candidate_selection_and_certification",
-    "task_local_intervention_relevance",
-    "clean_correct_irrelevant_contam_branch_indices",
+RemainingObject = Literal["clean_document_applicability_predicates_and_relevance_universe"]
+REMAINING_OBJECTS: tuple[RemainingObject] = (
+    "clean_document_applicability_predicates_and_relevance_universe",
 )
+BRANCHES = ("clean", "correct", "irrelevant", "contam")
 _SEMANTIC_STRATA = (
     "requirement_quantifier_constraint_interpretation",
     "option_wise_evidence_comparison_elimination",
@@ -45,22 +44,13 @@ class TaskArtifacts(_FrozenModel):
     accepted: Artifact
     index: Artifact
     corpus_hash: str
-    index_hashes: dict[Literal["clean"], str]
+    index_hashes: dict[Literal["clean", "correct", "irrelevant", "contam"], str]
 
 
 class Promotion(_FrozenModel):
     status: Literal["NOT_READY"]
     reason: Literal["NEW_MCQ_RAG_REQUIRED_ARTIFACTS_UNFROZEN"]
-    remaining_objects: tuple[
-        Literal[
-            "authority_required_leakage_gate_artifacts",
-            "verified_bge_m3_snapshot_tree_and_runtime_binding",
-            "task_local_candidate_selection_and_certification",
-            "task_local_intervention_relevance",
-            "clean_correct_irrelevant_contam_branch_indices",
-        ],
-        ...,
-    ]
+    remaining_objects: tuple[RemainingObject]
 
 
 class PackageManifest(_FrozenModel):
@@ -76,7 +66,7 @@ class PackageManifest(_FrozenModel):
 class _CandidatePackageStatus(_FrozenModel):
     path: Literal["data/phase13/rag/new_mcq/package_manifest_v1.json"]
     sha256: str
-    status: Literal["CLEAN_PACKAGE_NOT_READY"]
+    status: Literal["NOT_READY"]
     reconstruction_identity: str
 
 
@@ -84,8 +74,8 @@ class _CellStatus(_FrozenModel):
     status: Literal["NOT_READY"]
     reason: Literal["NEW_MCQ_RAG_REQUIRED_ARTIFACTS_UNFROZEN"]
     entry_condition_met: Literal[False]
-    missing_objects: tuple[str, ...]
-    index_hashes: dict[Literal["clean"], str]
+    missing_objects: tuple[RemainingObject]
+    index_hashes: dict[Literal["clean", "correct", "irrelevant", "contam"], str]
 
 
 class _RetrievalContract(_FrozenModel):
@@ -112,11 +102,12 @@ class _ScientificContract(_FrozenModel):
 
 class _PackageStatus(_FrozenModel):
     schema_version: Literal["phase13_new_mcq_rag_status_v1"]
-    authority_sha256: Literal["880ba261285758b8c5fea697a105690ffd1c0e4b0b6ab8409673f8408d457b11"]
+    authority_sha256: Literal["4b1db4e55e68ec8e00fe022b9bea1685bebb340138df0e39fddc7823aafdc374"]
     candidate_package: _CandidatePackageStatus
     cells: dict[str, _CellStatus]
     cutoff: Literal["2026-08-22T18:00:00+09:00"]
     cutoff_applied: Literal[False]
+    cutoff_status: Literal["PENDING_REGISTERED_CUTOFF"]
     retrieval_contract: _RetrievalContract
     scientific_contract: _ScientificContract
 
@@ -160,7 +151,7 @@ def validate_package_manifest(root: Path, evidence: ManifestEvidence) -> Package
             task_artifacts.candidate.sha256 != evidence.candidate_hashes[task]
             or task_artifacts.review.sha256 != evidence.review_hashes[task]
             or task_artifacts.corpus_hash != evidence.candidate_corpus_hashes[task]
-            or set(task_artifacts.index_hashes) != {"clean"}
+            or set(task_artifacts.index_hashes) != set(BRANCHES)
         ):
             raise ManifestError("NEW_MCQ_RAG_PACKAGE_MANIFEST_STALE")
     expected_identity = package_reconstruction_identity(_manifest_artifacts(manifest))
@@ -197,18 +188,15 @@ def _manifest_artifacts(manifest: PackageManifest) -> tuple[Artifact, ...]:
 
 
 def _expected_required_paths() -> dict[str, set[str]]:
-    tasks = ("mmlu_pro_engineering", "mmlu_pro_physics", "gpqa_diamond")
+    tasks = ("mmlu_pro_engineering", "mmlu_pro_physics")
     return {
         "complete_source_eligibility_registry": {"source_eligibility_registry_v1.json"},
         "accepted_document_registry": {f"accepted/{task}.jsonl" for task in tasks},
         "verified_embedding_runtime_artifact": {"embedding_runtime_v1.json"},
-        "serialized_clean_index_artifacts": {f"indices/{task}.json" for task in tasks},
-        "partial_clean_document_leakage_evidence": {"leakage_report_v1.json"},
-        "partial_task_local_candidate_evidence": {
-            "candidate_evidence_v1.json",
-            "sources/mmlu_pro_validation_475d58ba.parquet",
-            "sources/gpqa_tree_633f5ee8.json",
-        },
+        "serialized_branch_index_artifacts": {f"indices/{task}.json" for task in tasks},
+        "complete_leakage_evidence": {"leakage_report_v1.json"},
+        "retained_h2_intervention_registry": {"intervention_registry_v1.json"},
+        "accepted_h2_selection_record": {"authority_selection_v1.json"},
     }
 
 

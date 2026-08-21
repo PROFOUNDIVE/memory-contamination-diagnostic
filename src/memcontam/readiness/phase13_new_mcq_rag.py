@@ -19,7 +19,7 @@ from .phase13_new_mcq_rag_manifest import (
     ManifestEvidence,
     validate_package_manifest,
 )
-TASKS = ("mmlu_pro_engineering", "mmlu_pro_physics", "gpqa_diamond")
+TASKS = ("mmlu_pro_engineering", "mmlu_pro_physics")
 STRATA = (
     "requirement_quantifier_constraint_interpretation",
     "option_wise_evidence_comparison_elimination",
@@ -162,8 +162,8 @@ def _validate_new_mcq_rag_package(root: Path, evaluation_root: Path) -> NewMcqRa
             root,
             ManifestEvidence(candidate_hashes, review_hashes, corpus_hashes),
         )
-        clean_hashes = validate_frozen_artifacts(root, evaluation_root, corpus_hashes)
-        if any(manifest.tasks[task].index_hashes != {"clean": clean_hashes[task]} for task in TASKS):
+        index_hashes = validate_frozen_artifacts(root, evaluation_root, corpus_hashes)
+        if any(manifest.tasks[task].index_hashes != index_hashes[task] for task in TASKS):
             raise NewMcqRagError("NEW_MCQ_RAG_PACKAGE_MANIFEST_STALE")
     except ValueError as error:
         code = getattr(error, "code", "NEW_MCQ_RAG_PACKAGE_MANIFEST_STALE")
@@ -176,7 +176,7 @@ def _validate_new_mcq_rag_package(root: Path, evaluation_root: Path) -> NewMcqRa
         candidate_corpus_hashes=corpus_hashes,
         candidate_artifact_hashes=candidate_hashes,
         review_artifact_hashes=review_hashes,
-        clean_index_hashes=clean_hashes,
+        clean_index_hashes={task: index_hashes[task]["clean"] for task in TASKS},
         remaining_objects=manifest.promotion.remaining_objects,
         promotion_ready=False,
     )
