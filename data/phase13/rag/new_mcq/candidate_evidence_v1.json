@@ -7,6 +7,13 @@
     "phase13_experiment_revised_v7"
   ],
   "split_registry_status": "NOT_ESTABLISHED",
+  "unicode_provenance": {
+    "unicode_data_version": "15.1.0",
+    "unicode_data_manifest_hash": "7d17eb4282fb19ca71c8050facd78a89aa11dfd03450a3b87d01aa00cd3588d4",
+    "executable_source_sha256": "eb15d7ce19fecea9492fcd344dfe07b76686920c5e95723149a8e88b74ab7ef3",
+    "conformance_vectors_sha256": "7d4e363b184925d9066a93750a6ead81070cc4447a7b706868c045ae18e170f9",
+    "conformance_vector_count": 4
+  },
   "source_role_evidence": [
     "MMLU-Pro/evaluate_from_local.py@996df131:validation_few_shot_prompt_source",
     "MMLU-Pro/evaluate_from_local.py@996df131:test_scored_evaluation_source",
@@ -114,7 +121,6 @@
         "leakage_metric_threshold_registry",
         "full_leakage_conformance",
         "correct_i1_constructibility_and_validity",
-        "unicode_source_test_vector_provenance",
         "candidate_freeze_identity",
         "deterministic_relevance_affinity_constructibility"
       ]
@@ -219,7 +225,6 @@
         "leakage_metric_threshold_registry",
         "full_leakage_conformance",
         "correct_i1_constructibility_and_validity",
-        "unicode_source_test_vector_provenance",
         "candidate_freeze_identity",
         "deterministic_relevance_affinity_constructibility"
       ]
@@ -306,11 +311,10 @@
         "leakage_metric_threshold_registry",
         "full_leakage_conformance",
         "correct_i1_constructibility_and_validity",
-        "unicode_source_test_vector_provenance",
         "candidate_freeze_identity",
         "deterministic_relevance_affinity_constructibility"
       ]
     }
   },
-  "evidence_hash": "cac93515326093dd70a8c76ffc269267fb983e08604cfbf4051b86d9af9129f4"
+  "evidence_hash": "92d17beb1f5849c39003cc6b0c5e32b437b4052d9f0ee87d659ae934e6ef3c2e"
 }
