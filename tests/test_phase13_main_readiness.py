@@ -56,13 +56,16 @@ def test_reduced_main_readiness_preserves_calibration_without_using_it_as_main_g
     ]
 
 
-def test_track1_checkpoint_is_fail_closed_at_read_only_router_boundary() -> None:
+def test_track1_checkpoint_records_observed_read_only_router_completion() -> None:
     path = Path("data/phase13/main/track1_authority_state_sync_checkpoint_v1.json")
     assert path.exists()
     checkpoint = json.loads(path.read_text(encoding="utf-8"))
 
     assert checkpoint["repository_state_sync"] == "COMPLETE"
-    assert checkpoint["track1_status"] == "BLOCKED_CANONICAL_ROUTER_READ_ONLY"
+    assert checkpoint["track1_status"] == "TRACK1_AUTHORITY_AND_STATE_SYNC_COMPLETE"
+    assert checkpoint["authority_router"]["current_sha256"] == (
+        "e4c66c155d9a54efe76cd8dd3a102eb5de3a0fdb2af1a7f152932454831e08e1"
+    )
     assert checkpoint["authority_router"]["mount_options"] == [
         "ro",
         "nosuid",
