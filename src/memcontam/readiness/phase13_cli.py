@@ -25,6 +25,9 @@ from memcontam.readiness.phase13_provenance import (
     validate_provenance_bundle,
 )
 from memcontam.readiness.phase13_core_datasets import CoreDatasetError
+from memcontam.readiness.phase13_legacy_rag_audit import LegacyRagAuditError
+from memcontam.readiness.phase13_legacy_rag_errors import LegacyRagValidationError
+from memcontam.readiness.phase13_legacy_rag_materialize import LegacyRagMaterializationError
 
 
 def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -57,6 +60,18 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
     validate_core = commands.add_parser("validate-core-datasets")
     validate_core.add_argument("--root", type=Path, required=True)
     validate_core.add_argument("--trajectory-seed", type=int, required=True)
+    audit_legacy = commands.add_parser("audit-legacy-rag")
+    audit_legacy.add_argument("--evaluation-root", type=Path, required=True)
+    audit_legacy.add_argument("--output", type=Path, required=True)
+    materialize_legacy = commands.add_parser("materialize-legacy-rag")
+    materialize_legacy.add_argument("--repository-root", type=Path, required=True)
+    materialize_legacy.add_argument("--opaque-exclusion", type=Path, required=True)
+    materialize_legacy.add_argument("--cache-root", type=Path, required=True)
+    materialize_legacy.add_argument("--output", type=Path, required=True)
+    validate_legacy = commands.add_parser("validate-legacy-rag")
+    validate_legacy.add_argument("--repository-root", type=Path, required=True)
+    validate_legacy.add_argument("--root", type=Path, required=True)
+    validate_legacy.add_argument("--expected-manifest-sha256", required=True)
 
 
 def run(args: argparse.Namespace) -> None:
@@ -93,6 +108,54 @@ def run(args: argparse.Namespace) -> None:
 
             core_report = validate_core_datasets(args.root, trajectory_seed=args.trajectory_seed)
             print(json.dumps(core_report.model_dump(mode="json"), sort_keys=True))
+            return
+        if args.phase13_command == "audit-legacy-rag":
+            from memcontam.readiness.phase13_legacy_rag_audit import (
+                build_opaque_exclusion_registry,
+            )
+
+            audit_report = build_opaque_exclusion_registry(args.evaluation_root, args.output)
+            print(json.dumps(audit_report.model_dump(mode="json"), sort_keys=True))
+            return
+        if args.phase13_command == "validate-legacy-rag":
+            from memcontam.readiness.phase13_legacy_rag_validate import (
+                validate_legacy_rag_package,
+            )
+
+            legacy_report = validate_legacy_rag_package(
+                args.root,
+                args.repository_root,
+                args.expected_manifest_sha256,
+            )
+            print(json.dumps(legacy_report.model_dump(mode="json"), sort_keys=True))
+            return
+        if args.phase13_command == "materialize-legacy-rag":
+            from memcontam.memory.embeddings import BgeM3EmbeddingProvider
+            from memcontam.readiness.phase13_legacy_rag_materialize import (
+                LegacyRagMaterializationRequest,
+                materialize_legacy_rag_package,
+                require_legacy_rag_materialization_ready,
+            )
+
+            require_legacy_rag_materialization_ready()
+            try:
+                legacy_embedder = BgeM3EmbeddingProvider(
+                    cache_folder=args.cache_root,
+                    local_files_only=True,
+                )
+            except RuntimeError as error:
+                raise LegacyRagMaterializationError(
+                    "LEGACY_RAG_BGE_RESOURCE_UNAVAILABLE"
+                ) from error
+            materialization_report = materialize_legacy_rag_package(
+                LegacyRagMaterializationRequest(
+                    args.output,
+                    args.repository_root,
+                    args.opaque_exclusion,
+                    legacy_embedder,
+                )
+            )
+            print(json.dumps(materialization_report.model_dump(mode="json"), sort_keys=True))
             return
         from memcontam.clients.config import ProviderConfig
         from memcontam.clients.cost_guard import CostGuard
@@ -146,5 +209,8 @@ def run(args: argparse.Namespace) -> None:
         Phase13ExecutionError,
         Phase13ProvenanceError,
         CoreDatasetError,
+        LegacyRagAuditError,
+        LegacyRagMaterializationError,
+        LegacyRagValidationError,
     ) as error:
         raise SystemExit(error.code) from error
