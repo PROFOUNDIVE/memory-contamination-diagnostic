@@ -66,6 +66,12 @@ def validate_legacy_rag_package(
         validate_opaque_registry_identity(opaque)
     except LegacyRagAuditError as error:
         raise LegacyRagValidationError(error.code) from error
+    if (
+        not allow_test_package
+        and opaque.task_statuses["math_equation_balancer"] == "NOT_READY"
+    ):
+        reason = opaque.task_reason_codes["math_equation_balancer"]
+        fail_validation(reason or "LEGACY_RAG_PACKAGE_STATUS_INVALID")
     _validate_repeatability(root, repeatability)
     triplets = {
         triplet.task: triplet

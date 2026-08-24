@@ -188,6 +188,44 @@ def test_validator_rejects_resigned_audit_contract_tamper(
         )
 
 
+def test_validator_and_runtime_reject_resigned_test_package_promotion(
+    tmp_path: Path, frozen_package: Path
+) -> None:
+    package = _copy_package(frozen_package, tmp_path / "legacy")
+    status_path = package / "package_status.json"
+    status = _load(status_path)
+    status["package_status"] = "TRACK2_LEGACY_RAG_MATERIALIZATION_COMPLETE"
+    for task in status["tasks"].values():
+        task["status"] = "TRACK2_LEGACY_RAG_MATERIALIZATION_COMPLETE"
+    _write(status_path, status)
+    manifest_path = package / "manifest.json"
+    manifest = _load(manifest_path)
+    manifest["package_status"] = "TRACK2_LEGACY_RAG_MATERIALIZATION_COMPLETE"
+    _write(manifest_path, manifest)
+    _resign_manifest(package, "package_status.json")
+
+    with pytest.raises(
+        LegacyRagValidationError,
+        match="MEB_STRUCTURAL_SIMILARITY_THRESHOLD_UNFROZEN",
+    ):
+        validate_legacy_rag_package(package, ROOT, _manifest_sha256(package))
+    with pytest.raises(
+        LegacyRagValidationError,
+        match="MEB_STRUCTURAL_SIMILARITY_THRESHOLD_UNFROZEN",
+    ):
+        load_legacy_rag_state(
+            LegacyRagRuntimeRequest(
+                package,
+                ROOT,
+                "game24",
+                "clean",
+                ContractEmbedder(),
+                _manifest_sha256(package),
+                allow_test_embedder=True,
+            )
+        )
+
+
 def test_validator_rejects_nonfinite_vector_even_when_resigned(
     tmp_path: Path, frozen_package: Path
 ) -> None:
