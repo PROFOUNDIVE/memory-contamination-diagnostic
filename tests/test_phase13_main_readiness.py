@@ -66,6 +66,9 @@ def test_track1_checkpoint_records_observed_read_only_router_completion() -> Non
     assert checkpoint["authority_router"]["current_sha256"] == (
         "e4c66c155d9a54efe76cd8dd3a102eb5de3a0fdb2af1a7f152932454831e08e1"
     )
+    assert checkpoint["active_authority_hashes"]["post_cutoff_addendum"] == (
+        "d971c24439cc551655e9e1f5dbba6efa5a27242802f1db66a32749ec61350edc"
+    )
     assert checkpoint["authority_router"]["mount_options"] == [
         "ro",
         "nosuid",

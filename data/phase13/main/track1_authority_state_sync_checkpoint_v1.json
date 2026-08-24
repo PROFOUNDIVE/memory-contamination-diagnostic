@@ -27,7 +27,7 @@
     "theory_revised_v1": "34f63f37a49e92607c78ced038c4c70b4c9d5e3fa8fc57d6e97de1ee79db59a8",
     "baseline_revised_v5": "0bacce62718a93c14ce4da0c1b426e3823b75cf70b362f8f9a0632e83f4166c1",
     "protocol_revised_v8": "022879f559b145e30e645b6ccbd139e9927899d370f1956d27a0562580acf85f",
-    "post_cutoff_addendum": "2a7323664d87a6d6d0e0da934200d72220f93426e78a63662ef3f3e15941bfcb",
+    "post_cutoff_addendum": "d971c24439cc551655e9e1f5dbba6efa5a27242802f1db66a32749ec61350edc",
     "experiment_design_revised_v8": "4b1db4e55e68ec8e00fe022b9bea1685bebb340138df0e39fddc7823aafdc374"
   },
   "completed_repository_sync": {
@@ -62,5 +62,5 @@
     "mr_p6_authorization_claimed": false
   },
   "main_execution_authorized": false,
-  "checkpoint_hash": "77fbbdf897fbb973736d627572a9be58099e09dc2bb2a3d0b18b702b53c22a6a"
+  "checkpoint_hash": "7702db35b2c8c02fabe9969457abd07bc1813456afccc4666ed3d0720d9d4d09"
 }
