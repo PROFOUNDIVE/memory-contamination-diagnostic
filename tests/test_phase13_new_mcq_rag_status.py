@@ -48,7 +48,7 @@ def test_post_cutoff_package_records_fired_contingency_without_rewriting_pre_cut
 
     assert package["schema_version"] == "phase13_post_cutoff_package_selection_v1"
     assert package["authority"]["addendum_sha256"] == (
-        "2a7323664d87a6d6d0e0da934200d72220f93426e78a63662ef3f3e15941bfcb"
+        "d971c24439cc551655e9e1f5dbba6efa5a27242802f1db66a32749ec61350edc"
     )
     assert package["cutoff"]["status"] == "CONTINGENCY_FIRED"
     assert package["pre_cutoff_package"]["status"] == "NOT_READY"
