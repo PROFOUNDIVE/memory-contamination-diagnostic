@@ -45,7 +45,9 @@ from memcontam.experiment.phase12.filter_challenge.rootless_local_ledger import 
 )
 from memcontam.experiment.phase12.filter_challenge.rootless_local_state import read_private_file
 from memcontam.verifiers.game24 import verify_expression
-from memcontam.verifiers.math_equation_balancer import verify_answer as verify_meb_answer
+from memcontam.verifiers.math_equation_balancer import (
+    verify_rhs_completion_answer as verify_meb_answer,
+)
 from memcontam.verifiers.word_sorting import verify_words
 
 PROFILE: Final = "local_rootless_non_authoritative"
@@ -1140,7 +1142,16 @@ def _verify_response(
             raise RootlessContractError("ROOTLESS_COMPILATION_INVALID")
         return verify_expression(parsed_output, typed_numbers, target).is_correct
     if request.task == "math_equation_balancer":
-        return verify_meb_answer(parsed_output, certificate).is_correct
+        target = certificate.get("target")
+        target_value = certificate.get("target_value")
+        if not isinstance(target, str) or (
+            type(target_value) is not int and not isinstance(target_value, str)
+        ):
+            raise RootlessContractError("ROOTLESS_COMPILATION_INVALID")
+        return verify_meb_answer(
+            parsed_output,
+            {"target": target, "target_value": target_value},
+        ).is_correct
     if request.task == "word_sorting":
         words = certificate.get("correct_order")
         if not isinstance(words, list):
