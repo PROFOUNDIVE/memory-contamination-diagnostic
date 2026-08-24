@@ -93,7 +93,10 @@ from memcontam.tasks.game24 import build_instance as build_game24_instance
 from memcontam.tasks.math_equation_balancer import build_instance as build_meb_instance
 from memcontam.tasks.word_sorting import build_instance as build_word_sorting_instance
 from memcontam.verifiers.game24 import verify_expression
-from memcontam.verifiers.math_equation_balancer import verify_answer as verify_meb_answer
+from memcontam.verifiers.math_equation_balancer import (
+    verify_answer as verify_meb_answer,
+    verify_rhs_completion_answer as verify_historical_meb_answer,
+)
 from memcontam.verifiers.word_sorting import verify_words
 
 
@@ -106,6 +109,8 @@ def _verify_game24(parsed_answer: str, task: Any) -> Any:
 
 
 def _verify_meb(parsed_answer: str, task: Any) -> Any:
+    if str(task.input.get("input", "")).rstrip().endswith("= ?"):
+        return verify_historical_meb_answer(parsed_answer, task.verifier_spec)
     return verify_meb_answer(parsed_answer, task)
 
 
