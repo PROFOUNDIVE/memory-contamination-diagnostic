@@ -106,7 +106,7 @@ def _verify_game24(parsed_answer: str, task: Any) -> Any:
 
 
 def _verify_meb(parsed_answer: str, task: Any) -> Any:
-    return verify_meb_answer(parsed_answer, task.verifier_spec)
+    return verify_meb_answer(parsed_answer, task)
 
 
 def _verify_word_sorting(parsed_answer: str, task: Any) -> Any:
