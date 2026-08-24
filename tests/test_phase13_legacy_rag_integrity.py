@@ -149,7 +149,9 @@ def test_validator_rejects_resigned_intervention_text_tamper(
     _resign_manifest(package, "game24/corpus.json", "game24/indices.json")
 
     with pytest.raises(LegacyRagValidationError, match="LEGACY_RAG_CORPUS_INVALID"):
-        validate_legacy_rag_package(package, ROOT, _manifest_sha256(package))
+        validate_legacy_rag_package(
+            package, ROOT, _manifest_sha256(package), allow_test_package=True
+        )
 
 
 def test_validator_rejects_resigned_status_tamper(
@@ -163,7 +165,27 @@ def test_validator_rejects_resigned_status_tamper(
     _resign_manifest(package, "package_status.json")
 
     with pytest.raises(LegacyRagValidationError, match="LEGACY_RAG_PACKAGE_STATUS_INVALID"):
-        validate_legacy_rag_package(package, ROOT, _manifest_sha256(package))
+        validate_legacy_rag_package(
+            package, ROOT, _manifest_sha256(package), allow_test_package=True
+        )
+
+
+def test_validator_rejects_resigned_audit_contract_tamper(
+    tmp_path: Path, frozen_package: Path
+) -> None:
+    package = _copy_package(frozen_package, tmp_path / "legacy")
+    audit_path = package / "opaque_exclusion_registry.json"
+    audit = _load(audit_path)
+    audit["audit_contracts"]["word_sorting"]["thresholds"]["token_overlap"] = "1/3"
+    _write(audit_path, audit)
+    _resign_manifest(package, "opaque_exclusion_registry.json")
+
+    with pytest.raises(
+        LegacyRagValidationError, match="LEGACY_RAG_MAIN_SOURCE_IDENTITY_MISMATCH"
+    ):
+        validate_legacy_rag_package(
+            package, ROOT, _manifest_sha256(package), allow_test_package=True
+        )
 
 
 def test_validator_rejects_nonfinite_vector_even_when_resigned(
@@ -183,7 +205,9 @@ def test_validator_rejects_nonfinite_vector_even_when_resigned(
     _resign_manifest(package, "game24/indices.json")
 
     with pytest.raises(LegacyRagValidationError, match="LEGACY_RAG_INDEX_INVALID"):
-        validate_legacy_rag_package(package, ROOT, _manifest_sha256(package))
+        validate_legacy_rag_package(
+            package, ROOT, _manifest_sha256(package), allow_test_package=True
+        )
 
 
 def test_validator_rejects_resigned_branch_specific_clean_vector(
@@ -205,7 +229,9 @@ def test_validator_rejects_resigned_branch_specific_clean_vector(
     _resign_manifest(package, "game24/indices.json")
 
     with pytest.raises(LegacyRagValidationError, match="LEGACY_RAG_INDEX_INVALID"):
-        validate_legacy_rag_package(package, ROOT, _manifest_sha256(package))
+        validate_legacy_rag_package(
+            package, ROOT, _manifest_sha256(package), allow_test_package=True
+        )
 
 
 def test_validator_rejects_resigned_opaque_signature_removal(
@@ -222,7 +248,9 @@ def test_validator_rejects_resigned_opaque_signature_removal(
         LegacyRagValidationError,
         match="LEGACY_RAG_MAIN_SOURCE_IDENTITY_MISMATCH",
     ):
-        validate_legacy_rag_package(package, ROOT, _manifest_sha256(package))
+        validate_legacy_rag_package(
+            package, ROOT, _manifest_sha256(package), allow_test_package=True
+        )
 
 
 def test_validator_accepts_cross_runtime_score_roundoff(
@@ -239,7 +267,9 @@ def test_validator_accepts_cross_runtime_score_roundoff(
     )
     _resign_manifest(package, "game24/indices.json")
 
-    validate_legacy_rag_package(package, ROOT, _manifest_sha256(package))
+    validate_legacy_rag_package(
+        package, ROOT, _manifest_sha256(package), allow_test_package=True
+    )
 
 
 def test_runtime_validates_package_before_reconstruction(
@@ -262,6 +292,7 @@ def test_runtime_validates_package_before_reconstruction(
                 ContractEmbedder(),
                 _manifest_sha256(package),
                 allow_test_embedder=True,
+                allow_test_package=True,
             )
         )
 
@@ -277,6 +308,7 @@ def test_runtime_loads_each_completed_task(frozen_package: Path) -> None:
                 ContractEmbedder(),
                 _manifest_sha256(frozen_package),
                 allow_test_embedder=True,
+                allow_test_package=True,
             )
         )
 
@@ -295,6 +327,6 @@ def test_runtime_rejects_embedding_library_version_mismatch(frozen_package: Path
                 DifferentLibraryEmbedder(),
                 _manifest_sha256(frozen_package),
                 allow_test_embedder=True,
+                allow_test_package=True,
             )
         )
-
