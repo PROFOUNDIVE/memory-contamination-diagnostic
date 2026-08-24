@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import asdict
 
 import pytest
 
@@ -109,6 +110,7 @@ def test_common_capacity_is_mechanically_materialized_from_frozen_audit() -> Non
 
 def test_core_main_registry_matches_final_phase13_authority() -> None:
     registry = CORE_MAIN_REGISTRY
+    values = asdict(registry)
 
     assert registry.tasks == (
         "game24",
@@ -144,17 +146,36 @@ def test_core_main_registry_matches_final_phase13_authority() -> None:
     assert registry.capacity_formula == "min(B_FH_feasible,B_DC_feasible)"
     assert registry.dc_rs_capacity_binding == "L_DC_tokens=B_mem_tokens"
     assert registry.writer_max_output_tokens == 8192
-    assert (registry.preferred_seed_count, registry.fallback_seed_count) == (12, 10)
+    assert values["attempted_seed_count"] == 10
+    assert values["seed_policy"] == "exactly_10_no_replacement_no_adaptive_augmentation"
     assert registry.rag_deadline == "2026-08-22T18:00:00+09:00"
-    assert registry.rag_deadline_policy == (
-        "both_retained_new_mcq_rag_cells_or_prospective_extension"
+    assert values["rag_cutoff_status"] == "CONTINGENCY_FIRED"
+    assert values["current_main_excluded_cells"] == (
+        ("mmlu_pro_engineering", "rag_frozen"),
+        ("mmlu_pro_physics", "rag_frozen"),
     )
-    assert registry.authority_sha256 == (
-        "34f63f37a49e92607c78ced038c4c70b4c9d5e3fa8fc57d6e97de1ee79db59a8",
-        "0bacce62718a93c14ce4da0c1b426e3823b75cf70b362f8f9a0632e83f4166c1",
-        "022879f559b145e30e645b6ccbd139e9927899d370f1956d27a0562580acf85f",
-        "4b1db4e55e68ec8e00fe022b9bea1685bebb340138df0e39fddc7823aafdc374",
-        "624f3e9a198b7bdd14aa5fdfb3883eb141b5a5def8ef5ff4fff59667ca233280",
+    assert values["prospective_rag_extension_id"] == "new_mcq_rag_prospective_extension_v1"
+    assert values["authority_stack"] == (
+        (
+            "theory",
+            "34f63f37a49e92607c78ced038c4c70b4c9d5e3fa8fc57d6e97de1ee79db59a8",
+        ),
+        (
+            "baseline",
+            "0bacce62718a93c14ce4da0c1b426e3823b75cf70b362f8f9a0632e83f4166c1",
+        ),
+        (
+            "protocol",
+            "022879f559b145e30e645b6ccbd139e9927899d370f1956d27a0562580acf85f",
+        ),
+        (
+            "post_cutoff_addendum",
+            "2a7323664d87a6d6d0e0da934200d72220f93426e78a63662ef3f3e15941bfcb",
+        ),
+        (
+            "experiment_design",
+            "4b1db4e55e68ec8e00fe022b9bea1685bebb340138df0e39fddc7823aafdc374",
+        ),
     )
 
 

@@ -39,11 +39,13 @@ class CoreMainRegistry:
     capacity_formula: str
     dc_rs_capacity_binding: str
     writer_max_output_tokens: int
-    preferred_seed_count: int
-    fallback_seed_count: int
+    attempted_seed_count: int
+    seed_policy: str
     rag_deadline: str
-    rag_deadline_policy: str
-    authority_sha256: tuple[str, ...]
+    rag_cutoff_status: str
+    current_main_excluded_cells: tuple[tuple[str, str], ...]
+    prospective_rag_extension_id: str
+    authority_stack: tuple[tuple[str, str], ...]
 
 
 CORE_MAIN_REGISTRY = CoreMainRegistry(
@@ -79,16 +81,36 @@ CORE_MAIN_REGISTRY = CoreMainRegistry(
     capacity_formula="min(B_FH_feasible,B_DC_feasible)",
     dc_rs_capacity_binding="L_DC_tokens=B_mem_tokens",
     writer_max_output_tokens=8192,
-    preferred_seed_count=12,
-    fallback_seed_count=10,
+    attempted_seed_count=10,
+    seed_policy="exactly_10_no_replacement_no_adaptive_augmentation",
     rag_deadline="2026-08-22T18:00:00+09:00",
-    rag_deadline_policy="both_retained_new_mcq_rag_cells_or_prospective_extension",
-    authority_sha256=(
-        "34f63f37a49e92607c78ced038c4c70b4c9d5e3fa8fc57d6e97de1ee79db59a8",
-        "0bacce62718a93c14ce4da0c1b426e3823b75cf70b362f8f9a0632e83f4166c1",
-        "022879f559b145e30e645b6ccbd139e9927899d370f1956d27a0562580acf85f",
-        "4b1db4e55e68ec8e00fe022b9bea1685bebb340138df0e39fddc7823aafdc374",
-        "624f3e9a198b7bdd14aa5fdfb3883eb141b5a5def8ef5ff4fff59667ca233280",
+    rag_cutoff_status="CONTINGENCY_FIRED",
+    current_main_excluded_cells=(
+        ("mmlu_pro_engineering", "rag_frozen"),
+        ("mmlu_pro_physics", "rag_frozen"),
+    ),
+    prospective_rag_extension_id="new_mcq_rag_prospective_extension_v1",
+    authority_stack=(
+        (
+            "theory",
+            "34f63f37a49e92607c78ced038c4c70b4c9d5e3fa8fc57d6e97de1ee79db59a8",
+        ),
+        (
+            "baseline",
+            "0bacce62718a93c14ce4da0c1b426e3823b75cf70b362f8f9a0632e83f4166c1",
+        ),
+        (
+            "protocol",
+            "022879f559b145e30e645b6ccbd139e9927899d370f1956d27a0562580acf85f",
+        ),
+        (
+            "post_cutoff_addendum",
+            "2a7323664d87a6d6d0e0da934200d72220f93426e78a63662ef3f3e15941bfcb",
+        ),
+        (
+            "experiment_design",
+            "4b1db4e55e68ec8e00fe022b9bea1685bebb340138df0e39fddc7823aafdc374",
+        ),
     ),
 )
 
