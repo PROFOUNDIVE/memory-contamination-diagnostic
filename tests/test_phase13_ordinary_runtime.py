@@ -34,6 +34,7 @@ from memcontam.readiness.phase13_core_datasets import (
     MMLU_PRO_TEST_SHA256,
     SELECTION_PATH,
 )
+from memcontam.readiness.phase13_execution_contract import CORE_MAIN_REGISTRY
 from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
 
@@ -397,7 +398,7 @@ def test_core_ordinary_execution_consumes_seeded_bundle_order(
     assert all(trial.outcome.status == "succeeded" for trial in first.trials)
 
 
-def test_core_rag_remains_explicitly_unavailable_without_scientific_contract(
+def test_new_mcq_rag_is_excluded_from_current_main_after_fired_contingency(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -417,10 +418,17 @@ def test_core_rag_remains_explicitly_unavailable_without_scientific_contract(
 
     with pytest.raises(
         ProspectiveOrdinaryError,
-        match="NEW_MCQ_RAG_REQUIRED_ARTIFACTS_UNFROZEN",
+        match="EXCLUDED_CURRENT_MAIN_PROSPECTIVE_RAG_EXTENSION",
     ):
         execute_prospective_ordinary(run)
     assert client.calls == 0
+
+
+def test_runtime_current_main_exclusions_are_registry_driven() -> None:
+    assert CORE_MAIN_REGISTRY.current_main_excluded_cells == (
+        ("mmlu_pro_engineering", "rag_frozen"),
+        ("mmlu_pro_physics", "rag_frozen"),
+    )
 
 
 @pytest.mark.parametrize("baseline", ("fh_bounded", "bot_style", "reflexion_style"))

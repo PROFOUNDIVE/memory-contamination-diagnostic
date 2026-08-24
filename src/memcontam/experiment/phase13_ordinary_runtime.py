@@ -22,6 +22,7 @@ from memcontam.readiness.phase13_core_datasets import (
     paired_trajectory_order,
     validate_core_datasets,
 )
+from memcontam.readiness.phase13_execution_contract import CORE_MAIN_REGISTRY
 from memcontam.tasks.base import TaskInstance
 
 _validated_common_capacity_tokens = capacity_realization.validated_common_capacity_tokens
@@ -174,8 +175,8 @@ class ProspectiveOrdinaryResult:
 
 
 def execute_prospective_ordinary(run: ProspectiveOrdinaryRun) -> ProspectiveOrdinaryResult:
-    if run.task_name in CORE_TASKS and run.baseline == "rag_frozen":
-        raise ProspectiveOrdinaryError("NEW_MCQ_RAG_REQUIRED_ARTIFACTS_UNFROZEN")
+    if (run.task_name, run.baseline) in CORE_MAIN_REGISTRY.current_main_excluded_cells:
+        raise ProspectiveOrdinaryError("EXCLUDED_CURRENT_MAIN_PROSPECTIVE_RAG_EXTENSION")
     tasks = _ordered_tasks(run)
     entry = PHASE13_CORE_BASELINE_REGISTRY[run.baseline]
     contexts = tuple(_context(run, task, index) for index, task in enumerate(tasks, start=1))

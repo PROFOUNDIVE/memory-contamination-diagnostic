@@ -57,10 +57,10 @@
     "implementation_sha256": "2e4f2ed823ff0622cdac8b156892d787f24125132633cddfb1fab257b1344f9f"
   },
   "production_builder_hashes": {
-    "measurement_implementation_sha256": "8001ebf94ecb9a32b7f040f99ecabf54f28ff9677ef14b5cd910a635cb5c861d",
+    "measurement_implementation_sha256": "db4b4ad1e342f5e1cfcc788bd8222e7ee8eb70e61f54c0458f1eb3243c0ec041",
     "dc_rs_runtime_builder_sha256": "66274d3056457e5dd0c6e84c3df5a5f8bbf2380404bea59000928478c831723f",
     "dc_rs_prompt_builder_sha256": "2e4f2ed823ff0622cdac8b156892d787f24125132633cddfb1fab257b1344f9f",
-    "ordinary_runtime_builder_sha256": "fee4a76f77a144a451e871067846d289d4d17092dacc892d3cce8479a273ed0f"
+    "ordinary_runtime_builder_sha256": "38262c3467a9c945effa46ce00b7dde9fb3b805aa79f9246dab8def97a5db1db"
   },
   "runtime_implementation": {
     "openai_sdk_version": "2.46.0",
@@ -82,7 +82,7 @@
   },
   "capacity_artifact": {
     "path": "data/phase13/common_capacity_v1.json",
-    "sha256": "02310286b455adb8f38222a1e6e37122ad4472804643c8bf9be873e7536634db"
+    "sha256": "31fd190ce6111ae318e8d7a5d05fa9b1de097779e6cb516fdccc2c1c3e5608b8"
   },
   "validator": {
     "path": "src/memcontam/readiness/phase13_capacity_realization.py",
