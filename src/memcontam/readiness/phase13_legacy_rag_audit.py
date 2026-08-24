@@ -100,7 +100,9 @@ class WordSortingAuditContract(_FrozenModel):
 
 class OpaqueExclusionRegistry(_FrozenModel):
     schema_version: Literal["phase13_legacy_rag_opaque_exclusion_registry_v4"]
-    status: Literal["PASS"]
+    status: Literal["NOT_READY"]
+    task_statuses: dict[TaskName, Literal["PASS", "NOT_READY"]]
+    task_reason_codes: dict[TaskName, str | None]
     main_registry_manifest: SourceFile
     signature_hashes: dict[AuditedTask, tuple[Sha256, ...]]
     source_files: dict[TaskName, SourceFile]
@@ -208,7 +210,17 @@ def build_opaque_exclusion_registry(
         raise LegacyRagAuditError("LEGACY_RAG_MAIN_SOURCE_IDENTITY_MISMATCH") from error
     artifact = OpaqueExclusionRegistry(
         schema_version="phase13_legacy_rag_opaque_exclusion_registry_v4",
-        status="PASS",
+        status="NOT_READY",
+        task_statuses={
+            "game24": "PASS",
+            "math_equation_balancer": "NOT_READY",
+            "word_sorting": "PASS",
+        },
+        task_reason_codes={
+            "game24": None,
+            "math_equation_balancer": "MEB_STRUCTURAL_SIMILARITY_THRESHOLD_UNFROZEN",
+            "word_sorting": None,
+        },
         main_registry_manifest=SourceFile(
             path=_MANIFEST_FILE,
             sha256=_MANIFEST_SHA256,
@@ -244,6 +256,23 @@ def validate_opaque_registry_identity(artifact: OpaqueExclusionRegistry) -> None
     if (
         artifact.main_registry_manifest.path != _MANIFEST_FILE
         or artifact.main_registry_manifest.sha256 != _MANIFEST_SHA256
+        or artifact.status != "NOT_READY"
+        or artifact.task_statuses != {
+            "game24": "PASS",
+            "math_equation_balancer": "NOT_READY",
+            "word_sorting": "PASS",
+        }
+        or artifact.task_reason_codes != {
+            "game24": None,
+            "math_equation_balancer": "MEB_STRUCTURAL_SIMILARITY_THRESHOLD_UNFROZEN",
+            "word_sorting": None,
+        }
+        or artifact.audit_contracts != {
+            "word_sorting": WordSortingAuditContract(
+                thresholds={"token_overlap": "1/4", "lexical_signature": "1/6"},
+                boundary_rule="similarity_greater_than_or_equal_to_threshold_rejects",
+            )
+        }
         or artifact.source_files != expected_sources
         or any(
             len(artifact.signature_hashes[task]) != expected_count

@@ -132,7 +132,12 @@ def test_auditor_emits_only_opaque_signatures(tmp_path: Path) -> None:
     artifact = build_opaque_exclusion_registry(ROOT / "data/phase13/main", output)
 
     raw = output.read_text(encoding="utf-8")
-    assert artifact.status == "PASS"
+    assert artifact.status == "NOT_READY"
+    assert artifact.task_statuses == {
+        "game24": "PASS",
+        "math_equation_balancer": "NOT_READY",
+        "word_sorting": "PASS",
+    }
     assert set(artifact.signature_hashes) == {
         "game24",
         "math_equation_balancer",
