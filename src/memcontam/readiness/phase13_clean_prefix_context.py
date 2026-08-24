@@ -20,7 +20,7 @@ from memcontam.tasks.game24 import build_instance as build_game24
 from memcontam.tasks.math_equation_balancer import build_instance as build_meb
 from memcontam.tasks.word_sorting import build_instance as build_word_sorting
 from memcontam.verifiers.game24 import verify_expression
-from memcontam.verifiers.math_equation_balancer import verify_answer
+from memcontam.verifiers.math_equation_balancer import verify_rhs_completion_answer
 from memcontam.verifiers.word_sorting import verify_words
 
 from memcontam.readiness.phase13_clean_prefix import ROOT, TASKS
@@ -146,7 +146,9 @@ def _verifier(task: str) -> Verifier:
             answer, seen.input["numbers"], seen.verifier_spec["target"]
         ).is_correct
     if task == "math_equation_balancer":
-        return lambda answer, seen: verify_answer(answer, seen.verifier_spec).is_correct
+        return lambda answer, seen: verify_rhs_completion_answer(
+            answer, seen.verifier_spec
+        ).is_correct
     return lambda answer, seen: verify_words(
         answer.split(), seen.verifier_spec["sorted_words"]
     ).is_correct

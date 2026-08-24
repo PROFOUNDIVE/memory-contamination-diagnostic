@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+from importlib import import_module
 from pathlib import Path
 
 import pytest
@@ -9,8 +10,12 @@ import pytest
 from memcontam.contamination.catalog import load_catalog
 from memcontam.memory.corpus import KNOWN_BASELINES, load_corpus
 from memcontam.verifiers.game24 import verify_expression
-from memcontam.verifiers.math_equation_balancer import verify_answer
 from memcontam.verifiers.word_sorting import verify_words
+
+verify_rhs_completion_answer = getattr(
+    import_module("memcontam.verifiers.math_equation_balancer"),
+    "verify_rhs_completion_answer",
+)
 
 
 def _catalog_path() -> Path:
@@ -180,7 +185,7 @@ def test_dc_rs_warmup_rows_are_disjoint_and_verifier_checked(v2_corpus) -> None:
             "content": '{"input":"7 + 8 = ?"}',
             "clean_output": "7 + 8 = 15",
             "corrupted_output": "7 + 8 = 14",
-            "clean_check": lambda output, spec: verify_answer(output, spec),
+            "clean_check": lambda output, spec: verify_rhs_completion_answer(output, spec),
             "input_spec": {"target": "7 + 8 = 15", "target_value": "15"},
         },
         {
