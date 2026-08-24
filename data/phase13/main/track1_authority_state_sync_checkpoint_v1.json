@@ -1,0 +1,66 @@
+{
+  "schema_version": "phase13_track1_authority_state_sync_checkpoint_v1",
+  "repository_branch": "phase13-main-readiness-final",
+  "repository_head_at_start": "6431e955de9c2ec4f3b379637a4499ae760a31d4",
+  "repository_state_sync": "COMPLETE",
+  "track1_status": "BLOCKED_CANONICAL_ROUTER_READ_ONLY",
+  "authority_router": {
+    "path": "/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts/AGENTS.md",
+    "current_sha256": "f3e011ba60add1d6e462f0863b02538b9f2f7eff65b81100c55b1ddd45e82dcb",
+    "mount_target": "/home/hyunwoo/gdrive_undergrad_research",
+    "mount_options": ["ro", "nosuid", "nodev", "relatime"],
+    "required_sync_clauses": [
+      "legacy_rag_24_documents_per_task_and_6_6_6_6_composition",
+      "three_separate_task_local_legacy_rag_corpus_index_families",
+      "legacy_rag_build_source_contract_v2",
+      "legacy_rag_canonical_bytes_v1",
+      "historical_meb_rhs_completion_is_historical_evidence_only",
+      "current_meb_cal_first_16_and_build_next_64_operator_slot_candidates",
+      "build_cal_eval_authoring_boundary",
+      "independent_opaque_leakage_audit",
+      "meb_operator_insertion_semantic_verifier",
+      "mr_p4_mr_p5_mr_p6_namespace_and_stop_boundary",
+      "remove_remaining_12_to_10_support_admissible_router_text"
+    ]
+  },
+  "active_authority_hashes": {
+    "theory_revised_v1": "34f63f37a49e92607c78ced038c4c70b4c9d5e3fa8fc57d6e97de1ee79db59a8",
+    "baseline_revised_v5": "0bacce62718a93c14ce4da0c1b426e3823b75cf70b362f8f9a0632e83f4166c1",
+    "protocol_revised_v8": "022879f559b145e30e645b6ccbd139e9927899d370f1956d27a0562580acf85f",
+    "post_cutoff_addendum": "2a7323664d87a6d6d0e0da934200d72220f93426e78a63662ef3f3e15941bfcb",
+    "experiment_design_revised_v8": "4b1db4e55e68ec8e00fe022b9bea1685bebb340138df0e39fddc7823aafdc374"
+  },
+  "completed_repository_sync": {
+    "attempted_seed_count_per_task": 10,
+    "seed_replacement": "prohibited",
+    "adaptive_seed_augmentation": "prohibited",
+    "rag_cutoff_status": "CONTINGENCY_FIRED",
+    "new_mcq_rag_current_main_exclusions": [
+      ["mmlu_pro_engineering", "rag_frozen"],
+      ["mmlu_pro_physics", "rag_frozen"]
+    ],
+    "meb_verifier": "PROTOCOL_V8_OPERATOR_INSERTION",
+    "bare_meb_target_value_accepted": false,
+    "authority_freeze_accepts_post_cutoff_addendum_role": true
+  },
+  "preserved": {
+    "pre_cutoff_new_mcq_rag_status": "IMMUTABLE_NOT_READY_EVIDENCE",
+    "historical_meb_pilot": "IMMUTABLE_HISTORICAL_EVIDENCE_ONLY",
+    "common_capacity_status": "COMPLETE",
+    "B_mem_tokens": 8192,
+    "L_DC_tokens": 8192
+  },
+  "track2": {
+    "legacy_rag_materialization": "PENDING",
+    "prerequisites": [
+      "legacy_rag_build_cal_eval_materialization",
+      "legacy_rag_three_task_local_24_document_corpora",
+      "legacy_rag_final_bge_m3_indices"
+    ],
+    "mr_p4_closure_claimed": false,
+    "mr_p5_execution_freeze_claimed": false,
+    "mr_p6_authorization_claimed": false
+  },
+  "main_execution_authorized": false,
+  "checkpoint_hash": "65f99d68b86c9884e0066748231aa2618923978382e87a8b2cdee3bd1955b354"
+}

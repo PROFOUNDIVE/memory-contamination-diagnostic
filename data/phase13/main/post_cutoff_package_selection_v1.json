@@ -1,0 +1,66 @@
+{
+  "schema_version": "phase13_post_cutoff_package_selection_v1",
+  "authority": {
+    "addendum_path": "2026-08-24_Phase13_MainA_PostCutoff_Acceleration_Addendum.md",
+    "addendum_sha256": "2a7323664d87a6d6d0e0da934200d72220f93426e78a63662ef3f3e15941bfcb"
+  },
+  "cutoff": {
+    "timestamp": "2026-08-22T18:00:00+09:00",
+    "rule_id": "experiment_v8_two_retained_new_mcq_rag_deadline_contingency",
+    "status": "CONTINGENCY_FIRED"
+  },
+  "pre_cutoff_package": {
+    "manifest_path": "data/phase13/rag/new_mcq/package_manifest_v1.json",
+    "manifest_sha256": "e1ef6c2258bca1b317b1bc22a38de2e178f4763abe9c94c818223387f14dac9d",
+    "status_path": "data/phase13/rag/new_mcq_rag_status_v1.json",
+    "status_sha256": "0a49e0edcf6857666d0fc0dcf7f68766c5962c7279858c5f28c93e77220d431c",
+    "status": "NOT_READY",
+    "per_cell_status": {
+      "mmlu_pro_engineering|rag_frozen": "NOT_READY",
+      "mmlu_pro_physics|rag_frozen": "NOT_READY"
+    }
+  },
+  "resolution": {
+    "excluded_current_main_cells": [
+      ["mmlu_pro_engineering", "rag_frozen"],
+      ["mmlu_pro_physics", "rag_frozen"]
+    ],
+    "prospective_extension_id": "new_mcq_rag_prospective_extension_v1",
+    "late_reentry_to_current_main": "prohibited"
+  },
+  "selected_current_main": {
+    "package_id": "phase13_main_a_post_cutoff_partial_crossed_v1",
+    "tasks": [
+      "game24",
+      "math_equation_balancer",
+      "word_sorting",
+      "mmlu_pro_engineering",
+      "mmlu_pro_physics"
+    ],
+    "memory_baselines": [
+      "fh_bounded",
+      "rag_frozen",
+      "bot_style",
+      "reflexion_style",
+      "dc_rs"
+    ],
+    "arms": ["clean", "correct", "irrelevant", "contam"],
+    "nomem_policy": "singleton_per_task_seed",
+    "attempted_seed_count_per_task": 10,
+    "seed_replacement": "prohibited",
+    "adaptive_seed_augmentation": "prohibited",
+    "H_run": 50,
+    "H_primary": 50,
+    "primary_analysis_window_id": "core_prefix_50"
+  },
+  "track2": {
+    "legacy_rag_materialization": "PENDING",
+    "required_task_local_corpora": [
+      "game24",
+      "math_equation_balancer",
+      "word_sorting"
+    ],
+    "main_execution_authorized": false
+  },
+  "package_hash": "d8a128cd2740569e0dc130b08c6f11290e7b7fd599cd5364065d09e61bef5367"
+}

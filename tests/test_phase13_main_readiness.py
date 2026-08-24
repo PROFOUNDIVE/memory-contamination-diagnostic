@@ -1,17 +1,24 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 
 
-def test_reduced_main_readiness_requires_only_generic_clean_prefix_calibration() -> None:
+def test_reduced_main_readiness_preserves_calibration_without_using_it_as_main_gate() -> None:
     artifact = json.loads(
         Path("data/phase13/main/reduced_main_a_readiness_v1.json").read_text(encoding="utf-8")
     )
 
-    assert artifact["status"] == "READY_FOR_SEPARATE_PRE_MAIN_CALIBRATION_AUTHORIZATION"
+    assert artifact["status"] == "SUPERSEDED_BY_POST_CUTOFF_MAIN_PACKAGE_SELECTION"
     assert artifact["provider_calls_issued"] == 0
     assert artifact["filter_calls"] == 0
+    assert artifact["current_main_seed_policy"] == {
+        "attempted_seed_count_per_task": 10,
+        "replacement": "prohibited",
+        "adaptive_augmentation": "prohibited",
+        "support_role": "realized_analysis_domain_and_estimability",
+    }
     assert artifact["eligibility_definition"] == {
         "baseline_families": ["fh_bounded", "rag_frozen", "bot_style", "reflexion_style"],
         "horizon": 1,
@@ -39,6 +46,32 @@ def test_reduced_main_readiness_requires_only_generic_clean_prefix_calibration()
     assert artifact["prospective_scope_restriction"] == {
         "filter_challenge_available": False,
         "filter_pilot_b_selection_executed": False,
-        "generic_pre_main_calibration_role": "non_filter_joint_eligibility_and_route_budget",
+        "generic_pre_main_calibration_role": "historical_descriptive_build_evidence_only",
         "reduced_scope_frozen_before_main_unblinding": True,
     }
+    assert artifact["remaining_track2_prerequisites"] == [
+        "legacy_rag_build_cal_eval_materialization",
+        "legacy_rag_three_task_local_24_document_corpora",
+        "legacy_rag_final_bge_m3_indices",
+    ]
+
+
+def test_track1_checkpoint_is_fail_closed_at_read_only_router_boundary() -> None:
+    path = Path("data/phase13/main/track1_authority_state_sync_checkpoint_v1.json")
+    assert path.exists()
+    checkpoint = json.loads(path.read_text(encoding="utf-8"))
+
+    assert checkpoint["repository_state_sync"] == "COMPLETE"
+    assert checkpoint["track1_status"] == "BLOCKED_CANONICAL_ROUTER_READ_ONLY"
+    assert checkpoint["authority_router"]["mount_options"] == [
+        "ro",
+        "nosuid",
+        "nodev",
+        "relatime",
+    ]
+    assert checkpoint["track2"]["legacy_rag_materialization"] == "PENDING"
+    assert checkpoint["main_execution_authorized"] is False
+    unsigned = dict(checkpoint)
+    checkpoint_hash = unsigned.pop("checkpoint_hash")
+    canonical = json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
+    assert checkpoint_hash == hashlib.sha256(canonical).hexdigest()

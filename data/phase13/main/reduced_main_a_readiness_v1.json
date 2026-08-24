@@ -1,10 +1,16 @@
 {
   "schema_version": "phase13_reduced_main_a_readiness_v1",
-  "status": "READY_FOR_SEPARATE_PRE_MAIN_CALIBRATION_AUTHORIZATION",
+  "status": "SUPERSEDED_BY_POST_CUTOFF_MAIN_PACKAGE_SELECTION",
   "evidence_layer": "build",
   "scientific_result": false,
   "provider_calls_issued": 0,
   "filter_calls": 0,
+  "current_main_seed_policy": {
+    "attempted_seed_count_per_task": 10,
+    "replacement": "prohibited",
+    "adaptive_augmentation": "prohibited",
+    "support_role": "realized_analysis_domain_and_estimability"
+  },
   "panel": {
     "tasks": [
       "game24",
@@ -68,7 +74,7 @@
   "prospective_scope_restriction": {
     "filter_challenge_available": false,
     "filter_pilot_b_selection_executed": false,
-    "generic_pre_main_calibration_role": "non_filter_joint_eligibility_and_route_budget",
+    "generic_pre_main_calibration_role": "historical_descriptive_build_evidence_only",
     "reduced_scope_frozen_before_main_unblinding": true
   },
   "frozen_inputs": {
@@ -100,12 +106,15 @@
     "authorization_fail_closed": true
   },
   "post_calibration_continuation": [
-    "compute task-specific exact joint-eligibility rates",
-    "derive attempted Main counts as ceil(10 / rate) under registered ceilings",
-    "freeze concrete Main trajectory seeds and reduced run cells",
-    "freeze conditional-call rates separately",
-    "compute reduced Main call token and USD budget",
-    "issue separate Main live-smoke authorization request"
+    "retain calibration outputs as descriptive historical planning evidence only",
+    "use exactly 10 attempted Main trajectory seeds per task without replacement",
+    "treat structural support as a realized analysis-domain and estimability condition",
+    "do not derive attempted Main counts from support rates or precision targets"
+  ],
+  "remaining_track2_prerequisites": [
+    "legacy_rag_build_cal_eval_materialization",
+    "legacy_rag_three_task_local_24_document_corpora",
+    "legacy_rag_final_bge_m3_indices"
   ],
   "prepare_command": "python -m memcontam.cli phase13 prepare-clean-prefix --config configs/phase13/clean_prefix_calibration_v1.yaml --run-id <run-id> --output <authorization-request.json>"
 }
