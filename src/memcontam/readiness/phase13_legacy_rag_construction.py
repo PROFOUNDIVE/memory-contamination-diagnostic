@@ -151,6 +151,7 @@ def build_registry(source: BuildRegistrySource) -> BuildRegistry:
     audits = tuple(_audit_candidate(candidate) for candidate in source.candidates)
     return BuildRegistry(
         schema_version="phase13_legacy_rag_build_registry_v1",
+        build_registry_id=f"phase13_legacy_rag_build_registry_v1::{task}",
         task_id=task,
         build_source_contract_id="legacy_rag_build_source_contract_v2",
         canonical_byte_contract_id="legacy_rag_canonical_bytes_v1",

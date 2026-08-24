@@ -64,6 +64,9 @@ def test_meb_provenance_binds_authoritative_identities() -> None:
     ]
 
     assert registry.generator.generator_id == "legacy_meb_build_generator_v1"
+    assert registry.build_registry_id == (
+        "phase13_legacy_rag_build_registry_v1::math_equation_balancer"
+    )
     assert len(registry.candidate_audits) == 64
     assert all(row.semantic_validator_status == "PASS" for row in registry.candidate_audits)
     assert all(row.leakage_audit_status == "PASS" for row in registry.candidate_audits)
@@ -73,4 +76,5 @@ def test_meb_provenance_binds_authoritative_identities() -> None:
         "status": "HISTORICAL_EVIDENCE_ONLY",
     }
     assert all(row.build_registry_sha256 for row in worked)
+    assert all(row.build_registry_id == registry.build_registry_id for row in worked)
     assert all(row.generator_implementation_sha256 for row in worked)

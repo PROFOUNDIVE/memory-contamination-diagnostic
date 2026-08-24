@@ -9,6 +9,9 @@ TaskName = Literal["game24", "math_equation_balancer", "word_sorting"]
 FeasibleTaskName = TaskName
 BranchName = Literal["clean", "correct", "irrelevant", "contam"]
 Sha256 = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+MaterializationStatus = Literal[
+    "TRACK2_LEGACY_RAG_MATERIALIZATION_COMPLETE", "TEST_ONLY_NOT_READY"
+]
 TASKS = ("game24", "math_equation_balancer", "word_sorting")
 FEASIBLE_TASKS = TASKS
 MATERIALIZED_TASKS: tuple[FeasibleTaskName, ...] = TASKS
@@ -58,6 +61,7 @@ class RepeatabilityReport(_FrozenModel):
 
 class BuildRegistry(_FrozenModel):
     schema_version: Literal["phase13_legacy_rag_build_registry_v1"]
+    build_registry_id: str
     task_id: FeasibleTaskName
     build_source_contract_id: Literal["legacy_rag_build_source_contract_v2"]
     canonical_byte_contract_id: Literal["legacy_rag_canonical_bytes_v1"]
@@ -93,6 +97,7 @@ class CorpusDocument(_FrozenModel):
     text: str
     build_instance_id: Sha256 | None = None
     build_generator_id: str | None = None
+    build_registry_id: str | None = None
     build_registry_sha256: Sha256 | None = None
     generator_implementation_sha256: Sha256 | None = None
     canonical_response_constructor_id: str | None = None
@@ -166,23 +171,23 @@ class IndexBundle(_FrozenModel):
 
 
 class TaskStatus(_FrozenModel):
-    status: Literal["TRACK2_LEGACY_RAG_MATERIALIZATION_COMPLETE"]
+    status: MaterializationStatus
 
 
 class PackageStatus(_FrozenModel):
     schema_version: Literal["phase13_legacy_rag_package_status_v1"]
-    package_status: Literal["TRACK2_LEGACY_RAG_MATERIALIZATION_COMPLETE"]
+    package_status: MaterializationStatus
     tasks: dict[TaskName, TaskStatus]
 
 
 class PackageManifest(_FrozenModel):
     schema_version: Literal["phase13_legacy_rag_manifest_v1"]
-    package_status: Literal["TRACK2_LEGACY_RAG_MATERIALIZATION_COMPLETE"]
+    package_status: MaterializationStatus
     artifact_hashes: dict[str, Sha256]
 
 
 class LegacyRagMaterializationReport(_FrozenModel):
-    package_status: Literal["TRACK2_LEGACY_RAG_MATERIALIZATION_COMPLETE"]
+    package_status: MaterializationStatus
     tasks: dict[TaskName, TaskStatus]
 
 

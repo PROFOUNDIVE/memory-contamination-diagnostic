@@ -117,6 +117,7 @@ def _document(
         text=content.decode("utf-8"),
         build_instance_id=source if is_worked_example else None,
         build_generator_id=registry.generator.generator_id if registry else None,
+        build_registry_id=registry.build_registry_id if registry else None,
         build_registry_sha256=(
             hashlib.sha256(canonical_json_bytes(registry.model_dump(mode="json"))).hexdigest()
             if registry
