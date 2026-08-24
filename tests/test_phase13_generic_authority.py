@@ -33,6 +33,10 @@ def _freeze() -> dict[str, JsonValue]:
                 "role": "experiment_design",
                 "artifact": {"path": "authority/design.json", "sha256": "2" * 64},
             },
+            {
+                "role": "post_cutoff_addendum",
+                "artifact": {"path": "authority/addendum.md", "sha256": "4" * 64},
+            },
         ],
         "registries": [
             {
@@ -56,7 +60,11 @@ def _freeze() -> dict[str, JsonValue]:
 def test_authority_freeze_accepts_prospective_scientific_values_from_requirements() -> None:
     requirements = {
         "schema_version": "phase13_authority_requirements_v1",
-        "authority_hashes": {"protocol": "1" * 64, "experiment_design": "2" * 64},
+        "authority_hashes": {
+            "protocol": "1" * 64,
+            "experiment_design": "2" * 64,
+            "post_cutoff_addendum": "4" * 64,
+        },
         "registry_kinds": ["execution"],
         "parameter_names": ["H_run", "backbone", "baselines", "rag_corpus", "tasks"],
     }

@@ -1,12 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
 from pathlib import Path
-
-from tests.test_phase13_generic_authority import _freeze
-
 
 def _run(*arguments: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -30,8 +28,42 @@ def test_phase13_help_exposes_only_prospective_generic_validators_for_new_surfac
 
 
 def test_authority_validator_runs_without_importing_live_provider_module(tmp_path: Path) -> None:
+    freeze_payload = {
+        "schema_version": "phase13_authority_freeze_v1",
+        "freeze_id": "prospective-freeze",
+        "authorities": [
+            {
+                "role": "protocol",
+                "artifact": {"path": "authority/protocol.json", "sha256": "1" * 64},
+            },
+            {
+                "role": "experiment_design",
+                "artifact": {"path": "authority/design.json", "sha256": "2" * 64},
+            },
+            {
+                "role": "post_cutoff_addendum",
+                "artifact": {"path": "authority/addendum.md", "sha256": "4" * 64},
+            },
+        ],
+        "registries": [
+            {
+                "kind": "execution",
+                "registry_id": "execution-future",
+                "artifact": {"path": "registry/execution.json", "sha256": "3" * 64},
+            }
+        ],
+        "parameters": {
+            "backbone": "prospective-backbone",
+            "H_run": 7,
+            "tasks": ["future-task"],
+            "baselines": ["future-baseline"],
+            "rag_corpus": "future-corpus",
+        },
+    }
+    canonical = json.dumps(freeze_payload, sort_keys=True, separators=(",", ":")).encode()
+    freeze_payload["closure_hash"] = hashlib.sha256(canonical).hexdigest()
     freeze = tmp_path / "freeze.json"
-    freeze.write_text(json.dumps(_freeze()), encoding="utf-8")
+    freeze.write_text(json.dumps(freeze_payload), encoding="utf-8")
     requirements = tmp_path / "requirements.json"
     requirements.write_text(
         json.dumps(
@@ -40,6 +72,7 @@ def test_authority_validator_runs_without_importing_live_provider_module(tmp_pat
                 "authority_hashes": {
                     "protocol": "1" * 64,
                     "experiment_design": "2" * 64,
+                    "post_cutoff_addendum": "4" * 64,
                 },
                 "registry_kinds": ["execution"],
                 "parameter_names": ["H_run", "backbone", "baselines", "rag_corpus", "tasks"],
