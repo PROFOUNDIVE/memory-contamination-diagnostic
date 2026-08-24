@@ -39,6 +39,8 @@ def validate_legacy_rag_package(
     root: Path,
     repository_root: Path,
     expected_manifest_sha256: str,
+    *,
+    allow_test_package: bool = False,
 ) -> LegacyRagMaterializationReport:
     try:
         actual_manifest_sha256 = sha256_file(root / "manifest.json")
@@ -59,7 +61,7 @@ def validate_legacy_rag_package(
         root / "repeatability_report.json",
         "LEGACY_RAG_REPEAT_MATERIALIZATION_INVALID",
     )
-    _validate_status(manifest, status)
+    _validate_status(manifest, status, allow_test_package=allow_test_package)
     try:
         validate_opaque_registry_identity(opaque)
     except LegacyRagAuditError as error:
@@ -146,15 +148,22 @@ def _validate_artifact_hashes(root: Path, manifest: PackageManifest) -> None:
         fail_validation("LEGACY_RAG_ARTIFACT_HASH_MISMATCH")
 
 
-def _validate_status(manifest: PackageManifest, status: PackageStatus) -> None:
+def _validate_status(
+    manifest: PackageManifest,
+    status: PackageStatus,
+    *,
+    allow_test_package: bool,
+) -> None:
+    expected = (
+        "TEST_ONLY_NOT_READY"
+        if allow_test_package
+        else "TRACK2_LEGACY_RAG_MATERIALIZATION_COMPLETE"
+    )
     if (
         manifest.package_status != status.package_status
-        or status.package_status != "TRACK2_LEGACY_RAG_MATERIALIZATION_COMPLETE"
+        or status.package_status != expected
         or set(status.tasks) != set(TASKS)
-        or any(
-            task.status != "TRACK2_LEGACY_RAG_MATERIALIZATION_COMPLETE"
-            for task in status.tasks.values()
-        )
+        or any(task.status != expected for task in status.tasks.values())
     ):
         fail_validation("LEGACY_RAG_PACKAGE_STATUS_INVALID")
 

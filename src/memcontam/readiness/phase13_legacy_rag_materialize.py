@@ -73,7 +73,9 @@ def materialize_legacy_rag_package(
                 repeat_materialization_sha256=aggregate,
             ).model_dump(mode="json"),
         )
-        status = package_status()
+        status = package_status(
+            test_only=request.allow_unfrozen_meb_threshold_for_tests
+        )
         artifact_hashes = {
             str(path.relative_to(primary)): sha256_file(path)
             for path in sorted(primary.rglob("*"))
@@ -93,6 +95,7 @@ def materialize_legacy_rag_package(
             primary,
             request.repository_root,
             sha256_file(primary / "manifest.json"),
+            allow_test_package=request.allow_unfrozen_meb_threshold_for_tests,
         )
         primary.replace(output)
         return report

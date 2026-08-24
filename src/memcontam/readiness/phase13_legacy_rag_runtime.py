@@ -29,6 +29,7 @@ class LegacyRagRuntimeRequest:
     embedder: MetadataEmbeddingProvider
     expected_manifest_sha256: str
     allow_test_embedder: bool = False
+    allow_test_package: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +43,7 @@ def load_legacy_rag_state(request: LegacyRagRuntimeRequest) -> LoadedLegacyRagSt
         request.package_root,
         request.repository_root,
         request.expected_manifest_sha256,
+        allow_test_package=request.allow_test_package,
     )
     metadata = request.embedder.metadata
     if (

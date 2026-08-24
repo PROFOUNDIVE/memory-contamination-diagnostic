@@ -180,7 +180,11 @@ def test_materialized_feasible_packages_validate_and_load_runtime(tmp_path: Path
         )
     )
     manifest_sha256 = hashlib.sha256((output / "manifest.json").read_bytes()).hexdigest()
-    validated = validate_legacy_rag_package(output, ROOT, manifest_sha256)
+    with pytest.raises(LegacyRagValidationError, match="LEGACY_RAG_PACKAGE_STATUS_INVALID"):
+        validate_legacy_rag_package(output, ROOT, manifest_sha256)
+    validated = validate_legacy_rag_package(
+        output, ROOT, manifest_sha256, allow_test_package=True
+    )
     states = {
         task: load_legacy_rag_state(
             LegacyRagRuntimeRequest(
@@ -191,14 +195,15 @@ def test_materialized_feasible_packages_validate_and_load_runtime(tmp_path: Path
                 ContractEmbedder(),
                 manifest_sha256,
                 allow_test_embedder=True,
+                allow_test_package=True,
             )
         )
         for task in ("game24", "math_equation_balancer", "word_sorting")
     }
 
-    assert report.package_status == "TRACK2_LEGACY_RAG_MATERIALIZATION_COMPLETE"
+    assert report.package_status == "TEST_ONLY_NOT_READY"
     assert all(
-        task.status == "TRACK2_LEGACY_RAG_MATERIALIZATION_COMPLETE"
+        task.status == "TEST_ONLY_NOT_READY"
         for task in report.tasks.values()
     )
     assert all((output / task).is_dir() for task in report.tasks)

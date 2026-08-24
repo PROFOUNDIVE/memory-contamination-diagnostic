@@ -97,7 +97,12 @@ def materialize_stage(
     context = _MaterializationContext(request, opaque, triplets, _CachedEmbedder(request.embedder))
     for task in MATERIALIZED_TASKS:
         _materialize_task(root, task, context)
-    write_json(root / "package_status.json", package_status().model_dump(mode="json"))
+    write_json(
+        root / "package_status.json",
+        package_status(
+            test_only=request.allow_unfrozen_meb_threshold_for_tests
+        ).model_dump(mode="json"),
+    )
 
 
 def _materialize_task(
@@ -204,11 +209,16 @@ def _materialize_task(
     )
 
 
-def package_status() -> PackageStatus:
-    complete = TaskStatus(status="TRACK2_LEGACY_RAG_MATERIALIZATION_COMPLETE")
+def package_status(*, test_only: bool = False) -> PackageStatus:
+    status = (
+        "TEST_ONLY_NOT_READY"
+        if test_only
+        else "TRACK2_LEGACY_RAG_MATERIALIZATION_COMPLETE"
+    )
+    complete = TaskStatus(status=status)
     return PackageStatus(
         schema_version="phase13_legacy_rag_package_status_v1",
-        package_status="TRACK2_LEGACY_RAG_MATERIALIZATION_COMPLETE",
+        package_status=status,
         tasks={task: complete for task in MATERIALIZED_TASKS},
     )
 
