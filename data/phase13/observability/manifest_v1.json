@@ -1,0 +1,74 @@
+{
+  "schema_version": "phase13_observability_manifest_v1",
+  "manifest_id": "phase13_observability_measurement_identity_v1",
+  "evidence_scope": "synthetic_contract_fixture_only",
+  "track2_5_status": "BLOCKED",
+  "artifacts": {
+    "synthetic_contract_fixture": {
+      "path": "fixture_v1.json",
+      "sha256": "132c630d0119d0b5a217c86fc91b9ac59ba32c42f7e734885cd6b940a42580cd"
+    },
+    "target_set_registry": {
+      "path": "target_set_registry_v1.json",
+      "sha256": "beab1caa102dfd810f2a9eb4b7574719f02debf5577b07bd16695c2537e00427"
+    }
+  },
+  "implementations": {
+    "observable_contract": {
+      "path": "src/memcontam/evaluation/phase13_observability_models.py",
+      "sha256": "508d8243cc60bef1902c605e534207a7f72ac1a3278040ba20bea3507dd2ac29"
+    },
+    "trial_and_sequential_reconstruction": {
+      "path": "src/memcontam/evaluation/phase13_observability.py",
+      "sha256": "c26f86a2a652b4e6bce222aee2ed8830c4cd5634b25ee5761f7ee08d7581dd41"
+    },
+    "runtime_identity_and_lineage": {
+      "path": "src/memcontam/evaluation/phase13_observability_lineage.py",
+      "sha256": "606a65d75d96602b52f0afa834a2ecd2298c644bba71924aa65a2965d79922c6"
+    },
+    "phase13_aggregation": {
+      "path": "src/memcontam/evaluation/phase13_aggregate.py",
+      "sha256": "ab2ec63c4d3e643e6ce91ee3745ac8523d0de1d674b20b45bd11362c01f80f36"
+    },
+    "measurement_identity_models": {
+      "path": "src/memcontam/readiness/phase13_observability_models.py",
+      "sha256": "4db2a3bd265e6a60aa7b530a25f7a96cce9e7ac86480d457ab911d93927f91c7"
+    },
+    "measurement_reconstruction_validator": {
+      "path": "src/memcontam/readiness/phase13_observability_validate.py",
+      "sha256": "1dd6c7d6130c3246c6ccc6787a4dd2c0fe6dc675fa7890dae77274c2bcad1a2d"
+    },
+    "phase13_cli": {
+      "path": "src/memcontam/readiness/phase13_cli.py",
+      "sha256": "1acb2bc798d487f797fa32f52eb62d2800f033c04c488ef39e310e6b5cc35336"
+    },
+    "track1_authority_state": {
+      "path": "data/phase13/main/track1_authority_state_sync_checkpoint_v1.json",
+      "sha256": "29a4c79d2e443829b69b4e6edf74969bb777d6a1cfe47cfb03b8336d77015bac"
+    },
+    "track2_legacy_rag_seal": {
+      "path": "data/phase13/rag/legacy_seal_v1.json",
+      "sha256": "00a5ebc22b81945e12d69e53bd3e5174fed6ade14d4b93539f4e8da3c7796fc3"
+    },
+    "core_main_registry": {
+      "path": "src/memcontam/readiness/phase13_execution_contract.py",
+      "sha256": "79f5cd4d256830de10956cef90513dd23f7e590dc8de3e87c96b4260653aa8c8"
+    }
+  },
+  "expected_reconstruction_sha256": "8831bab1dd8e00d771cf19c1b6de032a584d01eacfb995c2f46e2ad3ef4fe348",
+  "failure_classifier_registry_status": "NOT_REGISTERED_BY_AUTHORITY",
+  "u_t_status": "NOT_REGISTERED_FOR_CURRENT_MAIN",
+  "blockers": [
+    "FAILURE_CLASSIFIER_REGISTRY_NOT_REGISTERED",
+    "RECURRENCE_LOOKBACK_NOT_REGISTERED",
+    "EXPOSURE_CONDITIONING_RULE_NOT_REGISTERED",
+    "POST_EVICTION_TIMING_NOT_REGISTERED",
+    "RETENTION_DURATION_ENDPOINT_NOT_REGISTERED",
+    "PRODUCTION_RUNTIME_METADATA_JOIN_NOT_MATERIALIZED",
+    "CONCRETE_MAIN_SEED_REGISTRY_NOT_FROZEN",
+    "LEVEL2_FH_INTERACTIONS_NOT_MATERIALIZED"
+  ],
+  "mr_p4_prerequisite_status": "BLOCKED",
+  "mr_p5_handoff_status": "NOT_AVAILABLE",
+  "main_a_measured_scientific_execution_count": 0
+}
