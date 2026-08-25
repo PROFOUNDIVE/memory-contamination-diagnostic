@@ -1,0 +1,17 @@
+{
+  "schema_version": "phase13_target_set_registry_v1",
+  "registry_id": "phase13_recorded_exact_lineage_targets_v1",
+  "scope": "synthetic_contract_fixture_only",
+  "source_package_manifest": {
+    "path": "data/phase13/rag/legacy_seal_v1.json",
+    "sha256": "00a5ebc22b81945e12d69e53bd3e5174fed6ade14d4b93539f4e8da3c7796fc3"
+  },
+  "target_sets": [
+    {
+      "target_set_id": "phase13_fixture_targets_v1",
+      "definition_version": "phase13_recorded_exact_lineage_v1",
+      "included_classes": ["injected", "derived"],
+      "require_exact_lineage": true
+    }
+  ]
+}
