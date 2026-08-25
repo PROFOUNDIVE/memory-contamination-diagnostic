@@ -108,6 +108,21 @@ def meb_candidates(
     )
 
 
+def iter_meb_candidates(excluded_signatures: frozenset[str]) -> Iterator[MebCandidate]:
+    for digest, candidate_bytes, operands, target, operators, response, signature in _meb_stream(
+        excluded_signatures
+    ):
+        yield MebCandidate(
+            ordered_operands=operands,
+            target_value=target,
+            canonical_operator_tuple=operators,
+            response=response,
+            candidate_bytes=candidate_bytes,
+            digest=digest.hex(),
+            canonical_signature=signature,
+        )
+
+
 def _meb_stream(
     excluded_signatures: frozenset[str],
 ) -> Iterator[tuple[bytes, bytes, tuple[int, ...], int, tuple[MebOperator, ...], str, str]]:
@@ -271,6 +286,7 @@ __all__ = [
     "WordSortingCandidate",
     "WORD_SORTING_VOCABULARY",
     "game24_candidates",
+    "iter_meb_candidates",
     "meb_candidates",
     "word_sorting_candidates",
 ]

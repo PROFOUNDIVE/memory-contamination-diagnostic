@@ -16,6 +16,7 @@ from memcontam.readiness.phase13_legacy_rag_construction import (
 )
 from memcontam.readiness.phase13_legacy_rag_documents import clean_documents
 from memcontam.readiness.phase13_legacy_rag_generators import meb_candidates
+from memcontam.readiness.phase13_legacy_rag_models import ArtifactReference
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -53,6 +54,10 @@ def test_meb_provenance_binds_authoritative_identities() -> None:
             build_partition_law=calibration.partition_law,
             historical_pilot_status=calibration.historical_rhs_completion_pilot.status,
             leakage_calibration_artifact=None,
+            structural_threshold_artifact=ArtifactReference(
+                path="math_equation_balancer/structural_threshold.json",
+                sha256="0" * 64,
+            ),
             opaque_hash="0" * 64,
             candidates=eligible[16:],
         )
@@ -70,6 +75,7 @@ def test_meb_provenance_binds_authoritative_identities() -> None:
     assert len(registry.candidate_audits) == 64
     assert all(row.semantic_validator_status == "PASS" for row in registry.candidate_audits)
     assert all(row.leakage_audit_status == "PASS" for row in registry.candidate_audits)
+    assert registry.structural_threshold_artifact is not None
     assert calibration.historical_rhs_completion_pilot.model_dump(mode="json") == {
         "path": "data/tasks/math_equation_balancer_pilot.jsonl",
         "sha256": "6fa5a5d3be52853f8d9da93a9a9c0ea5399f67c9c08acc64fdbdd4821f68bb41",

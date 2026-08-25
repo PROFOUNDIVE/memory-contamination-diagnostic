@@ -38,7 +38,7 @@ _ADDENDUM_PATH: Final = (
     "References/Theoretical Artifacts/"
     "2026-08-24_Phase13_MainA_PostCutoff_Acceleration_Addendum.md"
 )
-_ADDENDUM_SHA256: Final = "d971c24439cc551655e9e1f5dbba6efa5a27242802f1db66a32749ec61350edc"
+_ADDENDUM_SHA256: Final = "d66ca07ef2aabe5444793b268f1b2e0df2a388ddf9023b53e6e0901d2172224d"
 _GENERATOR_PATH: Final = "src/memcontam/readiness/phase13_legacy_rag_generators.py"
 CALIBRATION_PATHS: Final = {
     "game24": "data/tasks/game24_pilot.jsonl",
@@ -89,6 +89,7 @@ class BuildRegistrySource:
     build_partition_law: str
     historical_pilot_status: Literal["HISTORICAL_EVIDENCE_ONLY"] | None
     leakage_calibration_artifact: ArtifactReference | None
+    structural_threshold_artifact: ArtifactReference | None
     opaque_hash: str
     candidates: tuple[Candidate, ...]
 
@@ -174,6 +175,7 @@ def build_registry(source: BuildRegistrySource) -> BuildRegistry:
         build_partition_law=source.build_partition_law,
         historical_pilot_status=source.historical_pilot_status,
         leakage_calibration_artifact=source.leakage_calibration_artifact,
+        structural_threshold_artifact=source.structural_threshold_artifact,
         opaque_exclusion_registry_sha256=source.opaque_hash,
         eligible_candidate_count=64,
         candidates=tuple(

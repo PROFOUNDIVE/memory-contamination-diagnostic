@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from fractions import Fraction
 from pathlib import Path
 
 import pytest
@@ -14,7 +15,6 @@ from memcontam.readiness.phase13_legacy_rag_generators import (
     word_sorting_candidates,
 )
 from memcontam.readiness.phase13_legacy_rag_materialize import (
-    LegacyRagMaterializationError,
     LegacyRagMaterializationRequest,
     materialize_legacy_rag_package,
 )
@@ -132,10 +132,10 @@ def test_auditor_emits_only_opaque_signatures(tmp_path: Path) -> None:
     artifact = build_opaque_exclusion_registry(ROOT / "data/phase13/main", output)
 
     raw = output.read_text(encoding="utf-8")
-    assert artifact.status == "NOT_READY"
+    assert artifact.status == "PASS"
     assert artifact.task_statuses == {
         "game24": "PASS",
-        "math_equation_balancer": "NOT_READY",
+        "math_equation_balancer": "PASS",
         "word_sorting": "PASS",
     }
     assert set(artifact.signature_hashes) == {
@@ -147,6 +147,39 @@ def test_auditor_emits_only_opaque_signatures(tmp_path: Path) -> None:
     assert '"words"' not in raw
     assert '"target"' not in raw
     assert all(len(value) == 64 for values in artifact.signature_hashes.values() for value in values)
+
+
+def test_meb_v2_bootstrap_materializes_exact_opaque_threshold(tmp_path: Path) -> None:
+    artifact = build_opaque_exclusion_registry(
+        ROOT / "data/phase13/main", tmp_path / "opaque.json"
+    )
+
+    threshold = artifact.meb_structural_threshold
+    s_plus = Fraction(threshold.s_plus)
+    s_minus = Fraction(threshold.s_minus)
+
+    assert threshold.bootstrap_panel_id == (
+        "D_structcal^MEB::meb_structural_threshold_bootstrap_panel_v2"
+    )
+    assert threshold.pre_threshold_eval_exclusion_contract_id == (
+        "meb_structcal_exact_canonical_eval_exclusion_v1"
+    )
+    assert threshold.structural_representation_id == (
+        "proposed_sigma_meb_operand_count_ordered_operands_target_v1"
+    )
+    assert threshold.structural_similarity_metric_id == (
+        "proposed_meb_whole_token_normalized_levenshtein_v1"
+    )
+    assert len(threshold.anchor_signatures) == 16
+    assert len(threshold.positive_controls) == 16
+    assert len(threshold.negative_controls) == 16
+    assert len(threshold.endpoint_exclusion_statuses) == 48
+    assert set(threshold.endpoint_exclusion_statuses.values()) == {"PASS"}
+    assert len(set(threshold.endpoint_exclusion_statuses)) == 48
+    assert s_minus < s_plus
+    assert Fraction(threshold.tau_meb) == (s_minus + s_plus) / 2
+    assert threshold.boundary_rule == "similarity_greater_than_or_equal_to_threshold_rejects"
+    assert threshold.separability_result == "PASS"
 
 
 def test_auditor_records_governed_word_sorting_threshold_application(tmp_path: Path) -> None:
@@ -180,7 +213,10 @@ def test_materialized_feasible_packages_validate_and_load_runtime(tmp_path: Path
         )
     )
     manifest_sha256 = hashlib.sha256((output / "manifest.json").read_bytes()).hexdigest()
-    with pytest.raises(LegacyRagValidationError, match="LEGACY_RAG_PACKAGE_STATUS_INVALID"):
+    with pytest.raises(
+        LegacyRagValidationError,
+        match="LEGACY_RAG_TEST_ARTIFACT_PROMOTION_FORBIDDEN",
+    ):
         validate_legacy_rag_package(output, ROOT, manifest_sha256)
     validated = validate_legacy_rag_package(
         output, ROOT, manifest_sha256, allow_test_package=True
@@ -208,6 +244,7 @@ def test_materialized_feasible_packages_validate_and_load_runtime(tmp_path: Path
     )
     assert all((output / task).is_dir() for task in report.tasks)
     assert (output / "math_equation_balancer/calibration_registry.json").is_file()
+    assert (output / "math_equation_balancer/structural_threshold.json").is_file()
     leakage = json.loads((output / "word_sorting/leakage_calibration.json").read_text())
     assert leakage["thresholds"] == {"lexical_signature": "1/6", "token_overlap": "1/4"}
     assert leakage["separability_result"] == "PASS"
@@ -246,23 +283,21 @@ def test_materializer_rejects_non_bge_dimension(tmp_path: Path) -> None:
         )
 
 
-def test_materializer_blocks_without_frozen_meb_structural_threshold(tmp_path: Path) -> None:
+def test_materializer_uses_frozen_meb_structural_threshold(tmp_path: Path) -> None:
     opaque = tmp_path / "opaque.json"
     build_opaque_exclusion_registry(ROOT / "data/phase13/main", opaque)
 
-    with pytest.raises(
-        LegacyRagMaterializationError,
-        match="MEB_STRUCTURAL_SIMILARITY_THRESHOLD_UNFROZEN",
-    ):
-        materialize_legacy_rag_package(
-            LegacyRagMaterializationRequest(
-                tmp_path / "legacy",
-                ROOT,
-                opaque,
-                ContractEmbedder(),
-                allow_test_embedder=True,
-            )
+    report = materialize_legacy_rag_package(
+        LegacyRagMaterializationRequest(
+            tmp_path / "legacy",
+            ROOT,
+            opaque,
+            ContractEmbedder(),
+            allow_test_embedder=True,
         )
+    )
+
+    assert report.package_status == "TEST_ONLY_NOT_READY"
 
 
 def test_validator_rejects_tampered_index(tmp_path: Path) -> None:

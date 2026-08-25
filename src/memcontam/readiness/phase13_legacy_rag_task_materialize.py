@@ -100,7 +100,10 @@ def materialize_stage(
     write_json(
         root / "package_status.json",
         package_status(
-            test_only=request.allow_unfrozen_meb_threshold_for_tests
+            test_only=(
+                request.allow_test_embedder
+                or request.allow_unfrozen_meb_threshold_for_tests
+            )
         ).model_dump(mode="json"),
     )
 
@@ -115,6 +118,7 @@ def _materialize_task(
     opaque_signatures = frozenset(context.opaque.signature_hashes[task])
     historical_pilot_status = None
     leakage_artifact = None
+    structural_threshold_artifact = None
     match task:
         case "game24":
             calibration = calibration_path(context.request.repository_root, task)
@@ -128,6 +132,15 @@ def _materialize_task(
             calibration_selection_law = "existing_compatible_pilot_registry"
             build_partition_law = "first_64_noncolliding_certified_candidates"
         case "math_equation_balancer":
+            threshold_path = f"{task}/structural_threshold.json"
+            write_json(
+                root / threshold_path,
+                context.opaque.meb_structural_threshold.model_dump(mode="json"),
+            )
+            structural_threshold_artifact = ArtifactReference(
+                path=threshold_path,
+                sha256=sha256_file(root / threshold_path),
+            )
             eligible = meb_candidates(opaque_signatures, limit=80)
             calibration_registry = build_meb_calibration_registry(eligible[:16])
             calibration_registry_path = f"{task}/calibration_registry.json"
@@ -172,6 +185,7 @@ def _materialize_task(
             build_partition_law=build_partition_law,
             historical_pilot_status=historical_pilot_status,
             leakage_calibration_artifact=leakage_artifact,
+            structural_threshold_artifact=structural_threshold_artifact,
             opaque_hash=sha256_file(root / "opaque_exclusion_registry.json"),
             candidates=candidates,
         )

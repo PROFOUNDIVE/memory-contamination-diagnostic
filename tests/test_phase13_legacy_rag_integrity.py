@@ -206,12 +206,12 @@ def test_validator_and_runtime_reject_resigned_test_package_promotion(
 
     with pytest.raises(
         LegacyRagValidationError,
-        match="MEB_STRUCTURAL_SIMILARITY_THRESHOLD_UNFROZEN",
+        match="LEGACY_RAG_TEST_ARTIFACT_PROMOTION_FORBIDDEN",
     ):
         validate_legacy_rag_package(package, ROOT, _manifest_sha256(package))
     with pytest.raises(
         LegacyRagValidationError,
-        match="MEB_STRUCTURAL_SIMILARITY_THRESHOLD_UNFROZEN",
+        match="LEGACY_RAG_TEST_ARTIFACT_PROMOTION_FORBIDDEN",
     ):
         load_legacy_rag_state(
             LegacyRagRuntimeRequest(

@@ -25,6 +25,7 @@ from .phase13_legacy_rag_construction import (
 )
 from .phase13_legacy_rag_errors import fail_validation
 from .phase13_legacy_rag_generators import meb_candidates
+from .phase13_legacy_rag_meb_threshold import MebStructuralThreshold
 from .phase13_legacy_rag_models import ArtifactReference, BuildRegistry, FeasibleTaskName
 from .phase13_legacy_rag_serialization import sha256_file
 
@@ -43,6 +44,7 @@ def validate_registry(source: RegistryCheckSource) -> tuple[Candidate, ...]:
     opaque_signatures = frozenset(source.opaque.signature_hashes[source.task])
     historical_pilot_status = None
     leakage_artifact = None
+    structural_threshold_artifact = None
     match source.task:
         case "game24":
             calibration = calibration_path(source.repository_root, source.task)
@@ -56,6 +58,18 @@ def validate_registry(source: RegistryCheckSource) -> tuple[Candidate, ...]:
             calibration_selection_law = "existing_compatible_pilot_registry"
             build_partition_law = "first_64_noncolliding_certified_candidates"
         case "math_equation_balancer":
+            threshold_path = f"{source.task}/structural_threshold.json"
+            observed_threshold = _load(
+                MebStructuralThreshold,
+                source.package_root / threshold_path,
+                "LEGACY_RAG_BUILD_REGISTRY_INVALID",
+            )
+            if observed_threshold != source.opaque.meb_structural_threshold:
+                fail_validation("LEGACY_RAG_BUILD_REGISTRY_INVALID")
+            structural_threshold_artifact = ArtifactReference(
+                path=threshold_path,
+                sha256=sha256_file(source.package_root / threshold_path),
+            )
             eligible = meb_candidates(opaque_signatures, limit=80)
             expected_calibration = build_meb_calibration_registry(eligible[:16])
             calibration_registry_path = f"{source.task}/calibration_registry.json"
@@ -114,6 +128,7 @@ def validate_registry(source: RegistryCheckSource) -> tuple[Candidate, ...]:
             build_partition_law=build_partition_law,
             historical_pilot_status=historical_pilot_status,
             leakage_calibration_artifact=leakage_artifact,
+            structural_threshold_artifact=structural_threshold_artifact,
             opaque_hash=source.opaque_hash,
             candidates=candidates,
         )

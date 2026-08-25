@@ -66,12 +66,6 @@ def validate_legacy_rag_package(
         validate_opaque_registry_identity(opaque)
     except LegacyRagAuditError as error:
         raise LegacyRagValidationError(error.code) from error
-    if (
-        not allow_test_package
-        and opaque.task_statuses["math_equation_balancer"] == "NOT_READY"
-    ):
-        reason = opaque.task_reason_codes["math_equation_balancer"]
-        fail_validation(reason or "LEGACY_RAG_PACKAGE_STATUS_INVALID")
     _validate_repeatability(root, repeatability)
     triplets = {
         triplet.task: triplet
@@ -130,6 +124,7 @@ def _validate_artifact_hashes(root: Path, manifest: PackageManifest) -> None:
         "package_status.json",
         "repeatability_report.json",
         "math_equation_balancer/calibration_registry.json",
+        "math_equation_balancer/structural_threshold.json",
         "word_sorting/leakage_calibration.json",
         *(
             f"{task}/{artifact}.json"
@@ -160,14 +155,18 @@ def _validate_status(
     *,
     allow_test_package: bool,
 ) -> None:
+    if manifest.materialization_profile == "test_only" and not allow_test_package:
+        fail_validation("LEGACY_RAG_TEST_ARTIFACT_PROMOTION_FORBIDDEN")
     expected = (
         "TEST_ONLY_NOT_READY"
         if allow_test_package
         else "TRACK2_LEGACY_RAG_MATERIALIZATION_COMPLETE"
     )
+    expected_profile = "test_only" if allow_test_package else "production_bge_m3"
     if (
         manifest.package_status != status.package_status
         or status.package_status != expected
+        or manifest.materialization_profile != expected_profile
         or set(status.tasks) != set(TASKS)
         or any(task.status != expected for task in status.tasks.values())
     ):

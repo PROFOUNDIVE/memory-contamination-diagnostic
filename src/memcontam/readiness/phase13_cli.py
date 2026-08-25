@@ -134,10 +134,8 @@ def run(args: argparse.Namespace) -> None:
             from memcontam.readiness.phase13_legacy_rag_materialize import (
                 LegacyRagMaterializationRequest,
                 materialize_legacy_rag_package,
-                require_legacy_rag_materialization_ready,
             )
 
-            require_legacy_rag_materialization_ready()
             try:
                 legacy_embedder = BgeM3EmbeddingProvider(
                     cache_folder=args.cache_root,

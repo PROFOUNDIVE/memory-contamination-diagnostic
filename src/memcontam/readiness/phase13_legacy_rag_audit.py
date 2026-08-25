@@ -13,7 +13,14 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .phase13_legacy_rag_bytes import canonical_json_bytes
 from .phase13_legacy_rag_calibration import word_sorting_similarities
-from .phase13_legacy_rag_generators import WORD_SORTING_VOCABULARY
+from .phase13_legacy_rag_generators import WORD_SORTING_VOCABULARY, iter_meb_candidates
+from .phase13_legacy_rag_meb_threshold import (
+    MebStructuralEndpoint,
+    MebStructuralThreshold,
+    build_meb_structural_threshold,
+    near_duplicate_exclusions,
+)
+from .phase13_legacy_rag_models import ArtifactReference
 
 
 Sha256 = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
@@ -41,11 +48,14 @@ _SOURCE_IDENTITIES: Final = {
 _SIGNATURE_IDENTITIES: Final[dict[AuditedTask, tuple[int, Sha256]]] = {
     "game24": (95, "2fca0e90c38729a9ff9df8987aa2456ab73a1577b5df81338f93eb6880ac91d0"),
     "math_equation_balancer": (
-        250,
-        "b6b7ec23685eb7a63c9fd01edda1451cebc98de4b7815fa37a5c37368ad32149",
+        255,
+        "dfab5883795f7a097dfbfd374b57dbd627d6fc1ee4efa169f0ede7964c35e76c",
     ),
     "word_sorting": (0, "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"),
 }
+_MEB_THRESHOLD_SHA256: Final = (
+    "e113ecef6d43190bec136f4b32375172e58a1f4113a1e9f3bc7467ab65615921"
+)
 
 
 class LegacyRagAuditError(ValueError):
@@ -99,14 +109,15 @@ class WordSortingAuditContract(_FrozenModel):
 
 
 class OpaqueExclusionRegistry(_FrozenModel):
-    schema_version: Literal["phase13_legacy_rag_opaque_exclusion_registry_v4"]
-    status: Literal["NOT_READY"]
-    task_statuses: dict[TaskName, Literal["PASS", "NOT_READY"]]
+    schema_version: Literal["phase13_legacy_rag_opaque_exclusion_registry_v5"]
+    status: Literal["PASS"]
+    task_statuses: dict[TaskName, Literal["PASS"]]
     task_reason_codes: dict[TaskName, str | None]
     main_registry_manifest: SourceFile
     signature_hashes: dict[AuditedTask, tuple[Sha256, ...]]
     source_files: dict[TaskName, SourceFile]
     audit_contracts: dict[Literal["word_sorting"], WordSortingAuditContract]
+    meb_structural_threshold: MebStructuralThreshold
 
 
 def _canonical_signature_bytes(value: dict[str, int | list[int] | list[str]]) -> bytes:
@@ -171,25 +182,29 @@ def _read_word_sorting(raw: bytes) -> tuple[Sha256, ...]:
     )
 
 
-def _read_meb(raw: bytes) -> tuple[Sha256, ...]:
+def _read_meb(raw: bytes) -> tuple[tuple[Sha256, ...], tuple[MebStructuralEndpoint, ...]]:
     rows = tuple(_MebRow.model_validate_json(line) for line in raw.splitlines())
-    return tuple(
-        sorted(
-            {
-                hashlib.sha256(
-                    _canonical_signature_bytes(
-                        {
-                            "ordered_operands": [
-                                int(value) for value in re.findall(r"-?\d+", row.input.split("=", 1)[0])
-                            ],
-                            "target_value": row.verifier_spec.target_value,
-                        }
-                    )
-                ).hexdigest()
-                for row in rows
-            }
+    endpoints = tuple(
+        MebStructuralEndpoint(
+            ordered_operands=tuple(
+                int(value) for value in re.findall(r"-?\d+", row.input.split("=", 1)[0])
+            ),
+            target_value=row.verifier_spec.target_value,
+            signature=hashlib.sha256(
+                _canonical_signature_bytes(
+                    {
+                        "ordered_operands": [
+                            int(value)
+                            for value in re.findall(r"-?\d+", row.input.split("=", 1)[0])
+                        ],
+                        "target_value": row.verifier_spec.target_value,
+                    }
+                )
+            ).hexdigest(),
         )
+        for row in rows
     )
+    return tuple(sorted({endpoint.signature for endpoint in endpoints})), endpoints
 
 
 def build_opaque_exclusion_registry(
@@ -208,17 +223,26 @@ def build_opaque_exclusion_registry(
         word_raw, word_source = _verified_source(evaluation_root, "word_sorting")
     except OSError as error:
         raise LegacyRagAuditError("LEGACY_RAG_MAIN_SOURCE_IDENTITY_MISMATCH") from error
+    meb_exact_hashes, meb_endpoints = _read_meb(meb_raw)
+    meb_candidates = tuple(iter_meb_candidates(frozenset(meb_exact_hashes)))
+    meb_threshold = build_meb_structural_threshold(
+        meb_candidates,
+        ArtifactReference(path=_MEB_FILE, sha256=meb_source.sha256, row_count=meb_source.row_count),
+    )
+    meb_near_hashes = near_duplicate_exclusions(
+        meb_candidates, meb_endpoints, Fraction(meb_threshold.tau_meb)
+    )
     artifact = OpaqueExclusionRegistry(
-        schema_version="phase13_legacy_rag_opaque_exclusion_registry_v4",
-        status="NOT_READY",
+        schema_version="phase13_legacy_rag_opaque_exclusion_registry_v5",
+        status="PASS",
         task_statuses={
             "game24": "PASS",
-            "math_equation_balancer": "NOT_READY",
+            "math_equation_balancer": "PASS",
             "word_sorting": "PASS",
         },
         task_reason_codes={
             "game24": None,
-            "math_equation_balancer": "MEB_STRUCTURAL_SIMILARITY_THRESHOLD_UNFROZEN",
+            "math_equation_balancer": None,
             "word_sorting": None,
         },
         main_registry_manifest=SourceFile(
@@ -228,7 +252,7 @@ def build_opaque_exclusion_registry(
         ),
         signature_hashes={
             "game24": _read_game24(game24_raw),
-            "math_equation_balancer": _read_meb(meb_raw),
+            "math_equation_balancer": tuple(sorted({*meb_exact_hashes, *meb_near_hashes})),
             "word_sorting": _read_word_sorting(word_raw),
         },
         source_files={
@@ -242,6 +266,7 @@ def build_opaque_exclusion_registry(
                 boundary_rule="similarity_greater_than_or_equal_to_threshold_rejects",
             )
         },
+        meb_structural_threshold=meb_threshold,
     )
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_bytes(canonical_json_bytes(artifact.model_dump(mode="json")))
@@ -256,15 +281,15 @@ def validate_opaque_registry_identity(artifact: OpaqueExclusionRegistry) -> None
     if (
         artifact.main_registry_manifest.path != _MANIFEST_FILE
         or artifact.main_registry_manifest.sha256 != _MANIFEST_SHA256
-        or artifact.status != "NOT_READY"
+        or artifact.status != "PASS"
         or artifact.task_statuses != {
             "game24": "PASS",
-            "math_equation_balancer": "NOT_READY",
+            "math_equation_balancer": "PASS",
             "word_sorting": "PASS",
         }
         or artifact.task_reason_codes != {
             "game24": None,
-            "math_equation_balancer": "MEB_STRUCTURAL_SIMILARITY_THRESHOLD_UNFROZEN",
+            "math_equation_balancer": None,
             "word_sorting": None,
         }
         or artifact.audit_contracts != {
@@ -274,6 +299,10 @@ def validate_opaque_registry_identity(artifact: OpaqueExclusionRegistry) -> None
             )
         }
         or artifact.source_files != expected_sources
+        or hashlib.sha256(
+            canonical_json_bytes(artifact.meb_structural_threshold.model_dump(mode="json"))
+        ).hexdigest()
+        != _MEB_THRESHOLD_SHA256
         or any(
             len(artifact.signature_hashes[task]) != expected_count
             or hashlib.sha256(

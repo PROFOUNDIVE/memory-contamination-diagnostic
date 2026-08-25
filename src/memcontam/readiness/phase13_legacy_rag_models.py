@@ -74,6 +74,7 @@ class BuildRegistry(_FrozenModel):
     build_partition_law: str
     historical_pilot_status: Literal["HISTORICAL_EVIDENCE_ONLY"] | None = None
     leakage_calibration_artifact: ArtifactReference | None = None
+    structural_threshold_artifact: ArtifactReference | None = None
     opaque_exclusion_registry_sha256: Sha256
     eligible_candidate_count: Literal[64]
     candidates: tuple[BuildCandidate, ...]
@@ -183,6 +184,7 @@ class PackageStatus(_FrozenModel):
 class PackageManifest(_FrozenModel):
     schema_version: Literal["phase13_legacy_rag_manifest_v1"]
     package_status: MaterializationStatus
+    materialization_profile: Literal["production_bge_m3", "test_only"]
     artifact_hashes: dict[str, Sha256]
 
 
