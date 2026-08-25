@@ -1,0 +1,222 @@
+{
+  "schema_version": "meb_structural_threshold_bootstrap_packet_v1",
+  "status": "MEB_STRUCTURAL_THRESHOLD_AUTHORITY_CANDIDATE",
+  "authority_status": "NON_AUTHORITATIVE_CONSTRUCTION_ONLY_EVIDENCE",
+  "production_authority": false,
+  "production_readiness_changed": false,
+  "track2_state": "NOT_READY -- MEB_STRUCTURAL_SIMILARITY_THRESHOLD_UNFROZEN",
+  "panel": {
+    "panel_id": "D_structcal^MEB::meb_structural_threshold_bootstrap_panel_v1",
+    "object_kind": "paired_structural_control_panel",
+    "panel_content_sha256": "7bd5da0653781ce991d51b7bd7f1a448b3c9c2a208e01f42f83e7e2c9777c092",
+    "panel_content_sha256_scope": "SHA256(legacy_rag_canonical_bytes_v1({construction_contract,structural_representation,metric,threshold_functional,positive_controls,negative_controls}))",
+    "role": "prospective structural-threshold calibration only",
+    "partition_membership": "FORBIDDEN",
+    "distinctness_contract": {
+      "control_records_are_not_current_D_cal_members": true,
+      "control_records_are_not_D_build_members": true,
+      "control_records_are_not_D_eval_members": true,
+      "basis": "D_structcal records are namespaced control-pair objects and are ineligible for allocation to task-instance calibration, build, or evaluation partitions.",
+      "endpoint_task_content_overlap_with_partitions": "UNKNOWN_NOT_OPAQUELY_AUDITED",
+      "task_instance_content_disjointness_claim": "NOT_ASSERTED"
+    },
+    "positive_control_count": 16,
+    "negative_control_count": 16,
+    "global_endpoint_count": 48,
+    "global_endpoint_canonical_signatures_unique": true
+  },
+  "authority_inputs": {
+    "router": {
+      "path": "/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts/AGENTS.md",
+      "sha256": "e4c66c155d9a54efe76cd8dd3a102eb5de3a0fdb2af1a7f152932454831e08e1"
+    },
+    "post_cutoff_addendum": {
+      "path": "/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts/2026-08-24_Phase13_MainA_PostCutoff_Acceleration_Addendum.md",
+      "sha256": "d971c24439cc551655e9e1f5dbba6efa5a27242802f1db66a32749ec61350edc"
+    },
+    "protocol_v8": {
+      "path": "/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts/Phase 13-Compatible Contamination Construction Intervention Timing and Sensitivity Protocol revised-v8.md",
+      "sha256": "022879f559b145e30e645b6ccbd139e9927899d370f1956d27a0562580acf85f"
+    }
+  },
+  "panel_source": {
+    "source_class": "frozen_task_specification_derived_synthetic_construction_domain",
+    "generator_id": "legacy_meb_build_generator_v1",
+    "canonical_byte_contract_id": "legacy_rag_canonical_bytes_v1",
+    "generator_implementation_path": "src/memcontam/readiness/phase13_legacy_rag_generators.py",
+    "generator_implementation_sha256": "dcd8c767b2e17c66c37857bd8465fb3dfd62cbc39cfc977149f487e32d87c54a",
+    "exact_valid_canonical_candidate_count_pre_exclusion": 175175,
+    "operand_count_domain": [3, 4],
+    "operand_value_domain": [1, 9],
+    "operator_order": ["+", "-", "*", "/"],
+    "target_domain": [-512, 512],
+    "exact_rational_evaluation": true,
+    "opaque_exclusion_identities_used": false,
+    "evaluation_exclusion_used": false
+  },
+  "construction_contract": {
+    "contract_id": "meb_structural_threshold_bootstrap_construction_v1",
+    "rule_frozen_before_similarity_computation": true,
+    "anchor_count": 16,
+    "anchor_rule": {
+      "selector_object": ["domain", "anchor_signature", "ordered_operands", "target_value"],
+      "domain": "meb_structcal_anchor_selection_v1",
+      "anchor_signature_literal": "",
+      "order": "ascending raw SHA256(canonical selector object) bytes; candidate canonical bytes tie-break",
+      "selection": "first 16 from the full frozen synthetic structural domain"
+    },
+    "positive_admission_rule": {
+      "realized_similarity_not_used_for_admission": true,
+      "prior_threshold_not_used_for_admission": true,
+      "rule": "In anchor rank order, preserve operand_count and ordered operands; enumerate operator tuples in frozen product order; select the first exact-valid integer target different from the anchor target whose canonical task signature is unused by any anchor or earlier positive.",
+      "near_duplicate_basis": "same complete ordered operand skeleton and exactly one changed structural field: target_value",
+      "undersupply": "MEB_STRUCTURAL_BOOTSTRAP_PANEL_UNDERSUPPLIED"
+    },
+    "negative_admission_rule": {
+      "realized_similarity_not_used_for_admission": true,
+      "prior_threshold_not_used_for_admission": true,
+      "rule": "For each anchor in rank order, admit only exact-valid candidates with the same operand_count, every aligned operand value different, opposite target polarity under target<0 versus target>=0, and a canonical task signature unused by every anchor, positive, or earlier negative.",
+      "non_near_duplicate_basis": "same-cardinality structural contrast with zero aligned operand matches and opposite target polarity",
+      "selector_domain": "meb_structcal_negative_selection_v1",
+      "selector_object": ["domain", "anchor_signature", "ordered_operands", "target_value"],
+      "order": "ascending raw SHA256(canonical selector object) bytes; candidate canonical bytes tie-break",
+      "undersupply": "MEB_STRUCTURAL_BOOTSTRAP_PANEL_UNDERSUPPLIED"
+    },
+    "global_uniqueness_rule": "All 16 anchors, 16 positive endpoints, and 16 negative endpoints must have distinct canonical task signatures; otherwise fail closed.",
+    "metric_blind_admission_definition": "Admission is representation-aware synthetic construction but never computes or compares realized Levenshtein similarity, s_plus, s_minus, tau_candidate, or the prior 13/20.",
+    "control_label_scope": "Constructor-defined structural exemplars, not metric-independent or independently adjudicated natural-pair ground truth.",
+    "similarity_or_prior_threshold_used_for_admission": false,
+    "prior_13_over_20_used_for_admission": false,
+    "statistical_independence_claim": false
+  },
+  "structural_representation": {
+    "representation_id": "proposed_sigma_meb_operand_count_ordered_operands_target_v1",
+    "definition": "sigma_MEB(q)=[operand_count,n1,...,nm,target_value]",
+    "tokenization": "each entry is one whole integer structural token",
+    "identity_bound_but_not_repeated_as_tokens": [
+      "operator set {+,-,*,/}",
+      "no-parentheses policy",
+      "standard precedence",
+      "left associativity within equal precedence",
+      "operand-order preservation",
+      "fixed token-use law",
+      "exact rational evaluation"
+    ],
+    "authority_status": "PROPOSED_NOT_FROZEN"
+  },
+  "metric": {
+    "metric_id": "proposed_meb_whole_token_normalized_levenshtein_v1",
+    "definition": "1-d_Lev_tok(sigma_MEB(x),sigma_MEB(y))/max(len(sigma_MEB(x)),len(sigma_MEB(y)))",
+    "whole_token_insertion_cost": 1,
+    "whole_token_deletion_cost": 1,
+    "unequal_whole_token_substitution_cost": 1,
+    "equal_token_substitution_cost": 0,
+    "arithmetic": "exact rational",
+    "authority_status": "PROPOSED_NOT_FROZEN"
+  },
+  "threshold_functional": {
+    "functional_id": "proposed_meb_structural_bootstrap_midpoint_v1",
+    "frozen_before_similarity_computation": true,
+    "s_plus": "minimum positive-control similarity",
+    "s_minus": "maximum negative-control similarity",
+    "separability_requirement": "s_minus < s_plus",
+    "failure_result": "MEB_STRUCTURAL_BOOTSTRAP_PANEL_NOT_SEPARABLE",
+    "candidate_formula": "tau_candidate=(s_minus+s_plus)/2",
+    "candidate_boundary_if_adopted": "similarity >= tau_candidate would reject as structural near-duplicate",
+    "candidate_boundary_authority_status": "PROPOSED_NOT_PRODUCTION_AUTHORITY"
+  },
+  "positive_controls": [
+    {"pair_id":"structcal-positive-01","anchor_selection_sha256":"00005d56b337a3a673fa99c6ace86f2e35442bc11f178fc1e13d27e145b7ed9b","anchor_canonical_signature":"c0b1eaeec03633b8dc1a1c5cf4825706a0e46610a96aef2ede1e6e405b987e6c","left_sigma":[4,6,1,4,3,12],"left_operators":["-","+","+"],"right_canonical_signature":"78e34e6d4f27fae2d38a12a02155e4523a25ca3a71a5a298137a3574020cd0fc","right_sigma":[4,6,1,4,3,14],"right_operators":["+","+","+"],"edit_distance":1,"similarity":"5/6"},
+    {"pair_id":"structcal-positive-02","anchor_selection_sha256":"00008d12b82da6e24c8cc8cdf1a14ae2b8849a53e04eaa73964b1b74833a5acb","anchor_canonical_signature":"352eac08480bd33dc57b1e72f6a193f2330a74d0b8bc6009d2446e30225adf2e","left_sigma":[3,7,9,8,504],"left_operators":["*","*"],"right_canonical_signature":"392cf36e46cb7a0526d30cbb0cef74f6bcc59ad50475c746b0123f60a5766035","right_sigma":[3,7,9,8,24],"right_operators":["+","+"],"edit_distance":1,"similarity":"4/5"},
+    {"pair_id":"structcal-positive-03","anchor_selection_sha256":"0000fdd8ecccf558a128ccbc442faaf75396e850adaf6e50e6fa7864d2b16ee2","anchor_canonical_signature":"2d87f4614d2ba84803b38e0dfe37cce548c907654c78c1ee35572c1dac591e62","left_sigma":[4,5,9,5,7,47],"left_operators":["*","-","+"],"right_canonical_signature":"69dde51af217ba2ed0845d0c3894bc64bc2b4a180582a7c6c9ab3eb3d6a99251","right_sigma":[4,5,9,5,7,26],"right_operators":["+","+","+"],"edit_distance":1,"similarity":"5/6"},
+    {"pair_id":"structcal-positive-04","anchor_selection_sha256":"000134dec7982b38c2d16918ed9711ca4776ffce65c5999bdca0053db107132f","anchor_canonical_signature":"5272e5f8a6289863c994dd4026629245c96bb0e9108cb2a8e285f1cfbd094e72","left_sigma":[4,1,3,5,4,-59],"left_operators":["-","*","*"],"right_canonical_signature":"da50cb6c09855e41d2bf8df3dc872402ddecd771e9c51337b9a8dc4b9f8cf548","right_sigma":[4,1,3,5,4,13],"right_operators":["+","+","+"],"edit_distance":1,"similarity":"5/6"},
+    {"pair_id":"structcal-positive-05","anchor_selection_sha256":"00013be833b1ed60fe05f0840d842303ecaf785c234a78a2b155792448ddf8a5","anchor_canonical_signature":"fd1d5bc14eef594c2ae56b6d9a8a12ed640797b1d4e43b669fea9955ce391425","left_sigma":[4,7,7,4,1,45],"left_operators":["*","-","*"],"right_canonical_signature":"3145ec4eb5ecb001a3c738cb9c410087fea22b1dcb80c827364a4b888605855c","right_sigma":[4,7,7,4,1,19],"right_operators":["+","+","+"],"edit_distance":1,"similarity":"5/6"},
+    {"pair_id":"structcal-positive-06","anchor_selection_sha256":"00013d9ee7a0b6bbabf2382ecbcb62e54e91e094f25cd0fc32579dc8cf1ad456","anchor_canonical_signature":"09dcb707105f6c54ee735ee0f70b4f73fde36a33b30a53835af44c81a6dab1d0","left_sigma":[4,5,9,2,8,8],"left_operators":["+","+","-"],"right_canonical_signature":"a19c04db68cc9ab17e7cab0515bbde4e72ea99c964a4d974dfbabafdfed0f49f","right_sigma":[4,5,9,2,8,24],"right_operators":["+","+","+"],"edit_distance":1,"similarity":"5/6"},
+    {"pair_id":"structcal-positive-07","anchor_selection_sha256":"000187971b7b28b4d54bac6e1e42f64130d7c3b09921382b3ff2b77c835f336c","anchor_canonical_signature":"afb0a4add6ef11f834498deac2dcd844f732adb001f0eed5253f62598e10bf72","left_sigma":[4,6,4,7,8,9],"left_operators":["+","+","-"],"right_canonical_signature":"5015e2787ca688c2a107f70b29d1b051a1510f0a5d4b53f0a3b7838b1a8184b3","right_sigma":[4,6,4,7,8,25],"right_operators":["+","+","+"],"edit_distance":1,"similarity":"5/6"},
+    {"pair_id":"structcal-positive-08","anchor_selection_sha256":"0001bd0a711c2f2e49cd5d0eae2abbe2410c22daa98653911b98e7b7e1061914","anchor_canonical_signature":"7b05533672c016a8f2fa94a84cc18cae032c123257077268aec3677c2ebaa1ec","left_sigma":[4,3,6,9,6,12],"left_operators":["+","+","-"],"right_canonical_signature":"08c98a2cbd24482bb932f4f7f8a46f3459479b16a6030bcfc9b9f9d6fd475b49","right_sigma":[4,3,6,9,6,24],"right_operators":["+","+","+"],"edit_distance":1,"similarity":"5/6"},
+    {"pair_id":"structcal-positive-09","anchor_selection_sha256":"0001de4aaee6637e824d0f317eb5cb241d4947cacbe4679253c8efc95ccfef0f","anchor_canonical_signature":"c4e4b1c23f8235cc84598a434c0227f11d29a4f777555ff079867cbc63d64dda","left_sigma":[4,5,2,3,7,-18],"left_operators":["-","-","*"],"right_canonical_signature":"b9a6241c9256f6c8bc98298fca36d56ff1a769611bca0dc6c275083cf2c9486a","right_sigma":[4,5,2,3,7,17],"right_operators":["+","+","+"],"edit_distance":1,"similarity":"5/6"},
+    {"pair_id":"structcal-positive-10","anchor_selection_sha256":"00031cedd8b75c381d3446aed77c8f77c4805fa9efdb9813d4eba9d855ad89d2","anchor_canonical_signature":"983f40a71268d26e891bebc55d49c2e32b45ef4a5ed8538e1d218dcc739394c6","left_sigma":[4,2,5,6,4,36],"left_operators":["+","*","+"],"right_canonical_signature":"522b3960b7028bed5b7e1eaa469988f3280da89c064e9bf62d2c7b4f55eb2724","right_sigma":[4,2,5,6,4,17],"right_operators":["+","+","+"],"edit_distance":1,"similarity":"5/6"},
+    {"pair_id":"structcal-positive-11","anchor_selection_sha256":"00033ab867ac56595b34986e5f6befa87354b8b6e418a425d971ec86869239ba","anchor_canonical_signature":"fd813e46cf2c688efa67a33d6f9d8b2548b54704d9bb9f45acaf4b33751a8895","left_sigma":[4,5,9,8,3,363],"left_operators":["*","*","+"],"right_canonical_signature":"4df8eeac93c202fb4410329ebfd95e7b5c10fc06cf993052ae3fdd27536c4e6a","right_sigma":[4,5,9,8,3,25],"right_operators":["+","+","+"],"edit_distance":1,"similarity":"5/6"},
+    {"pair_id":"structcal-positive-12","anchor_selection_sha256":"000378e16dc8195663b6bbe1992b37cfde417dc4f40ffe8c034fecf31dafc168","anchor_canonical_signature":"e4479b50647662e6cb5ab6135a2cced0aa13c55b62f318943ee2ce9f859f9434","left_sigma":[4,5,6,9,4,47],"left_operators":["+","+","*"],"right_canonical_signature":"086cb7aadf6e58819aa1e47d8a23533d418d0d583c81ffb7afb291bc1768c1f8","right_sigma":[4,5,6,9,4,24],"right_operators":["+","+","+"],"edit_distance":1,"similarity":"5/6"},
+    {"pair_id":"structcal-positive-13","anchor_selection_sha256":"0003842015867c63842db7bac95091e0e9dcbe164d80c9c9096cd010ee612b4e","anchor_canonical_signature":"1c1a98690fb0555caa0429f7fb7b9bdfb9a9efa88b9e14d48f3341c8680b04ef","left_sigma":[4,3,6,9,3,1],"left_operators":["-","/","*"],"right_canonical_signature":"aebd75b9bbe6ba31302c5c0d4ef9f285be05285e4b958acdfd8acc0a336d05a1","right_sigma":[4,3,6,9,3,21],"right_operators":["+","+","+"],"edit_distance":1,"similarity":"5/6"},
+    {"pair_id":"structcal-positive-14","anchor_selection_sha256":"0003c11b51abc48167d54f92f694eb4436cebd0cbcb75873308567243716fc16","anchor_canonical_signature":"51a46447625a128d05764279be3c8dded90cc15169b0d5b41b5cae2cfa8e9e4f","left_sigma":[4,5,9,8,3,3],"left_operators":["+","-","-"],"right_canonical_signature":"9cd4bf2e8be4bcd5d692f354e22b240c90a2b7794904a308a8860e4c21701c90","right_sigma":[4,5,9,8,3,19],"right_operators":["+","+","-"],"edit_distance":1,"similarity":"5/6"},
+    {"pair_id":"structcal-positive-15","anchor_selection_sha256":"0003d07cc670b79da1a168e71f8b58820207d289849e7f20b192984e8614d60f","anchor_canonical_signature":"2cc68f8622cc6e685ad258b3647f85d76645beb8cee16c74ba56cca8e26d42cd","left_sigma":[4,7,8,1,2,12],"left_operators":["+","-","-"],"right_canonical_signature":"b29947d0dff88174fc465dbd0646048211e32627d549ded88b7046572a78413c","right_sigma":[4,7,8,1,2,18],"right_operators":["+","+","+"],"edit_distance":1,"similarity":"5/6"},
+    {"pair_id":"structcal-positive-16","anchor_selection_sha256":"00042d4e539b59c81dd1d31a84e14dc6aa38a1208d8ae2bfa500e19a58d7a594","anchor_canonical_signature":"06d66b01c3848541d5308a91f7819aa2ff2d02af92a41c569def8e0cd57a5f6b","left_sigma":[4,2,7,1,3,-19],"left_operators":["-","*","*"],"right_canonical_signature":"0c64b5d99a0fe004c843d5eff4bed91501fa2689f6bb3d324d28d25caf9249d6","right_sigma":[4,2,7,1,3,13],"right_operators":["+","+","+"],"edit_distance":1,"similarity":"5/6"}
+  ],
+  "negative_controls": [
+    {"pair_id":"structcal-negative-01","negative_selection_sha256":"0004a1964c4c7c82a9552b995dd6ebf44b6d69114db34f4cbc0f5d36783bfa23","right_canonical_signature":"5ceda79e00274247d5d6bdad13e582aba6acaa735b0b279dfe4ec84e92a2cf8e","left_sigma":[4,6,1,4,3,12],"right_sigma":[4,8,4,8,7,-13],"right_operators":["/","-","-"],"aligned_operands_all_different":true,"opposite_target_polarity":true,"edit_distance":5,"similarity":"1/6"},
+    {"pair_id":"structcal-negative-02","negative_selection_sha256":"003398d40fda58d130837275dfadebd3090ca6991beae339b82f114c47261614","right_canonical_signature":"de72698ac43ca3afb69c141c6e90269e5f5e81dd5bf0ee74286a3df75bdb7d65","left_sigma":[3,7,9,8,504],"right_sigma":[3,2,6,7,-40],"right_operators":["-","*"],"aligned_operands_all_different":true,"opposite_target_polarity":true,"edit_distance":4,"similarity":"1/5"},
+    {"pair_id":"structcal-negative-03","negative_selection_sha256":"00029c36e17a8fd7bb7f2c92ba4a673063937adc38f841bb923144092f78ba9c","right_canonical_signature":"c8b401cc4bece3850298bcac8a69a1dbc6af2aa9a308da31354bf7f97e313cc7","left_sigma":[4,5,9,5,7,47],"right_sigma":[4,6,4,9,6,-1],"right_operators":["-","-","+"],"aligned_operands_all_different":true,"opposite_target_polarity":true,"edit_distance":5,"similarity":"1/6"},
+    {"pair_id":"structcal-negative-04","negative_selection_sha256":"0000579bb0bd90164f99321dea8481a0117f66bc8c786a27d96fcd80924233f3","right_canonical_signature":"d2f647d0667c5ebaba039f6308ce1f0af79b80e175e2f417e98482495c2e75c8","left_sigma":[4,1,3,5,4,-59],"right_sigma":[4,9,9,4,6,330],"right_operators":["*","*","+"],"aligned_operands_all_different":true,"opposite_target_polarity":true,"edit_distance":5,"similarity":"1/6"},
+    {"pair_id":"structcal-negative-05","negative_selection_sha256":"0001ff8b61732704d400a59a909ac0440408e354245dc78311c53419d476a987","right_canonical_signature":"c479bd4a0c7c5d3d73d9358a54cddc1455be91e589af148985961f10310bc022","left_sigma":[4,7,7,4,1,45],"right_sigma":[4,5,4,3,8,-4],"right_operators":["-","+","-"],"aligned_operands_all_different":true,"opposite_target_polarity":true,"edit_distance":5,"similarity":"1/6"},
+    {"pair_id":"structcal-negative-06","negative_selection_sha256":"000663f67e29cdcb18991878f3093712d34fcc001be6d591c631e789f4d912fc","right_canonical_signature":"f22c3b7abc2686477f4eb5abadb311c4e394e1c5c1d451279380e9d839348740","left_sigma":[4,5,9,2,8,8],"right_sigma":[4,8,3,8,1,-3],"right_operators":["-","-","*"],"aligned_operands_all_different":true,"opposite_target_polarity":true,"edit_distance":5,"similarity":"1/6"},
+    {"pair_id":"structcal-negative-07","negative_selection_sha256":"00019a1f9a8153fa8148237fd5ef4eba78595597a5eafa67cbe51eaec2a70fed","right_canonical_signature":"24ceb9e733d1b050d21ffc44de95ce0c747cef6b886ed466ba65d1fb3fb3e907","left_sigma":[4,6,4,7,8,9],"right_sigma":[4,3,3,4,5,-8],"right_operators":["/","-","-"],"aligned_operands_all_different":true,"opposite_target_polarity":true,"edit_distance":5,"similarity":"1/6"},
+    {"pair_id":"structcal-negative-08","negative_selection_sha256":"0000af06ed8fc0cae022c1b1e15d7f68fc3d3a11f2f9b6ce1bfd6e962bda2300","right_canonical_signature":"5f75927c5fdba4b2674023014fc76a7ba9f260a180ad151327155a5ee6dd8c93","left_sigma":[4,3,6,9,6,12],"right_sigma":[4,8,8,7,9,-57],"right_operators":["-","*","-"],"aligned_operands_all_different":true,"opposite_target_polarity":true,"edit_distance":5,"similarity":"1/6"},
+    {"pair_id":"structcal-negative-09","negative_selection_sha256":"00001a039678ff44f955a55b805f32bb2863090871dab6fa6e51eb92a02108a1","right_canonical_signature":"18fd91e7cdfda7a23f27049b31545717b37e09d530903f79a454b0bd9d5ade34","left_sigma":[4,5,2,3,7,-18],"right_sigma":[4,1,7,6,3,6],"right_operators":["+","-","/"],"aligned_operands_all_different":true,"opposite_target_polarity":true,"edit_distance":5,"similarity":"1/6"},
+    {"pair_id":"structcal-negative-10","negative_selection_sha256":"00012690cbb6a783a512cb496f37de1f7b86c977cb5821b1d8678d48caac4b5a","right_canonical_signature":"ed4289c2d2bde6a656fdaa340cc46696799a1cbb0ee2e9b62b40c44969507014","left_sigma":[4,2,5,6,4,36],"right_sigma":[4,3,7,7,2,-48],"right_operators":["-","*","-"],"aligned_operands_all_different":true,"opposite_target_polarity":true,"edit_distance":5,"similarity":"1/6"},
+    {"pair_id":"structcal-negative-11","negative_selection_sha256":"00029692b5e2de3eed79adc8a02c7fc2de929a7a3f57840ba5d155003eb4c3e1","right_canonical_signature":"31b619d655ba2544170ae2736b73a8b4b424384b72d6463e5290ae64a198fc4c","left_sigma":[4,5,9,8,3,363],"right_sigma":[4,7,3,5,9,-4],"right_operators":["+","-","-"],"aligned_operands_all_different":true,"opposite_target_polarity":true,"edit_distance":5,"similarity":"1/6"},
+    {"pair_id":"structcal-negative-12","negative_selection_sha256":"00029d16215899763e5886088739bddb46f40f22e40d9df74e14306e843a9f26","right_canonical_signature":"8772c25a6d056f4b34bf2bab40badde84a4b65ce2dd7f0681317c5b81d2ef58a","left_sigma":[4,5,6,9,4,47],"right_sigma":[4,6,5,4,8,-1],"right_operators":["+","-","-"],"aligned_operands_all_different":true,"opposite_target_polarity":true,"edit_distance":4,"similarity":"1/3"},
+    {"pair_id":"structcal-negative-13","negative_selection_sha256":"000313b443649e20d1607c473af7dfc3a62e913276f5dfbc7609e0463c1d129f","right_canonical_signature":"07d48d858f62f9088550bfee8b3bc50653d8a48f8d6d106ae538843ad04586d1","left_sigma":[4,3,6,9,3,1],"right_sigma":[4,1,3,2,1,-3],"right_operators":["-","-","+"],"aligned_operands_all_different":true,"opposite_target_polarity":true,"edit_distance":5,"similarity":"1/6"},
+    {"pair_id":"structcal-negative-14","negative_selection_sha256":"00029b70ac3bfda057818899d1ddc6900d8e26ea2486fc0f494f6a017f1a16c2","right_canonical_signature":"b604408357d260fdc743ced0b90e159024eb5005ef990292014c9acb8553bc32","left_sigma":[4,5,9,8,3,3],"right_sigma":[4,8,7,4,6,-9],"right_operators":["+","-","*"],"aligned_operands_all_different":true,"opposite_target_polarity":true,"edit_distance":5,"similarity":"1/6"},
+    {"pair_id":"structcal-negative-15","negative_selection_sha256":"00030ad30ba64983797c3d7abddd3a642b3bc92579f50154061ea1179d7ca2cc","right_canonical_signature":"241549271bcbf865caa63d5a2084c8938cbfbed97583d57e09b78003ed575dfa","left_sigma":[4,7,8,1,2,12],"right_sigma":[4,1,3,6,5,-22],"right_operators":["-","*","-"],"aligned_operands_all_different":true,"opposite_target_polarity":true,"edit_distance":5,"similarity":"1/6"},
+    {"pair_id":"structcal-negative-16","negative_selection_sha256":"000214ec2fdf8a81054fce6737b249bfd1d575321a9b2fdeb112a82148c15247","right_canonical_signature":"4bc605ac6b3cdc00c36bbb2dee6fa4508a31cd609f01e2c577b4feda5ddf59ca","left_sigma":[4,2,7,1,3,-19],"right_sigma":[4,8,9,5,6,366],"right_operators":["*","*","+"],"aligned_operands_all_different":true,"opposite_target_polarity":true,"edit_distance":5,"similarity":"1/6"}
+  ],
+  "result": {
+    "s_plus": "4/5",
+    "s_plus_witnesses": ["structcal-positive-02"],
+    "s_minus": "1/3",
+    "s_minus_witnesses": ["structcal-negative-12"],
+    "strict_separability": "PASS",
+    "proof": "1/3 < 4/5",
+    "tau_candidate": "17/30",
+    "tau_candidate_decimal_approx": "0.5666666666666666666666666667",
+    "tau_candidate_decimal_rounding": "28 digits after the decimal point, half-even; exact value remains 17/30",
+    "tau_candidate_status": "MEB_STRUCTURAL_THRESHOLD_AUTHORITY_CANDIDATE",
+    "prior_conditional_candidate": "13/20",
+    "difference_from_prior": "-1/12",
+    "comparison": "The construction-only candidate is lower than the prior conditional empty-exclusion projection; no panel rule or selection was tuned to reproduce 13/20."
+  },
+  "claim_boundary": [
+    "Separation is established only for these designed synthetic controls.",
+    "No D_eval content-disjointness or endpoint partition-disjointness is established.",
+    "No natural-pair discrimination, empirical validity, or production suitability is claimed.",
+    "Authority adoption and production installation remain separate prohibited actions in this packet."
+  ],
+  "information_boundary_attestation": {
+    "result": "PASS",
+    "used": [
+      "frozen MEB task specification",
+      "frozen unexcluded synthetic construction domain",
+      "deterministic domain-separated control constructors",
+      "exact rational local arithmetic"
+    ],
+    "not_used": [
+      "raw D_eval",
+      "D_eval answers",
+      "D_eval solution traces",
+      "Main outputs",
+      "Main retrieval",
+      "Main accuracy",
+      "contamination outcomes",
+      "post-hoc observed failures",
+      "current D_cal membership",
+      "D_build membership",
+      "prior 13/20 for admission or selection"
+    ],
+    "raw_D_eval_opened": false,
+    "provider_calls": 0,
+    "opaque_exclusion_identities_consumed": false
+  },
+  "production_boundary_attestation": {
+    "phase13_legacy_rag_materialize_py_modified": false,
+    "production_leakage_gate_modified": false,
+    "production_manifests_modified": false,
+    "current_D_cal_or_D_build_registry_modified": false,
+    "canonical_authority_modified": false,
+    "track2_completion_state_modified": false,
+    "fail_closed_gate_remains_active": true
+  },
+  "files_changed_for_this_packet": [
+    "docs/evidence/phase13-meb-structural-threshold-bootstrap/meb_structural_threshold_bootstrap_v1.json"
+  ]
+}
