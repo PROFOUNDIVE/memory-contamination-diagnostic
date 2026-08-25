@@ -2,7 +2,7 @@
   "schema_version": "phase13_post_cutoff_package_selection_v1",
   "authority": {
     "addendum_path": "2026-08-24_Phase13_MainA_PostCutoff_Acceleration_Addendum.md",
-    "addendum_sha256": "d971c24439cc551655e9e1f5dbba6efa5a27242802f1db66a32749ec61350edc"
+    "addendum_sha256": "d66ca07ef2aabe5444793b268f1b2e0df2a388ddf9023b53e6e0901d2172224d"
   },
   "cutoff": {
     "timestamp": "2026-08-22T18:00:00+09:00",
@@ -54,7 +54,11 @@
     "primary_analysis_window_id": "core_prefix_50"
   },
   "track2": {
-    "legacy_rag_materialization": "PENDING",
+    "legacy_rag_materialization": "TRACK2_LEGACY_RAG_MATERIALIZATION_COMPLETE",
+    "manifest_path": "data/phase13/rag/legacy/manifest.json",
+    "manifest_sha256": "7017ed990edc78d76cb300d443eb69281900e564c2e02f4bc7fadba9aa69fd10",
+    "seal_path": "data/phase13/rag/legacy_seal_v1.json",
+    "seal_identity_sha256": "b41ac3a95affd86da60b99f38299594c59bedd3aa24e403c4325f1e9caa2a337",
     "required_task_local_corpora": [
       "game24",
       "math_equation_balancer",
@@ -62,5 +66,5 @@
     ],
     "main_execution_authorized": false
   },
-  "package_hash": "0ce6cf0e45477aa2319bd252d1164290502aac484665f97a4816c9ec5fc48cb3"
+  "package_hash": "45f2d781c5cd2ae78d29ca69b622ba959dfc30b3991606a9fa229f071d5aeea6"
 }
