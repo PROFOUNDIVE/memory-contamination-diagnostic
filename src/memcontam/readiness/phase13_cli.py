@@ -28,6 +28,9 @@ from memcontam.readiness.phase13_core_datasets import CoreDatasetError
 from memcontam.readiness.phase13_legacy_rag_audit import LegacyRagAuditError
 from memcontam.readiness.phase13_legacy_rag_errors import LegacyRagValidationError
 from memcontam.readiness.phase13_legacy_rag_materialize import LegacyRagMaterializationError
+from .phase13_observability_validate import (
+    Phase13ObservabilityValidationError,
+)
 
 
 def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -72,6 +75,10 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
     validate_legacy.add_argument("--repository-root", type=Path, required=True)
     validate_legacy.add_argument("--root", type=Path, required=True)
     validate_legacy.add_argument("--expected-manifest-sha256", required=True)
+    observability = commands.add_parser("validate-observability")
+    observability.add_argument("--repository-root", type=Path, required=True)
+    observability.add_argument("--root", type=Path, required=True)
+    observability.add_argument("--expected-manifest-sha256", required=True)
 
 
 def run(args: argparse.Namespace) -> None:
@@ -128,6 +135,18 @@ def run(args: argparse.Namespace) -> None:
                 args.expected_manifest_sha256,
             )
             print(json.dumps(legacy_report.model_dump(mode="json"), sort_keys=True))
+            return
+        if args.phase13_command == "validate-observability":
+            from .phase13_observability_validate import (
+                validate_phase13_observability_package,
+            )
+
+            observability_report = validate_phase13_observability_package(
+                args.root,
+                args.repository_root,
+                args.expected_manifest_sha256,
+            )
+            print(json.dumps(observability_report.model_dump(mode="json"), sort_keys=True))
             return
         if args.phase13_command == "materialize-legacy-rag":
             from memcontam.memory.embeddings import BgeM3EmbeddingProvider
@@ -210,5 +229,6 @@ def run(args: argparse.Namespace) -> None:
         LegacyRagAuditError,
         LegacyRagMaterializationError,
         LegacyRagValidationError,
+        Phase13ObservabilityValidationError,
     ) as error:
         raise SystemExit(error.code) from error
