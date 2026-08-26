@@ -23,28 +23,17 @@ from .phase13_observability_lineage import (
     validate_evidence_joins as _validate_evidence_joins,
     writer_parents as _writer_parents,
 )
+from .phase13_observability_registration import classify_registered_failure
+from .phase13_observability_sequence import (
+    first_continuous_episode,
+    has_registered_recurrence,
+    is_exact_root_eviction,
+    reconstruct_registered_sequence,
+)
 
 
-_RECURRENCE_WINDOW_BLOCK = MetricValue(
-    status="unavailable",
-    reason="RECURRENCE_LOOKBACK_NOT_REGISTERED",
-)
-_FAILURE_CLASS_BLOCK = MetricValue(
-    status="unavailable",
-    reason="FAILURE_CLASSIFIER_REGISTRY_NOT_REGISTERED",
-)
-_EXPOSURE_RECURRENCE_BLOCK = MetricValue(
-    status="unavailable",
-    reason="EXPOSURE_CONDITIONING_RULE_NOT_REGISTERED",
-)
-_POST_EVICTION_BLOCK = MetricValue(
-    status="unavailable",
-    reason="POST_EVICTION_TIMING_NOT_REGISTERED",
-)
-_RETENTION_DURATION_BLOCK = MetricValue(
-    status="unavailable",
-    reason="RETENTION_DURATION_ENDPOINT_NOT_REGISTERED",
-)
+def _blocked(reason: str) -> MetricValue:
+    return MetricValue(status="unavailable", reason=reason)
 
 
 def reconstruct_phase13_trial(evidence: Phase13TrialEvidence) -> Phase13TrialAnalysis:
@@ -71,14 +60,22 @@ def reconstruct_phase13_trial(evidence: Phase13TrialEvidence) -> Phase13TrialAna
             assert_never(unreachable)
     target_ids = set(target.target_entry_ids)
     nodes = {node.entry_id: node for node in evidence.lineage}
-    roots = tuple(node.entry_id for node in evidence.lineage if node.entry_id in target_ids)
+    roots = tuple(
+        node.entry_id
+        for node in evidence.lineage
+        if node.entry_id in target_ids
+        and node.entry_id in node.injected_root_ids
+        and not node.direct_parent_ids
+        and node.version_predecessor_id is None
+    )
+    root_ids = set(roots)
     writer_parents = _writer_parents(evidence)
     descendants = tuple(
         node.entry_id
         for node in evidence.lineage
-        if node.entry_id not in target_ids
-        and target_ids.intersection(node.injected_root_ids)
-        and _recorded_path(node, nodes, target_ids, writer_parents, set())
+        if node.entry_id not in root_ids
+        and root_ids.intersection(node.injected_root_ids)
+        and _recorded_path(node, nodes, root_ids, writer_parents, set())
     )
     final_ids = set(observables.final_context.final_entry_ids)
     applicable = current_arm == "contam"
@@ -113,7 +110,7 @@ def reconstruct_phase13_trial(evidence: Phase13TrialEvidence) -> Phase13TrialAna
             reason="NOT_REGISTERED_FOR_CURRENT_MAIN",
         ),
         verified_outcome=evidence.verified_outcome,
-        failure_class=_FAILURE_CLASS_BLOCK,
+        failure_class=_blocked("FAILURE_CLASSIFIER_REGISTRY_NOT_REGISTERED"),
         root_entry_ids=roots,
         descendant_entry_ids=descendants,
         memory_before_ids=evidence.memory_before_ids,
@@ -121,10 +118,10 @@ def reconstruct_phase13_trial(evidence: Phase13TrialEvidence) -> Phase13TrialAna
         new_entry_ids=evidence.new_entry_ids,
         updated_entry_ids=evidence.updated_entry_ids,
         removed_entry_ids=evidence.removed_entry_ids,
-        generic_recurrence=_RECURRENCE_WINDOW_BLOCK,
-        exact_lineage_recurrence=_RECURRENCE_WINDOW_BLOCK,
-        exposure_conditioned_recurrence=_EXPOSURE_RECURRENCE_BLOCK,
-        post_eviction_recurrence=_POST_EVICTION_BLOCK,
+        generic_recurrence=_blocked("RECURRENCE_LOOKBACK_NOT_REGISTERED"),
+        exact_lineage_recurrence=_blocked("RECURRENCE_LOOKBACK_NOT_REGISTERED"),
+        exposure_conditioned_recurrence=_blocked("EXPOSURE_CONDITIONING_RULE_NOT_REGISTERED"),
+        post_eviction_recurrence=_blocked("POST_EVICTION_TIMING_NOT_REGISTERED"),
         root_storage_persistence=_applicable_presence_metric(
             applicable, roots, evidence.memory_after_ids
         ),
@@ -135,9 +132,9 @@ def reconstruct_phase13_trial(evidence: Phase13TrialEvidence) -> Phase13TrialAna
         descendant_prompt_visibility=_applicable_descendant_metric(
             applicable, descendants, final_ids
         ),
-        root_retention_duration=_RETENTION_DURATION_BLOCK,
-        prompt_retention_duration=_RETENTION_DURATION_BLOCK,
-        descendant_retention_duration=_RETENTION_DURATION_BLOCK,
+        root_retention_duration=_blocked("RETENTION_DURATION_ENDPOINT_NOT_REGISTERED"),
+        prompt_retention_duration=_blocked("RETENTION_DURATION_ENDPOINT_NOT_REGISTERED"),
+        descendant_retention_duration=_blocked("RETENTION_DURATION_ENDPOINT_NOT_REGISTERED"),
         propagation=_propagation(
             evidence,
             nodes,
@@ -253,5 +250,10 @@ __all__ = [
     "Phase13TrialAnalysis",
     "Phase13TrialEvidence",
     "aggregate_phase13",
+    "classify_registered_failure",
+    "first_continuous_episode",
+    "has_registered_recurrence",
+    "is_exact_root_eviction",
     "reconstruct_phase13_trial",
+    "reconstruct_registered_sequence",
 ]

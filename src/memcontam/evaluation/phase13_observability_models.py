@@ -39,6 +39,8 @@ class MetricValue(_FrozenModel):
     value: bool | int | float | str | None = None
     reason: str
     path: tuple[str, ...] = ()
+    censoring_status: Literal["OBSERVED_END", "RIGHT_CENSORED"] | None = None
+    censoring_endpoint_analysis_window_id: Literal["core_prefix_50"] | None = None
 
 
 class Phase13TargetSetEvidence(_FrozenModel):
@@ -164,6 +166,42 @@ class Phase13AggregateTrial(_FrozenModel):
         status="unavailable", reason="PRODUCTION_RUNTIME_METADATA_JOIN_NOT_MATERIALIZED"
     )
     theory_exposure: MetricValue = MetricValue(
+        status="unavailable", reason="PRODUCTION_RUNTIME_METADATA_JOIN_NOT_MATERIALIZED"
+    )
+    generic_recurrence: MetricValue = MetricValue(
+        status="unavailable", reason="PRODUCTION_RUNTIME_METADATA_JOIN_NOT_MATERIALIZED"
+    )
+    exact_lineage_recurrence: MetricValue = MetricValue(
+        status="unavailable", reason="PRODUCTION_RUNTIME_METADATA_JOIN_NOT_MATERIALIZED"
+    )
+    exposure_conditioned_recurrence: MetricValue = MetricValue(
+        status="unavailable", reason="PRODUCTION_RUNTIME_METADATA_JOIN_NOT_MATERIALIZED"
+    )
+    post_eviction_recurrence: MetricValue = MetricValue(
+        status="unavailable", reason="PRODUCTION_RUNTIME_METADATA_JOIN_NOT_MATERIALIZED"
+    )
+    root_storage_persistence: MetricValue = MetricValue(
+        status="unavailable", reason="PRODUCTION_RUNTIME_METADATA_JOIN_NOT_MATERIALIZED"
+    )
+    descendant_storage_persistence: MetricValue = MetricValue(
+        status="unavailable", reason="PRODUCTION_RUNTIME_METADATA_JOIN_NOT_MATERIALIZED"
+    )
+    root_prompt_visibility: MetricValue = MetricValue(
+        status="unavailable", reason="PRODUCTION_RUNTIME_METADATA_JOIN_NOT_MATERIALIZED"
+    )
+    descendant_prompt_visibility: MetricValue = MetricValue(
+        status="unavailable", reason="PRODUCTION_RUNTIME_METADATA_JOIN_NOT_MATERIALIZED"
+    )
+    root_retention_duration: MetricValue = MetricValue(
+        status="unavailable", reason="PRODUCTION_RUNTIME_METADATA_JOIN_NOT_MATERIALIZED"
+    )
+    prompt_retention_duration: MetricValue = MetricValue(
+        status="unavailable", reason="PRODUCTION_RUNTIME_METADATA_JOIN_NOT_MATERIALIZED"
+    )
+    descendant_retention_duration: MetricValue = MetricValue(
+        status="unavailable", reason="PRODUCTION_RUNTIME_METADATA_JOIN_NOT_MATERIALIZED"
+    )
+    propagation: MetricValue = MetricValue(
         status="unavailable", reason="PRODUCTION_RUNTIME_METADATA_JOIN_NOT_MATERIALIZED"
     )
 
