@@ -6,7 +6,7 @@
   "track1_status": "TRACK1_AUTHORITY_AND_STATE_SYNC_COMPLETE",
   "authority_router": {
     "path": "/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts/AGENTS.md",
-    "current_sha256": "e4c66c155d9a54efe76cd8dd3a102eb5de3a0fdb2af1a7f152932454831e08e1",
+    "current_sha256": "19b46e67c590f68a880fbe0b5329f8be640c9a77c528936629c66d224a2399a2",
     "mount_target": "/home/hyunwoo/gdrive_undergrad_research",
     "mount_options": ["ro", "nosuid", "nodev", "relatime"],
     "required_sync_clauses": [
@@ -28,7 +28,7 @@
     "baseline_revised_v5": "0bacce62718a93c14ce4da0c1b426e3823b75cf70b362f8f9a0632e83f4166c1",
     "protocol_revised_v8": "022879f559b145e30e645b6ccbd139e9927899d370f1956d27a0562580acf85f",
     "post_cutoff_addendum": "d66ca07ef2aabe5444793b268f1b2e0df2a388ddf9023b53e6e0901d2172224d",
-    "experiment_design_revised_v8": "4b1db4e55e68ec8e00fe022b9bea1685bebb340138df0e39fddc7823aafdc374"
+    "experiment_design_revised_v9": "373e97317ad22b925a878a1c0972bc1220e44d21c3c83d251efcc6fa03ff46be"
   },
   "completed_repository_sync": {
     "attempted_seed_count_per_task": 10,
@@ -62,5 +62,5 @@
     "mr_p6_authorization_claimed": false
   },
   "main_execution_authorized": false,
-  "checkpoint_hash": "b30dcb23e10a3dd39fb8b46b1101a245ac835a17806849819bda4560f61a4851"
+  "checkpoint_hash": "73fdc2d011a08be696970712da00867db55b3705dec10be3a94869e074225998"
 }

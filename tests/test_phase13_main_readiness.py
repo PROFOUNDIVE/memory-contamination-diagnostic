@@ -64,11 +64,15 @@ def test_track1_checkpoint_records_observed_read_only_router_completion() -> Non
     assert checkpoint["repository_state_sync"] == "COMPLETE"
     assert checkpoint["track1_status"] == "TRACK1_AUTHORITY_AND_STATE_SYNC_COMPLETE"
     assert checkpoint["authority_router"]["current_sha256"] == (
-        "e4c66c155d9a54efe76cd8dd3a102eb5de3a0fdb2af1a7f152932454831e08e1"
+        "19b46e67c590f68a880fbe0b5329f8be640c9a77c528936629c66d224a2399a2"
     )
     assert checkpoint["active_authority_hashes"]["post_cutoff_addendum"] == (
         "d66ca07ef2aabe5444793b268f1b2e0df2a388ddf9023b53e6e0901d2172224d"
     )
+    assert checkpoint["active_authority_hashes"]["experiment_design_revised_v9"] == (
+        "373e97317ad22b925a878a1c0972bc1220e44d21c3c83d251efcc6fa03ff46be"
+    )
+    assert "experiment_design_revised_v8" not in checkpoint["active_authority_hashes"]
     assert checkpoint["authority_router"]["mount_options"] == [
         "ro",
         "nosuid",
