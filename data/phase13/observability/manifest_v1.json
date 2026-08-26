@@ -44,7 +44,7 @@
     },
     "track1_authority_state": {
       "path": "data/phase13/main/track1_authority_state_sync_checkpoint_v1.json",
-      "sha256": "29a4c79d2e443829b69b4e6edf74969bb777d6a1cfe47cfb03b8336d77015bac"
+      "sha256": "99fdffc6567f0b7c2799d29538d7cb38b484ba498a748c2a528703cedf0d92bd"
     },
     "track2_legacy_rag_seal": {
       "path": "data/phase13/rag/legacy_seal_v1.json",
@@ -52,7 +52,7 @@
     },
     "core_main_registry": {
       "path": "src/memcontam/readiness/phase13_execution_contract.py",
-      "sha256": "79f5cd4d256830de10956cef90513dd23f7e590dc8de3e87c96b4260653aa8c8"
+      "sha256": "fc2e747c76ee2a4e1c191a8b807de6379349e634aa56bf3e541579b0fc0c9787"
     }
   },
   "expected_reconstruction_sha256": "8831bab1dd8e00d771cf19c1b6de032a584d01eacfb995c2f46e2ad3ef4fe348",
