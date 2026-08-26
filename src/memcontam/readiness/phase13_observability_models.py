@@ -44,6 +44,7 @@ class Phase13ObservabilityFixture(_FrozenModel):
     schema_version: Literal["phase13_observability_fixture_v1"]
     fixture_id: Literal["phase13_main_disjoint_observability_fixture_v1"]
     provider_backed_calls: Literal[0]
+    registration_packet_sha256: Sha256
     concrete_seed_ids: tuple[NonEmptyString, ...] = Field(min_length=10, max_length=10)
     trials: tuple[Phase13TrialEvidence, ...]
     aggregate_templates: tuple[Phase13AggregateTrial, ...]
@@ -74,24 +75,23 @@ class Phase13ObservabilityManifest(_FrozenModel):
     schema_version: Literal["phase13_observability_manifest_v1"]
     manifest_id: Literal["phase13_observability_measurement_identity_v1"]
     evidence_scope: Literal["synthetic_contract_fixture_only"]
-    track2_5_status: Literal["BLOCKED"]
+    track2_5_status: Literal["TRACK2_5_NOVELTY_OBSERVABILITY_COMPLETE"]
     artifacts: dict[str, ArtifactIdentity]
     implementations: dict[str, ArtifactIdentity]
     expected_reconstruction_sha256: Sha256
-    failure_classifier_registry_status: Literal["NOT_REGISTERED_BY_AUTHORITY"]
+    registration_packet_sha256: Sha256
+    failure_classifier_registry_status: Literal["PACKET_BOUND_REGISTERED"]
     u_t_status: Literal["NOT_REGISTERED_FOR_CURRENT_MAIN"]
-    blockers: tuple[
-        Literal["FAILURE_CLASSIFIER_REGISTRY_NOT_REGISTERED"],
-        Literal["RECURRENCE_LOOKBACK_NOT_REGISTERED"],
-        Literal["EXPOSURE_CONDITIONING_RULE_NOT_REGISTERED"],
-        Literal["POST_EVICTION_TIMING_NOT_REGISTERED"],
-        Literal["RETENTION_DURATION_ENDPOINT_NOT_REGISTERED"],
+    downstream_blockers: tuple[
         Literal["PRODUCTION_RUNTIME_METADATA_JOIN_NOT_MATERIALIZED"],
         Literal["CONCRETE_MAIN_SEED_REGISTRY_NOT_FROZEN"],
         Literal["LEVEL2_FH_INTERACTIONS_NOT_MATERIALIZED"],
     ]
-    mr_p4_prerequisite_status: Literal["BLOCKED"]
-    mr_p5_handoff_status: Literal["NOT_AVAILABLE"]
+    mr_p4_prerequisite_status: Literal["OBSERVABILITY_PREREQUISITE_MET"]
+    mr_p5_handoff_status: Literal["MEASUREMENT_IDENTITY_HANDOFF_CLOSED"]
+    mr_p4_closure_claimed: Literal[False]
+    mr_p5_closure_claimed: Literal[False]
+    main_execution_authorized: Literal[False]
     main_a_measured_scientific_execution_count: Literal[0]
 
 
@@ -99,16 +99,20 @@ class Phase13ObservabilityReport(_FrozenModel):
     manifest_id: str
     manifest_sha256: Sha256
     evidence_scope: Literal["synthetic_contract_fixture_only"]
-    track2_5_status: Literal["BLOCKED"]
+    track2_5_status: Literal["TRACK2_5_NOVELTY_OBSERVABILITY_COMPLETE"]
+    registration_packet_sha256: Sha256
     reconstruction_sha256: Sha256
     repeat_reconstruction_sha256: Sha256
     reconstructed_trial_count: int = Field(ge=0)
     target_set_registry_id: str
     failure_classifier_registry_status: str
     u_t_status: str
-    blockers: tuple[str, ...]
-    mr_p4_prerequisite_status: Literal["BLOCKED"]
-    mr_p5_handoff_status: Literal["NOT_AVAILABLE"]
+    downstream_blockers: tuple[str, ...]
+    mr_p4_prerequisite_status: Literal["OBSERVABILITY_PREREQUISITE_MET"]
+    mr_p5_handoff_status: Literal["MEASUREMENT_IDENTITY_HANDOFF_CLOSED"]
+    mr_p4_closure_claimed: Literal[False]
+    mr_p5_closure_claimed: Literal[False]
+    main_execution_authorized: Literal[False]
     main_a_measured_scientific_execution_count: Literal[0]
 
 

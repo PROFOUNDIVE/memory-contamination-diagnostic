@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
 from typing import Final
 
@@ -11,6 +12,12 @@ from memcontam.evaluation.phase13_observability import (
     Phase13ObservabilityError,
     aggregate_phase13,
     reconstruct_phase13_trial,
+    reconstruct_registered_sequence,
+)
+from memcontam.evaluation.phase13_aggregate import summarize_sequence_diagnostics
+from memcontam.evaluation.phase13_observability_registration import (
+    BoundIdentity,
+    ObservabilityRegistrationPacket,
 )
 from memcontam.readiness.phase13_authority_files import AuthorityFileError, read_regular_nofollow
 from .phase13_observability_models import (
@@ -30,10 +37,13 @@ class Phase13ObservabilityValidationError(ValueError):
 
 
 _EXPECTED_ARTIFACT_PATHS: Final[dict[str, str]] = {
+    "observability_registration_packet": "registration_packet_v1.json",
     "synthetic_contract_fixture": "fixture_v1.json",
     "target_set_registry": "target_set_registry_v1.json",
 }
 _EXPECTED_IMPLEMENTATION_PATHS: Final[dict[str, str]] = {
+    "observability_registration": "src/memcontam/evaluation/phase13_observability_registration.py",
+    "observability_sequence": "src/memcontam/evaluation/phase13_observability_sequence.py",
     "observable_contract": "src/memcontam/evaluation/phase13_observability_models.py",
     "trial_and_sequential_reconstruction": "src/memcontam/evaluation/phase13_observability.py",
     "runtime_identity_and_lineage": "src/memcontam/evaluation/phase13_observability_lineage.py",
@@ -54,7 +64,7 @@ def validate_phase13_observability_package(
 ) -> Phase13ObservabilityReport:
     try:
         manifest_bytes = read_regular_nofollow(root / "manifest_v1.json")
-        manifest_sha256 = _sha256(manifest_bytes)
+        manifest_sha256 = hashlib.sha256(manifest_bytes).hexdigest()
         if manifest_sha256 != expected_manifest_sha256:
             raise Phase13ObservabilityValidationError("OBSERVABILITY_MANIFEST_HASH_MISMATCH")
         manifest = Phase13ObservabilityManifest.model_validate_json(manifest_bytes)
@@ -67,10 +77,31 @@ def validate_phase13_observability_package(
         fixture = Phase13ObservabilityFixture.model_validate_json(
             read_regular_nofollow(root / "fixture_v1.json")
         )
+        packet_bytes = read_regular_nofollow(root / "registration_packet_v1.json")
+        packet = ObservabilityRegistrationPacket.model_validate_json(packet_bytes)
+        if hashlib.sha256(packet_bytes).hexdigest() != manifest.registration_packet_sha256:
+            raise Phase13ObservabilityValidationError("OBSERVABILITY_REGISTRATION_HASH_MISMATCH")
+        if fixture.registration_packet_sha256 != manifest.registration_packet_sha256:
+            raise Phase13ObservabilityValidationError("OBSERVABILITY_FIXTURE_PACKET_MISMATCH")
+        for identities in (
+            packet.implementation_identities,
+            packet.verifier_identities,
+            packet.applicability_identities,
+        ):
+            _validate_identities(repository_root, repository_root, identities)
+        if (
+            packet.implementation_identities["registration"].model_dump()
+            != manifest.implementations["observability_registration"].model_dump()
+            or packet.implementation_identities["sequence"].model_dump()
+            != manifest.implementations["observability_sequence"].model_dump()
+            or packet.implementation_identities["authority_state"].model_dump()
+            != manifest.implementations["track1_authority_state"].model_dump()
+        ):
+            raise Phase13ObservabilityValidationError("OBSERVABILITY_PACKET_MANIFEST_MISMATCH")
         _validate_identities(repository_root, repository_root, {"source_package": registry.source_package_manifest})
         _validate_target_sets(fixture, registry)
-        first = reconstruct_fixture(fixture)
-        second = reconstruct_fixture(fixture)
+        first = reconstruct_fixture(fixture, packet)
+        second = reconstruct_fixture(fixture, packet)
         first_hash = _canonical_hash(first)
         second_hash = _canonical_hash(second)
         if first_hash != second_hash or first_hash != manifest.expected_reconstruction_sha256:
@@ -81,15 +112,19 @@ def validate_phase13_observability_package(
             manifest_sha256=manifest_sha256,
             evidence_scope=manifest.evidence_scope,
             track2_5_status=manifest.track2_5_status,
+            registration_packet_sha256=manifest.registration_packet_sha256,
             reconstruction_sha256=first_hash,
             repeat_reconstruction_sha256=second_hash,
             reconstructed_trial_count=len(fixture.trials),
             target_set_registry_id=registry.registry_id,
             failure_classifier_registry_status=manifest.failure_classifier_registry_status,
             u_t_status=manifest.u_t_status,
-            blockers=manifest.blockers,
+            downstream_blockers=manifest.downstream_blockers,
             mr_p4_prerequisite_status=manifest.mr_p4_prerequisite_status,
             mr_p5_handoff_status=manifest.mr_p5_handoff_status,
+            mr_p4_closure_claimed=manifest.mr_p4_closure_claimed,
+            mr_p5_closure_claimed=manifest.mr_p5_closure_claimed,
+            main_execution_authorized=manifest.main_execution_authorized,
             main_a_measured_scientific_execution_count=(
                 manifest.main_a_measured_scientific_execution_count
             ),
@@ -104,13 +139,25 @@ def validate_phase13_observability_package(
         raise Phase13ObservabilityValidationError("OBSERVABILITY_RECONSTRUCTION_INVALID") from error
 
 
-def reconstruct_fixture(fixture: Phase13ObservabilityFixture) -> Phase13Reconstruction:
-    trials = tuple(reconstruct_phase13_trial(trial) for trial in fixture.trials)
+def reconstruct_fixture(
+    fixture: Phase13ObservabilityFixture,
+    packet: ObservabilityRegistrationPacket,
+) -> Phase13Reconstruction:
+    base_trials = tuple(reconstruct_phase13_trial(trial) for trial in fixture.trials)
+    trials = reconstruct_registered_sequence(
+        fixture.trials, base_trials, packet.recurrence_lookback_h
+    )
+    sequence_summary = summarize_sequence_diagnostics(trials)
     aggregate_rows = tuple(
         template.model_copy(
             update={
                 "trajectory_seed": seed,
                 "concrete_seed_id": concrete_seed_id,
+                **(
+                    sequence_summary
+                    if template.baseline == "bot_style" and template.arm == "contam"
+                    else {}
+                ),
             }
         )
         for seed, concrete_seed_id in enumerate(fixture.concrete_seed_ids)
@@ -121,7 +168,7 @@ def reconstruct_fixture(fixture: Phase13ObservabilityFixture) -> Phase13Reconstr
 
 
 def require_mr_p4_observability(report: Phase13ObservabilityReport) -> None:
-    if report.mr_p4_prerequisite_status == "BLOCKED":
+    if report.mr_p4_prerequisite_status != "OBSERVABILITY_PREREQUISITE_MET":
         raise Phase13ObservabilityValidationError("OBSERVABILITY_PREREQUISITE_BLOCKED")
 
 
@@ -139,7 +186,7 @@ def _validate_manifest_semantics(manifest: Phase13ObservabilityManifest) -> None
 def _validate_identities(
     root: Path,
     repository_root: Path,
-    identities: dict[str, ArtifactIdentity],
+    identities: Mapping[str, ArtifactIdentity | BoundIdentity],
 ) -> None:
     if not identities:
         raise Phase13ObservabilityValidationError("OBSERVABILITY_IDENTITY_MISSING")
@@ -154,7 +201,7 @@ def _validate_identities(
             raw = read_regular_nofollow(path)
         except AuthorityFileError as error:
             raise Phase13ObservabilityValidationError("OBSERVABILITY_ARTIFACT_UNREADABLE") from error
-        if _sha256(raw) != identity.sha256:
+        if hashlib.sha256(raw).hexdigest() != identity.sha256:
             raise Phase13ObservabilityValidationError("OBSERVABILITY_ARTIFACT_HASH_MISMATCH")
 
 
@@ -187,22 +234,36 @@ def _validate_reconstruction(payload: Phase13Reconstruction) -> None:
     required = {
         (True, False, False, False, 1),
         (True, True, False, False, 1),
-        (True, True, True, True, 1),
         (True, True, True, True, 0),
     }
     if not required.issubset(states):
         raise Phase13ObservabilityValidationError("OBSERVABILITY_FIXTURE_COVERAGE_INCOMPLETE")
-
-
-def _sha256(raw: bytes) -> str:
-    return hashlib.sha256(raw).hexdigest()
+    anchors = tuple(row for row in payload.trials if row.propagation.value is True)
+    recurrents = tuple(
+        row
+        for row in payload.trials
+        if row.generic_recurrence.value is True
+        and row.exact_lineage_recurrence.value is True
+        and row.exposure_conditioned_recurrence.value is True
+        and row.post_eviction_recurrence.value is True
+    )
+    if len(anchors) != 1 or len(recurrents) != 1:
+        raise Phase13ObservabilityValidationError("OBSERVABILITY_SEQUENCE_COVERAGE_INCOMPLETE")
+    recurrent = recurrents[0]
+    if (
+        recurrent.root_retention_duration.value != 3
+        or recurrent.root_retention_duration.censoring_status != "OBSERVED_END"
+        or recurrent.prompt_retention_duration.value != 1
+        or recurrent.prompt_retention_duration.censoring_status != "OBSERVED_END"
+        or recurrent.descendant_retention_duration.value != 3
+        or recurrent.descendant_retention_duration.censoring_status != "RIGHT_CENSORED"
+    ):
+        raise Phase13ObservabilityValidationError("OBSERVABILITY_SEQUENCE_COVERAGE_INCOMPLETE")
 
 
 def _canonical_hash(value: Phase13Reconstruction) -> str:
-    raw = json.dumps(
-        value.model_dump(mode="json"), sort_keys=True, separators=(",", ":")
-    ).encode()
-    return _sha256(raw)
+    raw = json.dumps(value.model_dump(mode="json"), sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(raw).hexdigest()
 
 
 __all__ = [
