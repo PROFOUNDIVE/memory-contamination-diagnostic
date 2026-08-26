@@ -109,7 +109,7 @@ CORE_MAIN_REGISTRY = CoreMainRegistry(
         ),
         (
             "experiment_design",
-            "4b1db4e55e68ec8e00fe022b9bea1685bebb340138df0e39fddc7823aafdc374",
+            "373e97317ad22b925a878a1c0972bc1220e44d21c3c83d251efcc6fa03ff46be",
         ),
     ),
 )
