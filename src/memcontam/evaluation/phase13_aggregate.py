@@ -11,12 +11,38 @@ from memcontam.evaluation.phase13_observability_models import (
     Phase13AggregateCell,
     Phase13AggregateTrial,
     Phase13ObservabilityError,
+    Phase13TrialAnalysis,
     Task,
 )
 from memcontam.readiness.phase13_execution_contract import CORE_MAIN_REGISTRY
 
 
 _ARMS = frozenset(CORE_MAIN_REGISTRY.arms)
+_BOOLEAN_TRIAL_OBSERVABILITY_FIELDS = (
+    "target_present_in_store_before_answer",
+    "target_retrieved",
+    "target_final_context_included",
+    "theory_exposure",
+)
+_GENERIC_OBSERVABILITY_FIELDS = ("generic_recurrence",)
+_TARGET_OBSERVABILITY_FIELDS = (
+    *_BOOLEAN_TRIAL_OBSERVABILITY_FIELDS,
+    "exact_lineage_recurrence",
+    "exposure_conditioned_recurrence",
+    "post_eviction_recurrence",
+    "root_storage_persistence",
+    "descendant_storage_persistence",
+    "root_prompt_visibility",
+    "descendant_prompt_visibility",
+    "root_retention_duration",
+    "prompt_retention_duration",
+    "descendant_retention_duration",
+    "propagation",
+)
+_SEQUENCE_DIAGNOSTIC_FIELDS = (
+    *_GENERIC_OBSERVABILITY_FIELDS,
+    *_TARGET_OBSERVABILITY_FIELDS[4:],
+)
 
 
 def aggregate_phase13(rows: Sequence[Phase13AggregateTrial]) -> Phase13Aggregate:
@@ -42,6 +68,27 @@ def aggregate_phase13(rows: Sequence[Phase13AggregateTrial]) -> Phase13Aggregate
             for (task, baseline), cell_rows in sorted(grouped.items())
         )
     )
+
+
+def summarize_sequence_diagnostics(
+    rows: tuple[Phase13TrialAnalysis, ...],
+) -> dict[str, MetricValue]:
+    summary = {}
+    for field in _SEQUENCE_DIAGNOSTIC_FIELDS:
+        supported = tuple(
+            metric.value
+            for row in rows
+            if (metric := getattr(row, field)).status == "supported"
+            and isinstance(metric.value, (bool, int, float))
+        )
+        if not supported:
+            raise Phase13ObservabilityError("SEQUENCE_DIAGNOSTIC_SUPPORT_MISSING")
+        summary[field] = MetricValue(
+            status="supported",
+            value=mean(float(value) for value in supported),
+            reason="SYNTHETIC_CONTRACT_SEQUENCE_SUMMARY",
+        )
+    return summary
 
 
 def _aggregate_cell(
@@ -89,8 +136,8 @@ def _aggregate_cell(
                         tuple(row for row in flat if row.arm == arm), name, baseline, arm
                     )
                 for name in (
-                    "target_present_in_store_before_answer", "target_retrieved",
-                    "target_final_context_included", "theory_exposure",
+                    *_GENERIC_OBSERVABILITY_FIELDS,
+                    *_TARGET_OBSERVABILITY_FIELDS,
                 )
             }
             for arm in sorted(expected)
@@ -128,17 +175,32 @@ def _optional_rate(
     baseline: AggregateBaseline,
     arm: str,
 ) -> MetricValue:
-    if baseline == "nomem" or arm != "contam":
+    if field in _TARGET_OBSERVABILITY_FIELDS and (baseline == "nomem" or arm != "contam"):
         return MetricValue(status="not_applicable", reason="ARM_HAS_NO_TARGET_CONTAMINATION")
     values = tuple(getattr(row, field) for row in rows)
-    if not values or any(value.status != "supported" for value in values):
+    if not values:
         return MetricValue(status="unavailable", reason="TRIAL_OBSERVABILITY_UNAVAILABLE")
-    if any(not isinstance(value.value, bool) for value in values):
-        raise Phase13ObservabilityError("NON_BOOLEAN_OBSERVABILITY_VALUE")
+    if all(value.status == "supported" for value in values):
+        if field in _BOOLEAN_TRIAL_OBSERVABILITY_FIELDS and any(
+            not isinstance(value.value, bool) for value in values
+        ):
+            raise Phase13ObservabilityError("NON_BOOLEAN_OBSERVABILITY_VALUE")
+        if any(not isinstance(value.value, (bool, int, float)) for value in values):
+            raise Phase13ObservabilityError("NON_NUMERIC_OBSERVABILITY_VALUE")
+        return MetricValue(
+            status="supported",
+            value=mean(float(value.value) for value in values),
+            reason="SYNTHETIC_CONTRACT_FIXTURE_ONLY",
+        )
+    first = values[0]
+    if all(
+        value.status == first.status and value.reason == first.reason and value.value is None
+        for value in values
+    ):
+        return first
     return MetricValue(
-        status="supported",
-        value=mean(bool(value.value) for value in values),
-        reason="SYNTHETIC_CONTRACT_FIXTURE_ONLY",
+        status="unavailable",
+        reason="MIXED_TRIAL_OBSERVABILITY_STATUS",
     )
 
 
@@ -171,4 +233,4 @@ def _exposure_diagnostic(rows: Sequence[Phase13AggregateTrial]) -> MetricValue:
     )
 
 
-__all__ = ["aggregate_phase13"]
+__all__ = ["aggregate_phase13", "summarize_sequence_diagnostics"]
