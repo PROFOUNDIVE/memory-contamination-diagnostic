@@ -2,11 +2,15 @@
   "schema_version": "phase13_observability_manifest_v1",
   "manifest_id": "phase13_observability_measurement_identity_v1",
   "evidence_scope": "synthetic_contract_fixture_only",
-  "track2_5_status": "BLOCKED",
+  "track2_5_status": "TRACK2_5_NOVELTY_OBSERVABILITY_COMPLETE",
   "artifacts": {
+    "observability_registration_packet": {
+      "path": "registration_packet_v1.json",
+      "sha256": "f9e1520f42234ef37663351639f6bb2000b7134a0fbf4806cdf7db4458bd7c11"
+    },
     "synthetic_contract_fixture": {
       "path": "fixture_v1.json",
-      "sha256": "132c630d0119d0b5a217c86fc91b9ac59ba32c42f7e734885cd6b940a42580cd"
+      "sha256": "a768cecccfbee73caf47733ce68554d90ecf7ce5ba582e12710e63d3a333ce9c"
     },
     "target_set_registry": {
       "path": "target_set_registry_v1.json",
@@ -14,13 +18,21 @@
     }
   },
   "implementations": {
+    "observability_registration": {
+      "path": "src/memcontam/evaluation/phase13_observability_registration.py",
+      "sha256": "4828abf75bb80474789574510e859e4bcb34ca10042d5fad95a4ca883e7cbaeb"
+    },
+    "observability_sequence": {
+      "path": "src/memcontam/evaluation/phase13_observability_sequence.py",
+      "sha256": "1417da9e1d87ea2aecf0570930829d32e03aacdabfd348ab7f4823dd0ab2b12e"
+    },
     "observable_contract": {
       "path": "src/memcontam/evaluation/phase13_observability_models.py",
-      "sha256": "508d8243cc60bef1902c605e534207a7f72ac1a3278040ba20bea3507dd2ac29"
+      "sha256": "5ded90097089ba55674f6c3dd64960bbb12911bc056e2138fc9a35f559352252"
     },
     "trial_and_sequential_reconstruction": {
       "path": "src/memcontam/evaluation/phase13_observability.py",
-      "sha256": "c26f86a2a652b4e6bce222aee2ed8830c4cd5634b25ee5761f7ee08d7581dd41"
+      "sha256": "50dda189fa08eeabe1a506ef04d5a39ec391c37c8d986d5edb1c9968255ad240"
     },
     "runtime_identity_and_lineage": {
       "path": "src/memcontam/evaluation/phase13_observability_lineage.py",
@@ -28,15 +40,15 @@
     },
     "phase13_aggregation": {
       "path": "src/memcontam/evaluation/phase13_aggregate.py",
-      "sha256": "ab2ec63c4d3e643e6ce91ee3745ac8523d0de1d674b20b45bd11362c01f80f36"
+      "sha256": "ffcadf3bca8349cf804799bdfaab235857b3fad7420f3a1305bb747aea7b7dd0"
     },
     "measurement_identity_models": {
       "path": "src/memcontam/readiness/phase13_observability_models.py",
-      "sha256": "4db2a3bd265e6a60aa7b530a25f7a96cce9e7ac86480d457ab911d93927f91c7"
+      "sha256": "4a77b2588a06c26f32f9a4099b441cba728e4d1a4df0d8e12101baf5450a7ffd"
     },
     "measurement_reconstruction_validator": {
       "path": "src/memcontam/readiness/phase13_observability_validate.py",
-      "sha256": "1dd6c7d6130c3246c6ccc6787a4dd2c0fe6dc675fa7890dae77274c2bcad1a2d"
+      "sha256": "d7f219406652db53fbf2faed6f89d2f24be7a54b3c7fe4c4dd05cc9772755323"
     },
     "phase13_cli": {
       "path": "src/memcontam/readiness/phase13_cli.py",
@@ -55,20 +67,19 @@
       "sha256": "fc2e747c76ee2a4e1c191a8b807de6379349e634aa56bf3e541579b0fc0c9787"
     }
   },
-  "expected_reconstruction_sha256": "8831bab1dd8e00d771cf19c1b6de032a584d01eacfb995c2f46e2ad3ef4fe348",
-  "failure_classifier_registry_status": "NOT_REGISTERED_BY_AUTHORITY",
+  "expected_reconstruction_sha256": "e0e57053cf676439670e160ca49bb2d21df42d2f54e0afdc135248938a803d9f",
+  "registration_packet_sha256": "f9e1520f42234ef37663351639f6bb2000b7134a0fbf4806cdf7db4458bd7c11",
+  "failure_classifier_registry_status": "PACKET_BOUND_REGISTERED",
   "u_t_status": "NOT_REGISTERED_FOR_CURRENT_MAIN",
-  "blockers": [
-    "FAILURE_CLASSIFIER_REGISTRY_NOT_REGISTERED",
-    "RECURRENCE_LOOKBACK_NOT_REGISTERED",
-    "EXPOSURE_CONDITIONING_RULE_NOT_REGISTERED",
-    "POST_EVICTION_TIMING_NOT_REGISTERED",
-    "RETENTION_DURATION_ENDPOINT_NOT_REGISTERED",
+  "downstream_blockers": [
     "PRODUCTION_RUNTIME_METADATA_JOIN_NOT_MATERIALIZED",
     "CONCRETE_MAIN_SEED_REGISTRY_NOT_FROZEN",
     "LEVEL2_FH_INTERACTIONS_NOT_MATERIALIZED"
   ],
-  "mr_p4_prerequisite_status": "BLOCKED",
-  "mr_p5_handoff_status": "NOT_AVAILABLE",
+  "mr_p4_prerequisite_status": "OBSERVABILITY_PREREQUISITE_MET",
+  "mr_p5_handoff_status": "MEASUREMENT_IDENTITY_HANDOFF_CLOSED",
+  "mr_p4_closure_claimed": false,
+  "mr_p5_closure_claimed": false,
+  "main_execution_authorized": false,
   "main_a_measured_scientific_execution_count": 0
 }

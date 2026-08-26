@@ -1,0 +1,41 @@
+{
+  "schema_version": "phase13_observability_registration_packet_v1",
+  "packet_id": "OBSERVABILITY_REGISTRATION_PACKET_V1",
+  "authority_hashes": {
+    "experiment_design_revised_v9": "373e97317ad22b925a878a1c0972bc1220e44d21c3c83d251efcc6fa03ff46be",
+    "protocol_revised_v8": "022879f559b145e30e645b6ccbd139e9927899d370f1956d27a0562580acf85f"
+  },
+  "failure_classes": {
+    "game24": "G24_CANONICAL_FALSE_RULE_APPLICABLE_INSTANCE_SUBSTANTIVE_FAILURE_V1",
+    "math_equation_balancer": "MEB_CANONICAL_FALSE_RULE_APPLICABLE_INSTANCE_SUBSTANTIVE_FAILURE_V1",
+    "word_sorting": "WS_CANONICAL_FALSE_RULE_APPLICABLE_INSTANCE_SUBSTANTIVE_FAILURE_V1",
+    "mmlu_pro_engineering": "MMLUENG_SURFACE_CUE_HEURISTIC_APPLICABLE_INSTANCE_SUBSTANTIVE_FAILURE_V1",
+    "mmlu_pro_physics": "MMLUPHY_SURFACE_CUE_HEURISTIC_APPLICABLE_INSTANCE_SUBSTANTIVE_FAILURE_V1"
+  },
+  "recurrence_lookback_h": 10,
+  "exposure_conditioning": "CURRENT_Z_T_EQUALS_1_PRIOR_MATCH_NEED_NOT_BE_EXPOSED",
+  "exact_lineage_recurrence": "SAME_EXACT_ROOT_EXPOSED_AT_BOTH_OCCURRENCES",
+  "post_eviction": "EXACT_ROOT_PRESENT_EXPLICITLY_REMOVED_ABSENT_AFTER_NEXT_ORDINARY_ROW_FIRST_RISK",
+  "retention": "FIRST_CONTINUOUS_FINITE_WINDOW_EPISODE_NO_GAP_BRIDGING",
+  "censoring": "RIGHT_CENSORED_AT_REGISTERED_OR_FIXTURE_ENDPOINT",
+  "u_t_status": "NOT_REGISTERED_FOR_CURRENT_MAIN",
+  "implementation_identities": {
+    "authority_state": {"path": "data/phase13/main/track1_authority_state_sync_checkpoint_v1.json", "sha256": "99fdffc6567f0b7c2799d29538d7cb38b484ba498a748c2a528703cedf0d92bd"},
+    "registration": {"path": "src/memcontam/evaluation/phase13_observability_registration.py", "sha256": "4828abf75bb80474789574510e859e4bcb34ca10042d5fad95a4ca883e7cbaeb"},
+    "sequence": {"path": "src/memcontam/evaluation/phase13_observability_sequence.py", "sha256": "1417da9e1d87ea2aecf0570930829d32e03aacdabfd348ab7f4823dd0ab2b12e"}
+  },
+  "verifier_identities": {
+    "game24": {"path": "src/memcontam/verifiers/game24.py", "sha256": "ae343911d957d763ce2e43742362e557afa0415c841f9be8c7299f0929778d3e"},
+    "math_equation_balancer": {"path": "src/memcontam/verifiers/math_equation_balancer.py", "sha256": "1225789314c153528ba7284e108fc9c8e1e93114345cb1458af332ccb380bfca"},
+    "word_sorting": {"path": "src/memcontam/verifiers/word_sorting.py", "sha256": "f18f71ac5d139600269c79c7700511afbeea63d92688720c84169f450bff184c"},
+    "mmlu_pro_engineering": {"path": "src/memcontam/tasks/multiple_choice.py", "sha256": "7908a8d4a03c9f7ae4eb2aac9dc1bc3b66d3b32bd406370e58e28673e34cfcba"},
+    "mmlu_pro_physics": {"path": "src/memcontam/tasks/multiple_choice.py", "sha256": "7908a8d4a03c9f7ae4eb2aac9dc1bc3b66d3b32bd406370e58e28673e34cfcba"}
+  },
+  "applicability_identities": {
+    "game24": {"path": "data/phase12/registries/candidate_registry_v1.json", "sha256": "7dc76a6816a1d3d641a38db71c9152eccf9fe290b4dfdc9d4fd19f62a73ceef8"},
+    "math_equation_balancer": {"path": "data/phase12/registries/candidate_registry_v1.json", "sha256": "7dc76a6816a1d3d641a38db71c9152eccf9fe290b4dfdc9d4fd19f62a73ceef8"},
+    "word_sorting": {"path": "data/phase12/registries/candidate_registry_v1.json", "sha256": "7dc76a6816a1d3d641a38db71c9152eccf9fe290b4dfdc9d4fd19f62a73ceef8"},
+    "mmlu_pro_engineering": {"path": "src/memcontam/readiness/phase13_new_mcq_candidate.py", "sha256": "547f063bbeee113268b9a63c080e8722ee89911d47d339cded91d8d83ad26754"},
+    "mmlu_pro_physics": {"path": "src/memcontam/readiness/phase13_new_mcq_candidate.py", "sha256": "547f063bbeee113268b9a63c080e8722ee89911d47d339cded91d8d83ad26754"}
+  }
+}
