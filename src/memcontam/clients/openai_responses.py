@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import inspect
 import os
-from pathlib import Path
 import time
 from typing import Any, Callable, Mapping, cast
 
@@ -44,7 +43,6 @@ class OpenAIResponsesClient:
             cached_input_per_million_usd=config.cached_input_per_million_usd,
             output_per_million_usd=config.output_per_million_usd,
         )
-        _load_repository_dotenv()
         api_key_env = config.api_key_env or "OPENAI_API_KEY"
         api_key = os.environ.get(api_key_env)
         if not api_key:
@@ -76,7 +74,12 @@ class OpenAIResponsesClient:
             "service_tier": self._config.service_tier,
             "store": self._config.store,
         }
+        registered_cost_policy = False
         if model == "gpt-5.6-luna":
+            registered_cost_policy = (
+                config.get("_phase13_execution_envelope_id")
+                == "CORE_EXECUTION_ENVELOPE_REGISTRY_V2"
+            )
             if (
                 self._config.timeout_seconds != 180
                 or self._config.retries_after_initial_attempt != 2
@@ -85,10 +88,13 @@ class OpenAIResponsesClient:
                 or "previous_response_id" in config
             ):
                 raise LunaContractError("LUNA_RUNTIME_CONTRACT_MISMATCH")
-            expected_output_tokens = (
+            if registered_cost_policy:
+                registered_attempts = config.get("_phase13_maximum_transport_attempts")
+                if registered_attempts != 1 or max_output_tokens not in {384, 512, 8192}:
+                    raise LunaContractError("LUNA_RUNTIME_CONTRACT_MISMATCH")
+            elif max_output_tokens != (
                 8192 if config.get("method_stage") == "dc_rs_synthesize" else 4096
-            )
-            if max_output_tokens != expected_output_tokens:
+            ):
                 raise LunaContractError("LUNA_OUTPUT_CONTRACT_MISMATCH")
             request.update(
                 reasoning={"mode": "standard", "effort": "none", "context": "current_turn"},
@@ -102,13 +108,16 @@ class OpenAIResponsesClient:
 
         start = time.perf_counter()
         attempts = 0
+        retries_after_initial_attempt = (
+            0 if registered_cost_policy else self._config.retries_after_initial_attempt
+        )
         while True:
             attempts += 1
             try:
                 response = self.client.responses.create(**cast(Any, request))
                 break
             except Exception as error:
-                if not _is_retryable(error) or attempts > self._config.retries_after_initial_attempt:
+                if not _is_retryable(error) or attempts > retries_after_initial_attempt:
                     setattr(error, "provider_attempts_count", attempts)
                     setattr(error, "provider_latency_ms", int((time.perf_counter() - start) * 1000))
                     raise
@@ -118,6 +127,21 @@ class OpenAIResponsesClient:
         usage = _usage_dict(getattr(response, "usage", None))
         token_usage = _token_usage(usage)
         cost_usd = self.cost_guard.record_usage(usage)
+        if registered_cost_policy and getattr(response, "status", None) == "incomplete":
+            error = LunaContractError("LUNA_PROVIDER_INCOMPLETE")
+            setattr(error, "provider_attempts_count", attempts)
+            setattr(error, "provider_latency_ms", latency_ms)
+            setattr(error, "provider_status", "incomplete")
+            setattr(
+                error,
+                "provider_incomplete_reason",
+                getattr(getattr(response, "incomplete_details", None), "reason", None),
+            )
+            setattr(error, "provider_usage", usage)
+            setattr(error, "provider_token_usage", token_usage)
+            setattr(error, "provider_cost_usd", cost_usd)
+            setattr(error, "provider_response_id", getattr(response, "id", None))
+            raise error
         return LLMResponse(
             content=_output_text(response),
             raw={
@@ -139,27 +163,6 @@ class OpenAIResponsesClient:
             raise LiveCallNotAuthorized("live calls require config.live_calls.enabled=true")
         if not self._allow_live_calls:
             raise LiveCallNotAuthorized("live calls require --allow-live-calls")
-
-
-def _repository_root() -> Path:
-    return Path(__file__).resolve().parents[3]
-
-
-def _load_repository_dotenv() -> None:
-    path = _repository_root() / ".env"
-    if not path.is_file():
-        return
-    for line in path.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        key = key.strip().removeprefix("export ").strip()
-        value = value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
-            value = value[1:-1]
-        if key:
-            os.environ.setdefault(key, value)
 
 
 def _conservative_input_tokens(messages: list[dict[str, str]]) -> int:

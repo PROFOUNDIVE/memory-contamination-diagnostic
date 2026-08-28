@@ -122,6 +122,6 @@ def request_binding_error(
 ) -> ProviderBindingError | None:
     if service_tier != "default":
         return "PROVIDER_SERVICE_TIER_MISMATCH"
-    if max_output_tokens != 4096:
+    if max_output_tokens != 512:
         return "ANSWER_OUTPUT_BUDGET_MISMATCH"
     return None

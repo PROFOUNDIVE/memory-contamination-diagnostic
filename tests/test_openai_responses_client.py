@@ -36,6 +36,11 @@ class _Response:
     service_tier = "default"
 
 
+class _IncompleteResponse(_Response):
+    status = "incomplete"
+    incomplete_details = SimpleNamespace(reason="max_output_tokens")
+
+
 class _Responses:
     def __init__(self, outcomes: list[object]) -> None:
         self.outcomes = outcomes
@@ -174,6 +179,70 @@ def test_luna_request_rejects_nondefault_provider_service_tier(monkeypatch) -> N
     assert _OpenAI.instance.responses.calls == []
 
 
+def test_luna_cost_policy_disables_transport_retry(monkeypatch) -> None:
+    error = _StatusError(503)
+    client = _client(
+        monkeypatch,
+        [error, _Response()],
+        timeout_seconds=180,
+        max_output_tokens=4096,
+        retries_after_initial_attempt=2,
+        retry_delays_seconds=(0.0, 0.0),
+    )
+
+    with pytest.raises(_StatusError) as caught:
+        client.chat(
+            [{"role": "user", "content": "solve"}],
+            model="gpt-5.6-luna",
+            config={
+                "method_stage": "full_history_generate",
+                "max_output_tokens": 512,
+                "_phase13_execution_envelope_id": "CORE_EXECUTION_ENVELOPE_REGISTRY_V2",
+                "_phase13_maximum_transport_attempts": 1,
+            },
+        )
+
+    assert caught.value.provider_attempts_count == 1
+    assert len(_OpenAI.instance.responses.calls) == 1
+
+
+def test_luna_cost_policy_rejects_incomplete_response(monkeypatch) -> None:
+    client = _client(
+        monkeypatch,
+        [_IncompleteResponse()],
+        timeout_seconds=180,
+        max_output_tokens=4096,
+        retries_after_initial_attempt=2,
+        retry_delays_seconds=(0.0, 0.0),
+    )
+
+    with pytest.raises(LunaContractError, match="LUNA_PROVIDER_INCOMPLETE") as caught:
+        client.chat(
+            [{"role": "user", "content": "solve"}],
+            model="gpt-5.6-luna",
+            config={
+                "method_stage": "full_history_generate",
+                "max_output_tokens": 512,
+                "_phase13_execution_envelope_id": "CORE_EXECUTION_ENVELOPE_REGISTRY_V2",
+                "_phase13_maximum_transport_attempts": 1,
+            },
+        )
+
+    assert len(_OpenAI.instance.responses.calls) == 1
+    assert getattr(caught.value, "provider_status") == "incomplete"
+    assert getattr(caught.value, "provider_incomplete_reason") == "max_output_tokens"
+    assert getattr(caught.value, "provider_attempts_count") == 1
+    assert isinstance(getattr(caught.value, "provider_latency_ms"), int)
+    assert getattr(caught.value, "provider_token_usage") == {
+        "prompt_tokens": 7,
+        "cached_prompt_tokens": 2,
+        "completion_tokens": 11,
+        "total_tokens": 18,
+    }
+    assert getattr(caught.value, "provider_cost_usd") > 0
+    assert client.cost_guard.spent_usd == getattr(caught.value, "provider_cost_usd")
+
+
 @pytest.mark.parametrize("error", [TimeoutError(), _StatusError(429), _StatusError(503)])
 def test_responses_client_retries_only_retryable_failures(monkeypatch, error: BaseException) -> None:
     client = _client(monkeypatch, [error, _Response()])
@@ -232,18 +301,17 @@ def test_responses_client_rejects_over_budget_before_dispatch(monkeypatch) -> No
     assert _OpenAI.instance.responses.calls == []
 
 
-def test_responses_client_loads_repository_dotenv_without_overriding_exported_key(
+def test_responses_client_uses_only_current_process_environment(
     tmp_path: Path, monkeypatch
 ) -> None:
     (tmp_path / ".env").write_text("OPENAI_API_KEY=dotenv-key\n", encoding="utf-8")
     _OpenAI.outcomes = []
     monkeypatch.setattr(responses_module, "OpenAI", _OpenAI)
-    monkeypatch.setattr(responses_module, "_repository_root", lambda: tmp_path)
-    monkeypatch.setenv("OPENAI_API_KEY", "exported-key")
+    monkeypatch.setattr(responses_module, "_repository_root", lambda: tmp_path, raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
-    OpenAIResponsesClient(
-        ProviderConfig(provider="openai_responses", live_calls_enabled=True),
-        allow_live_calls=True,
-    )
-
-    assert _OpenAI.instance.kwargs["api_key"] == "exported-key"
+    with pytest.raises(RuntimeError, match="missing API key env var: OPENAI_API_KEY"):
+        OpenAIResponsesClient(
+            ProviderConfig(provider="openai_responses", live_calls_enabled=True),
+            allow_live_calls=True,
+        )
