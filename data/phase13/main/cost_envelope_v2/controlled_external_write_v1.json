@@ -1,0 +1,42 @@
+{
+  "schema_version": "phase13_controlled_external_write_v1",
+  "status": "PARTIAL_WRITE_VISIBLE_REFERENCE_REVIEW_REQUIRED",
+  "targets": {
+    "post_cutoff_addendum": {
+      "filename": "2026-08-24_Phase13_MainA_PostCutoff_Acceleration_Addendum.md",
+      "pre_write_sha256": "786e1ef1db7656e38beb5ab9ec316adc7df9bb1cc2f16d389f3612c76fbd2015",
+      "observed_sha256": "e55ab2fe57380f870eecc6331ebf47f7642ddc39807d294a912dd09c9122ca22",
+      "expected_post_write_sha256": "5f45108e833cddcd68c612c73f5d56e9b01cb38946bdf89a1f20532351cff9c4",
+      "operations": [
+        {
+          "kind": "exact_utf8_replace",
+          "old_utf8": "Experiment-v12",
+          "new_utf8": "Experiment-v10",
+          "expected_match_count": 1
+        }
+      ]
+    },
+    "experiment_v10": {
+      "filename": "Phase 13-Compatible Pilot Main and Exploratory Experiment Design revised-v10.md",
+      "pre_write_sha256": "bf6cf602d3ead47e95d9e158c1e3fe89ffab1ba4093a40f7d7ccb781faa0e0ec",
+      "observed_sha256": "5597f27d688c19efbcf47dc7369de02a947eac55a5493a69a3aa9098dfe25616",
+      "expected_post_write_sha256": "5597f27d688c19efbcf47dc7369de02a947eac55a5493a69a3aa9098dfe25616",
+      "operations": []
+    }
+  },
+  "canonical_block_hashes": {
+    "CORE_EXECUTION_ENVELOPE_REGISTRY_V2": "4dec48f105c8d4730706d1d99d05bb14bab96a8e643811db1ebdd26e612590d5",
+    "CORE_TERMINAL_TECHNICAL_MISSINGNESS_V1": "9bbcdd9dd1686af034f7c0d2114ac86d5837a07de0cc6ba8fef7940bbc822b75",
+    "COST_ENVELOPE_V2": "806b4f6fe752b3ed12d6dd9c081f75f54873a575870ffab62a84ca1fc032460a"
+  },
+  "residual_patch_path": "data/phase13/main/cost_envelope_v2/post_cutoff_addendum_residual_v1.patch",
+  "post_write_stop_conditions": {
+    "reference_reviewer_required": true,
+    "router_sync_permitted": false,
+    "repository_projection_activation_permitted": false,
+    "mr_p4_resume_permitted": false,
+    "mr_p5_start_permitted": false,
+    "mr_p6_start_permitted": false,
+    "main_execution_permitted": false
+  }
+}

@@ -19,7 +19,7 @@ REGISTERED_FAILURE_CLASSES: Final = {
     "mmlu_pro_physics": "MMLUPHY_SURFACE_CUE_HEURISTIC_APPLICABLE_INSTANCE_SUBSTANTIVE_FAILURE_V1",
 }
 AUTHORITY_HASHES: Final = {
-    "experiment_design_revised_v9": "373e97317ad22b925a878a1c0972bc1220e44d21c3c83d251efcc6fa03ff46be",
+    "experiment_design_revised_v10": "5597f27d688c19efbcf47dc7369de02a947eac55a5493a69a3aa9098dfe25616",
     "protocol_revised_v8": "022879f559b145e30e645b6ccbd139e9927899d370f1956d27a0562580acf85f",
 }
 VERIFIER_PATHS: Final = {

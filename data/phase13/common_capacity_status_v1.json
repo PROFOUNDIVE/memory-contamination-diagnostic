@@ -57,17 +57,17 @@
     "implementation_sha256": "2e4f2ed823ff0622cdac8b156892d787f24125132633cddfb1fab257b1344f9f"
   },
   "production_builder_hashes": {
-    "measurement_implementation_sha256": "db4b4ad1e342f5e1cfcc788bd8222e7ee8eb70e61f54c0458f1eb3243c0ec041",
+    "measurement_implementation_sha256": "bc09aa8249328f90557440ee3b5d4926ce1b00c2144f9ed89674c35a65209544",
     "dc_rs_runtime_builder_sha256": "66274d3056457e5dd0c6e84c3df5a5f8bbf2380404bea59000928478c831723f",
     "dc_rs_prompt_builder_sha256": "2e4f2ed823ff0622cdac8b156892d787f24125132633cddfb1fab257b1344f9f",
-    "ordinary_runtime_builder_sha256": "38262c3467a9c945effa46ce00b7dde9fb3b805aa79f9246dab8def97a5db1db"
+    "ordinary_runtime_builder_sha256": "fc0a3b3b7bc90612b5336604a67163975ca6274ac2ef30f56c24022732a9df18"
   },
   "runtime_implementation": {
     "openai_sdk_version": "2.46.0",
     "httpx_version": "0.28.1",
     "httpcore_version": "1.0.9",
     "pydantic_version": "2.13.4",
-    "client_implementation_sha256": "a99f7b729069dd4011f1ad571e162a321bda7753bd0b213cef0033fdc1472df9"
+    "client_implementation_sha256": "f60b29d708a570d4630842c45498a784761927393f3d3e4ed8e941da17030130"
   },
   "provider_contract_artifact": {
     "path": "data/phase13/openai_luna_provider_contract_v1.json",
@@ -82,7 +82,7 @@
   },
   "capacity_artifact": {
     "path": "data/phase13/common_capacity_v1.json",
-    "sha256": "31fd190ce6111ae318e8d7a5d05fa9b1de097779e6cb516fdccc2c1c3e5608b8"
+    "sha256": "95b7e6f2c0af37af7de1a695beeb80b86bd7d08d9a214b819190245cb114e8e2"
   },
   "validator": {
     "path": "src/memcontam/readiness/phase13_capacity_realization.py",

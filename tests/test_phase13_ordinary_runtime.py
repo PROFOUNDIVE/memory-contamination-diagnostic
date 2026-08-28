@@ -10,6 +10,7 @@ from memcontam.experiment import phase13_ordinary_runtime as ordinary_runtime
 from memcontam.baselines.bot_phase12 import BoTStateV3
 from memcontam.baselines.dynamic_cheatsheet_phase12 import DcRsStateV3
 from memcontam.clients.base import LLMResponse
+from memcontam.clients.openai_responses import OpenAIResponsesClient
 from memcontam.experiment.phase13_ordinary_runtime import (
     ORDINARY_BASELINES,
     ORDINARY_TASKS,
@@ -27,6 +28,7 @@ from memcontam.readiness.phase13_core_bundle import (
     SourceArtifact,
     write_bundle,
 )
+from memcontam.readiness.phase13_main_checkpoint import production_identity_from_checkpoint
 from memcontam.readiness.phase13_core_datasets import (
     GPQA_REVISION,
     GPQA_SOURCE_SHA256,
@@ -78,7 +80,12 @@ class _Client:
             )
         else:
             content = "final: B"
-        return LLMResponse(content=content, raw={"replay": True}, token_usage={}, latency_ms=0)
+        return LLMResponse(
+            content=content,
+            raw={"replay": True, "attempts": 1, "cost_usd": 0.0},
+            token_usage={"prompt_tokens": 1, "completion_tokens": 1},
+            latency_ms=0,
+        )
 
 
 class _EmbeddingProvider:
@@ -207,6 +214,154 @@ def test_ordinary_runtime_binds_default_provider_service_tier() -> None:
     )
 
     assert [config["service_tier"] for config in client.configs] == ["default"]
+
+
+def test_ordinary_runtime_binds_approved_cost_policy() -> None:
+    task = TaskInstance(
+        sample_id="game24:cost-policy",
+        task_name="game24",
+        input={"numbers": [1, 3, 4, 6], "target": 24},
+        verifier_spec={"target": 24},
+    )
+    client = _Client()
+
+    execute_prospective_ordinary(
+        ProspectiveOrdinaryRun(
+            task_name="game24",
+            baseline="fh_bounded",
+            run_id="ordinary-cost-policy",
+            model="replay",
+            client=client,
+            allow_test_client=True,
+            verifier=lambda _answer, _task: True,
+            decoding={"temperature": 0.0},
+            tasks=(task,),
+        )
+    )
+
+    assert client.configs[0]["max_output_tokens"] == 512
+    assert client.configs[0]["_phase13_execution_envelope_id"] == (
+        "CORE_EXECUTION_ENVELOPE_REGISTRY_V2"
+    )
+    assert client.configs[0]["_phase13_maximum_transport_attempts"] == 1
+
+
+def test_nomem_runtime_executes_clean_singleton_under_cost_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(ordinary_runtime, "_validated_common_capacity_tokens", lambda: 8192)
+    task = TaskInstance(
+        sample_id="game24:nomem",
+        task_name="game24",
+        input={"numbers": [1, 3, 4, 6], "target": 24},
+        verifier_spec={"target": 24},
+    )
+    client = _Client()
+
+    result = execute_prospective_ordinary(
+        ProspectiveOrdinaryRun(
+            task_name="game24",
+            baseline="nomem",
+            run_id="ordinary-nomem",
+            model="replay",
+            client=client,
+            allow_test_client=True,
+            verifier=lambda _answer, _task: True,
+            decoding={"temperature": 0.0},
+            tasks=(task,),
+        )
+    )
+
+    assert result.baseline == "nomem"
+    assert result.trials[0].outcome.status == "succeeded"
+    assert client.configs[0]["_phase13_execution_envelope_id"] == (
+        "CORE_EXECUTION_ENVELOPE_REGISTRY_V2"
+    )
+
+
+def test_ordinary_runtime_stops_suffix_after_terminal_provider_failure() -> None:
+    class _FailingClient:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def chat(self, messages, model, config):  # noqa: ANN001, ANN201
+            del messages, model, config
+            self.calls += 1
+            raise TimeoutError("terminal provider failure")
+
+    tasks = tuple(
+        TaskInstance(
+            sample_id=f"game24:terminal:{index}",
+            task_name="game24",
+            input={"numbers": [1, 3, 4, 6], "target": 24},
+            verifier_spec={"target": 24},
+        )
+        for index in range(2)
+    )
+    client = _FailingClient()
+
+    result = execute_prospective_ordinary(
+        ProspectiveOrdinaryRun(
+            task_name="game24",
+            baseline="fh_bounded",
+            run_id="ordinary-terminal-failure",
+            model="replay",
+            client=client,
+            allow_test_client=True,
+            verifier=lambda _answer, _task: True,
+            decoding={"temperature": 0.0},
+            tasks=tasks,
+        )
+    )
+
+    assert client.calls == 1
+    assert len(result.trials) == 1
+    assert result.trials[0].outcome.failure_disposition == "provider_call_failed"
+
+
+def test_dc_rs_runtime_retains_terminal_provider_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(ordinary_runtime, "_validated_common_capacity_tokens", lambda: 8192)
+    class _FailingClient:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def chat(self, messages, model, config):  # noqa: ANN001, ANN201
+            del messages, model, config
+            self.calls += 1
+            raise TimeoutError("terminal provider failure")
+
+    tasks = tuple(
+        TaskInstance(
+            sample_id=f"game24:dc-terminal:{index}",
+            task_name="game24",
+            input={"numbers": [1, 3, 4, 6], "target": 24},
+            verifier_spec={"target": 24},
+        )
+        for index in range(2)
+    )
+    client = _FailingClient()
+
+    result = execute_prospective_ordinary(
+        ProspectiveOrdinaryRun(
+            task_name="game24",
+            baseline="dc_rs",
+            run_id="ordinary-dc-terminal-failure",
+            model="replay",
+            client=client,
+            allow_test_client=True,
+            verifier=lambda _answer, _task: True,
+            decoding={"temperature": 0.0},
+            tasks=tasks,
+            embedding_provider=_EmbeddingProvider(),
+            baseline_configs={"dc_rs": {"embedding_mode": "test_double"}},
+        )
+    )
+
+    assert client.calls == 1
+    assert len(result.trials) == 1
+    assert result.trials[0].outcome.failure_disposition == "provider_call_failed"
 
 
 def test_ordinary_runtime_binds_capacity_from_validated_artifact(
@@ -345,6 +500,80 @@ def test_ordinary_runtime_rejects_luna_model_with_fake_client(
             decoding={"temperature": 0.0},
             tasks=(task,),
         )
+
+
+def test_ordinary_runtime_accepts_non_test_luna_after_policy_activation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(ordinary_runtime, "model_client_binding_error", lambda *_args: None)
+    monkeypatch.setattr(ordinary_runtime, "_validated_common_capacity_tokens", lambda: 8192)
+    activated: list[Path] = []
+    monkeypatch.setattr(
+        ordinary_runtime,
+        "validate_activated_cost_policy",
+        lambda root: activated.append(root),
+        raising=False,
+    )
+    task = TaskInstance(
+        sample_id="game24:activation-pending",
+        task_name="game24",
+        input={"numbers": [1, 3, 4, 6], "target": 24},
+        verifier_spec={"target": 24},
+    )
+
+    ProspectiveOrdinaryRun(
+        task_name="game24",
+        baseline="fh_bounded",
+        run_id="ordinary-activated",
+        model="gpt-5.6-luna",
+        client=_Client(),
+        verifier=lambda _answer, _task: True,
+        decoding={"temperature": 0.0},
+        tasks=(task,),
+    )
+
+    assert activated == [ordinary_runtime.REPOSITORY_ROOT]
+
+
+def test_ordinary_runtime_rejects_frozen_suffix_mismatch_before_live_dispatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(ordinary_runtime, "_validated_common_capacity_tokens", lambda: 8192)
+    task = TaskInstance(
+        sample_id="game24:live-client-test-flag",
+        task_name="game24",
+        input={"numbers": [1, 3, 4, 6], "target": 24},
+        verifier_spec={"target": 24},
+    )
+
+    client = object.__new__(OpenAIResponsesClient)
+    dispatched: list[bool] = []
+    monkeypatch.setattr(client, "chat", lambda *_args, **_kwargs: dispatched.append(True))
+    run = ProspectiveOrdinaryRun(
+        task_name="game24",
+        baseline="fh_bounded",
+        run_id="ordinary-live-client-test-flag",
+        model="gpt-5.6-luna",
+        client=client,
+        allow_test_client=True,
+        verifier=lambda _answer, _task: True,
+        decoding={"temperature": 0.0},
+        tasks=(task,),
+        trajectory_seed=0,
+        production_identity=production_identity_from_checkpoint(
+            ordinary_runtime.REPOSITORY_ROOT / "data/phase13/main/mr_p4",
+            ordinary_runtime.REPOSITORY_ROOT,
+            task="game24",
+            trajectory_seed=0,
+            execution_template_id="game24|fh_bounded|clean",
+            registration_packet_sha256="0" * 64,
+        ),
+    )
+
+    with pytest.raises(ProspectiveOrdinaryError, match="PRODUCTION_SAMPLE_ORDER_MISMATCH"):
+        execute_prospective_ordinary(run)
+
+    assert dispatched == []
 
 
 def test_ordinary_runtime_rejects_nonregistered_fh_capacity() -> None:

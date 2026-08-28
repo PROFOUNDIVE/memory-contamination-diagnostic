@@ -41,12 +41,12 @@
     "new_mcq_core_manifest_sha256": "9640831f3dfd6e99abd796e0cee4d4c6e3e9d6e5fd8460512fd81b6d63963203"
   },
   "production_builder_hashes": {
-    "measurement_implementation_sha256": "db4b4ad1e342f5e1cfcc788bd8222e7ee8eb70e61f54c0458f1eb3243c0ec041",
-    "openai_client_sha256": "a99f7b729069dd4011f1ad571e162a321bda7753bd0b213cef0033fdc1472df9",
+    "measurement_implementation_sha256": "bc09aa8249328f90557440ee3b5d4926ce1b00c2144f9ed89674c35a65209544",
+    "openai_client_sha256": "f60b29d708a570d4630842c45498a784761927393f3d3e4ed8e941da17030130",
     "full_history_builder_sha256": "92f25e2cb8f8d937085bcae36030116956f2d47dbc927f3c4e2c4034b5d1eb89",
     "dc_rs_builder_sha256": "2e4f2ed823ff0622cdac8b156892d787f24125132633cddfb1fab257b1344f9f",
     "dc_rs_runtime_builder_sha256": "66274d3056457e5dd0c6e84c3df5a5f8bbf2380404bea59000928478c831723f",
-    "ordinary_runtime_builder_sha256": "38262c3467a9c945effa46ce00b7dde9fb3b805aa79f9246dab8def97a5db1db"
+    "ordinary_runtime_builder_sha256": "fc0a3b3b7bc90612b5336604a67163975ca6274ac2ef30f56c24022732a9df18"
   },
   "per_task_R_FH": {
     "game24": 4149,

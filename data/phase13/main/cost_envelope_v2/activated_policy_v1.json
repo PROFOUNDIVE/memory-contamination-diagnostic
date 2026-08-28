@@ -1,0 +1,20 @@
+{
+  "schema_version": "phase13_activated_cost_policy_v1",
+  "status": "PASS",
+  "authority": {
+    "router_sha256": "c30f7c621218451affbee7bbe01359c76014f7baca9159cc6349b371e8d01b8f",
+    "post_cutoff_addendum_sha256": "e55ab2fe57380f870eecc6331ebf47f7642ddc39807d294a912dd09c9122ca22",
+    "experiment_design_v10_sha256": "5597f27d688c19efbcf47dc7369de02a947eac55a5493a69a3aa9098dfe25616"
+  },
+  "candidate": {
+    "path": "data/phase13/main/cost_envelope_v2/candidate_manifest_v1.json",
+    "sha256": "abc7c6ecd314d4041248620421c91abc4499d803f33950bd485c9a5b1a8f8e25",
+    "provenance_status": "PRESERVED_HISTORICAL_CONTROLLED_HANDOFF"
+  },
+  "cmax_main_krw": 442130,
+  "core_authorization_gate_krw": 450000,
+  "margin_to_core_gate_krw": 7870,
+  "main_execution_authorized": false,
+  "main_a_measured_scientific_execution_count": 0,
+  "activation_hash": "6bcea5d21818062b8ae086ffe2d7a7b7f70c18ce60718af3aa90dd659d985cb2"
+}

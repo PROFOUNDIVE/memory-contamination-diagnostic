@@ -6,11 +6,11 @@
   "artifacts": {
     "observability_registration_packet": {
       "path": "registration_packet_v1.json",
-      "sha256": "f9e1520f42234ef37663351639f6bb2000b7134a0fbf4806cdf7db4458bd7c11"
+      "sha256": "810c25a3fa6a68913c09e8da525f85c4e485aa4704f622a7168c516583fe8d76"
     },
     "synthetic_contract_fixture": {
       "path": "fixture_v1.json",
-      "sha256": "a768cecccfbee73caf47733ce68554d90ecf7ce5ba582e12710e63d3a333ce9c"
+      "sha256": "d6c18b034b39f0100ea93ef27877c1f3d6a3e8e0e7df580279db4c7a26967a48"
     },
     "target_set_registry": {
       "path": "target_set_registry_v1.json",
@@ -20,7 +20,7 @@
   "implementations": {
     "observability_registration": {
       "path": "src/memcontam/evaluation/phase13_observability_registration.py",
-      "sha256": "4828abf75bb80474789574510e859e4bcb34ca10042d5fad95a4ca883e7cbaeb"
+      "sha256": "5c24be5b0685fab403ce9bee8dac58747c6e5e6c739f792b69c4a3825f1a96af"
     },
     "observability_sequence": {
       "path": "src/memcontam/evaluation/phase13_observability_sequence.py",
@@ -28,11 +28,11 @@
     },
     "observable_contract": {
       "path": "src/memcontam/evaluation/phase13_observability_models.py",
-      "sha256": "5ded90097089ba55674f6c3dd64960bbb12911bc056e2138fc9a35f559352252"
+      "sha256": "27c17088333d8e2aa3676b980ef0c47085ecc8c826369876d5d37ecd1d95b50c"
     },
     "trial_and_sequential_reconstruction": {
       "path": "src/memcontam/evaluation/phase13_observability.py",
-      "sha256": "50dda189fa08eeabe1a506ef04d5a39ec391c37c8d986d5edb1c9968255ad240"
+      "sha256": "f2ac943a1b998b7b950f73dbec140d27cb5dd15c818fbf271d6624dfd713b022"
     },
     "runtime_identity_and_lineage": {
       "path": "src/memcontam/evaluation/phase13_observability_lineage.py",
@@ -44,7 +44,7 @@
     },
     "measurement_identity_models": {
       "path": "src/memcontam/readiness/phase13_observability_models.py",
-      "sha256": "4a77b2588a06c26f32f9a4099b441cba728e4d1a4df0d8e12101baf5450a7ffd"
+      "sha256": "5e36c513853f8bb89d7a78be269c25846f2f291eb64c9057a660b7e10bb71b6c"
     },
     "measurement_reconstruction_validator": {
       "path": "src/memcontam/readiness/phase13_observability_validate.py",
@@ -52,11 +52,11 @@
     },
     "phase13_cli": {
       "path": "src/memcontam/readiness/phase13_cli.py",
-      "sha256": "1acb2bc798d487f797fa32f52eb62d2800f033c04c488ef39e310e6b5cc35336"
+      "sha256": "c05484cfbcea313ae9a3490f30bdeedcb8bd2d739a0988df7d7329ffe1d38590"
     },
     "track1_authority_state": {
       "path": "data/phase13/main/track1_authority_state_sync_checkpoint_v1.json",
-      "sha256": "99fdffc6567f0b7c2799d29538d7cb38b484ba498a748c2a528703cedf0d92bd"
+      "sha256": "84ce7b495b6450e82333aeb008fd6b7279532007648f4667038c1e8834e09d0d"
     },
     "track2_legacy_rag_seal": {
       "path": "data/phase13/rag/legacy_seal_v1.json",
@@ -64,18 +64,14 @@
     },
     "core_main_registry": {
       "path": "src/memcontam/readiness/phase13_execution_contract.py",
-      "sha256": "fc2e747c76ee2a4e1c191a8b807de6379349e634aa56bf3e541579b0fc0c9787"
+      "sha256": "e44f33feff64b386484aef48bfa5a1f00cabf4af80d5d89a94f17de439c2ccdb"
     }
   },
   "expected_reconstruction_sha256": "e0e57053cf676439670e160ca49bb2d21df42d2f54e0afdc135248938a803d9f",
-  "registration_packet_sha256": "f9e1520f42234ef37663351639f6bb2000b7134a0fbf4806cdf7db4458bd7c11",
+  "registration_packet_sha256": "810c25a3fa6a68913c09e8da525f85c4e485aa4704f622a7168c516583fe8d76",
   "failure_classifier_registry_status": "PACKET_BOUND_REGISTERED",
   "u_t_status": "NOT_REGISTERED_FOR_CURRENT_MAIN",
-  "downstream_blockers": [
-    "PRODUCTION_RUNTIME_METADATA_JOIN_NOT_MATERIALIZED",
-    "CONCRETE_MAIN_SEED_REGISTRY_NOT_FROZEN",
-    "LEVEL2_FH_INTERACTIONS_NOT_MATERIALIZED"
-  ],
+  "downstream_blockers": [],
   "mr_p4_prerequisite_status": "OBSERVABILITY_PREREQUISITE_MET",
   "mr_p5_handoff_status": "MEASUREMENT_IDENTITY_HANDOFF_CLOSED",
   "mr_p4_closure_claimed": false,

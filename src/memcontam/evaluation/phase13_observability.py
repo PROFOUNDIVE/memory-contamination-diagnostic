@@ -91,7 +91,7 @@ def reconstruct_phase13_trial(evidence: Phase13TrialEvidence) -> Phase13TrialAna
     inclusion = observables.final_context.is_target_included
     exposure = observables.exposure.is_exposed
     return Phase13TrialAnalysis(
-        evidence_scope="synthetic_contract_fixture",
+        evidence_scope=evidence.evidence_scope,
         task=evidence.task,
         baseline=evidence.baseline,
         arm=current_arm,

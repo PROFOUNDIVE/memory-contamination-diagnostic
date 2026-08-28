@@ -91,16 +91,49 @@ class MethodCallRecorder:
         except Exception as exc:
             failure = self._capture_failure()
             failure["function"] = entrypoint
+            failed_usage = getattr(exc, "provider_token_usage", {})
+            if not isinstance(failed_usage, dict) or not all(
+                isinstance(key, str)
+                and isinstance(value, int)
+                and not isinstance(value, bool)
+                and value >= 0
+                for key, value in failed_usage.items()
+            ):
+                failed_usage = {}
+            failed_latency = getattr(exc, "provider_latency_ms", None)
+            if (
+                not isinstance(failed_latency, int)
+                or isinstance(failed_latency, bool)
+                or failed_latency < 0
+            ):
+                failed_latency = None
+            failed_attempts = getattr(exc, "provider_attempts_count", retry_count + 1)
+            if (
+                not isinstance(failed_attempts, int)
+                or isinstance(failed_attempts, bool)
+                or failed_attempts < 0
+            ):
+                failed_attempts = 1
             call_event = call_event.model_copy(
                 update={
                     "response_text": None,
-                    "token_usage": {},
-                    "latency_ms": None,
+                    "token_usage": failed_usage,
+                    "latency_ms": failed_latency,
+                    "retry_count": max(failed_attempts - 1, 0),
+                    "transport_attempts": failed_attempts,
                     "error_type": type(exc).__name__,
+                    "failure_code": getattr(exc, "code", None),
                     "failure_function": failure["function"],
                     "failure_module": failure["module"],
                     "failure_line": failure["line"],
                     "origin": "provider_call",
+                    "provider_status": getattr(exc, "provider_status", None),
+                    "provider_incomplete_reason": getattr(
+                        exc, "provider_incomplete_reason", None
+                    ),
+                    "provider_cost_usd": getattr(exc, "provider_cost_usd", None),
+                    "provider_response_id": getattr(exc, "provider_response_id", None),
+                    "provider_usage": getattr(exc, "provider_usage", None),
                 }
             )
             method_call = self._call_event_to_method_call(call_event, stage)
@@ -116,6 +149,7 @@ class MethodCallRecorder:
                 "response_text": response.content,
                 "token_usage": response.token_usage,
                 "latency_ms": response.latency_ms,
+                "transport_attempts": _response_attempts(response),
             }
         )
         method_call = self._call_event_to_method_call(call_event, stage)
@@ -177,9 +211,21 @@ class MethodCallRecorder:
             latency_ms=event.latency_ms,
             token_usage=event.token_usage,
             retry_count=event.retry_count,
+            transport_attempts=event.transport_attempts,
             error_type=event.error_type,
+            failure_code=event.failure_code,
+            provider_status=event.provider_status,
+            provider_incomplete_reason=event.provider_incomplete_reason,
+            provider_cost_usd=event.provider_cost_usd,
+            provider_response_id=event.provider_response_id,
+            provider_usage=event.provider_usage,
             source_spans=event.source_spans,
         )
+
+
+def _response_attempts(response: LLMResponse) -> int:
+    attempts = response.raw.get("attempts", 1)
+    return attempts if type(attempts) is int and attempts >= 1 else 1
 
 
 def _timestamp() -> str:

@@ -19,6 +19,7 @@ Task = Literal[
 Arm = Literal["clean", "correct", "irrelevant", "contam"]
 AggregateArm = Literal["clean", "correct", "irrelevant", "contam", "nomem"]
 AggregateBaseline = Baseline | Literal["nomem"]
+EvidenceScope = Literal["synthetic_contract_fixture", "production_runtime"]
 MetricStatus = Literal[
     "supported", "not_applicable", "not_estimable", "unavailable", "not_registered"
 ]
@@ -61,7 +62,7 @@ class Phase13LineageNode(_FrozenModel):
 
 class Phase13TrialEvidence(_FrozenModel):
     schema_version: Literal["phase13_trial_evidence_v1"] = "phase13_trial_evidence_v1"
-    evidence_scope: Literal["synthetic_contract_fixture"]
+    evidence_scope: EvidenceScope
     task: Task
     baseline: Baseline
     trajectory_seed: int = Field(ge=0)
@@ -73,7 +74,7 @@ class Phase13TrialEvidence(_FrozenModel):
     retrievals: tuple[RetrievalEvent, ...] = ()
     context: ContextEvent | None
     target_set: Phase13TargetSetEvidence
-    verified_outcome: Literal[0, 1]
+    verified_outcome: Literal[0, 1] | None
     memory_before_ids: tuple[str, ...]
     memory_after_ids: tuple[str, ...]
     new_entry_ids: tuple[str, ...] = ()
@@ -84,6 +85,10 @@ class Phase13TrialEvidence(_FrozenModel):
 
     @model_validator(mode="after")
     def _identity_integrity(self) -> Phase13TrialEvidence:
+        if self.evidence_scope == "production_runtime" and (
+            (self.trial.execution_status == "failed") != (self.verified_outcome is None)
+        ):
+            raise Phase13ObservabilityError("TECHNICAL_MISSINGNESS_OUTCOME_MISMATCH")
         identity_sets = (
             self.memory_before_ids,
             self.memory_after_ids,
@@ -107,7 +112,7 @@ class Phase13TrialEvidence(_FrozenModel):
 
 class Phase13TrialAnalysis(_FrozenModel):
     schema_version: Literal["phase13_trial_analysis_v1"] = "phase13_trial_analysis_v1"
-    evidence_scope: Literal["synthetic_contract_fixture"]
+    evidence_scope: EvidenceScope
     task: Task
     baseline: Baseline
     arm: Arm

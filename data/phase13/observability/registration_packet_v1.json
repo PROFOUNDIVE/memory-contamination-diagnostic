@@ -2,7 +2,7 @@
   "schema_version": "phase13_observability_registration_packet_v1",
   "packet_id": "OBSERVABILITY_REGISTRATION_PACKET_V1",
   "authority_hashes": {
-    "experiment_design_revised_v9": "373e97317ad22b925a878a1c0972bc1220e44d21c3c83d251efcc6fa03ff46be",
+    "experiment_design_revised_v10": "5597f27d688c19efbcf47dc7369de02a947eac55a5493a69a3aa9098dfe25616",
     "protocol_revised_v8": "022879f559b145e30e645b6ccbd139e9927899d370f1956d27a0562580acf85f"
   },
   "failure_classes": {
@@ -20,8 +20,8 @@
   "censoring": "RIGHT_CENSORED_AT_REGISTERED_OR_FIXTURE_ENDPOINT",
   "u_t_status": "NOT_REGISTERED_FOR_CURRENT_MAIN",
   "implementation_identities": {
-    "authority_state": {"path": "data/phase13/main/track1_authority_state_sync_checkpoint_v1.json", "sha256": "99fdffc6567f0b7c2799d29538d7cb38b484ba498a748c2a528703cedf0d92bd"},
-    "registration": {"path": "src/memcontam/evaluation/phase13_observability_registration.py", "sha256": "4828abf75bb80474789574510e859e4bcb34ca10042d5fad95a4ca883e7cbaeb"},
+    "authority_state": {"path": "data/phase13/main/track1_authority_state_sync_checkpoint_v1.json", "sha256": "84ce7b495b6450e82333aeb008fd6b7279532007648f4667038c1e8834e09d0d"},
+    "registration": {"path": "src/memcontam/evaluation/phase13_observability_registration.py", "sha256": "5c24be5b0685fab403ce9bee8dac58747c6e5e6c739f792b69c4a3825f1a96af"},
     "sequence": {"path": "src/memcontam/evaluation/phase13_observability_sequence.py", "sha256": "1417da9e1d87ea2aecf0570930829d32e03aacdabfd348ab7f4823dd0ab2b12e"}
   },
   "verifier_identities": {

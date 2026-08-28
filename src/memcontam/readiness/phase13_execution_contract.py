@@ -29,6 +29,7 @@ class CoreMainRegistry:
     task_extensions: tuple[tuple[str, str], ...]
     memory_baselines: tuple[str, ...]
     arms: tuple[str, ...]
+    call_ceilings: tuple[tuple[str, int, int], ...]
     nomem_policy: str
     backbone_id: str
     H_run: int
@@ -45,6 +46,10 @@ class CoreMainRegistry:
     rag_cutoff_status: str
     current_main_excluded_cells: tuple[tuple[str, str], ...]
     prospective_rag_extension_id: str
+    authority_router_sha256: str
+    post_cutoff_addendum_path: str
+    post_cutoff_rule_id: str
+    current_main_package_id: str
     authority_stack: tuple[tuple[str, str], ...]
 
 
@@ -71,6 +76,14 @@ CORE_MAIN_REGISTRY = CoreMainRegistry(
         "dc_rs",
     ),
     arms=("clean", "correct", "irrelevant", "contam"),
+    call_ceilings=(
+        ("fh_bounded", 1, 1),
+        ("rag_frozen", 1, 1),
+        ("bot_style", 3, 3),
+        ("reflexion_style", 1, 4),
+        ("dc_rs", 2, 2),
+        ("nomem", 1, 1),
+    ),
     nomem_policy="singleton_per_task_seed",
     backbone_id="gpt-5.6-luna",
     H_run=50,
@@ -90,6 +103,10 @@ CORE_MAIN_REGISTRY = CoreMainRegistry(
         ("mmlu_pro_physics", "rag_frozen"),
     ),
     prospective_rag_extension_id="new_mcq_rag_prospective_extension_v1",
+    authority_router_sha256="c30f7c621218451affbee7bbe01359c76014f7baca9159cc6349b371e8d01b8f",
+    post_cutoff_addendum_path="2026-08-24_Phase13_MainA_PostCutoff_Acceleration_Addendum.md",
+    post_cutoff_rule_id="experiment_v8_two_retained_new_mcq_rag_deadline_contingency",
+    current_main_package_id="phase13_main_a_post_cutoff_partial_crossed_v1",
     authority_stack=(
         (
             "theory",
@@ -105,11 +122,11 @@ CORE_MAIN_REGISTRY = CoreMainRegistry(
         ),
         (
             "post_cutoff_addendum",
-            "d66ca07ef2aabe5444793b268f1b2e0df2a388ddf9023b53e6e0901d2172224d",
+            "e55ab2fe57380f870eecc6331ebf47f7642ddc39807d294a912dd09c9122ca22",
         ),
         (
             "experiment_design",
-            "373e97317ad22b925a878a1c0972bc1220e44d21c3c83d251efcc6fa03ff46be",
+            "5597f27d688c19efbcf47dc7369de02a947eac55a5493a69a3aa9098dfe25616",
         ),
     ),
 )

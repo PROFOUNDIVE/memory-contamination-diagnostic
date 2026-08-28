@@ -26,6 +26,10 @@ from memcontam.experiment import phase13_dc_rs_runtime as dc_runtime
 from memcontam.memory.cards_v3 import MemoryCardEnvelopeV3, canonical_content_hash
 from memcontam.memory.checkpoint_v3 import NATIVE_ENTRY_V1, NativeEntry, NativeState, serialize_checkpoint
 from memcontam.memory.stores import MemoryEntry, MemoryState
+from memcontam.readiness.phase13_cost_policy import (
+    Phase13CostPolicyError,
+    Phase13ProviderCallError,
+)
 
 
 class RuntimeStateError(ValueError):
@@ -100,6 +104,27 @@ def _config(context: Any, baseline: str) -> dict[str, Any]:
         "run_id": context.identities.run_id,
         "sample_id": context.task.sample_id,
     }
+
+
+def _provider_failure(error: Exception) -> BaselineExecutionOutcome:
+    return BaselineExecutionOutcome(
+        status="failed",
+        error_type="ProviderCallFailure",
+        failure_disposition="provider_call_failed",
+        scientific_ineligibility_reason="provider_call_failed",
+        metadata={
+            "exception_type": type(error).__name__,
+            "message": str(error),
+            "provider_attempts_count": getattr(error, "provider_attempts_count", 1),
+            "provider_latency_ms": getattr(error, "provider_latency_ms", 0),
+            "provider_status": getattr(error, "provider_status", None),
+            "provider_incomplete_reason": getattr(error, "provider_incomplete_reason", None),
+            "provider_usage": getattr(error, "provider_usage", None),
+            "provider_token_usage": getattr(error, "provider_token_usage", None),
+            "provider_cost_usd": getattr(error, "provider_cost_usd", None),
+            "provider_response_id": getattr(error, "provider_response_id", None),
+        },
+    )
 
 
 def _nomem_execute(context: Any, state: object) -> RuntimeTrialResult:
@@ -230,6 +255,8 @@ def _dc_execute(context: Any, state: object) -> RuntimeTrialResult:
         execution = dc_runtime.execute(context, state)
     except (dc_runtime.DcRsRuntimeError, dc_runtime.dc.DcRsContractError) as error:
         raise RuntimeStateError(error.code) from error
+    except (Phase13CostPolicyError, Phase13ProviderCallError) as error:
+        return RuntimeTrialResult(_provider_failure(error), state)
     result = execution.result
     native_entries = tuple(
         entry

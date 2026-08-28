@@ -82,11 +82,7 @@ class Phase13ObservabilityManifest(_FrozenModel):
     registration_packet_sha256: Sha256
     failure_classifier_registry_status: Literal["PACKET_BOUND_REGISTERED"]
     u_t_status: Literal["NOT_REGISTERED_FOR_CURRENT_MAIN"]
-    downstream_blockers: tuple[
-        Literal["PRODUCTION_RUNTIME_METADATA_JOIN_NOT_MATERIALIZED"],
-        Literal["CONCRETE_MAIN_SEED_REGISTRY_NOT_FROZEN"],
-        Literal["LEVEL2_FH_INTERACTIONS_NOT_MATERIALIZED"],
-    ]
+    downstream_blockers: tuple[()]
     mr_p4_prerequisite_status: Literal["OBSERVABILITY_PREREQUISITE_MET"]
     mr_p5_handoff_status: Literal["MEASUREMENT_IDENTITY_HANDOFF_CLOSED"]
     mr_p4_closure_claimed: Literal[False]

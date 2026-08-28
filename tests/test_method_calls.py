@@ -8,6 +8,7 @@ import pytest
 from memcontam.clients.base import LLMResponse
 from memcontam.clients.recording import MethodCallRecorder, summarize_calls
 from memcontam.logging.schema import CallEvent, PromptSourceSpan
+from memcontam.readiness.phase13_cost_policy import Phase13CostPolicyError
 
 
 class _FakeClient:
@@ -165,6 +166,45 @@ def test_recorder_resets_after_failed_trial() -> None:
     assert response.content == "ok"
     assert len(recorder.get_records()) == 1
     assert recorder.get_records()[0].stage == "unknown"
+
+
+def test_recorder_marks_pre_dispatch_policy_failure_with_zero_attempts() -> None:
+    recorder = MethodCallRecorder(
+        _ExplodingClient(Phase13CostPolicyError("INPUT_ENVELOPE_EXCEEDED"))
+    )
+
+    with pytest.raises(Phase13CostPolicyError, match="INPUT_ENVELOPE_EXCEEDED"):
+        recorder.chat([{"role": "user", "content": "x"}], "m", {})
+
+    record = recorder.get_records()[0]
+    assert getattr(record, "transport_attempts", None) == 0
+    assert getattr(record, "failure_code", None) == "INPUT_ENVELOPE_EXCEEDED"
+
+
+def test_recorder_preserves_provider_accounting_on_failed_call() -> None:
+    error = RuntimeError("incomplete")
+    setattr(error, "provider_attempts_count", 1)
+    setattr(error, "provider_latency_ms", 23)
+    setattr(error, "provider_token_usage", {"prompt_tokens": 7, "completion_tokens": 11})
+    setattr(error, "provider_status", "incomplete")
+    setattr(error, "provider_incomplete_reason", "max_output_tokens")
+    setattr(error, "provider_cost_usd", 0.25)
+    setattr(error, "provider_response_id", "resp_incomplete")
+    setattr(error, "provider_usage", {"input_tokens": 7, "output_tokens": 11})
+    recorder = MethodCallRecorder(_ExplodingClient(error))
+
+    with pytest.raises(RuntimeError, match="incomplete"):
+        recorder.chat([{"role": "user", "content": "x"}], "m", {"method_stage": "fail"})
+
+    record = recorder.get_records()[0]
+    assert record.token_usage == {"prompt_tokens": 7, "completion_tokens": 11}
+    assert record.latency_ms == 23
+    assert record.retry_count == 0
+    assert record.provider_status == "incomplete"
+    assert record.provider_incomplete_reason == "max_output_tokens"
+    assert record.provider_cost_usd == 0.25
+    assert record.provider_response_id == "resp_incomplete"
+    assert record.provider_usage == {"input_tokens": 7, "output_tokens": 11}
 
 
 def test_recorder_emits_callback_before_return_with_call_id() -> None:

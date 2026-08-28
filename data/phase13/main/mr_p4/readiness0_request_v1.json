@@ -1,0 +1,39 @@
+{
+  "schema_version": "phase13_readiness0_request_v1",
+  "status": "BLOCKED_EXTERNAL_DEPENDENCY",
+  "scientific_result": false,
+  "main_result": false,
+  "measured_main_a_trajectory_count": 0,
+  "authorization": {
+    "scope": "MINIMUM_PRODUCTION_FACING_READINESS0_LIVE_PILOT",
+    "allow_live_calls": true,
+    "authorizes_provider_backed_scientific_calibration": false,
+    "authorizes_mr_p5": false,
+    "authorizes_mr_p6": false,
+    "authorizes_main_a": false,
+    "answer_correctness_acceptance_criterion": false,
+    "authorization_hash": "7c706ecab10d42e7fdf55e3e415f275edd58a5095dd8a7114ac320dea720943e"
+  },
+  "runtime_contract": {
+    "api": "OpenAI Responses API",
+    "model": "gpt-5.6-luna",
+    "service_tier": "default",
+    "reasoning_mode": "standard",
+    "reasoning_effort": "none",
+    "reasoning_context": "current_turn",
+    "previous_response_id": null,
+    "store": false,
+    "tools": [],
+    "retries_after_initial_attempt": 0
+  },
+  "case_matrix": ["luna_responses_terminal_success"],
+  "f1c_status": "BLOCKED_ENVIRONMENT_NOT_CONFIGURED",
+  "credentials_source": "CURRENT_PROCESS_ENVIRONMENT_ONLY",
+  "sibling_dotenv_read": false,
+  "external_blockers": [
+    "OPENAI_API_KEY_MISSING",
+    "F1C_RUNTIME_ENVIRONMENT_NOT_CONFIGURED"
+  ],
+  "provider_calls_issued": 0,
+  "request_hash": "8294202d6a8751744a3ee91cdd38a63822fe0985d4898ab50feba914a851d912"
+}

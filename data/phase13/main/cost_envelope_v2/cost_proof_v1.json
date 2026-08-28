@@ -1,0 +1,52 @@
+{
+  "schema_version": "cost_envelope_v2_cost_proof_v1",
+  "proof_id": "cost_envelope_v2_main_a_450k_v1",
+  "activation_status": "PENDING_CONTROLLED_EXTERNAL_AUTHORITY_WRITE",
+  "package_id": "phase13_main_a_post_cutoff_partial_crossed_v1",
+  "package_selection_path": "data/phase13/main/post_cutoff_package_selection_v1.json",
+  "package_selection_sha256": "851f033f75f04861d8f53217faac8108296d7b0dba9d27e07a57ab94841dd3a9",
+  "common_capacity_path": "data/phase13/common_capacity_v1.json",
+  "common_capacity_sha256": "95b7e6f2c0af37af7de1a695beeb80b86bd7d08d9a214b819190245cb114e8e2",
+  "cost_envelope_id": "COST_ENVELOPE_V2",
+  "cost_envelope_sha256": "806b4f6fe752b3ed12d6dd9c081f75f54873a575870ffab62a84ca1fc032460a",
+  "stage_envelope_registry_id": "CORE_EXECUTION_ENVELOPE_REGISTRY_V2",
+  "stage_envelope_registry_authority_sha256": "4dec48f105c8d4730706d1d99d05bb14bab96a8e643811db1ebdd26e612590d5",
+  "stage_envelope_registry_hash": "4c48fca92d1d70105d2eb34b5b86984c732c03e3600cb00965501ecabd2d1769",
+  "retry_failure_contract_id": "CORE_TRANSPORT_ATTEMPT_CONTRACT_V2",
+  "retry_failure_contract_hash": "1ee66fcb795f97d483c2ef976133ee61dbd5108c9dae851c2c2786ff496d788f",
+  "terminal_failure_contract_id": "CORE_TERMINAL_TECHNICAL_MISSINGNESS_V1",
+  "terminal_failure_contract_sha256": "9bbcdd9dd1686af034f7c0d2114ac86d5837a07de0cc6ba8fef7940bbc822b75",
+  "semantic_calls": 108500,
+  "rate_card": {
+    "input_usd_per_million": "0.20",
+    "cached_input_usd_per_million": "0.02",
+    "output_usd_per_million": "1.20",
+    "cache_write_planning_premium": "1.25",
+    "cache_read_credit": "none",
+    "long_context_threshold_tokens": 272000,
+    "long_context_input_multiplier": "2.0",
+    "long_context_output_multiplier": "1.5",
+    "fx_planning_ceiling_krw_per_usd": 1600
+  },
+  "budget": {
+    "total_budget_ceiling_krw": 500000,
+    "reserve_fraction": "0.10",
+    "core_authorization_gate_krw": 450000
+  },
+  "rounding": "ceil_each_stage_input_and_output_krw_component_then_sum",
+  "stage_costs": [
+    {"semantic_stage_id": "full_history_generate", "input_krw_ceiling": 37320, "output_krw_ceiling": 9831, "stage_krw": 47151},
+    {"semantic_stage_id": "rag_generate", "input_krw_ceiling": 696, "output_krw_ceiling": 5899, "stage_krw": 6595},
+    {"semantic_stage_id": "bot_problem_distill", "input_krw_ceiling": 4708, "output_krw_ceiling": 7373, "stage_krw": 12081},
+    {"semantic_stage_id": "bot_instantiate_solve", "input_krw_ceiling": 7796, "output_krw_ceiling": 9831, "stage_krw": 17627},
+    {"semantic_stage_id": "bot_thought_distill", "input_krw_ceiling": 10180, "output_krw_ceiling": 7373, "stage_krw": 17553},
+    {"semantic_stage_id": "reflexion_generate", "input_krw_ceiling": 18256, "output_krw_ceiling": 19661, "stage_krw": 37917},
+    {"semantic_stage_id": "reflexion_reflect", "input_krw_ceiling": 26792, "output_krw_ceiling": 14746, "stage_krw": 41538},
+    {"semantic_stage_id": "dc_rs_generate", "input_krw_ceiling": 36848, "output_krw_ceiling": 9831, "stage_krw": 46679},
+    {"semantic_stage_id": "dc_rs_synthesize", "input_krw_ceiling": 54084, "output_krw_ceiling": 157287, "stage_krw": 211371},
+    {"semantic_stage_id": "no_memory_generate", "input_krw_ceiling": 1160, "output_krw_ceiling": 2458, "stage_krw": 3618}
+  ],
+  "cmax_main_krw": 442130,
+  "margin_to_core_gate_krw": 7870,
+  "proof_hash": "de66fb7d38f80c6bb4dadc903e35ec14f80901eddb3da837ad02afd6f287109b"
+}

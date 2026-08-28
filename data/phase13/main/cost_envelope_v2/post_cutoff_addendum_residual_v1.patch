@@ -1,0 +1,11 @@
+--- a/2026-08-24_Phase13_MainA_PostCutoff_Acceleration_Addendum.md
++++ b/2026-08-24_Phase13_MainA_PostCutoff_Acceleration_Addendum.md
+@@ -3623,7 +3623,7 @@
+ >
+ this addendum on its enumerated narrow clauses
+ >
+-Experiment-v12
++Experiment-v10
+ ```
+ 
+ The router must treat the following as binding current-Main states:

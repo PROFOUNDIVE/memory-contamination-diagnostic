@@ -31,6 +31,7 @@ from memcontam.readiness.phase13_legacy_rag_materialize import LegacyRagMaterial
 from .phase13_observability_validate import (
     Phase13ObservabilityValidationError,
 )
+from .phase13_main_readiness import Phase13MainReadinessError
 
 
 def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -79,6 +80,10 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
     observability.add_argument("--repository-root", type=Path, required=True)
     observability.add_argument("--root", type=Path, required=True)
     observability.add_argument("--expected-manifest-sha256", required=True)
+    main_readiness = commands.add_parser("validate-main-readiness")
+    main_readiness.add_argument("--repository-root", type=Path, required=True)
+    main_readiness.add_argument("--root", type=Path, required=True)
+    main_readiness.add_argument("--expected-manifest-sha256", required=True)
 
 
 def run(args: argparse.Namespace) -> None:
@@ -147,6 +152,16 @@ def run(args: argparse.Namespace) -> None:
                 args.expected_manifest_sha256,
             )
             print(json.dumps(observability_report.model_dump(mode="json"), sort_keys=True))
+            return
+        if args.phase13_command == "validate-main-readiness":
+            from .phase13_main_readiness import validate_main_readiness
+
+            readiness_report = validate_main_readiness(
+                args.root,
+                args.repository_root,
+                args.expected_manifest_sha256,
+            )
+            print(json.dumps(readiness_report.model_dump(mode="json"), sort_keys=True))
             return
         if args.phase13_command == "materialize-legacy-rag":
             from memcontam.memory.embeddings import BgeM3EmbeddingProvider
@@ -230,5 +245,6 @@ def run(args: argparse.Namespace) -> None:
         LegacyRagMaterializationError,
         LegacyRagValidationError,
         Phase13ObservabilityValidationError,
+        Phase13MainReadinessError,
     ) as error:
         raise SystemExit(error.code) from error

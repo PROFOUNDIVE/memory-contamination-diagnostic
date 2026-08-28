@@ -58,6 +58,8 @@ class LiveArmBranch:
     state: object
     root_count: Literal[0, 1]
     injected_root_id: str | None = None
+    candidate_triplet_id: str | None = None
+    native_render_id: str | None = None
     filter_state: FilteredCheckpoint | None = None
 
 
@@ -152,6 +154,8 @@ def build_live_three_arm_branches(
             contam_state,
             1,
             root_id,
+            triplet.triplet_id,
+            render_id,
         ),
         "filter": LiveArmBranch(
             "filter",
@@ -161,6 +165,8 @@ def build_live_three_arm_branches(
             filter_state,
             1,
             root_id,
+            triplet.triplet_id,
+            render_id,
             materialized.filter,
         ),
     }
@@ -214,6 +220,7 @@ def build_live_reduced_main_branches(
         "irrelevant": materialized.irrelevant,
         "contam": materialized.contam,
     }
+    interventions = {intervention.arm: intervention for intervention in materialized.interventions}
     arms: dict[Arm, LiveArmBranch] = {
         arm: LiveArmBranch(
             arm,
@@ -223,6 +230,8 @@ def build_live_reduced_main_branches(
             states[arm],
             0 if arm == "clean" else 1,
             branch.inserted_entry_id,
+            None if arm == "clean" else interventions[arm].candidate_triplet_id,
+            None if arm == "clean" else interventions[arm].native_render_id,
         )
         for arm, branch in materialized_by_arm.items()
     }

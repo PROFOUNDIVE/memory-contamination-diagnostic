@@ -40,11 +40,7 @@ def test_published_observability_package_is_deterministic_and_track2_5_complete(
     assert report.main_a_measured_scientific_execution_count == 0
     assert report.reconstructed_trial_count == 5
     assert report.reconstruction_sha256 == report.repeat_reconstruction_sha256
-    assert set(report.downstream_blockers) == {
-        "PRODUCTION_RUNTIME_METADATA_JOIN_NOT_MATERIALIZED",
-        "CONCRETE_MAIN_SEED_REGISTRY_NOT_FROZEN",
-        "LEVEL2_FH_INTERACTIONS_NOT_MATERIALIZED",
-    }
+    assert report.downstream_blockers == ()
     assert report.mr_p4_closure_claimed is False
     assert report.mr_p5_closure_claimed is False
     assert report.main_execution_authorized is False

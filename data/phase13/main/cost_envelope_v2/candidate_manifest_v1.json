@@ -1,0 +1,55 @@
+{
+  "schema_version": "phase13_cost_policy_candidate_manifest_v1",
+  "manifest_id": "phase13_main_a_cost_envelope_v2_450k_candidate_v1",
+  "policy_id": "phase13_main_a_cost_envelope_v2_450k_w8192_a512_s384_t1",
+  "activation_status": "PENDING_CONTROLLED_EXTERNAL_AUTHORITY_WRITE",
+  "approval": {
+    "decision_classification": "PROSPECTIVE_EXECUTION_POLICY_CHANGE_EXPLICITLY_APPROVED",
+    "session_id": "ses_fc2c0fee1ffeCtvJ45A7qgIbis",
+    "main_outcome_blind": true
+  },
+  "artifacts": {
+    "stage_envelope_registry": {
+      "path": "data/phase13/main/cost_envelope_v2/stage_envelope_registry_v1.json",
+      "sha256": "55b27d76bb89c08e9ad9ca9de5b38230467616f2a97f471a7d3238072194ea52"
+    },
+    "retry_failure_contract": {
+      "path": "data/phase13/main/cost_envelope_v2/retry_failure_contract_v1.json",
+      "sha256": "f566f39667dfc34f5809e8cc6ec3c9af895119ed38234792fbf161652df357be"
+    },
+    "cost_proof": {
+      "path": "data/phase13/main/cost_envelope_v2/cost_proof_v1.json",
+      "sha256": "549358635d1fd608458fb0e9c882a0e2f88156de5b53be77d2cad181bfad7f9b"
+    },
+    "controlled_external_write": {
+      "path": "data/phase13/main/cost_envelope_v2/controlled_external_write_v1.json",
+      "sha256": "e9f8155ea416064c3844c3b4b6dc4391fe4eafd56576d0d37454a2397979a7ac"
+    },
+    "residual_authority_patch": {
+      "path": "data/phase13/main/cost_envelope_v2/post_cutoff_addendum_residual_v1.patch",
+      "sha256": "1cd212dd7c7a1a3c85efb01f737d03a210c95b7266626cc524d39aa87aeaf418"
+    }
+  },
+  "controlled_external_write_sources": {
+    "post_cutoff_addendum": {
+      "filename": "2026-08-24_Phase13_MainA_PostCutoff_Acceleration_Addendum.md",
+      "source_sha256": "786e1ef1db7656e38beb5ab9ec316adc7df9bb1cc2f16d389f3612c76fbd2015"
+    },
+    "experiment_v10": {
+      "filename": "Phase 13-Compatible Pilot Main and Exploratory Experiment Design revised-v10.md",
+      "source_sha256": "bf6cf602d3ead47e95d9e158c1e3fe89ffab1ba4093a40f7d7ccb781faa0e0ec"
+    }
+  },
+  "state": {
+    "canonical_authority_updated": false,
+    "reference_reviewer_completed": false,
+    "router_synchronized": false,
+    "repository_authority_projections_activated": false,
+    "mr_p4_resumed_or_reclosed": false,
+    "mr_p5_started": false,
+    "mr_p6_started": false,
+    "main_execution_authorized": false,
+    "main_a_measured_scientific_execution_count": 0
+  },
+  "manifest_hash": "632168d3aad62b71c0776a0ef248bd2eb188a5507372b4fbb31d9828206bbbd0"
+}

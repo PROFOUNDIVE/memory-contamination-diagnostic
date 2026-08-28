@@ -180,13 +180,20 @@ class CallEvent(EventContext):
     token_usage: dict[str, int]
     latency_ms: int | None = Field(strict=True, ge=0)
     retry_count: int = Field(ge=0)
+    transport_attempts: int = Field(default=0, ge=0)
     source_spans: list[PromptSourceSpan]
     created_at: str
     error_type: str | None = None
+    failure_code: str | None = None
     failure_function: str | None = None
     failure_module: str | None = None
     failure_line: int | None = Field(default=None, ge=0)
     origin: Literal["provider_call", "parser", "verifier", "runner"] | None = None
+    provider_status: str | None = None
+    provider_incomplete_reason: str | None = None
+    provider_cost_usd: float | None = Field(default=None, ge=0)
+    provider_response_id: str | None = None
+    provider_usage: dict[str, Any] | None = None
 
 
 class FailureEvent(EventContext):
@@ -449,7 +456,14 @@ class MethodCall(BaseModel):
     latency_ms: int | None = Field(default=None, strict=True, ge=0)
     token_usage: dict[str, int] = Field(default_factory=dict)
     retry_count: int = 0
+    transport_attempts: int = Field(default=0, ge=0)
     error_type: str | None = None
+    failure_code: str | None = None
+    provider_status: str | None = None
+    provider_incomplete_reason: str | None = None
+    provider_cost_usd: float | None = Field(default=None, ge=0)
+    provider_response_id: str | None = None
+    provider_usage: dict[str, Any] | None = None
     retrieved_records: list[RetrievalRecord] = Field(default_factory=list)
     source_spans: list[PromptSourceSpan] = Field(default_factory=list)
 
