@@ -1,0 +1,2629 @@
+{
+  "schema_version": "phase13_readiness0_f1c_report_v1",
+  "status": "PASS",
+  "runtime": {
+    "provider_identity": "BAAI/bge-m3@5617a9f61b028005a4858fdac845db406aefb181",
+    "vector_dimension": 1024,
+    "normalize_embeddings": true,
+    "python": "3.11.15",
+    "sentence_transformers": "5.6.0",
+    "torch": "2.13.0",
+    "device": "cpu",
+    "dtype": "torch.float32",
+    "local_files_only": true,
+    "network_attempts": 0,
+    "runtime_hash": "a6352ce4de433467e368c9f67ade1e3603a1f4a4c77fb00ee9703aee4b4117e1"
+  },
+  "row_scope": "ACTIVE_CURRENT_MAIN_RETRIEVAL_ARM_CELLS",
+  "row_count": 52,
+  "rows": [
+    {
+      "row_id": "625193618adb4d9f8f1b2c0677cf357124e23660246ca5e0ded052599bc1ea4f",
+      "task": "game24",
+      "baseline": "rag_frozen",
+      "arm": "clean",
+      "sample_id": "phase13_main_game24_0057",
+      "query_sha256": "67f14653ddaf000670fd4d23fa3d0fdf322ff8db1e12cc9043e02c802b33a182",
+      "query_source": "data/phase13/main/game24_main_v1.jsonl",
+      "query_source_sha256": "ae682f138d8035fc1de9382eb8903730d392851def720351a78846df160b615f",
+      "state_identity_sha256": null,
+      "corpus_identity_sha256": "7fbfd6476c52e5168edd7320ecd5404e98883d8c24088e0eb3816353c0696631",
+      "index_identity_sha256": "8dbc0bc70efcd5c25d92cc08fd60b0a604e0947a5ddf77829a1f874b6969fcb7",
+      "candidate_ids": [
+        "legacy-rag::game24::game24-D04",
+        "legacy-rag::game24::game24-D02",
+        "legacy-rag::game24::game24-D06",
+        "legacy-rag::game24::game24-D05",
+        "legacy-rag::game24::game24-D01",
+        "legacy-rag::game24::game24-D03",
+        "legacy-rag::game24::G24-A01",
+        "legacy-rag::game24::G24-C01",
+        "legacy-rag::game24::G24-A04",
+        "legacy-rag::game24::G24-B05",
+        "legacy-rag::game24::G24-B04",
+        "legacy-rag::game24::G24-B06",
+        "legacy-rag::game24::G24-C03",
+        "legacy-rag::game24::G24-C04",
+        "legacy-rag::game24::G24-C06",
+        "legacy-rag::game24::G24-A02",
+        "legacy-rag::game24::G24-A03",
+        "legacy-rag::game24::G24-B01",
+        "legacy-rag::game24::G24-A05",
+        "legacy-rag::game24::G24-A06",
+        "legacy-rag::game24::G24-B03",
+        "legacy-rag::game24::G24-B02",
+        "legacy-rag::game24::G24-C05",
+        "legacy-rag::game24::G24-C02"
+      ],
+      "scores": [
+        0.5918506815652006,
+        0.5363555121559989,
+        0.5213927834685481,
+        0.5195196550533099,
+        0.5169048378996998,
+        0.5099519958532187,
+        0.4866520756524994,
+        0.4851431007875095,
+        0.4677804707794781,
+        0.45896304239323865,
+        0.455540439985216,
+        0.44596521519684584,
+        0.42865018345561995,
+        0.42065843188934454,
+        0.4146939178302972,
+        0.4144277593811288,
+        0.4103573507301734,
+        0.4031033504675087,
+        0.39882962705333985,
+        0.38567450264301756,
+        0.3723792335254743,
+        0.3597052196053975,
+        0.3458242892472787,
+        0.34139905056213227
+      ],
+      "ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "legacy-rag::game24::game24-D04",
+        "legacy-rag::game24::game24-D02",
+        "legacy-rag::game24::game24-D06"
+      ],
+      "threshold": null,
+      "top_k": 3,
+      "source_span_ids": [
+        "legacy-rag::game24::game24-D04",
+        "legacy-rag::game24::game24-D02",
+        "legacy-rag::game24::game24-D06"
+      ],
+      "source_span_join_sha256": "1d5d0d5974f757205f5e727cb861c6bec1c9b473b28ff35183712a8b21f03c65"
+    },
+    {
+      "row_id": "be5207e71cf2277428d5d0dde32ba51ac437f5f22c2dbc5552b98161c6e0a823",
+      "task": "game24",
+      "baseline": "rag_frozen",
+      "arm": "correct",
+      "sample_id": "phase13_main_game24_0057",
+      "query_sha256": "67f14653ddaf000670fd4d23fa3d0fdf322ff8db1e12cc9043e02c802b33a182",
+      "query_source": "data/phase13/main/game24_main_v1.jsonl",
+      "query_source_sha256": "ae682f138d8035fc1de9382eb8903730d392851def720351a78846df160b615f",
+      "state_identity_sha256": null,
+      "corpus_identity_sha256": "ca7d95e31123891352ca7a5f3b8b8ff82de1482be43216a09ff27b31e77d499b",
+      "index_identity_sha256": "3b2922469188a234dcc57d6732cbf2475defe7e276be2ea1546ae9bbef45c6a5",
+      "candidate_ids": [
+        "legacy-rag::game24::game24-D04",
+        "legacy-rag::game24::game24-D02",
+        "control-game24-rational-intermediates-v1",
+        "legacy-rag::game24::game24-D06",
+        "legacy-rag::game24::game24-D05",
+        "legacy-rag::game24::game24-D01",
+        "legacy-rag::game24::game24-D03",
+        "legacy-rag::game24::G24-A01",
+        "legacy-rag::game24::G24-C01",
+        "legacy-rag::game24::G24-A04",
+        "legacy-rag::game24::G24-B05",
+        "legacy-rag::game24::G24-B04",
+        "legacy-rag::game24::G24-B06",
+        "legacy-rag::game24::G24-C03",
+        "legacy-rag::game24::G24-C04",
+        "legacy-rag::game24::G24-C06",
+        "legacy-rag::game24::G24-A02",
+        "legacy-rag::game24::G24-A03",
+        "legacy-rag::game24::G24-B01",
+        "legacy-rag::game24::G24-A05",
+        "legacy-rag::game24::G24-A06",
+        "legacy-rag::game24::G24-B03",
+        "legacy-rag::game24::G24-B02",
+        "legacy-rag::game24::G24-C05",
+        "legacy-rag::game24::G24-C02"
+      ],
+      "scores": [
+        0.5918506815652006,
+        0.5363555121559989,
+        0.5252287180618898,
+        0.5213927834685481,
+        0.5195196550533099,
+        0.5169048378996998,
+        0.5099519958532187,
+        0.4866520756524994,
+        0.4851431007875095,
+        0.4677804707794781,
+        0.45896304239323865,
+        0.455540439985216,
+        0.44596521519684584,
+        0.42865018345561995,
+        0.42065843188934454,
+        0.4146939178302972,
+        0.4144277593811288,
+        0.4103573507301734,
+        0.4031033504675087,
+        0.39882962705333985,
+        0.38567450264301756,
+        0.3723792335254743,
+        0.3597052196053975,
+        0.3458242892472787,
+        0.34139905056213227
+      ],
+      "ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "legacy-rag::game24::game24-D04",
+        "legacy-rag::game24::game24-D02",
+        "control-game24-rational-intermediates-v1"
+      ],
+      "threshold": null,
+      "top_k": 3,
+      "source_span_ids": [
+        "legacy-rag::game24::game24-D04",
+        "legacy-rag::game24::game24-D02",
+        "control-game24-rational-intermediates-v1"
+      ],
+      "source_span_join_sha256": "640f1904468cd6cd8d30603ad58877c94ee66c5a1be3ffa997f21899770ef20d"
+    },
+    {
+      "row_id": "ac4eb95933957193a758a9b84384fdd707d75a441dde7c97d67dc65ec8e04453",
+      "task": "game24",
+      "baseline": "rag_frozen",
+      "arm": "irrelevant",
+      "sample_id": "phase13_main_game24_0057",
+      "query_sha256": "67f14653ddaf000670fd4d23fa3d0fdf322ff8db1e12cc9043e02c802b33a182",
+      "query_source": "data/phase13/main/game24_main_v1.jsonl",
+      "query_source_sha256": "ae682f138d8035fc1de9382eb8903730d392851def720351a78846df160b615f",
+      "state_identity_sha256": null,
+      "corpus_identity_sha256": "9bd98db24f3cae07af7e7ddfbd076102cbb6d43eee729d395b1541cd5827a217",
+      "index_identity_sha256": "426b94b6787b157f70d94cf1cc2e4317e93479d79d5a40334369c8da6eabb7d6",
+      "candidate_ids": [
+        "legacy-rag::game24::game24-D04",
+        "legacy-rag::game24::game24-D02",
+        "legacy-rag::game24::game24-D06",
+        "legacy-rag::game24::game24-D05",
+        "legacy-rag::game24::game24-D01",
+        "legacy-rag::game24::game24-D03",
+        "control-game24-integer-subfamily-v1",
+        "legacy-rag::game24::G24-A01",
+        "legacy-rag::game24::G24-C01",
+        "legacy-rag::game24::G24-A04",
+        "legacy-rag::game24::G24-B05",
+        "legacy-rag::game24::G24-B04",
+        "legacy-rag::game24::G24-B06",
+        "legacy-rag::game24::G24-C03",
+        "legacy-rag::game24::G24-C04",
+        "legacy-rag::game24::G24-C06",
+        "legacy-rag::game24::G24-A02",
+        "legacy-rag::game24::G24-A03",
+        "legacy-rag::game24::G24-B01",
+        "legacy-rag::game24::G24-A05",
+        "legacy-rag::game24::G24-A06",
+        "legacy-rag::game24::G24-B03",
+        "legacy-rag::game24::G24-B02",
+        "legacy-rag::game24::G24-C05",
+        "legacy-rag::game24::G24-C02"
+      ],
+      "scores": [
+        0.5918506815652006,
+        0.5363555121559989,
+        0.5213927834685481,
+        0.5195196550533099,
+        0.5169048378996998,
+        0.5099519958532187,
+        0.48723412875911654,
+        0.4866520756524994,
+        0.4851431007875095,
+        0.4677804707794781,
+        0.45896304239323865,
+        0.455540439985216,
+        0.44596521519684584,
+        0.42865018345561995,
+        0.42065843188934454,
+        0.4146939178302972,
+        0.4144277593811288,
+        0.4103573507301734,
+        0.4031033504675087,
+        0.39882962705333985,
+        0.38567450264301756,
+        0.3723792335254743,
+        0.3597052196053975,
+        0.3458242892472787,
+        0.34139905056213227
+      ],
+      "ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "legacy-rag::game24::game24-D04",
+        "legacy-rag::game24::game24-D02",
+        "legacy-rag::game24::game24-D06"
+      ],
+      "threshold": null,
+      "top_k": 3,
+      "source_span_ids": [
+        "legacy-rag::game24::game24-D04",
+        "legacy-rag::game24::game24-D02",
+        "legacy-rag::game24::game24-D06"
+      ],
+      "source_span_join_sha256": "1d5d0d5974f757205f5e727cb861c6bec1c9b473b28ff35183712a8b21f03c65"
+    },
+    {
+      "row_id": "2bdd644c1c8dd938faa0c17d82eae7190fd52e8e17b701e0fed8f33528bcad95",
+      "task": "game24",
+      "baseline": "rag_frozen",
+      "arm": "contam",
+      "sample_id": "phase13_main_game24_0057",
+      "query_sha256": "67f14653ddaf000670fd4d23fa3d0fdf322ff8db1e12cc9043e02c802b33a182",
+      "query_source": "data/phase13/main/game24_main_v1.jsonl",
+      "query_source_sha256": "ae682f138d8035fc1de9382eb8903730d392851def720351a78846df160b615f",
+      "state_identity_sha256": null,
+      "corpus_identity_sha256": "ab4b7d48b304adb32f26c79e682d8ce90d997e8103e1f73fd42df71e08a4b05f",
+      "index_identity_sha256": "76d43e54cfb92c276e221527b9ddf79538847cb3b3810e276fb3cb2f09ad44fe",
+      "candidate_ids": [
+        "legacy-rag::game24::game24-D04",
+        "candidate-game24-integer-intermediates-v1",
+        "legacy-rag::game24::game24-D02",
+        "legacy-rag::game24::game24-D06",
+        "legacy-rag::game24::game24-D05",
+        "legacy-rag::game24::game24-D01",
+        "legacy-rag::game24::game24-D03",
+        "legacy-rag::game24::G24-A01",
+        "legacy-rag::game24::G24-C01",
+        "legacy-rag::game24::G24-A04",
+        "legacy-rag::game24::G24-B05",
+        "legacy-rag::game24::G24-B04",
+        "legacy-rag::game24::G24-B06",
+        "legacy-rag::game24::G24-C03",
+        "legacy-rag::game24::G24-C04",
+        "legacy-rag::game24::G24-C06",
+        "legacy-rag::game24::G24-A02",
+        "legacy-rag::game24::G24-A03",
+        "legacy-rag::game24::G24-B01",
+        "legacy-rag::game24::G24-A05",
+        "legacy-rag::game24::G24-A06",
+        "legacy-rag::game24::G24-B03",
+        "legacy-rag::game24::G24-B02",
+        "legacy-rag::game24::G24-C05",
+        "legacy-rag::game24::G24-C02"
+      ],
+      "scores": [
+        0.5918506815652006,
+        0.5527275144788836,
+        0.5363555121559989,
+        0.5213927834685481,
+        0.5195196550533099,
+        0.5169048378996998,
+        0.5099519958532187,
+        0.4866520756524994,
+        0.4851431007875095,
+        0.4677804707794781,
+        0.45896304239323865,
+        0.455540439985216,
+        0.44596521519684584,
+        0.42865018345561995,
+        0.42065843188934454,
+        0.4146939178302972,
+        0.4144277593811288,
+        0.4103573507301734,
+        0.4031033504675087,
+        0.39882962705333985,
+        0.38567450264301756,
+        0.3723792335254743,
+        0.3597052196053975,
+        0.3458242892472787,
+        0.34139905056213227
+      ],
+      "ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "legacy-rag::game24::game24-D04",
+        "candidate-game24-integer-intermediates-v1",
+        "legacy-rag::game24::game24-D02"
+      ],
+      "threshold": null,
+      "top_k": 3,
+      "source_span_ids": [
+        "legacy-rag::game24::game24-D04",
+        "candidate-game24-integer-intermediates-v1",
+        "legacy-rag::game24::game24-D02"
+      ],
+      "source_span_join_sha256": "8a88737adee08a1b5aaba80c9bdeed79d92f6f04f3023b934794181273042744"
+    },
+    {
+      "row_id": "27cfd3aa4f7b1eb8899bdee873a76199315a566d070134729a72dcf169647128",
+      "task": "math_equation_balancer",
+      "baseline": "rag_frozen",
+      "arm": "clean",
+      "sample_id": "phase13_main_meb_0104",
+      "query_sha256": "9c39ebaa31ff9937d4970c564391ea07ffd3115bbd68d7c017016c523d2edea8",
+      "query_source": "data/phase13/main/math_equation_balancer_main_v1.jsonl",
+      "query_source_sha256": "dfa07c8c3ada1b0030a735cca97022f98dfb8da30d8ce86f82013eb51b4a7037",
+      "state_identity_sha256": null,
+      "corpus_identity_sha256": "4a369a7106b21115d0e0886e7599e166af8d3f6279bc26d7b0c596223eaa6a6e",
+      "index_identity_sha256": "97fc1e6631488bb07851ddd060d83a36dda1f9c8e9d4e4f0090f1d0320bfd859",
+      "candidate_ids": [
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D02",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D03",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D04",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D05",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D06",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D01",
+        "legacy-rag::math_equation_balancer::MEB-A03",
+        "legacy-rag::math_equation_balancer::MEB-A06",
+        "legacy-rag::math_equation_balancer::MEB-A04",
+        "legacy-rag::math_equation_balancer::MEB-B03",
+        "legacy-rag::math_equation_balancer::MEB-A05",
+        "legacy-rag::math_equation_balancer::MEB-C02",
+        "legacy-rag::math_equation_balancer::MEB-C06",
+        "legacy-rag::math_equation_balancer::MEB-C01",
+        "legacy-rag::math_equation_balancer::MEB-C05",
+        "legacy-rag::math_equation_balancer::MEB-A01",
+        "legacy-rag::math_equation_balancer::MEB-B02",
+        "legacy-rag::math_equation_balancer::MEB-B05",
+        "legacy-rag::math_equation_balancer::MEB-C04",
+        "legacy-rag::math_equation_balancer::MEB-C03",
+        "legacy-rag::math_equation_balancer::MEB-B01",
+        "legacy-rag::math_equation_balancer::MEB-A02",
+        "legacy-rag::math_equation_balancer::MEB-B04",
+        "legacy-rag::math_equation_balancer::MEB-B06"
+      ],
+      "scores": [
+        0.5848242876041502,
+        0.5344028877112939,
+        0.534055111535562,
+        0.49828602899902397,
+        0.4900246880165267,
+        0.48572560650454844,
+        0.42965847761052645,
+        0.420223203925816,
+        0.4183776729137468,
+        0.4162747522282657,
+        0.3988883503747118,
+        0.39696116276106025,
+        0.38618615885209295,
+        0.38369896332483616,
+        0.3815848101386985,
+        0.3671750149302338,
+        0.35767074781752295,
+        0.3557670987599987,
+        0.35241782231052404,
+        0.3506701570918807,
+        0.34793049418190203,
+        0.34033947599815767,
+        0.3322550542049552,
+        0.32359245663789116
+      ],
+      "ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D02",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D03",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D04"
+      ],
+      "threshold": null,
+      "top_k": 3,
+      "source_span_ids": [
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D02",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D03",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D04"
+      ],
+      "source_span_join_sha256": "243f6de1e46af03a9c37c71a4b75c3411b4fd975116f21d65971f51a395ec494"
+    },
+    {
+      "row_id": "30826564ca14a27a99d3289f4c0fecc872f31e2d6c51182a3806946d19c09195",
+      "task": "math_equation_balancer",
+      "baseline": "rag_frozen",
+      "arm": "correct",
+      "sample_id": "phase13_main_meb_0104",
+      "query_sha256": "9c39ebaa31ff9937d4970c564391ea07ffd3115bbd68d7c017016c523d2edea8",
+      "query_source": "data/phase13/main/math_equation_balancer_main_v1.jsonl",
+      "query_source_sha256": "dfa07c8c3ada1b0030a735cca97022f98dfb8da30d8ce86f82013eb51b4a7037",
+      "state_identity_sha256": null,
+      "corpus_identity_sha256": "b69a803e7aa8da3799acaaffcc6dcc9e601c6410ceb8b7f1bd258719d895b10b",
+      "index_identity_sha256": "a561f4d57c390870799434319360a0a6667986739c29320a27d97da8e7295311",
+      "candidate_ids": [
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D02",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D03",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D04",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D05",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D06",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D01",
+        "legacy-rag::math_equation_balancer::MEB-A03",
+        "control-meb-precedence-v1",
+        "legacy-rag::math_equation_balancer::MEB-A06",
+        "legacy-rag::math_equation_balancer::MEB-A04",
+        "legacy-rag::math_equation_balancer::MEB-B03",
+        "legacy-rag::math_equation_balancer::MEB-A05",
+        "legacy-rag::math_equation_balancer::MEB-C02",
+        "legacy-rag::math_equation_balancer::MEB-C06",
+        "legacy-rag::math_equation_balancer::MEB-C01",
+        "legacy-rag::math_equation_balancer::MEB-C05",
+        "legacy-rag::math_equation_balancer::MEB-A01",
+        "legacy-rag::math_equation_balancer::MEB-B02",
+        "legacy-rag::math_equation_balancer::MEB-B05",
+        "legacy-rag::math_equation_balancer::MEB-C04",
+        "legacy-rag::math_equation_balancer::MEB-C03",
+        "legacy-rag::math_equation_balancer::MEB-B01",
+        "legacy-rag::math_equation_balancer::MEB-A02",
+        "legacy-rag::math_equation_balancer::MEB-B04",
+        "legacy-rag::math_equation_balancer::MEB-B06"
+      ],
+      "scores": [
+        0.5848242876041502,
+        0.5344028877112939,
+        0.534055111535562,
+        0.49828602899902397,
+        0.4900246880165267,
+        0.48572560650454844,
+        0.42965847761052645,
+        0.4218536333717923,
+        0.420223203925816,
+        0.4183776729137468,
+        0.4162747522282657,
+        0.3988883503747118,
+        0.39696116276106025,
+        0.38618615885209295,
+        0.38369896332483616,
+        0.3815848101386985,
+        0.3671750149302338,
+        0.35767074781752295,
+        0.3557670987599987,
+        0.35241782231052404,
+        0.3506701570918807,
+        0.34793049418190203,
+        0.34033947599815767,
+        0.3322550542049552,
+        0.32359245663789116
+      ],
+      "ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D02",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D03",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D04"
+      ],
+      "threshold": null,
+      "top_k": 3,
+      "source_span_ids": [
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D02",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D03",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D04"
+      ],
+      "source_span_join_sha256": "243f6de1e46af03a9c37c71a4b75c3411b4fd975116f21d65971f51a395ec494"
+    },
+    {
+      "row_id": "1b0b15f957a70077138e5e2f4ccb262a74cf2c84c407c223aced32a00fd5b304",
+      "task": "math_equation_balancer",
+      "baseline": "rag_frozen",
+      "arm": "irrelevant",
+      "sample_id": "phase13_main_meb_0104",
+      "query_sha256": "9c39ebaa31ff9937d4970c564391ea07ffd3115bbd68d7c017016c523d2edea8",
+      "query_source": "data/phase13/main/math_equation_balancer_main_v1.jsonl",
+      "query_source_sha256": "dfa07c8c3ada1b0030a735cca97022f98dfb8da30d8ce86f82013eb51b4a7037",
+      "state_identity_sha256": null,
+      "corpus_identity_sha256": "c874a902f7dbbe23457686b127f16bb37575c2611c0011664bac7d22d47813aa",
+      "index_identity_sha256": "c558e1bbc756df827a0edaca254f6167f6e3624a43e6b46e293c3c641ff7a3de",
+      "candidate_ids": [
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D02",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D03",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D04",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D05",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D06",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D01",
+        "control-meb-same-precedence-v1",
+        "legacy-rag::math_equation_balancer::MEB-A03",
+        "legacy-rag::math_equation_balancer::MEB-A06",
+        "legacy-rag::math_equation_balancer::MEB-A04",
+        "legacy-rag::math_equation_balancer::MEB-B03",
+        "legacy-rag::math_equation_balancer::MEB-A05",
+        "legacy-rag::math_equation_balancer::MEB-C02",
+        "legacy-rag::math_equation_balancer::MEB-C06",
+        "legacy-rag::math_equation_balancer::MEB-C01",
+        "legacy-rag::math_equation_balancer::MEB-C05",
+        "legacy-rag::math_equation_balancer::MEB-A01",
+        "legacy-rag::math_equation_balancer::MEB-B02",
+        "legacy-rag::math_equation_balancer::MEB-B05",
+        "legacy-rag::math_equation_balancer::MEB-C04",
+        "legacy-rag::math_equation_balancer::MEB-C03",
+        "legacy-rag::math_equation_balancer::MEB-B01",
+        "legacy-rag::math_equation_balancer::MEB-A02",
+        "legacy-rag::math_equation_balancer::MEB-B04",
+        "legacy-rag::math_equation_balancer::MEB-B06"
+      ],
+      "scores": [
+        0.5848242876041502,
+        0.5344028877112939,
+        0.534055111535562,
+        0.49828602899902397,
+        0.4900246880165267,
+        0.48572560650454844,
+        0.4579166714603776,
+        0.42965847761052645,
+        0.420223203925816,
+        0.4183776729137468,
+        0.4162747522282657,
+        0.3988883503747118,
+        0.39696116276106025,
+        0.38618615885209295,
+        0.38369896332483616,
+        0.3815848101386985,
+        0.3671750149302338,
+        0.35767074781752295,
+        0.3557670987599987,
+        0.35241782231052404,
+        0.3506701570918807,
+        0.34793049418190203,
+        0.34033947599815767,
+        0.3322550542049552,
+        0.32359245663789116
+      ],
+      "ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D02",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D03",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D04"
+      ],
+      "threshold": null,
+      "top_k": 3,
+      "source_span_ids": [
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D02",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D03",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D04"
+      ],
+      "source_span_join_sha256": "243f6de1e46af03a9c37c71a4b75c3411b4fd975116f21d65971f51a395ec494"
+    },
+    {
+      "row_id": "78f7381d40b8a5c1a94494ceeffcb6d4c3aae95feba2659258550fcc7da1793a",
+      "task": "math_equation_balancer",
+      "baseline": "rag_frozen",
+      "arm": "contam",
+      "sample_id": "phase13_main_meb_0104",
+      "query_sha256": "9c39ebaa31ff9937d4970c564391ea07ffd3115bbd68d7c017016c523d2edea8",
+      "query_source": "data/phase13/main/math_equation_balancer_main_v1.jsonl",
+      "query_source_sha256": "dfa07c8c3ada1b0030a735cca97022f98dfb8da30d8ce86f82013eb51b4a7037",
+      "state_identity_sha256": null,
+      "corpus_identity_sha256": "c881515e47e20ef1da878c1478bb622eb49047a802b13beb246868bfae339d90",
+      "index_identity_sha256": "14f49043075fa75c28604b0d01efa3ca377833904a7c4d639df61c189233e24c",
+      "candidate_ids": [
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D02",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D03",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D04",
+        "candidate-meb-left-to-right-v1",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D05",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D06",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D01",
+        "legacy-rag::math_equation_balancer::MEB-A03",
+        "legacy-rag::math_equation_balancer::MEB-A06",
+        "legacy-rag::math_equation_balancer::MEB-A04",
+        "legacy-rag::math_equation_balancer::MEB-B03",
+        "legacy-rag::math_equation_balancer::MEB-A05",
+        "legacy-rag::math_equation_balancer::MEB-C02",
+        "legacy-rag::math_equation_balancer::MEB-C06",
+        "legacy-rag::math_equation_balancer::MEB-C01",
+        "legacy-rag::math_equation_balancer::MEB-C05",
+        "legacy-rag::math_equation_balancer::MEB-A01",
+        "legacy-rag::math_equation_balancer::MEB-B02",
+        "legacy-rag::math_equation_balancer::MEB-B05",
+        "legacy-rag::math_equation_balancer::MEB-C04",
+        "legacy-rag::math_equation_balancer::MEB-C03",
+        "legacy-rag::math_equation_balancer::MEB-B01",
+        "legacy-rag::math_equation_balancer::MEB-A02",
+        "legacy-rag::math_equation_balancer::MEB-B04",
+        "legacy-rag::math_equation_balancer::MEB-B06"
+      ],
+      "scores": [
+        0.5848242876041502,
+        0.5344028877112939,
+        0.534055111535562,
+        0.5196283388498739,
+        0.49828602899902397,
+        0.4900246880165267,
+        0.48572560650454844,
+        0.42965847761052645,
+        0.420223203925816,
+        0.4183776729137468,
+        0.4162747522282657,
+        0.3988883503747118,
+        0.39696116276106025,
+        0.38618615885209295,
+        0.38369896332483616,
+        0.3815848101386985,
+        0.3671750149302338,
+        0.35767074781752295,
+        0.3557670987599987,
+        0.35241782231052404,
+        0.3506701570918807,
+        0.34793049418190203,
+        0.34033947599815767,
+        0.3322550542049552,
+        0.32359245663789116
+      ],
+      "ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D02",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D03",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D04"
+      ],
+      "threshold": null,
+      "top_k": 3,
+      "source_span_ids": [
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D02",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D03",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D04"
+      ],
+      "source_span_join_sha256": "243f6de1e46af03a9c37c71a4b75c3411b4fd975116f21d65971f51a395ec494"
+    },
+    {
+      "row_id": "dec64a4caea525984a938d14d32ca61d4c36d64151528366457992e1a3fe99e9",
+      "task": "word_sorting",
+      "baseline": "rag_frozen",
+      "arm": "clean",
+      "sample_id": "phase13_main_word_sorting_0123",
+      "query_sha256": "5605a0372b9adf71737afefed055d2761297f49d4e0578754c33a49056fd862d",
+      "query_source": "data/phase13/main/word_sorting_main_v1.jsonl",
+      "query_source_sha256": "e7ff0507512af4e71ae027a5226984b175d9b75dca898df79ca88535326c9c54",
+      "state_identity_sha256": null,
+      "corpus_identity_sha256": "8baf99166deb3c16cc2ce0f2106057a0b97aedcc0f5941877f97b2ca827706da",
+      "index_identity_sha256": "17febe5ea5073e0403249ba47011e5bab3c59fbf4259c43244b6a869eeeaeb10",
+      "candidate_ids": [
+        "legacy-rag::word_sorting::WS-A02",
+        "legacy-rag::word_sorting::word_sorting-D02",
+        "legacy-rag::word_sorting::word_sorting-D01",
+        "legacy-rag::word_sorting::word_sorting-D04",
+        "legacy-rag::word_sorting::word_sorting-D03",
+        "legacy-rag::word_sorting::WS-C02",
+        "legacy-rag::word_sorting::WS-B03",
+        "legacy-rag::word_sorting::WS-B01",
+        "legacy-rag::word_sorting::WS-A03",
+        "legacy-rag::word_sorting::WS-A05",
+        "legacy-rag::word_sorting::word_sorting-D05",
+        "legacy-rag::word_sorting::WS-C03",
+        "legacy-rag::word_sorting::word_sorting-D06",
+        "legacy-rag::word_sorting::WS-C06",
+        "legacy-rag::word_sorting::WS-A04",
+        "legacy-rag::word_sorting::WS-C04",
+        "legacy-rag::word_sorting::WS-B04",
+        "legacy-rag::word_sorting::WS-C01",
+        "legacy-rag::word_sorting::WS-A01",
+        "legacy-rag::word_sorting::WS-C05",
+        "legacy-rag::word_sorting::WS-A06",
+        "legacy-rag::word_sorting::WS-B06",
+        "legacy-rag::word_sorting::WS-B05",
+        "legacy-rag::word_sorting::WS-B02"
+      ],
+      "scores": [
+        0.5282261647330628,
+        0.5272939738371281,
+        0.5051785386045813,
+        0.5032822150550217,
+        0.5025354752206055,
+        0.4952764491399349,
+        0.4915185151555158,
+        0.48948023995112244,
+        0.4888715466625649,
+        0.4830888814727876,
+        0.4776453974914561,
+        0.4741482764900352,
+        0.4734350976035254,
+        0.4705804546108894,
+        0.46748167662869056,
+        0.45127125979681465,
+        0.449634301223244,
+        0.44944318926609134,
+        0.4481497179485555,
+        0.41298423459964895,
+        0.41120396066789644,
+        0.4079147232605581,
+        0.39105872132979924,
+        0.3869721465129293
+      ],
+      "ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "legacy-rag::word_sorting::WS-A02",
+        "legacy-rag::word_sorting::word_sorting-D02",
+        "legacy-rag::word_sorting::word_sorting-D01"
+      ],
+      "threshold": null,
+      "top_k": 3,
+      "source_span_ids": [
+        "legacy-rag::word_sorting::WS-A02",
+        "legacy-rag::word_sorting::word_sorting-D02",
+        "legacy-rag::word_sorting::word_sorting-D01"
+      ],
+      "source_span_join_sha256": "9fa815d885f3c7d722168e8cc21e8b2a72eca30de40a4ad653ed2e4e0ad191c5"
+    },
+    {
+      "row_id": "06789e0df76c65ebc5466ec0d8086337ebccdc579166235e155882d2ddf2e5e8",
+      "task": "word_sorting",
+      "baseline": "rag_frozen",
+      "arm": "correct",
+      "sample_id": "phase13_main_word_sorting_0123",
+      "query_sha256": "5605a0372b9adf71737afefed055d2761297f49d4e0578754c33a49056fd862d",
+      "query_source": "data/phase13/main/word_sorting_main_v1.jsonl",
+      "query_source_sha256": "e7ff0507512af4e71ae027a5226984b175d9b75dca898df79ca88535326c9c54",
+      "state_identity_sha256": null,
+      "corpus_identity_sha256": "e77a382780f583a5be1f102358ab7da31eea6e25de92e167fc0e13329b2fe0b0",
+      "index_identity_sha256": "6a878a6823bd918f6271a9638b8b4d905c9cf64d9c5da9a777b1daddeb409fcc",
+      "candidate_ids": [
+        "control-word-first-difference-v1",
+        "legacy-rag::word_sorting::WS-A02",
+        "legacy-rag::word_sorting::word_sorting-D02",
+        "legacy-rag::word_sorting::word_sorting-D01",
+        "legacy-rag::word_sorting::word_sorting-D04",
+        "legacy-rag::word_sorting::word_sorting-D03",
+        "legacy-rag::word_sorting::WS-C02",
+        "legacy-rag::word_sorting::WS-B03",
+        "legacy-rag::word_sorting::WS-B01",
+        "legacy-rag::word_sorting::WS-A03",
+        "legacy-rag::word_sorting::WS-A05",
+        "legacy-rag::word_sorting::word_sorting-D05",
+        "legacy-rag::word_sorting::WS-C03",
+        "legacy-rag::word_sorting::word_sorting-D06",
+        "legacy-rag::word_sorting::WS-C06",
+        "legacy-rag::word_sorting::WS-A04",
+        "legacy-rag::word_sorting::WS-C04",
+        "legacy-rag::word_sorting::WS-B04",
+        "legacy-rag::word_sorting::WS-C01",
+        "legacy-rag::word_sorting::WS-A01",
+        "legacy-rag::word_sorting::WS-C05",
+        "legacy-rag::word_sorting::WS-A06",
+        "legacy-rag::word_sorting::WS-B06",
+        "legacy-rag::word_sorting::WS-B05",
+        "legacy-rag::word_sorting::WS-B02"
+      ],
+      "scores": [
+        0.5362793468979603,
+        0.5282261647330628,
+        0.5272939738371281,
+        0.5051785386045813,
+        0.5032822150550217,
+        0.5025354752206055,
+        0.4952764491399349,
+        0.4915185151555158,
+        0.48948023995112244,
+        0.4888715466625649,
+        0.4830888814727876,
+        0.4776453974914561,
+        0.4741482764900352,
+        0.4734350976035254,
+        0.4705804546108894,
+        0.46748167662869056,
+        0.45127125979681465,
+        0.449634301223244,
+        0.44944318926609134,
+        0.4481497179485555,
+        0.41298423459964895,
+        0.41120396066789644,
+        0.4079147232605581,
+        0.39105872132979924,
+        0.3869721465129293
+      ],
+      "ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "control-word-first-difference-v1",
+        "legacy-rag::word_sorting::WS-A02",
+        "legacy-rag::word_sorting::word_sorting-D02"
+      ],
+      "threshold": null,
+      "top_k": 3,
+      "source_span_ids": [
+        "control-word-first-difference-v1",
+        "legacy-rag::word_sorting::WS-A02",
+        "legacy-rag::word_sorting::word_sorting-D02"
+      ],
+      "source_span_join_sha256": "b94411899bc98ccfa6fe7cbde5324c0df3b15a18eb0b62855f99fbd1d9c9b122"
+    },
+    {
+      "row_id": "c4878778eac0896b7370b8a9036dd1bc07fa3519ed3ea1762b2fce837d6ccb47",
+      "task": "word_sorting",
+      "baseline": "rag_frozen",
+      "arm": "irrelevant",
+      "sample_id": "phase13_main_word_sorting_0123",
+      "query_sha256": "5605a0372b9adf71737afefed055d2761297f49d4e0578754c33a49056fd862d",
+      "query_source": "data/phase13/main/word_sorting_main_v1.jsonl",
+      "query_source_sha256": "e7ff0507512af4e71ae027a5226984b175d9b75dca898df79ca88535326c9c54",
+      "state_identity_sha256": null,
+      "corpus_identity_sha256": "af948d7e730650b782ee94dcf96f5953374441c7291835a3c446a6436177382a",
+      "index_identity_sha256": "9b80cccaa385387a7379b4db7eb4fabe3f34feb07e4370467d4e07e9310d9333",
+      "candidate_ids": [
+        "legacy-rag::word_sorting::WS-A02",
+        "legacy-rag::word_sorting::word_sorting-D02",
+        "legacy-rag::word_sorting::word_sorting-D01",
+        "legacy-rag::word_sorting::word_sorting-D04",
+        "legacy-rag::word_sorting::word_sorting-D03",
+        "legacy-rag::word_sorting::WS-C02",
+        "legacy-rag::word_sorting::WS-B03",
+        "legacy-rag::word_sorting::WS-B01",
+        "legacy-rag::word_sorting::WS-A03",
+        "legacy-rag::word_sorting::WS-A05",
+        "legacy-rag::word_sorting::word_sorting-D05",
+        "legacy-rag::word_sorting::WS-C03",
+        "legacy-rag::word_sorting::word_sorting-D06",
+        "legacy-rag::word_sorting::WS-C06",
+        "legacy-rag::word_sorting::WS-A04",
+        "legacy-rag::word_sorting::WS-C04",
+        "legacy-rag::word_sorting::WS-B04",
+        "legacy-rag::word_sorting::WS-C01",
+        "legacy-rag::word_sorting::WS-A01",
+        "control-word-single-character-v1",
+        "legacy-rag::word_sorting::WS-C05",
+        "legacy-rag::word_sorting::WS-A06",
+        "legacy-rag::word_sorting::WS-B06",
+        "legacy-rag::word_sorting::WS-B05",
+        "legacy-rag::word_sorting::WS-B02"
+      ],
+      "scores": [
+        0.5282261647330628,
+        0.5272939738371281,
+        0.5051785386045813,
+        0.5032822150550217,
+        0.5025354752206055,
+        0.4952764491399349,
+        0.4915185151555158,
+        0.48948023995112244,
+        0.4888715466625649,
+        0.4830888814727876,
+        0.4776453974914561,
+        0.4741482764900352,
+        0.4734350976035254,
+        0.4705804546108894,
+        0.46748167662869056,
+        0.45127125979681465,
+        0.449634301223244,
+        0.44944318926609134,
+        0.4481497179485555,
+        0.43621579368861624,
+        0.41298423459964895,
+        0.41120396066789644,
+        0.4079147232605581,
+        0.39105872132979924,
+        0.3869721465129293
+      ],
+      "ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "legacy-rag::word_sorting::WS-A02",
+        "legacy-rag::word_sorting::word_sorting-D02",
+        "legacy-rag::word_sorting::word_sorting-D01"
+      ],
+      "threshold": null,
+      "top_k": 3,
+      "source_span_ids": [
+        "legacy-rag::word_sorting::WS-A02",
+        "legacy-rag::word_sorting::word_sorting-D02",
+        "legacy-rag::word_sorting::word_sorting-D01"
+      ],
+      "source_span_join_sha256": "9fa815d885f3c7d722168e8cc21e8b2a72eca30de40a4ad653ed2e4e0ad191c5"
+    },
+    {
+      "row_id": "478ed219741b11d0195fdb688ec07f9e519397e1c072872de7afa6d253a88509",
+      "task": "word_sorting",
+      "baseline": "rag_frozen",
+      "arm": "contam",
+      "sample_id": "phase13_main_word_sorting_0123",
+      "query_sha256": "5605a0372b9adf71737afefed055d2761297f49d4e0578754c33a49056fd862d",
+      "query_source": "data/phase13/main/word_sorting_main_v1.jsonl",
+      "query_source_sha256": "e7ff0507512af4e71ae027a5226984b175d9b75dca898df79ca88535326c9c54",
+      "state_identity_sha256": null,
+      "corpus_identity_sha256": "a9aae3740599b9edebf7b36b606e4fce63e19c9dd4f24b195068246e5e90a865",
+      "index_identity_sha256": "84d4f2a64ba5d9c10f9e5c0ca6a8ab5fcf81b4f0abbc242bb3771c0d855cfe03",
+      "candidate_ids": [
+        "legacy-rag::word_sorting::WS-A02",
+        "legacy-rag::word_sorting::word_sorting-D02",
+        "candidate-word-final-char-v1",
+        "legacy-rag::word_sorting::word_sorting-D01",
+        "legacy-rag::word_sorting::word_sorting-D04",
+        "legacy-rag::word_sorting::word_sorting-D03",
+        "legacy-rag::word_sorting::WS-C02",
+        "legacy-rag::word_sorting::WS-B03",
+        "legacy-rag::word_sorting::WS-B01",
+        "legacy-rag::word_sorting::WS-A03",
+        "legacy-rag::word_sorting::WS-A05",
+        "legacy-rag::word_sorting::word_sorting-D05",
+        "legacy-rag::word_sorting::WS-C03",
+        "legacy-rag::word_sorting::word_sorting-D06",
+        "legacy-rag::word_sorting::WS-C06",
+        "legacy-rag::word_sorting::WS-A04",
+        "legacy-rag::word_sorting::WS-C04",
+        "legacy-rag::word_sorting::WS-B04",
+        "legacy-rag::word_sorting::WS-C01",
+        "legacy-rag::word_sorting::WS-A01",
+        "legacy-rag::word_sorting::WS-C05",
+        "legacy-rag::word_sorting::WS-A06",
+        "legacy-rag::word_sorting::WS-B06",
+        "legacy-rag::word_sorting::WS-B05",
+        "legacy-rag::word_sorting::WS-B02"
+      ],
+      "scores": [
+        0.5282261647330628,
+        0.5272939738371281,
+        0.5224251473719088,
+        0.5051785386045813,
+        0.5032822150550217,
+        0.5025354752206055,
+        0.4952764491399349,
+        0.4915185151555158,
+        0.48948023995112244,
+        0.4888715466625649,
+        0.4830888814727876,
+        0.4776453974914561,
+        0.4741482764900352,
+        0.4734350976035254,
+        0.4705804546108894,
+        0.46748167662869056,
+        0.45127125979681465,
+        0.449634301223244,
+        0.44944318926609134,
+        0.4481497179485555,
+        0.41298423459964895,
+        0.41120396066789644,
+        0.4079147232605581,
+        0.39105872132979924,
+        0.3869721465129293
+      ],
+      "ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "legacy-rag::word_sorting::WS-A02",
+        "legacy-rag::word_sorting::word_sorting-D02",
+        "candidate-word-final-char-v1"
+      ],
+      "threshold": null,
+      "top_k": 3,
+      "source_span_ids": [
+        "legacy-rag::word_sorting::WS-A02",
+        "legacy-rag::word_sorting::word_sorting-D02",
+        "candidate-word-final-char-v1"
+      ],
+      "source_span_join_sha256": "0d997e0c3898a15921ca69ded603b1f20dbc3f0a36904f416fb607b5b321f344"
+    },
+    {
+      "row_id": "03410430381613e4257524fb7352ffbb6ee92597b7a878788532fce0cfaec66e",
+      "task": "game24",
+      "baseline": "bot_style",
+      "arm": "clean",
+      "sample_id": "phase13_main_game24_0057",
+      "query_sha256": "67f14653ddaf000670fd4d23fa3d0fdf322ff8db1e12cc9043e02c802b33a182",
+      "query_source": "data/phase13/main/game24_main_v1.jsonl",
+      "query_source_sha256": "ae682f138d8035fc1de9382eb8903730d392851def720351a78846df160b615f",
+      "state_identity_sha256": "1abafc1a218253329cd10610ea405d02ac61eed8ffd6ec91cb80980a0929173f",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "7fd183903ddc8066bb2c736e1f05cc46d3a56c3725920407916182bc531b8df4",
+      "candidate_ids": [
+        "bot::procedure-based",
+        "bot::prompt-based",
+        "bot::programming-based"
+      ],
+      "scores": [
+        0.5249577060901539,
+        0.5025435729186187,
+        0.43955769454500726
+      ],
+      "ranks": [
+        1,
+        2,
+        3
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [],
+      "threshold": 0.7,
+      "top_k": 1,
+      "source_span_ids": [],
+      "source_span_join_sha256": "ec7183a0e9d45362d7143c6be6268a5e602c429bb9e2a809bc79a3e948254f3e"
+    },
+    {
+      "row_id": "17479be922ee69383b10f178208c078cc864ae66909b908090015be0d3382ec9",
+      "task": "game24",
+      "baseline": "bot_style",
+      "arm": "correct",
+      "sample_id": "phase13_main_game24_0057",
+      "query_sha256": "67f14653ddaf000670fd4d23fa3d0fdf322ff8db1e12cc9043e02c802b33a182",
+      "query_source": "data/phase13/main/game24_main_v1.jsonl",
+      "query_source_sha256": "ae682f138d8035fc1de9382eb8903730d392851def720351a78846df160b615f",
+      "state_identity_sha256": "aa0a7e5ab46d9a4cc1cd8397abc4a409ac9554e8877b863f09d17563e84ebeb7",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "7fd183903ddc8066bb2c736e1f05cc46d3a56c3725920407916182bc531b8df4",
+      "candidate_ids": [
+        "bot::procedure-based",
+        "bot::prompt-based",
+        "bot::programming-based"
+      ],
+      "scores": [
+        0.5249577060901539,
+        0.5025435729186187,
+        0.43955769454500726
+      ],
+      "ranks": [
+        1,
+        2,
+        3
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [],
+      "threshold": 0.7,
+      "top_k": 1,
+      "source_span_ids": [],
+      "source_span_join_sha256": "ec7183a0e9d45362d7143c6be6268a5e602c429bb9e2a809bc79a3e948254f3e"
+    },
+    {
+      "row_id": "1d346e16fa24d1a4de43159bf4d41f142932f2913387c48584b06d9f1ed2099c",
+      "task": "game24",
+      "baseline": "bot_style",
+      "arm": "irrelevant",
+      "sample_id": "phase13_main_game24_0057",
+      "query_sha256": "67f14653ddaf000670fd4d23fa3d0fdf322ff8db1e12cc9043e02c802b33a182",
+      "query_source": "data/phase13/main/game24_main_v1.jsonl",
+      "query_source_sha256": "ae682f138d8035fc1de9382eb8903730d392851def720351a78846df160b615f",
+      "state_identity_sha256": "2ad9716738af64a08fef80382ff14b26676c47b7ee59ac17b23a2286e3c8b60a",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "7fd183903ddc8066bb2c736e1f05cc46d3a56c3725920407916182bc531b8df4",
+      "candidate_ids": [
+        "bot::procedure-based",
+        "bot::prompt-based",
+        "bot::programming-based"
+      ],
+      "scores": [
+        0.5249577060901539,
+        0.5025435729186187,
+        0.43955769454500726
+      ],
+      "ranks": [
+        1,
+        2,
+        3
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [],
+      "threshold": 0.7,
+      "top_k": 1,
+      "source_span_ids": [],
+      "source_span_join_sha256": "ec7183a0e9d45362d7143c6be6268a5e602c429bb9e2a809bc79a3e948254f3e"
+    },
+    {
+      "row_id": "c6e9bd2589c839ea6561df8a6f37f39aca0dfb4de1ea370af2ce8ed7101412d2",
+      "task": "game24",
+      "baseline": "bot_style",
+      "arm": "contam",
+      "sample_id": "phase13_main_game24_0057",
+      "query_sha256": "67f14653ddaf000670fd4d23fa3d0fdf322ff8db1e12cc9043e02c802b33a182",
+      "query_source": "data/phase13/main/game24_main_v1.jsonl",
+      "query_source_sha256": "ae682f138d8035fc1de9382eb8903730d392851def720351a78846df160b615f",
+      "state_identity_sha256": "11d9285b8f1bfc7526c47e372a3cf0d885265cd452ec930e38181f3b31cf4b26",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "7fd183903ddc8066bb2c736e1f05cc46d3a56c3725920407916182bc531b8df4",
+      "candidate_ids": [
+        "bot::procedure-based",
+        "bot::prompt-based",
+        "bot::programming-based"
+      ],
+      "scores": [
+        0.5249577060901539,
+        0.5025435729186187,
+        0.43955769454500726
+      ],
+      "ranks": [
+        1,
+        2,
+        3
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [],
+      "threshold": 0.7,
+      "top_k": 1,
+      "source_span_ids": [],
+      "source_span_join_sha256": "ec7183a0e9d45362d7143c6be6268a5e602c429bb9e2a809bc79a3e948254f3e"
+    },
+    {
+      "row_id": "e2f5cb010a9b7d3641522eab3e1a56f61cd660393c99428d482f9833a3ed2e08",
+      "task": "math_equation_balancer",
+      "baseline": "bot_style",
+      "arm": "clean",
+      "sample_id": "phase13_main_meb_0104",
+      "query_sha256": "9c39ebaa31ff9937d4970c564391ea07ffd3115bbd68d7c017016c523d2edea8",
+      "query_source": "data/phase13/main/math_equation_balancer_main_v1.jsonl",
+      "query_source_sha256": "dfa07c8c3ada1b0030a735cca97022f98dfb8da30d8ce86f82013eb51b4a7037",
+      "state_identity_sha256": "aebe0f718e4e62aa95ffc2eafa664fb799bf32a897bbbdb8d839a6709fdd215b",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "93fd8220a21a121d5aa0df059cfc19cee7cb6a4c9886e472e4f2b90a292c88e0",
+      "candidate_ids": [
+        "bot::procedure-based",
+        "bot::programming-based",
+        "bot::prompt-based"
+      ],
+      "scores": [
+        0.4507324483797726,
+        0.4231525099157978,
+        0.413850217691204
+      ],
+      "ranks": [
+        1,
+        2,
+        3
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [],
+      "threshold": 0.7,
+      "top_k": 1,
+      "source_span_ids": [],
+      "source_span_join_sha256": "ec7183a0e9d45362d7143c6be6268a5e602c429bb9e2a809bc79a3e948254f3e"
+    },
+    {
+      "row_id": "a66cf8b79c223dfa03bfe8dce162e20f1c8048c5139a2942e8e294e1da103275",
+      "task": "math_equation_balancer",
+      "baseline": "bot_style",
+      "arm": "correct",
+      "sample_id": "phase13_main_meb_0104",
+      "query_sha256": "9c39ebaa31ff9937d4970c564391ea07ffd3115bbd68d7c017016c523d2edea8",
+      "query_source": "data/phase13/main/math_equation_balancer_main_v1.jsonl",
+      "query_source_sha256": "dfa07c8c3ada1b0030a735cca97022f98dfb8da30d8ce86f82013eb51b4a7037",
+      "state_identity_sha256": "63d6d5b47debcc3b88fbacec060de0bd3fd9287bb2c972557529d30453b853e4",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "93fd8220a21a121d5aa0df059cfc19cee7cb6a4c9886e472e4f2b90a292c88e0",
+      "candidate_ids": [
+        "bot::procedure-based",
+        "bot::programming-based",
+        "bot::prompt-based"
+      ],
+      "scores": [
+        0.4507324483797726,
+        0.4231525099157978,
+        0.413850217691204
+      ],
+      "ranks": [
+        1,
+        2,
+        3
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [],
+      "threshold": 0.7,
+      "top_k": 1,
+      "source_span_ids": [],
+      "source_span_join_sha256": "ec7183a0e9d45362d7143c6be6268a5e602c429bb9e2a809bc79a3e948254f3e"
+    },
+    {
+      "row_id": "1f17f6d4dc8b04423184dd4f8743921226b131d5edefef9c68614f7c2a302174",
+      "task": "math_equation_balancer",
+      "baseline": "bot_style",
+      "arm": "irrelevant",
+      "sample_id": "phase13_main_meb_0104",
+      "query_sha256": "9c39ebaa31ff9937d4970c564391ea07ffd3115bbd68d7c017016c523d2edea8",
+      "query_source": "data/phase13/main/math_equation_balancer_main_v1.jsonl",
+      "query_source_sha256": "dfa07c8c3ada1b0030a735cca97022f98dfb8da30d8ce86f82013eb51b4a7037",
+      "state_identity_sha256": "f4c2dfe282d8a79998cfa71ef1149594b1be231a870d50505950c4f6d48a047d",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "93fd8220a21a121d5aa0df059cfc19cee7cb6a4c9886e472e4f2b90a292c88e0",
+      "candidate_ids": [
+        "bot::procedure-based",
+        "bot::programming-based",
+        "bot::prompt-based"
+      ],
+      "scores": [
+        0.4507324483797726,
+        0.4231525099157978,
+        0.413850217691204
+      ],
+      "ranks": [
+        1,
+        2,
+        3
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [],
+      "threshold": 0.7,
+      "top_k": 1,
+      "source_span_ids": [],
+      "source_span_join_sha256": "ec7183a0e9d45362d7143c6be6268a5e602c429bb9e2a809bc79a3e948254f3e"
+    },
+    {
+      "row_id": "438e96e874ea340fa4087339456b71398c2def012623545e72cb390176646d3e",
+      "task": "math_equation_balancer",
+      "baseline": "bot_style",
+      "arm": "contam",
+      "sample_id": "phase13_main_meb_0104",
+      "query_sha256": "9c39ebaa31ff9937d4970c564391ea07ffd3115bbd68d7c017016c523d2edea8",
+      "query_source": "data/phase13/main/math_equation_balancer_main_v1.jsonl",
+      "query_source_sha256": "dfa07c8c3ada1b0030a735cca97022f98dfb8da30d8ce86f82013eb51b4a7037",
+      "state_identity_sha256": "9a0b24199487988e7abdec7c0b1e6ce488382689e61b1032d7c3748a0c570697",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "93fd8220a21a121d5aa0df059cfc19cee7cb6a4c9886e472e4f2b90a292c88e0",
+      "candidate_ids": [
+        "bot::procedure-based",
+        "bot::programming-based",
+        "bot::prompt-based"
+      ],
+      "scores": [
+        0.4507324483797726,
+        0.4231525099157978,
+        0.413850217691204
+      ],
+      "ranks": [
+        1,
+        2,
+        3
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [],
+      "threshold": 0.7,
+      "top_k": 1,
+      "source_span_ids": [],
+      "source_span_join_sha256": "ec7183a0e9d45362d7143c6be6268a5e602c429bb9e2a809bc79a3e948254f3e"
+    },
+    {
+      "row_id": "7ec3e75ecec681c6d6fafab70f1b58bc6730fbd20bc72744143c52f5be5e7600",
+      "task": "word_sorting",
+      "baseline": "bot_style",
+      "arm": "clean",
+      "sample_id": "phase13_main_word_sorting_0123",
+      "query_sha256": "5605a0372b9adf71737afefed055d2761297f49d4e0578754c33a49056fd862d",
+      "query_source": "data/phase13/main/word_sorting_main_v1.jsonl",
+      "query_source_sha256": "e7ff0507512af4e71ae027a5226984b175d9b75dca898df79ca88535326c9c54",
+      "state_identity_sha256": "401102000954b04f7748237ed50212db74de1a5b3c254930af3633084749a0d7",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "632ae27419158d6295a199296cd6eeff69180573a20c678b012bf26be0e197ca",
+      "candidate_ids": [
+        "bot::procedure-based",
+        "bot::prompt-based",
+        "bot::programming-based"
+      ],
+      "scores": [
+        0.5016923867452715,
+        0.46220290639290446,
+        0.41824158894689273
+      ],
+      "ranks": [
+        1,
+        2,
+        3
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [],
+      "threshold": 0.7,
+      "top_k": 1,
+      "source_span_ids": [],
+      "source_span_join_sha256": "ec7183a0e9d45362d7143c6be6268a5e602c429bb9e2a809bc79a3e948254f3e"
+    },
+    {
+      "row_id": "6be8329e132a9b7ba3e624cc44a3b732fb766b74a2df457e37fe053a3723b5fd",
+      "task": "word_sorting",
+      "baseline": "bot_style",
+      "arm": "correct",
+      "sample_id": "phase13_main_word_sorting_0123",
+      "query_sha256": "5605a0372b9adf71737afefed055d2761297f49d4e0578754c33a49056fd862d",
+      "query_source": "data/phase13/main/word_sorting_main_v1.jsonl",
+      "query_source_sha256": "e7ff0507512af4e71ae027a5226984b175d9b75dca898df79ca88535326c9c54",
+      "state_identity_sha256": "9393cfeed64b48d84f1e22c061e37c2bf7d6090933c69c992fb7d12bf8863008",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "632ae27419158d6295a199296cd6eeff69180573a20c678b012bf26be0e197ca",
+      "candidate_ids": [
+        "bot::procedure-based",
+        "bot::prompt-based",
+        "bot::programming-based"
+      ],
+      "scores": [
+        0.5016923867452715,
+        0.46220290639290446,
+        0.41824158894689273
+      ],
+      "ranks": [
+        1,
+        2,
+        3
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [],
+      "threshold": 0.7,
+      "top_k": 1,
+      "source_span_ids": [],
+      "source_span_join_sha256": "ec7183a0e9d45362d7143c6be6268a5e602c429bb9e2a809bc79a3e948254f3e"
+    },
+    {
+      "row_id": "69efbb4c86327f366fce39b6e5e6eb38d3759c7b2a2b9b57888bf5535e2425b6",
+      "task": "word_sorting",
+      "baseline": "bot_style",
+      "arm": "irrelevant",
+      "sample_id": "phase13_main_word_sorting_0123",
+      "query_sha256": "5605a0372b9adf71737afefed055d2761297f49d4e0578754c33a49056fd862d",
+      "query_source": "data/phase13/main/word_sorting_main_v1.jsonl",
+      "query_source_sha256": "e7ff0507512af4e71ae027a5226984b175d9b75dca898df79ca88535326c9c54",
+      "state_identity_sha256": "9a1d3498072ffc32441a96a37ea4c7d3976d6424336c9e0d3d4fbb09df7fcd12",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "632ae27419158d6295a199296cd6eeff69180573a20c678b012bf26be0e197ca",
+      "candidate_ids": [
+        "bot::procedure-based",
+        "bot::prompt-based",
+        "bot::programming-based"
+      ],
+      "scores": [
+        0.5016923867452715,
+        0.46220290639290446,
+        0.41824158894689273
+      ],
+      "ranks": [
+        1,
+        2,
+        3
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [],
+      "threshold": 0.7,
+      "top_k": 1,
+      "source_span_ids": [],
+      "source_span_join_sha256": "ec7183a0e9d45362d7143c6be6268a5e602c429bb9e2a809bc79a3e948254f3e"
+    },
+    {
+      "row_id": "ccd3707c5d45a3cb740375bf73847072e52bd7e1a6d409da1d5e9c0d6096f843",
+      "task": "word_sorting",
+      "baseline": "bot_style",
+      "arm": "contam",
+      "sample_id": "phase13_main_word_sorting_0123",
+      "query_sha256": "5605a0372b9adf71737afefed055d2761297f49d4e0578754c33a49056fd862d",
+      "query_source": "data/phase13/main/word_sorting_main_v1.jsonl",
+      "query_source_sha256": "e7ff0507512af4e71ae027a5226984b175d9b75dca898df79ca88535326c9c54",
+      "state_identity_sha256": "6daffacbc9033e84a9ea097bad1f4c0325d37213fc8b2d3e928850ad56806d4a",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "632ae27419158d6295a199296cd6eeff69180573a20c678b012bf26be0e197ca",
+      "candidate_ids": [
+        "bot::procedure-based",
+        "bot::prompt-based",
+        "bot::programming-based"
+      ],
+      "scores": [
+        0.5016923867452715,
+        0.46220290639290446,
+        0.41824158894689273
+      ],
+      "ranks": [
+        1,
+        2,
+        3
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [],
+      "threshold": 0.7,
+      "top_k": 1,
+      "source_span_ids": [],
+      "source_span_join_sha256": "ec7183a0e9d45362d7143c6be6268a5e602c429bb9e2a809bc79a3e948254f3e"
+    },
+    {
+      "row_id": "7140719edff1ec0bfe865fd8459e20bb8a517b3b1d7aeded1bb785669b345460",
+      "task": "mmlu_pro_engineering",
+      "baseline": "bot_style",
+      "arm": "clean",
+      "sample_id": "mmlu_pro_engineering:11642",
+      "query_sha256": "64bbc32eeef0d22c1f543e63fd6de7d8f9f208ec70f2b9cf59cf4a2288f89043",
+      "query_source": "data/phase13/core/materialized/mmlu_pro_engineering.jsonl",
+      "query_source_sha256": "c8ff52f9f797ee91c69692a9802f421f2b1117695727da2502140e6e4e92ad36",
+      "state_identity_sha256": "d6206033b720a314289491a3d70570e52c5beed32a740af3d4875f0617700d91",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "094943cc38079e3ab57a323a4709fcc125449306ccafadd00e57cfb4d20ea36d",
+      "candidate_ids": [
+        "bot::programming-based",
+        "bot::prompt-based",
+        "bot::procedure-based"
+      ],
+      "scores": [
+        0.39996404884860925,
+        0.3842343637077869,
+        0.36486427470698235
+      ],
+      "ranks": [
+        1,
+        2,
+        3
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [],
+      "threshold": 0.7,
+      "top_k": 1,
+      "source_span_ids": [],
+      "source_span_join_sha256": "ec7183a0e9d45362d7143c6be6268a5e602c429bb9e2a809bc79a3e948254f3e"
+    },
+    {
+      "row_id": "2d6b64dbfbb38a8e7a22a8bb710c8b0e87866022d00cef63b8731f1568574a7f",
+      "task": "mmlu_pro_engineering",
+      "baseline": "bot_style",
+      "arm": "correct",
+      "sample_id": "mmlu_pro_engineering:11642",
+      "query_sha256": "64bbc32eeef0d22c1f543e63fd6de7d8f9f208ec70f2b9cf59cf4a2288f89043",
+      "query_source": "data/phase13/core/materialized/mmlu_pro_engineering.jsonl",
+      "query_source_sha256": "c8ff52f9f797ee91c69692a9802f421f2b1117695727da2502140e6e4e92ad36",
+      "state_identity_sha256": "4ebae2c969090be3e494a88c891d1ca0d9673a0c95e0ac5e4bc859ea21ca3ad5",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "094943cc38079e3ab57a323a4709fcc125449306ccafadd00e57cfb4d20ea36d",
+      "candidate_ids": [
+        "bot::programming-based",
+        "bot::prompt-based",
+        "bot::procedure-based"
+      ],
+      "scores": [
+        0.39996404884860925,
+        0.3842343637077869,
+        0.36486427470698235
+      ],
+      "ranks": [
+        1,
+        2,
+        3
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [],
+      "threshold": 0.7,
+      "top_k": 1,
+      "source_span_ids": [],
+      "source_span_join_sha256": "ec7183a0e9d45362d7143c6be6268a5e602c429bb9e2a809bc79a3e948254f3e"
+    },
+    {
+      "row_id": "dee1b33347759c632301cf1ff49b0de65bb8ed78778872d018cd4538ad79ab37",
+      "task": "mmlu_pro_engineering",
+      "baseline": "bot_style",
+      "arm": "irrelevant",
+      "sample_id": "mmlu_pro_engineering:11642",
+      "query_sha256": "64bbc32eeef0d22c1f543e63fd6de7d8f9f208ec70f2b9cf59cf4a2288f89043",
+      "query_source": "data/phase13/core/materialized/mmlu_pro_engineering.jsonl",
+      "query_source_sha256": "c8ff52f9f797ee91c69692a9802f421f2b1117695727da2502140e6e4e92ad36",
+      "state_identity_sha256": "c2708c641a5caa866696e360381ae48ee7e6c5877d6b6805196e29d87bdbd925",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "094943cc38079e3ab57a323a4709fcc125449306ccafadd00e57cfb4d20ea36d",
+      "candidate_ids": [
+        "bot::programming-based",
+        "bot::prompt-based",
+        "bot::procedure-based"
+      ],
+      "scores": [
+        0.39996404884860925,
+        0.3842343637077869,
+        0.36486427470698235
+      ],
+      "ranks": [
+        1,
+        2,
+        3
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [],
+      "threshold": 0.7,
+      "top_k": 1,
+      "source_span_ids": [],
+      "source_span_join_sha256": "ec7183a0e9d45362d7143c6be6268a5e602c429bb9e2a809bc79a3e948254f3e"
+    },
+    {
+      "row_id": "c784d4bb10cb188e753cdf279fefeb46d4f3e99fe4e1d374394775d50bebe753",
+      "task": "mmlu_pro_engineering",
+      "baseline": "bot_style",
+      "arm": "contam",
+      "sample_id": "mmlu_pro_engineering:11642",
+      "query_sha256": "64bbc32eeef0d22c1f543e63fd6de7d8f9f208ec70f2b9cf59cf4a2288f89043",
+      "query_source": "data/phase13/core/materialized/mmlu_pro_engineering.jsonl",
+      "query_source_sha256": "c8ff52f9f797ee91c69692a9802f421f2b1117695727da2502140e6e4e92ad36",
+      "state_identity_sha256": "4c719a1f1b18821c3240e71c073d77b899739287c31f8252e13f5a0f9fd103d1",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "094943cc38079e3ab57a323a4709fcc125449306ccafadd00e57cfb4d20ea36d",
+      "candidate_ids": [
+        "bot::programming-based",
+        "bot::prompt-based",
+        "bot::procedure-based"
+      ],
+      "scores": [
+        0.39996404884860925,
+        0.3842343637077869,
+        0.36486427470698235
+      ],
+      "ranks": [
+        1,
+        2,
+        3
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [],
+      "threshold": 0.7,
+      "top_k": 1,
+      "source_span_ids": [],
+      "source_span_join_sha256": "ec7183a0e9d45362d7143c6be6268a5e602c429bb9e2a809bc79a3e948254f3e"
+    },
+    {
+      "row_id": "ab3b3d3a82af094250e544eb2aeaee1ba267bcdb1bdf3af590b2c476061cf238",
+      "task": "mmlu_pro_physics",
+      "baseline": "bot_style",
+      "arm": "clean",
+      "sample_id": "mmlu_pro_physics:10004",
+      "query_sha256": "6d5455dfe834f5cad2bd62d5a84b43b88aeddee849fea9f94e7c12e0263ab186",
+      "query_source": "data/phase13/core/materialized/mmlu_pro_physics.jsonl",
+      "query_source_sha256": "adcb50a3ab7303470a07df495f822ad06cf7b14fc6a78c357558e2aad7871743",
+      "state_identity_sha256": "951c433f4d5e4afed2e682a26637213fff8311b2802a45d1ae5d31e56c4ab679",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "bbc659e98e5fc0dd4250ab52ce9c5e1481fc9532346f1f75e01b24f0f77b4553",
+      "candidate_ids": [
+        "bot::prompt-based",
+        "bot::procedure-based",
+        "bot::programming-based"
+      ],
+      "scores": [
+        0.45327924879615755,
+        0.45303663729702587,
+        0.44555771603279565
+      ],
+      "ranks": [
+        1,
+        2,
+        3
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [],
+      "threshold": 0.7,
+      "top_k": 1,
+      "source_span_ids": [],
+      "source_span_join_sha256": "ec7183a0e9d45362d7143c6be6268a5e602c429bb9e2a809bc79a3e948254f3e"
+    },
+    {
+      "row_id": "2006e7f6eba03d07514084a9d98be4d561500ddb12661e16b8bfac48304e7fee",
+      "task": "mmlu_pro_physics",
+      "baseline": "bot_style",
+      "arm": "correct",
+      "sample_id": "mmlu_pro_physics:10004",
+      "query_sha256": "6d5455dfe834f5cad2bd62d5a84b43b88aeddee849fea9f94e7c12e0263ab186",
+      "query_source": "data/phase13/core/materialized/mmlu_pro_physics.jsonl",
+      "query_source_sha256": "adcb50a3ab7303470a07df495f822ad06cf7b14fc6a78c357558e2aad7871743",
+      "state_identity_sha256": "64395da79b352b5b4a6f3e3e4bfbc8681384039574a3c8bf67273ce4a2175b8c",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "bbc659e98e5fc0dd4250ab52ce9c5e1481fc9532346f1f75e01b24f0f77b4553",
+      "candidate_ids": [
+        "bot::prompt-based",
+        "bot::procedure-based",
+        "bot::programming-based"
+      ],
+      "scores": [
+        0.45327924879615755,
+        0.45303663729702587,
+        0.44555771603279565
+      ],
+      "ranks": [
+        1,
+        2,
+        3
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [],
+      "threshold": 0.7,
+      "top_k": 1,
+      "source_span_ids": [],
+      "source_span_join_sha256": "ec7183a0e9d45362d7143c6be6268a5e602c429bb9e2a809bc79a3e948254f3e"
+    },
+    {
+      "row_id": "a2e26a3402a827f83cf16ddc9fe07416d5e8b4c745c631629e47d9f72bb750dc",
+      "task": "mmlu_pro_physics",
+      "baseline": "bot_style",
+      "arm": "irrelevant",
+      "sample_id": "mmlu_pro_physics:10004",
+      "query_sha256": "6d5455dfe834f5cad2bd62d5a84b43b88aeddee849fea9f94e7c12e0263ab186",
+      "query_source": "data/phase13/core/materialized/mmlu_pro_physics.jsonl",
+      "query_source_sha256": "adcb50a3ab7303470a07df495f822ad06cf7b14fc6a78c357558e2aad7871743",
+      "state_identity_sha256": "50106cc5c36f4b8a8ec8b89c7bd9af13d53a0ea9287449e9659bfec09ed71926",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "bbc659e98e5fc0dd4250ab52ce9c5e1481fc9532346f1f75e01b24f0f77b4553",
+      "candidate_ids": [
+        "bot::prompt-based",
+        "bot::procedure-based",
+        "bot::programming-based"
+      ],
+      "scores": [
+        0.45327924879615755,
+        0.45303663729702587,
+        0.44555771603279565
+      ],
+      "ranks": [
+        1,
+        2,
+        3
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [],
+      "threshold": 0.7,
+      "top_k": 1,
+      "source_span_ids": [],
+      "source_span_join_sha256": "ec7183a0e9d45362d7143c6be6268a5e602c429bb9e2a809bc79a3e948254f3e"
+    },
+    {
+      "row_id": "1d0f9fbf6e184a456133c4265ab540ff15c46f99c383cb92225dcb854a33cd9f",
+      "task": "mmlu_pro_physics",
+      "baseline": "bot_style",
+      "arm": "contam",
+      "sample_id": "mmlu_pro_physics:10004",
+      "query_sha256": "6d5455dfe834f5cad2bd62d5a84b43b88aeddee849fea9f94e7c12e0263ab186",
+      "query_source": "data/phase13/core/materialized/mmlu_pro_physics.jsonl",
+      "query_source_sha256": "adcb50a3ab7303470a07df495f822ad06cf7b14fc6a78c357558e2aad7871743",
+      "state_identity_sha256": "a8eeab553c842827e7cf99a5fb2635d96b6d1ec30ee4fd09615e80fe6464eedb",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "bbc659e98e5fc0dd4250ab52ce9c5e1481fc9532346f1f75e01b24f0f77b4553",
+      "candidate_ids": [
+        "bot::prompt-based",
+        "bot::procedure-based",
+        "bot::programming-based"
+      ],
+      "scores": [
+        0.45327924879615755,
+        0.45303663729702587,
+        0.44555771603279565
+      ],
+      "ranks": [
+        1,
+        2,
+        3
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [],
+      "threshold": 0.7,
+      "top_k": 1,
+      "source_span_ids": [],
+      "source_span_join_sha256": "ec7183a0e9d45362d7143c6be6268a5e602c429bb9e2a809bc79a3e948254f3e"
+    },
+    {
+      "row_id": "2db6ecef4ddfa66503098a8a91bb41630b03f7f6ed699c3454034d36b1e7c8b8",
+      "task": "game24",
+      "baseline": "dc_rs",
+      "arm": "clean",
+      "sample_id": "phase13_main_game24_0057",
+      "query_sha256": "67f14653ddaf000670fd4d23fa3d0fdf322ff8db1e12cc9043e02c802b33a182",
+      "query_source": "data/phase13/main/game24_main_v1.jsonl",
+      "query_source_sha256": "ae682f138d8035fc1de9382eb8903730d392851def720351a78846df160b615f",
+      "state_identity_sha256": "1879f97b1785aff7d1cf5b0388879ced81fdbe1da33cfc1e67080890cbc16bd9",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "fb35ddeccdcd04d178bf02dc59f04d0117bfd58af1e93c2d8ae6d1ab1a41350c",
+      "candidate_ids": [
+        "dc-rs::clean::phase13_main_game24_0024"
+      ],
+      "scores": [
+        0.7076970721669643
+      ],
+      "ranks": [
+        1
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "dc-rs::clean::phase13_main_game24_0024"
+      ],
+      "threshold": null,
+      "top_k": 1,
+      "source_span_ids": [
+        "dc-rs::clean::phase13_main_game24_0024"
+      ],
+      "source_span_join_sha256": "d79624198f96415b7af359f7016274a654419639163796fc6247603d029380db"
+    },
+    {
+      "row_id": "7816581d9d810f398c88f52d012d7a8a487620edfba3eb5c4179a7ef35b6aa63",
+      "task": "game24",
+      "baseline": "dc_rs",
+      "arm": "correct",
+      "sample_id": "phase13_main_game24_0057",
+      "query_sha256": "67f14653ddaf000670fd4d23fa3d0fdf322ff8db1e12cc9043e02c802b33a182",
+      "query_source": "data/phase13/main/game24_main_v1.jsonl",
+      "query_source_sha256": "ae682f138d8035fc1de9382eb8903730d392851def720351a78846df160b615f",
+      "state_identity_sha256": "51d967b51ffb2d3a8050a4e41602db37dcfdeca44cd5a3dccada5d8476271dcc",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "315defbaf28ae45fe1b0c82902e80307ab01471f96087b9d6e14d7beb6a7df6f",
+      "candidate_ids": [
+        "dc-rs::correct::phase13_main_game24_0024"
+      ],
+      "scores": [
+        0.7076970721669643
+      ],
+      "ranks": [
+        1
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "dc-rs::correct::phase13_main_game24_0024"
+      ],
+      "threshold": null,
+      "top_k": 1,
+      "source_span_ids": [
+        "dc-rs::correct::phase13_main_game24_0024"
+      ],
+      "source_span_join_sha256": "20a550049372c7974b42cdd565dcb887a8ac13fcf6a09f11883e5b13d4a706b4"
+    },
+    {
+      "row_id": "0d7f46b1d02f1d34f95fd97b20514908e184bdc08550be98aaddef4d6d52feec",
+      "task": "game24",
+      "baseline": "dc_rs",
+      "arm": "irrelevant",
+      "sample_id": "phase13_main_game24_0057",
+      "query_sha256": "67f14653ddaf000670fd4d23fa3d0fdf322ff8db1e12cc9043e02c802b33a182",
+      "query_source": "data/phase13/main/game24_main_v1.jsonl",
+      "query_source_sha256": "ae682f138d8035fc1de9382eb8903730d392851def720351a78846df160b615f",
+      "state_identity_sha256": "11f80e6417b67466ca8c973e24e57223289535caf4d03aebee3f66c32e74cd9f",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "60d0350dd43275017a88edf1483c1a53ead97f3be7a096e3bab8977482e44d2c",
+      "candidate_ids": [
+        "dc-rs::irrelevant::phase13_main_game24_0024"
+      ],
+      "scores": [
+        0.7076970721669643
+      ],
+      "ranks": [
+        1
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "dc-rs::irrelevant::phase13_main_game24_0024"
+      ],
+      "threshold": null,
+      "top_k": 1,
+      "source_span_ids": [
+        "dc-rs::irrelevant::phase13_main_game24_0024"
+      ],
+      "source_span_join_sha256": "19a28c4f428d1453791fb2855db6cc7d1672194f31f6ad89485fec77a50ddcbc"
+    },
+    {
+      "row_id": "d6107852caaeef3c5bb379c7577ee91160ae1ec1de9b20133f8901d99cf649fe",
+      "task": "game24",
+      "baseline": "dc_rs",
+      "arm": "contam",
+      "sample_id": "phase13_main_game24_0057",
+      "query_sha256": "67f14653ddaf000670fd4d23fa3d0fdf322ff8db1e12cc9043e02c802b33a182",
+      "query_source": "data/phase13/main/game24_main_v1.jsonl",
+      "query_source_sha256": "ae682f138d8035fc1de9382eb8903730d392851def720351a78846df160b615f",
+      "state_identity_sha256": "1145838f68155ac39ff6e48816ee607222dc0f97126578c4e1f9975422fec708",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "1473423dd74bea678169179ca95602300b507c5e0ff95ab963941c0c4c5cec4a",
+      "candidate_ids": [
+        "dc-rs::contam::phase13_main_game24_0024"
+      ],
+      "scores": [
+        0.7076970721669643
+      ],
+      "ranks": [
+        1
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "dc-rs::contam::phase13_main_game24_0024"
+      ],
+      "threshold": null,
+      "top_k": 1,
+      "source_span_ids": [
+        "dc-rs::contam::phase13_main_game24_0024"
+      ],
+      "source_span_join_sha256": "a54a562f3b76bf8c92f90e7d80223df7fcf19f68be91875c33458ee44d314cfd"
+    },
+    {
+      "row_id": "270d2dfc26219ebde6d10f9795e190deee8474701d5a6518a172905a9b9c73c7",
+      "task": "math_equation_balancer",
+      "baseline": "dc_rs",
+      "arm": "clean",
+      "sample_id": "phase13_main_meb_0104",
+      "query_sha256": "9c39ebaa31ff9937d4970c564391ea07ffd3115bbd68d7c017016c523d2edea8",
+      "query_source": "data/phase13/main/math_equation_balancer_main_v1.jsonl",
+      "query_source_sha256": "dfa07c8c3ada1b0030a735cca97022f98dfb8da30d8ce86f82013eb51b4a7037",
+      "state_identity_sha256": "8d42a7c39f1a0b575b3e9daa4d8209a91c9224f3a98467b7bc40a7da8d8d7a97",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "5aa8657cbe83562b55532e70662ed2f49b6b0f5514ddb5f648fe6dc3ebf0fa5b",
+      "candidate_ids": [
+        "dc-rs::clean::phase13_main_meb_0188"
+      ],
+      "scores": [
+        0.2767542906815178
+      ],
+      "ranks": [
+        1
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "dc-rs::clean::phase13_main_meb_0188"
+      ],
+      "threshold": null,
+      "top_k": 1,
+      "source_span_ids": [
+        "dc-rs::clean::phase13_main_meb_0188"
+      ],
+      "source_span_join_sha256": "9e46e125e7f066add99d2d8030cd5f288e42bd7866e5a18387a8ac9e8a45347d"
+    },
+    {
+      "row_id": "0e3d41ceafbf066a6d4fbf545e528e9a12eb58a534808a4daa206b21d614ff0f",
+      "task": "math_equation_balancer",
+      "baseline": "dc_rs",
+      "arm": "correct",
+      "sample_id": "phase13_main_meb_0104",
+      "query_sha256": "9c39ebaa31ff9937d4970c564391ea07ffd3115bbd68d7c017016c523d2edea8",
+      "query_source": "data/phase13/main/math_equation_balancer_main_v1.jsonl",
+      "query_source_sha256": "dfa07c8c3ada1b0030a735cca97022f98dfb8da30d8ce86f82013eb51b4a7037",
+      "state_identity_sha256": "9d98b403d984bede805cb3122a54d4b8ef51232420864631bc162f786149f562",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "581671b6e9ffe72294e964b0202ed48b115ecdf3c3bc337eb5a1059e6aedcd77",
+      "candidate_ids": [
+        "dc-rs::correct::phase13_main_meb_0188"
+      ],
+      "scores": [
+        0.2767542906815178
+      ],
+      "ranks": [
+        1
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "dc-rs::correct::phase13_main_meb_0188"
+      ],
+      "threshold": null,
+      "top_k": 1,
+      "source_span_ids": [
+        "dc-rs::correct::phase13_main_meb_0188"
+      ],
+      "source_span_join_sha256": "4a1a23459242a2eaeba97b8abcafc73916e43d88fcc3af5035a8d30cab797370"
+    },
+    {
+      "row_id": "1d785c1b84a6ba337b1d2b60c768b841c5e8acdd1319a18229bb984061eb4f24",
+      "task": "math_equation_balancer",
+      "baseline": "dc_rs",
+      "arm": "irrelevant",
+      "sample_id": "phase13_main_meb_0104",
+      "query_sha256": "9c39ebaa31ff9937d4970c564391ea07ffd3115bbd68d7c017016c523d2edea8",
+      "query_source": "data/phase13/main/math_equation_balancer_main_v1.jsonl",
+      "query_source_sha256": "dfa07c8c3ada1b0030a735cca97022f98dfb8da30d8ce86f82013eb51b4a7037",
+      "state_identity_sha256": "6b3664a59623e351dff923a61e242122df6046e8744bd844ef9fd34c35c9b744",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "cac89b8382ce9d64bc239d03ff1cdd7858b2c30ee9195edab8ec3f4b9428ca1f",
+      "candidate_ids": [
+        "dc-rs::irrelevant::phase13_main_meb_0188"
+      ],
+      "scores": [
+        0.2767542906815178
+      ],
+      "ranks": [
+        1
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "dc-rs::irrelevant::phase13_main_meb_0188"
+      ],
+      "threshold": null,
+      "top_k": 1,
+      "source_span_ids": [
+        "dc-rs::irrelevant::phase13_main_meb_0188"
+      ],
+      "source_span_join_sha256": "65c6cc46943229e46dcf8b1e91e2612dff133593143621e8f10dbf65ecbbcbcf"
+    },
+    {
+      "row_id": "e1a4d18804149364efa11d17bbea65002eb3582005e982266fab24c2d245ef5e",
+      "task": "math_equation_balancer",
+      "baseline": "dc_rs",
+      "arm": "contam",
+      "sample_id": "phase13_main_meb_0104",
+      "query_sha256": "9c39ebaa31ff9937d4970c564391ea07ffd3115bbd68d7c017016c523d2edea8",
+      "query_source": "data/phase13/main/math_equation_balancer_main_v1.jsonl",
+      "query_source_sha256": "dfa07c8c3ada1b0030a735cca97022f98dfb8da30d8ce86f82013eb51b4a7037",
+      "state_identity_sha256": "e4b692b1bc4af8d5abd13d67b312fa7d936aee17e1939a7d589378f4271641ae",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "a9643432bcd5b219d513ec2a40ac3df877506e21fd875cb7444627e831b06554",
+      "candidate_ids": [
+        "dc-rs::contam::phase13_main_meb_0188"
+      ],
+      "scores": [
+        0.2767542906815178
+      ],
+      "ranks": [
+        1
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "dc-rs::contam::phase13_main_meb_0188"
+      ],
+      "threshold": null,
+      "top_k": 1,
+      "source_span_ids": [
+        "dc-rs::contam::phase13_main_meb_0188"
+      ],
+      "source_span_join_sha256": "94dae082d41693d83df0224f1a105992b0cc15f8afc6073b61f6740e84d692d9"
+    },
+    {
+      "row_id": "6eb7780a92b84fbb31f9d698edbbac2f1cd5ca552376b1b553b62c83085d81a8",
+      "task": "word_sorting",
+      "baseline": "dc_rs",
+      "arm": "clean",
+      "sample_id": "phase13_main_word_sorting_0123",
+      "query_sha256": "5605a0372b9adf71737afefed055d2761297f49d4e0578754c33a49056fd862d",
+      "query_source": "data/phase13/main/word_sorting_main_v1.jsonl",
+      "query_source_sha256": "e7ff0507512af4e71ae027a5226984b175d9b75dca898df79ca88535326c9c54",
+      "state_identity_sha256": "fb6fb2b22045df9f54db6f0ef121f508caa0e70ca6ae228942f51826ecb5abd8",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "96b8e40414ba216741227e9bd5899df87a33e104cc5bf97dbd0d28392e5aa061",
+      "candidate_ids": [
+        "dc-rs::clean::phase13_main_word_sorting_0115"
+      ],
+      "scores": [
+        0.5904758091635123
+      ],
+      "ranks": [
+        1
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "dc-rs::clean::phase13_main_word_sorting_0115"
+      ],
+      "threshold": null,
+      "top_k": 1,
+      "source_span_ids": [
+        "dc-rs::clean::phase13_main_word_sorting_0115"
+      ],
+      "source_span_join_sha256": "47abe4ddfeeb9bf268895136991a5a07dac26473241f5a90dbe3c4e0a76d94ee"
+    },
+    {
+      "row_id": "46309153370531902ea5dba36095fee4cafa12430f0b23f74fb7a8da31564223",
+      "task": "word_sorting",
+      "baseline": "dc_rs",
+      "arm": "correct",
+      "sample_id": "phase13_main_word_sorting_0123",
+      "query_sha256": "5605a0372b9adf71737afefed055d2761297f49d4e0578754c33a49056fd862d",
+      "query_source": "data/phase13/main/word_sorting_main_v1.jsonl",
+      "query_source_sha256": "e7ff0507512af4e71ae027a5226984b175d9b75dca898df79ca88535326c9c54",
+      "state_identity_sha256": "e60a7bf5e460056e4221ccff467b114e975df0dc85e46426768b2860834f4fba",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "bfb6f4fdaa09401a117b6c8b594ab1259592019c310cfef4313fb9062689e29a",
+      "candidate_ids": [
+        "dc-rs::correct::phase13_main_word_sorting_0115"
+      ],
+      "scores": [
+        0.5904758091635123
+      ],
+      "ranks": [
+        1
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "dc-rs::correct::phase13_main_word_sorting_0115"
+      ],
+      "threshold": null,
+      "top_k": 1,
+      "source_span_ids": [
+        "dc-rs::correct::phase13_main_word_sorting_0115"
+      ],
+      "source_span_join_sha256": "d8bb5ea0d0ede6ae5bedda3c9d0f925400921f6bd89d0649eeed82b16d04ca13"
+    },
+    {
+      "row_id": "fc87fe8298f0b2105b8acba752818470a479ed7333f80ea4fb17887625de54f7",
+      "task": "word_sorting",
+      "baseline": "dc_rs",
+      "arm": "irrelevant",
+      "sample_id": "phase13_main_word_sorting_0123",
+      "query_sha256": "5605a0372b9adf71737afefed055d2761297f49d4e0578754c33a49056fd862d",
+      "query_source": "data/phase13/main/word_sorting_main_v1.jsonl",
+      "query_source_sha256": "e7ff0507512af4e71ae027a5226984b175d9b75dca898df79ca88535326c9c54",
+      "state_identity_sha256": "8d85da640e112e0b2ffd3f5591ae2f0f3ffd55a9b2010910db30f39ff67bafe6",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "f334616bcf8d0524243f67e07ebd6a1c0df06bb6899a4eb59e38c62005994466",
+      "candidate_ids": [
+        "dc-rs::irrelevant::phase13_main_word_sorting_0115"
+      ],
+      "scores": [
+        0.5904758091635123
+      ],
+      "ranks": [
+        1
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "dc-rs::irrelevant::phase13_main_word_sorting_0115"
+      ],
+      "threshold": null,
+      "top_k": 1,
+      "source_span_ids": [
+        "dc-rs::irrelevant::phase13_main_word_sorting_0115"
+      ],
+      "source_span_join_sha256": "c34dc73aa2028c6081b1dec8b4e789c080e70ca82cb19b12019c93233c5da6f2"
+    },
+    {
+      "row_id": "b19c13d609fca489f942dc785649871ac5d412af0ab7a3224e963dfc673bdf76",
+      "task": "word_sorting",
+      "baseline": "dc_rs",
+      "arm": "contam",
+      "sample_id": "phase13_main_word_sorting_0123",
+      "query_sha256": "5605a0372b9adf71737afefed055d2761297f49d4e0578754c33a49056fd862d",
+      "query_source": "data/phase13/main/word_sorting_main_v1.jsonl",
+      "query_source_sha256": "e7ff0507512af4e71ae027a5226984b175d9b75dca898df79ca88535326c9c54",
+      "state_identity_sha256": "c8f699ec36aa544e09d513925934c5eefcf4a6963c66454c149f6fba5a5649f6",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "308c9439a394946eb0c4aa67f5b0fcf32758cd0f587df50b76cd2b5369da6ef7",
+      "candidate_ids": [
+        "dc-rs::contam::phase13_main_word_sorting_0115"
+      ],
+      "scores": [
+        0.5904758091635123
+      ],
+      "ranks": [
+        1
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "dc-rs::contam::phase13_main_word_sorting_0115"
+      ],
+      "threshold": null,
+      "top_k": 1,
+      "source_span_ids": [
+        "dc-rs::contam::phase13_main_word_sorting_0115"
+      ],
+      "source_span_join_sha256": "da1d89b251c163788c9eff1e77de3b51c10df730cae950b4447357c6b2725493"
+    },
+    {
+      "row_id": "bdb54ada81b433667df3f6df7952a4bb1dce5816fdd47cafd976767d7d494468",
+      "task": "mmlu_pro_engineering",
+      "baseline": "dc_rs",
+      "arm": "clean",
+      "sample_id": "mmlu_pro_engineering:11642",
+      "query_sha256": "64bbc32eeef0d22c1f543e63fd6de7d8f9f208ec70f2b9cf59cf4a2288f89043",
+      "query_source": "data/phase13/core/materialized/mmlu_pro_engineering.jsonl",
+      "query_source_sha256": "c8ff52f9f797ee91c69692a9802f421f2b1117695727da2502140e6e4e92ad36",
+      "state_identity_sha256": "5bf556ef093dc004f64de67e2b48a7623bf059b267e0e52bc5d3997516f4451b",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "b7b58807eaf2bc5712b5ba9e4b7ae2d8df68b1f680f0562e3a7ff770c3068bc5",
+      "candidate_ids": [
+        "dc-rs::clean::mmlu_pro_engineering:11492"
+      ],
+      "scores": [
+        0.3656712234999948
+      ],
+      "ranks": [
+        1
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "dc-rs::clean::mmlu_pro_engineering:11492"
+      ],
+      "threshold": null,
+      "top_k": 1,
+      "source_span_ids": [
+        "dc-rs::clean::mmlu_pro_engineering:11492"
+      ],
+      "source_span_join_sha256": "bc9be911c421a327bbd864735e4967a3d44d459eec5892cd07539da12395b74a"
+    },
+    {
+      "row_id": "36e91e41355467e50686b82f3da4736e619e17db271c6e61a6417c64e380b46c",
+      "task": "mmlu_pro_engineering",
+      "baseline": "dc_rs",
+      "arm": "correct",
+      "sample_id": "mmlu_pro_engineering:11642",
+      "query_sha256": "64bbc32eeef0d22c1f543e63fd6de7d8f9f208ec70f2b9cf59cf4a2288f89043",
+      "query_source": "data/phase13/core/materialized/mmlu_pro_engineering.jsonl",
+      "query_source_sha256": "c8ff52f9f797ee91c69692a9802f421f2b1117695727da2502140e6e4e92ad36",
+      "state_identity_sha256": "55c314239841073cc786f5d098ce342c16801c333de1f5352f8788e13e5a84ea",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "e7304e4d6c86969ef3656b59c6e6305157c5431f534b09ed082b3e3491ce3eee",
+      "candidate_ids": [
+        "dc-rs::correct::mmlu_pro_engineering:11492"
+      ],
+      "scores": [
+        0.3656712234999948
+      ],
+      "ranks": [
+        1
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "dc-rs::correct::mmlu_pro_engineering:11492"
+      ],
+      "threshold": null,
+      "top_k": 1,
+      "source_span_ids": [
+        "dc-rs::correct::mmlu_pro_engineering:11492"
+      ],
+      "source_span_join_sha256": "6316aafb99f2f37b91132d6de3240c7502e664447b040873b563c883cbeb11b2"
+    },
+    {
+      "row_id": "dd0faf76658c3df24ab0d57ae2cbf995323d871df3124aa4c657fdc0f6382830",
+      "task": "mmlu_pro_engineering",
+      "baseline": "dc_rs",
+      "arm": "irrelevant",
+      "sample_id": "mmlu_pro_engineering:11642",
+      "query_sha256": "64bbc32eeef0d22c1f543e63fd6de7d8f9f208ec70f2b9cf59cf4a2288f89043",
+      "query_source": "data/phase13/core/materialized/mmlu_pro_engineering.jsonl",
+      "query_source_sha256": "c8ff52f9f797ee91c69692a9802f421f2b1117695727da2502140e6e4e92ad36",
+      "state_identity_sha256": "3ec0d3316a55e4fa87421383f50bd93cd7c184ac0522f509b3cc0bd9d0201ec8",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "0b3b149764e1fdd6792598f8c7b7fc42c617da200b8abdac225bd8d78dc1db0f",
+      "candidate_ids": [
+        "dc-rs::irrelevant::mmlu_pro_engineering:11492"
+      ],
+      "scores": [
+        0.3656712234999948
+      ],
+      "ranks": [
+        1
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "dc-rs::irrelevant::mmlu_pro_engineering:11492"
+      ],
+      "threshold": null,
+      "top_k": 1,
+      "source_span_ids": [
+        "dc-rs::irrelevant::mmlu_pro_engineering:11492"
+      ],
+      "source_span_join_sha256": "9fdaada233b797e08421f424ce00846202eda28a6e4a61d1f9b3eab97b5b8265"
+    },
+    {
+      "row_id": "e53e45c29816fa7537b9c8da0db8c6cfb30c5b00bf00e5c73d43dd002dcb1c90",
+      "task": "mmlu_pro_engineering",
+      "baseline": "dc_rs",
+      "arm": "contam",
+      "sample_id": "mmlu_pro_engineering:11642",
+      "query_sha256": "64bbc32eeef0d22c1f543e63fd6de7d8f9f208ec70f2b9cf59cf4a2288f89043",
+      "query_source": "data/phase13/core/materialized/mmlu_pro_engineering.jsonl",
+      "query_source_sha256": "c8ff52f9f797ee91c69692a9802f421f2b1117695727da2502140e6e4e92ad36",
+      "state_identity_sha256": "2adde3e5dc4f6176f0e0189a9736e4a40130af9129a674960556278981672c54",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "8639c9a12e002c8da2cbf4378cbde77084be999db7cd90cf21bd38b8cc033961",
+      "candidate_ids": [
+        "dc-rs::contam::mmlu_pro_engineering:11492"
+      ],
+      "scores": [
+        0.3656712234999948
+      ],
+      "ranks": [
+        1
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "dc-rs::contam::mmlu_pro_engineering:11492"
+      ],
+      "threshold": null,
+      "top_k": 1,
+      "source_span_ids": [
+        "dc-rs::contam::mmlu_pro_engineering:11492"
+      ],
+      "source_span_join_sha256": "542d8005972e31b3fc12abe2cf47a82ac6c2afaba3818b441d1a042596aaf6d1"
+    },
+    {
+      "row_id": "84593b91c52e3333409eec1eb7367f22d5eb5b51149ef92627e7fafb3fe5e323",
+      "task": "mmlu_pro_physics",
+      "baseline": "dc_rs",
+      "arm": "clean",
+      "sample_id": "mmlu_pro_physics:10004",
+      "query_sha256": "6d5455dfe834f5cad2bd62d5a84b43b88aeddee849fea9f94e7c12e0263ab186",
+      "query_source": "data/phase13/core/materialized/mmlu_pro_physics.jsonl",
+      "query_source_sha256": "adcb50a3ab7303470a07df495f822ad06cf7b14fc6a78c357558e2aad7871743",
+      "state_identity_sha256": "85df3030fc5ed50b644e3b145b49d54db8ad11591ce6dcbac973f77ac90956f3",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "14defcb43bfda2d54dfb84b77ec9a52374964f20c785d80f90a716ec56ba381c",
+      "candidate_ids": [
+        "dc-rs::clean::mmlu_pro_physics:9960"
+      ],
+      "scores": [
+        0.44761304818594644
+      ],
+      "ranks": [
+        1
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "dc-rs::clean::mmlu_pro_physics:9960"
+      ],
+      "threshold": null,
+      "top_k": 1,
+      "source_span_ids": [
+        "dc-rs::clean::mmlu_pro_physics:9960"
+      ],
+      "source_span_join_sha256": "82313c4be56388c48b54d3ed47674a403a469931fe3490124311e63d58690ff4"
+    },
+    {
+      "row_id": "eddfa6dcec45d5e8cefbd99e4b90256f294275a9312e0aa59ac0107c4ad70618",
+      "task": "mmlu_pro_physics",
+      "baseline": "dc_rs",
+      "arm": "correct",
+      "sample_id": "mmlu_pro_physics:10004",
+      "query_sha256": "6d5455dfe834f5cad2bd62d5a84b43b88aeddee849fea9f94e7c12e0263ab186",
+      "query_source": "data/phase13/core/materialized/mmlu_pro_physics.jsonl",
+      "query_source_sha256": "adcb50a3ab7303470a07df495f822ad06cf7b14fc6a78c357558e2aad7871743",
+      "state_identity_sha256": "b0a4d293a1062286ede3acab2a07d0565d4d1d9ae93792743c7e347321282623",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "b7b3427935b7fedbb7d323be8dd6f1b5df6e3f2f1ec28c10617a72cfb5975859",
+      "candidate_ids": [
+        "dc-rs::correct::mmlu_pro_physics:9960"
+      ],
+      "scores": [
+        0.44761304818594644
+      ],
+      "ranks": [
+        1
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "dc-rs::correct::mmlu_pro_physics:9960"
+      ],
+      "threshold": null,
+      "top_k": 1,
+      "source_span_ids": [
+        "dc-rs::correct::mmlu_pro_physics:9960"
+      ],
+      "source_span_join_sha256": "df3562e5f51368ca9e22eba6cc9ac0d13661275c7a7fbae386a66100ba58d55b"
+    },
+    {
+      "row_id": "28fc5faa9d765b5cd8e4d6525851d6de7c585c8bc4ef405aa53fab4fa699b93f",
+      "task": "mmlu_pro_physics",
+      "baseline": "dc_rs",
+      "arm": "irrelevant",
+      "sample_id": "mmlu_pro_physics:10004",
+      "query_sha256": "6d5455dfe834f5cad2bd62d5a84b43b88aeddee849fea9f94e7c12e0263ab186",
+      "query_source": "data/phase13/core/materialized/mmlu_pro_physics.jsonl",
+      "query_source_sha256": "adcb50a3ab7303470a07df495f822ad06cf7b14fc6a78c357558e2aad7871743",
+      "state_identity_sha256": "92faf184287b06618f787d53040aeb8f1ac9a0043b804cb58151687d623e78fb",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "0d84ea8d31c843411843c9428a78850f835591d34e11edf29fe578c13937bbc1",
+      "candidate_ids": [
+        "dc-rs::irrelevant::mmlu_pro_physics:9960"
+      ],
+      "scores": [
+        0.44761304818594644
+      ],
+      "ranks": [
+        1
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "dc-rs::irrelevant::mmlu_pro_physics:9960"
+      ],
+      "threshold": null,
+      "top_k": 1,
+      "source_span_ids": [
+        "dc-rs::irrelevant::mmlu_pro_physics:9960"
+      ],
+      "source_span_join_sha256": "1d98731bba74755a63b7d86bb53602fdcef224a824104156606859d69398527d"
+    },
+    {
+      "row_id": "ddaf38de919c7959f8d2d8b81428fa3dd215cfa86af8d4dea5cae36403be406b",
+      "task": "mmlu_pro_physics",
+      "baseline": "dc_rs",
+      "arm": "contam",
+      "sample_id": "mmlu_pro_physics:10004",
+      "query_sha256": "6d5455dfe834f5cad2bd62d5a84b43b88aeddee849fea9f94e7c12e0263ab186",
+      "query_source": "data/phase13/core/materialized/mmlu_pro_physics.jsonl",
+      "query_source_sha256": "adcb50a3ab7303470a07df495f822ad06cf7b14fc6a78c357558e2aad7871743",
+      "state_identity_sha256": "06d0ca5a02b45c56aa4c7d297225e4ff6b9fe6fe2589edb921ea088250e830cc",
+      "corpus_identity_sha256": null,
+      "index_identity_sha256": "c2d31fe36afaf72174b4d674e0c58aea59e779e5c174fc5ef4f9bdb0e26ccc7d",
+      "candidate_ids": [
+        "dc-rs::contam::mmlu_pro_physics:9960"
+      ],
+      "scores": [
+        0.44761304818594644
+      ],
+      "ranks": [
+        1
+      ],
+      "tie_policy": "score_desc_id_lexical",
+      "selected_ids": [
+        "dc-rs::contam::mmlu_pro_physics:9960"
+      ],
+      "threshold": null,
+      "top_k": 1,
+      "source_span_ids": [
+        "dc-rs::contam::mmlu_pro_physics:9960"
+      ],
+      "source_span_join_sha256": "898ea4df7f8dac78d2778b8cc944f3a061342bc91aa25d3d60fbcf2890294144"
+    }
+  ],
+  "report_hash": "6e8e97567ff0e3b873dce41fdc172196b3867ceb0416a1048ccef07bd720b33c"
+}

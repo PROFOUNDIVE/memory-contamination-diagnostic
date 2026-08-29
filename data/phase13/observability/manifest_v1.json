@@ -6,11 +6,11 @@
   "artifacts": {
     "observability_registration_packet": {
       "path": "registration_packet_v1.json",
-      "sha256": "810c25a3fa6a68913c09e8da525f85c4e485aa4704f622a7168c516583fe8d76"
+      "sha256": "b2f9d7b5cced3b7bd4f33272b952d9a2270696a5348121608d13876bce02e454"
     },
     "synthetic_contract_fixture": {
       "path": "fixture_v1.json",
-      "sha256": "d6c18b034b39f0100ea93ef27877c1f3d6a3e8e0e7df580279db4c7a26967a48"
+      "sha256": "e3f472e24c3c95b378067ad780e56b72228c5f45ab11c6ca833667245f52bb5b"
     },
     "target_set_registry": {
       "path": "target_set_registry_v1.json",
@@ -52,7 +52,7 @@
     },
     "phase13_cli": {
       "path": "src/memcontam/readiness/phase13_cli.py",
-      "sha256": "c05484cfbcea313ae9a3490f30bdeedcb8bd2d739a0988df7d7329ffe1d38590"
+      "sha256": "3e323a4b7f5180d35c619a772ce5817bdd16578ba6bf09d59b957960d0fb031f"
     },
     "track1_authority_state": {
       "path": "data/phase13/main/track1_authority_state_sync_checkpoint_v1.json",
@@ -68,7 +68,7 @@
     }
   },
   "expected_reconstruction_sha256": "e0e57053cf676439670e160ca49bb2d21df42d2f54e0afdc135248938a803d9f",
-  "registration_packet_sha256": "810c25a3fa6a68913c09e8da525f85c4e485aa4704f622a7168c516583fe8d76",
+  "registration_packet_sha256": "b2f9d7b5cced3b7bd4f33272b952d9a2270696a5348121608d13876bce02e454",
   "failure_classifier_registry_status": "PACKET_BOUND_REGISTERED",
   "u_t_status": "NOT_REGISTERED_FOR_CURRENT_MAIN",
   "downstream_blockers": [],

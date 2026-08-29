@@ -1,0 +1,12 @@
+{
+  "schema_version": "phase13_readiness0_live_authorization_v1",
+  "scope": "MINIMUM_PRODUCTION_FACING_READINESS0_LIVE_PILOT",
+  "request_sha256": "b5705340e3d66a447d05a85ea21a5ed6211e3884119266fdccc76b4ddbae2137",
+  "allow_live_calls": true,
+  "maximum_provider_calls": 12,
+  "authorizes_provider_backed_scientific_calibration": false,
+  "authorizes_mr_p5": false,
+  "authorizes_mr_p6": false,
+  "authorizes_main_a": false,
+  "answer_correctness_acceptance_criterion": false
+}

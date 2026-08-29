@@ -1,0 +1,103 @@
+{
+  "schema_version": "phase13_readiness0_live_implementation_manifest_v1",
+  "status": "PASS",
+  "artifacts": {
+    "live_cli": {
+      "path": "src/memcontam/readiness/phase13_readiness0_cli.py",
+      "sha256": "5485e4fa0400915a3c53251c8065e25229ba0efa97348c2a65a7595d405448b4"
+    },
+    "live_orchestrator": {
+      "path": "src/memcontam/readiness/phase13_readiness0_live.py",
+      "sha256": "c0e1b2e3295b04fd848adf3084483edbe543821b62072cec3b8de16af03c3db7"
+    },
+    "production_executor": {
+      "path": "src/memcontam/readiness/phase13_readiness0_live_runtime.py",
+      "sha256": "ca4fbde0bc0cfc2a40e9415fb6be95645c37b9774443ff09b3150869f7f155f3"
+    },
+    "call_budget": {
+      "path": "src/memcontam/readiness/phase13_readiness0_budget.py",
+      "sha256": "ff71e4ba9d890c1694f4a842cadab579d35192f964f2ced3fdf03a136926288e"
+    },
+    "f1c_runtime": {
+      "path": "src/memcontam/readiness/phase13_readiness0_f1c.py",
+      "sha256": "556d1f830e87d9e5327030a069556b62ea4c2cf6c5417cd00e4ed88dd63a45f8"
+    },
+    "f1c_report": {
+      "path": "src/memcontam/readiness/phase13_readiness0_f1c_report.py",
+      "sha256": "21e577df2c18f053a836ef70fb3e7b838d0317dca40e8d9ebc959b9b73df47dd"
+    },
+    "evidence_models": {
+      "path": "src/memcontam/readiness/phase13_readiness0_evidence_models.py",
+      "sha256": "ed43516bdbba8963fa5dd99362724b6c1b5ac8e2ee2f5e7ff4d3dde332000a02"
+    },
+    "evidence_builder": {
+      "path": "src/memcontam/readiness/phase13_readiness0_case_evidence.py",
+      "sha256": "99690505d6c284b2570eb14a58d2179f44970ed9c5a67a9a6e03ca7c48aed0d6"
+    },
+    "evidence_validator": {
+      "path": "src/memcontam/readiness/phase13_readiness0_evidence_validate.py",
+      "sha256": "b05c5b76739dab568589431ad02ae746de3a98bc815170729c9237c67c2f54ed"
+    },
+    "current_status": {
+      "path": "src/memcontam/readiness/phase13_readiness0_current_status.py",
+      "sha256": "168d698a826f300bb770a64354ee40659dded12dfdeebf77f67fc0f14b782d95"
+    },
+    "ordinary_runtime": {
+      "path": "src/memcontam/experiment/phase13_ordinary_runtime.py",
+      "sha256": "05492b3ff486e101536243597e2d5b07a00d984dbbcdd49152905f45c847859c"
+    },
+    "rag_adapter": {
+      "path": "src/memcontam/baselines/retrieval_rag_phase12.py",
+      "sha256": "71cbdc1b35f689db6ca2082a95fe3685febcc492249d45c4c1beb90909f52323"
+    },
+    "bot_retrieval": {
+      "path": "src/memcontam/baselines/bot_read.py",
+      "sha256": "aff5684a5c4e029b44a6d1953975d79d8ea62f44079d131a23346a5eca094717"
+    },
+    "dc_rs_adapter": {
+      "path": "src/memcontam/baselines/dynamic_cheatsheet_phase12.py",
+      "sha256": "2e4f2ed823ff0622cdac8b156892d787f24125132633cddfb1fab257b1344f9f"
+    },
+    "legacy_rag_runtime": {
+      "path": "src/memcontam/readiness/phase13_legacy_rag_runtime.py",
+      "sha256": "eca2db56881bbb6ca10e86eb91c83b127b6ec266177bcfefffc193ad9924509d"
+    },
+    "provider_adapter": {
+      "path": "src/memcontam/clients/openai_responses.py",
+      "sha256": "896527e0308adb0eb55c52b668b2df484d4c05980ef5bfdb2d5c72accc17ca40"
+    },
+    "recording_adapter": {
+      "path": "src/memcontam/clients/recording.py",
+      "sha256": "d4e416f191397437a6f57a742acf49af39e9b1297cb365bf0be3f6cf749ef27c"
+    },
+    "logging_schema": {
+      "path": "src/memcontam/logging/schema.py",
+      "sha256": "842cd854f060bc5e3b793efc56604b729287193646d64906c7f55a160dbda26a"
+    },
+    "logging_schema_v3": {
+      "path": "src/memcontam/logging/schema_v3.py",
+      "sha256": "1a0c010ddc3b4d1bd218f4c81e19d96f1884f7ee29b430785e6a47d376b21d21"
+    },
+    "cost_policy": {
+      "path": "src/memcontam/readiness/phase13_cost_policy.py",
+      "sha256": "4c188eb6be4664c5571978c4e7ed75f1aee4782428b7822321d03afc1f4f80d9"
+    },
+    "cost_policy_models": {
+      "path": "src/memcontam/readiness/phase13_cost_policy_models.py",
+      "sha256": "696d04ff57e257c7dc96aae7c738cf58ff782055dc28f9be1d8e5f9e9e445f68"
+    },
+    "stage_envelopes": {
+      "path": "data/phase13/main/cost_envelope_v2/stage_envelope_registry_v1.json",
+      "sha256": "55b27d76bb89c08e9ad9ca9de5b38230467616f2a97f471a7d3238072194ea52"
+    },
+    "failure_contract": {
+      "path": "data/phase13/main/cost_envelope_v2/retry_failure_contract_v1.json",
+      "sha256": "f566f39667dfc34f5809e8cc6ec3c9af895119ed38234792fbf161652df357be"
+    },
+    "activated_cost_policy": {
+      "path": "data/phase13/main/cost_envelope_v2/activated_policy_v1.json",
+      "sha256": "f0468cd995fc2ec59c5fbccd4a1e899a2379c3ddbb31a313456857cb5d12c4f1"
+    }
+  },
+  "manifest_hash": "299dea97a205485faa3d5b88c1714ca57deb881bea51ea63ac7db95357186c7b"
+}

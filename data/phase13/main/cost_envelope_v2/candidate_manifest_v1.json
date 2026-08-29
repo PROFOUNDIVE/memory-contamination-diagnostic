@@ -19,7 +19,7 @@
     },
     "cost_proof": {
       "path": "data/phase13/main/cost_envelope_v2/cost_proof_v1.json",
-      "sha256": "549358635d1fd608458fb0e9c882a0e2f88156de5b53be77d2cad181bfad7f9b"
+      "sha256": "5562acaeaf10b286d57bc638686d51751a09d0d22aa331829121ac18ac828481"
     },
     "controlled_external_write": {
       "path": "data/phase13/main/cost_envelope_v2/controlled_external_write_v1.json",
@@ -51,5 +51,5 @@
     "main_execution_authorized": false,
     "main_a_measured_scientific_execution_count": 0
   },
-  "manifest_hash": "632168d3aad62b71c0776a0ef248bd2eb188a5507372b4fbb31d9828206bbbd0"
+  "manifest_hash": "1aaee4368d6e7691edc54f8463a67ce8121a344a721db69b836ab7c01dc5ce57"
 }

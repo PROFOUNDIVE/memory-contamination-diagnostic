@@ -1,0 +1,25 @@
+{
+  "schema_version": "phase13_readiness0_f1c_registry_v1",
+  "status": "PASS",
+  "cache_environment_variable": "MEMCONTAM_BGE_CACHE_DIR",
+  "local_files_only": true,
+  "model_id": "BAAI/bge-m3",
+  "revision": "5617a9f61b028005a4858fdac845db406aefb181",
+  "normalize_embeddings": true,
+  "vector_dimension": 1024,
+  "report": {
+    "path": "data/phase13/main/mr_p4/readiness0_f1c_report_v1.json",
+    "sha256": "976f00cfa9a2c13bd91cea30de9a654fe56080fff34320b345ddaeb059fda74b"
+  },
+  "runtime_hash": "a6352ce4de433467e368c9f67ade1e3603a1f4a4c77fb00ee9703aee4b4117e1",
+  "legacy_rag_manifest": {
+    "path": "data/phase13/rag/legacy/manifest.json",
+    "sha256": "7017ed990edc78d76cb300d443eb69281900e564c2e02f4bc7fadba9aa69fd10"
+  },
+  "ready_legacy_cells": [
+    "game24",
+    "math_equation_balancer",
+    "word_sorting"
+  ],
+  "f1c_hash": "9fc0c81915d8bcf575a20a6701ff845767f49c1205cb8cba44b991d7cba2c1e2"
+}

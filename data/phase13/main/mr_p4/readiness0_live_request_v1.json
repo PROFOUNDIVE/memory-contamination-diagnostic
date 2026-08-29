@@ -1,0 +1,47 @@
+{
+  "schema_version": "phase13_readiness0_live_request_v1",
+  "status": "PRE_LIVE_AUTHORIZED",
+  "scientific_result": false,
+  "main_result": false,
+  "measured_main_a_trajectory_count": 0,
+  "case_ids": [
+    "nomem_mmlu_engineering_seed0_suffix1",
+    "nomem_mmlu_physics_seed0_suffix1",
+    "fh_bounded_game24_clean_seed0_suffix1",
+    "rag_frozen_game24_clean_seed0_suffix1",
+    "bot_style_game24_clean_seed0_suffix1",
+    "reflexion_game24_clean_seed0_suffix1",
+    "dc_rs_game24_clean_seed0_suffix1"
+  ],
+  "maximum_provider_calls": 12,
+  "implementation_manifest": {
+    "path": "data/phase13/main/mr_p4/readiness0_live_implementation_manifest_v1.json",
+    "sha256": "b58a12be3028846ad3537e6ee9ef84672468dbbd31675bf65a8c9a4f75d3a6b9"
+  },
+  "window_proof": {
+    "path": "data/phase13/main/mr_p4/readiness0_window_proof_v1.json",
+    "sha256": "99decc17225dcf6f87b60de71ab6d38729a01c032ffd90ba0397b191c6e0a191"
+  },
+  "f1c_registry": {
+    "path": "data/phase13/main/mr_p4/readiness0_f1c_registry_v1.json",
+    "sha256": "f23e4c3d58ae18f59e78f5692af0cbce746dcf69dc808583ead03520b191e736"
+  },
+  "core_manifest": {
+    "path": "data/phase13/core/materialized/manifest.json",
+    "sha256": "9640831f3dfd6e99abd796e0cee4d4c6e3e9d6e5fd8460512fd81b6d63963203"
+  },
+  "legacy_rag_manifest": {
+    "path": "data/phase13/rag/legacy/manifest.json",
+    "sha256": "7017ed990edc78d76cb300d443eb69281900e564c2e02f4bc7fadba9aa69fd10"
+  },
+  "checkpoint_registry": {
+    "path": "data/phase13/main/mr_p4/main_a_common_checkpoint_registry_v1.json",
+    "sha256": "ec26757928ee3e9883aab23f6e7b416e71159b5e6b740e63effee6b8eb58a64b"
+  },
+  "observability_packet": {
+    "path": "data/phase13/observability/registration_packet_v1.json",
+    "sha256": "b2f9d7b5cced3b7bd4f33272b952d9a2270696a5348121608d13876bce02e454"
+  },
+  "credentials_source": "CURRENT_PROCESS_ENVIRONMENT_ONLY",
+  "request_hash": "719da50e937f605335cc58d08ccb32662f519cb0743bd4e9e8f14340b14801cf"
+}

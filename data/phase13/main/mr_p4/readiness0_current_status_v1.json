@@ -1,0 +1,49 @@
+{
+  "schema_version": "phase13_readiness0_current_status_v1",
+  "status": "PRE_DISPATCH_BLOCKED",
+  "failure_code": "READINESS0_PRE_DISPATCH_BLOCKED",
+  "external_blockers": [
+    "OPENAI_API_KEY_MISSING",
+    "READINESS0_REAUTHORIZATION_REQUIRED"
+  ],
+  "f1c_status": "PASS",
+  "provider_calls_issued": 0,
+  "output_directory_created": false,
+  "scientific_result": false,
+  "main_result": false,
+  "measured_main_a_trajectory_count": 0,
+  "mr_p4_status": "OPEN",
+  "mr_p4_closure_claimed": false,
+  "mr_p5_status": "NOT_STARTED",
+  "mr_p6_status": "NOT_AUTHORIZED",
+  "main_a_status": "NOT_STARTED",
+  "main_execution_authorized": false,
+  "credential_present": false,
+  "artifacts": {
+    "live_request": {
+      "path": "data/phase13/main/mr_p4/readiness0_live_request_v1.json",
+      "sha256": "0202af95351812def2067d2351d6b33a0cdf296993eb23383514d13157b29897"
+    },
+    "live_authorization": {
+      "path": "data/phase13/main/mr_p4/readiness0_live_authorization_v1.json",
+      "sha256": "468a11ca7af02d527a74f35199cc7aa9a0a5df71278e5b111ab50152f06f1c7f"
+    },
+    "f1c_registry": {
+      "path": "data/phase13/main/mr_p4/readiness0_f1c_registry_v1.json",
+      "sha256": "f23e4c3d58ae18f59e78f5692af0cbce746dcf69dc808583ead03520b191e736"
+    },
+    "f1c_report": {
+      "path": "data/phase13/main/mr_p4/readiness0_f1c_report_v1.json",
+      "sha256": "976f00cfa9a2c13bd91cea30de9a654fe56080fff34320b345ddaeb059fda74b"
+    },
+    "implementation_manifest": {
+      "path": "data/phase13/main/mr_p4/readiness0_live_implementation_manifest_v1.json",
+      "sha256": "b58a12be3028846ad3537e6ee9ef84672468dbbd31675bf65a8c9a4f75d3a6b9"
+    },
+    "window_proof": {
+      "path": "data/phase13/main/mr_p4/readiness0_window_proof_v1.json",
+      "sha256": "99decc17225dcf6f87b60de71ab6d38729a01c032ffd90ba0397b191c6e0a191"
+    }
+  },
+  "status_hash": "b91a2a1b1622c75f879c994d71f7d2c25855b6a124097cf596dd9f23f84b5550"
+}

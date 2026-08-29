@@ -20,22 +20,61 @@
   "censoring": "RIGHT_CENSORED_AT_REGISTERED_OR_FIXTURE_ENDPOINT",
   "u_t_status": "NOT_REGISTERED_FOR_CURRENT_MAIN",
   "implementation_identities": {
-    "authority_state": {"path": "data/phase13/main/track1_authority_state_sync_checkpoint_v1.json", "sha256": "84ce7b495b6450e82333aeb008fd6b7279532007648f4667038c1e8834e09d0d"},
-    "registration": {"path": "src/memcontam/evaluation/phase13_observability_registration.py", "sha256": "5c24be5b0685fab403ce9bee8dac58747c6e5e6c739f792b69c4a3825f1a96af"},
-    "sequence": {"path": "src/memcontam/evaluation/phase13_observability_sequence.py", "sha256": "1417da9e1d87ea2aecf0570930829d32e03aacdabfd348ab7f4823dd0ab2b12e"}
+    "authority_state": {
+      "path": "data/phase13/main/track1_authority_state_sync_checkpoint_v1.json",
+      "sha256": "84ce7b495b6450e82333aeb008fd6b7279532007648f4667038c1e8834e09d0d"
+    },
+    "registration": {
+      "path": "src/memcontam/evaluation/phase13_observability_registration.py",
+      "sha256": "5c24be5b0685fab403ce9bee8dac58747c6e5e6c739f792b69c4a3825f1a96af"
+    },
+    "sequence": {
+      "path": "src/memcontam/evaluation/phase13_observability_sequence.py",
+      "sha256": "1417da9e1d87ea2aecf0570930829d32e03aacdabfd348ab7f4823dd0ab2b12e"
+    }
   },
   "verifier_identities": {
-    "game24": {"path": "src/memcontam/verifiers/game24.py", "sha256": "ae343911d957d763ce2e43742362e557afa0415c841f9be8c7299f0929778d3e"},
-    "math_equation_balancer": {"path": "src/memcontam/verifiers/math_equation_balancer.py", "sha256": "1225789314c153528ba7284e108fc9c8e1e93114345cb1458af332ccb380bfca"},
-    "word_sorting": {"path": "src/memcontam/verifiers/word_sorting.py", "sha256": "f18f71ac5d139600269c79c7700511afbeea63d92688720c84169f450bff184c"},
-    "mmlu_pro_engineering": {"path": "src/memcontam/tasks/multiple_choice.py", "sha256": "7908a8d4a03c9f7ae4eb2aac9dc1bc3b66d3b32bd406370e58e28673e34cfcba"},
-    "mmlu_pro_physics": {"path": "src/memcontam/tasks/multiple_choice.py", "sha256": "7908a8d4a03c9f7ae4eb2aac9dc1bc3b66d3b32bd406370e58e28673e34cfcba"}
+    "game24": {
+      "path": "src/memcontam/verifiers/game24.py",
+      "sha256": "ae343911d957d763ce2e43742362e557afa0415c841f9be8c7299f0929778d3e"
+    },
+    "math_equation_balancer": {
+      "path": "src/memcontam/verifiers/math_equation_balancer.py",
+      "sha256": "1225789314c153528ba7284e108fc9c8e1e93114345cb1458af332ccb380bfca"
+    },
+    "word_sorting": {
+      "path": "src/memcontam/verifiers/word_sorting.py",
+      "sha256": "f18f71ac5d139600269c79c7700511afbeea63d92688720c84169f450bff184c"
+    },
+    "mmlu_pro_engineering": {
+      "path": "src/memcontam/tasks/multiple_choice.py",
+      "sha256": "7908a8d4a03c9f7ae4eb2aac9dc1bc3b66d3b32bd406370e58e28673e34cfcba"
+    },
+    "mmlu_pro_physics": {
+      "path": "src/memcontam/tasks/multiple_choice.py",
+      "sha256": "7908a8d4a03c9f7ae4eb2aac9dc1bc3b66d3b32bd406370e58e28673e34cfcba"
+    }
   },
   "applicability_identities": {
-    "game24": {"path": "data/phase12/registries/candidate_registry_v1.json", "sha256": "7dc76a6816a1d3d641a38db71c9152eccf9fe290b4dfdc9d4fd19f62a73ceef8"},
-    "math_equation_balancer": {"path": "data/phase12/registries/candidate_registry_v1.json", "sha256": "7dc76a6816a1d3d641a38db71c9152eccf9fe290b4dfdc9d4fd19f62a73ceef8"},
-    "word_sorting": {"path": "data/phase12/registries/candidate_registry_v1.json", "sha256": "7dc76a6816a1d3d641a38db71c9152eccf9fe290b4dfdc9d4fd19f62a73ceef8"},
-    "mmlu_pro_engineering": {"path": "src/memcontam/readiness/phase13_new_mcq_candidate.py", "sha256": "547f063bbeee113268b9a63c080e8722ee89911d47d339cded91d8d83ad26754"},
-    "mmlu_pro_physics": {"path": "src/memcontam/readiness/phase13_new_mcq_candidate.py", "sha256": "547f063bbeee113268b9a63c080e8722ee89911d47d339cded91d8d83ad26754"}
+    "game24": {
+      "path": "data/phase12/registries/candidate_registry_v1.json",
+      "sha256": "7dc76a6816a1d3d641a38db71c9152eccf9fe290b4dfdc9d4fd19f62a73ceef8"
+    },
+    "math_equation_balancer": {
+      "path": "data/phase12/registries/candidate_registry_v1.json",
+      "sha256": "7dc76a6816a1d3d641a38db71c9152eccf9fe290b4dfdc9d4fd19f62a73ceef8"
+    },
+    "word_sorting": {
+      "path": "data/phase12/registries/candidate_registry_v1.json",
+      "sha256": "7dc76a6816a1d3d641a38db71c9152eccf9fe290b4dfdc9d4fd19f62a73ceef8"
+    },
+    "mmlu_pro_engineering": {
+      "path": "src/memcontam/readiness/phase13_new_mcq_candidate.py",
+      "sha256": "547f063bbeee113268b9a63c080e8722ee89911d47d339cded91d8d83ad26754"
+    },
+    "mmlu_pro_physics": {
+      "path": "src/memcontam/readiness/phase13_new_mcq_candidate.py",
+      "sha256": "547f063bbeee113268b9a63c080e8722ee89911d47d339cded91d8d83ad26754"
+    }
   }
 }
