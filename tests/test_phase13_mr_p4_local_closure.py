@@ -17,6 +17,7 @@ from memcontam.readiness.phase13_main_readiness import (
     Phase13MainReadinessError,
     validate_main_readiness,
 )
+from memcontam.readiness.phase13_main_readiness_models import MainReadinessReport
 from memcontam.readiness.phase13_observability_models import Phase13ObservabilityFixture
 from memcontam.readiness.phase13_production_observability import (
     ProductionObservabilityArchive,
@@ -58,7 +59,7 @@ def _conformance_archive() -> ProductionObservabilityArchive:
 
 
 def test_local_mr_p4_package_materializes_every_policy_fixed_registry() -> None:
-    report = validate_main_readiness(PACKAGE, ROOT, _manifest_sha256())
+    report: MainReadinessReport = validate_main_readiness(PACKAGE, ROOT, _manifest_sha256())
 
     assert report.execution_template_count == 97
     assert report.level2_interaction_count == 18
@@ -71,16 +72,23 @@ def test_local_mr_p4_package_materializes_every_policy_fixed_registry() -> None:
 
 
 def test_local_mr_p4_package_fails_closed_only_on_live_external_dependencies() -> None:
-    report = validate_main_readiness(PACKAGE, ROOT, _manifest_sha256())
+    report: MainReadinessReport = validate_main_readiness(PACKAGE, ROOT, _manifest_sha256())
 
     assert report.status == "READINESS0_LIVE_EXTERNAL_DEPENDENCY_BLOCKED"
-    assert set(report.blockers) == {
+    assert report.blockers == (
         "OPENAI_API_KEY_MISSING",
-        "F1C_RUNTIME_ENVIRONMENT_NOT_CONFIGURED",
-    }
+        "READINESS0_REAUTHORIZATION_REQUIRED",
+    )
+    assert report.f1c_status == "PASS"
+    assert report.provider_calls_issued == 0
+    assert report.output_directory_created is False
+    assert report.scientific_result is False
+    assert report.main_result is False
+    assert report.mr_p4_status == "OPEN"
     assert report.mr_p4_closure_claimed is False
-    assert report.mr_p5_status == "NOT_YET_FROZEN"
-    assert report.mr_p6_status == "NOT_YET_AUTHORIZED"
+    assert report.mr_p5_status == "NOT_STARTED"
+    assert report.mr_p6_status == "NOT_AUTHORIZED"
+    assert report.main_a_status == "NOT_STARTED"
     assert report.main_execution_authorized is False
 
 
@@ -102,6 +110,78 @@ def test_mr_p4_manifest_binds_direct_safety_dependencies() -> None:
         "cost_policy_models",
         "cost_policy_handoff",
     } <= set(manifest["artifacts"])
+
+
+def test_mr_p4_manifest_binds_current_readiness0_attempt_artifacts() -> None:
+    manifest = json.loads((PACKAGE / "manifest_v1.json").read_text(encoding="utf-8"))
+
+    assert {
+        "readiness0_live_request",
+        "readiness0_live_authorization",
+        "readiness0_f1c_registry",
+        "readiness0_current_status",
+    } <= set(manifest["artifacts"])
+
+
+def test_historical_readiness0_request_remains_stale_provenance_not_current_status() -> None:
+    historical = json.loads(
+        (PACKAGE / "readiness0_request_v1.json").read_text(encoding="utf-8")
+    )
+    report: MainReadinessReport = validate_main_readiness(PACKAGE, ROOT, _manifest_sha256())
+
+    assert historical["external_blockers"] == [
+        "OPENAI_API_KEY_MISSING",
+        "F1C_RUNTIME_ENVIRONMENT_NOT_CONFIGURED",
+    ]
+    assert report.blockers == (
+        "OPENAI_API_KEY_MISSING",
+        "READINESS0_REAUTHORIZATION_REQUIRED",
+    )
+    assert report.f1c_status == "PASS"
+
+
+def test_mr_p4_current_status_hash_binding_rejects_tamper(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = json.loads((PACKAGE / "manifest_v1.json").read_text(encoding="utf-8"))
+    identity = manifest["artifacts"]["readiness0_current_status"]
+    status_path = ROOT / identity["path"]
+    tampered = status_path.read_bytes() + b" "
+    original_read = phase13_main_readiness.read_regular_nofollow
+
+    def read_with_tampered_status(path: Path) -> bytes:
+        return tampered if path == status_path else original_read(path)
+
+    monkeypatch.setattr(phase13_main_readiness, "read_regular_nofollow", read_with_tampered_status)
+    with pytest.raises(Phase13MainReadinessError, match="MR_P4_ARTIFACT_HASH_MISMATCH"):
+        validate_main_readiness(PACKAGE, ROOT, _manifest_sha256())
+
+
+def test_mr_p4_current_status_semantic_tamper_fails_after_hash_refresh(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    package = tmp_path / "mr_p4"
+    shutil.copytree(PACKAGE, package)
+    manifest = json.loads((package / "manifest_v1.json").read_text(encoding="utf-8"))
+    identity = manifest["artifacts"]["readiness0_current_status"]
+    status_path = ROOT / identity["path"]
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    status["provider_calls_issued"] = 1
+    status["status_hash"] = _canonical_hash(
+        {key: value for key, value in status.items() if key != "status_hash"}
+    )
+    tampered = json.dumps(status).encode()
+    identity["sha256"] = hashlib.sha256(tampered).hexdigest()
+    _write_rehashed_manifest(package, manifest)
+    original_read = phase13_main_readiness.read_regular_nofollow
+
+    def read_with_tampered_status(path: Path) -> bytes:
+        return tampered if path == status_path else original_read(path)
+
+    monkeypatch.setattr(phase13_main_readiness, "read_regular_nofollow", read_with_tampered_status)
+    with pytest.raises(Phase13MainReadinessError, match="MR_P4_PREREQUISITE_INVALID"):
+        validate_main_readiness(package, ROOT, _manifest_sha256(package))
 
 
 def test_production_contract_rejects_stateful_provider_continuation() -> None:

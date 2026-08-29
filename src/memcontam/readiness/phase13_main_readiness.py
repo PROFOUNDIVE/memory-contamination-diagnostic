@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 
 from pydantic import ValidationError
@@ -37,6 +38,12 @@ from memcontam.readiness.phase13_readiness0 import (
     Phase13Readiness0Error,
     validate_readiness0_request,
 )
+from memcontam.readiness.phase13_readiness0_current_status import (
+    CurrentReadiness0Status,
+    CurrentReadiness0StatusError,
+    PreliveArtifactBytes,
+    validate_current_readiness0_status,
+)
 from memcontam.readiness.phase13_observability_validate import (
     validate_phase13_observability_package,
 )
@@ -50,6 +57,12 @@ from .phase13_production_observability import (
 def validate_main_readiness(
     root: Path, repository_root: Path, expected_manifest_sha256: str
 ) -> MainReadinessReport:
+    return generate_main_readiness_report(root, repository_root, expected_manifest_sha256)
+
+
+def generate_main_readiness_report(
+    root: Path, repository_root: Path, expected_manifest_sha256: str
+) -> MainReadinessReport:
     try:
         raw = read_regular_nofollow(root / "manifest_v1.json")
         manifest_sha256 = hashlib.sha256(raw).hexdigest()
@@ -57,7 +70,7 @@ def validate_main_readiness(
             raise Phase13MainReadinessError("MR_P4_MANIFEST_HASH_MISMATCH")
         manifest = MainReadinessManifest.model_validate_json(raw)
         _validate_artifacts(repository_root, manifest.artifacts)
-        _validate_prerequisites(repository_root, manifest)
+        current = _validate_prerequisites(repository_root, manifest)
         packet_path = repository_root / manifest.artifacts["observability_packet"].path
         fixture_path = repository_root / manifest.artifacts["observability_fixture"].path
         packet_raw = read_regular_nofollow(packet_path)
@@ -87,14 +100,17 @@ def validate_main_readiness(
                 manifest.gates.provider_session_retry_resource_contract_status
             ),
             u_t_status=manifest.u_t_status,
-            blockers=tuple(
-                validate_readiness0_request(
-                    repository_root / manifest.artifacts["readiness0_request"].path
-                ).external_blockers
-            ),
-            mr_p4_closure_claimed=manifest.mr_p4_closure_claimed,
-            mr_p5_status=manifest.mr_p5_status,
-            mr_p6_status=manifest.mr_p6_status,
+            blockers=current.external_blockers,
+            f1c_status=current.f1c_status,
+            provider_calls_issued=current.provider_calls_issued,
+            output_directory_created=current.output_directory_created,
+            scientific_result=current.scientific_result,
+            main_result=current.main_result,
+            mr_p4_status=current.mr_p4_status,
+            mr_p4_closure_claimed=current.mr_p4_closure_claimed,
+            mr_p5_status=current.mr_p5_status,
+            mr_p6_status=current.mr_p6_status,
+            main_a_status=current.main_a_status,
             main_execution_authorized=manifest.main_execution_authorized,
             main_a_measured_scientific_execution_count=(
                 manifest.main_a_measured_scientific_execution_count
@@ -110,6 +126,7 @@ def validate_main_readiness(
         Phase13CostActivationError,
         Phase13MainCheckpointError,
         Phase13Readiness0Error,
+        CurrentReadiness0StatusError,
     ) as error:
         raise Phase13MainReadinessError("MR_P4_PREREQUISITE_INVALID") from error
     except ProductionObservabilityError as error:
@@ -138,7 +155,10 @@ def _validate_artifacts(root: Path, artifacts: dict[str, ArtifactIdentity]) -> N
         "main_readiness_validator", "main_readiness_authority", "main_readiness_models",
         "task_seed_orders", "common_checkpoint_registry", "main_checkpoint_validator",
         "activated_cost_policy", "cost_activation_validator", "readiness0_request",
-        "readiness0_validator",
+        "readiness0_validator", "readiness0_live_request", "readiness0_live_authorization",
+        "readiness0_f1c_registry", "readiness0_f1c_report", "readiness0_current_status",
+        "readiness0_live_implementation_manifest", "readiness0_window_proof",
+        "readiness0_live_models", "readiness0_current_status_validator",
     }
     if set(artifacts) != required:
         raise Phase13MainReadinessError("MR_P4_ARTIFACT_SET_MISMATCH")
@@ -150,7 +170,9 @@ def _validate_artifacts(root: Path, artifacts: dict[str, ArtifactIdentity]) -> N
             raise Phase13MainReadinessError("MR_P4_ARTIFACT_HASH_MISMATCH")
 
 
-def _validate_prerequisites(root: Path, manifest: MainReadinessManifest) -> None:
+def _validate_prerequisites(
+    root: Path, manifest: MainReadinessManifest
+) -> CurrentReadiness0Status:
     validate_track1(read_regular_nofollow(root / manifest.artifacts["track1"].path))
     validate_package_selection(
         read_regular_nofollow(root / manifest.artifacts["package_selection"].path)
@@ -158,6 +180,40 @@ def _validate_prerequisites(root: Path, manifest: MainReadinessManifest) -> None
     validate_main_checkpoint_package(root / "data/phase13/main/mr_p4", root)
     validate_activated_cost_policy(root)
     validate_readiness0_request(root / manifest.artifacts["readiness0_request"].path)
+    current = validate_current_readiness0_status(
+        read_regular_nofollow(root / manifest.artifacts["readiness0_current_status"].path),
+        PreliveArtifactBytes(
+            live_request=read_regular_nofollow(
+                root / manifest.artifacts["readiness0_live_request"].path
+            ),
+            live_authorization=read_regular_nofollow(
+                root / manifest.artifacts["readiness0_live_authorization"].path
+            ),
+            f1c_registry=read_regular_nofollow(
+                root / manifest.artifacts["readiness0_f1c_registry"].path
+            ),
+            f1c_report=read_regular_nofollow(
+                root / manifest.artifacts["readiness0_f1c_report"].path
+            ),
+            implementation_manifest=read_regular_nofollow(
+                root / manifest.artifacts["readiness0_live_implementation_manifest"].path
+            ),
+            window_proof=read_regular_nofollow(
+                root / manifest.artifacts["readiness0_window_proof"].path
+            ),
+            repository_root=root,
+            credential_present=bool(os.environ.get("OPENAI_API_KEY")),
+        ),
+    )
+    if (
+        manifest.mr_p4_closure_claimed != current.mr_p4_closure_claimed
+        or manifest.mr_p5_status != current.mr_p5_status
+        or manifest.mr_p6_status != current.mr_p6_status
+        or manifest.main_execution_authorized != current.main_execution_authorized
+        or manifest.main_a_measured_scientific_execution_count
+        != current.measured_main_a_trajectory_count
+    ):
+        raise Phase13MainReadinessError("MR_P4_CURRENT_STATUS_MISMATCH")
     validate_common_capacity_artifact(root / manifest.artifacts["capacity"].path, root)
     try:
         legacy = json.loads(
@@ -176,10 +232,12 @@ def _validate_prerequisites(root: Path, manifest: MainReadinessManifest) -> None
         root,
         manifest.artifacts["observability_manifest"].sha256,
     )
+    return current
 
 
 __all__ = [
     "MainReadinessReport",
     "Phase13MainReadinessError",
+    "generate_main_readiness_report",
     "validate_main_readiness",
 ]

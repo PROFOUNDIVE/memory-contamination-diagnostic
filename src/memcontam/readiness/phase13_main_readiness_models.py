@@ -113,8 +113,8 @@ class MainReadinessManifest(_FrozenModel):
     gates: GateStates
     u_t_status: Literal["NOT_REGISTERED_FOR_CURRENT_MAIN"]
     mr_p4_closure_claimed: Literal[False]
-    mr_p5_status: Literal["NOT_YET_FROZEN"]
-    mr_p6_status: Literal["NOT_YET_AUTHORIZED"]
+    mr_p5_status: Literal["NOT_STARTED"]
+    mr_p6_status: Literal["NOT_AUTHORIZED"]
     main_execution_authorized: Literal[False]
     main_a_measured_scientific_execution_count: Literal[0]
     closure_hash: Sha256
@@ -141,9 +141,16 @@ class MainReadinessReport(_FrozenModel):
     provider_session_retry_resource_contract_status: str
     u_t_status: str
     blockers: tuple[str, ...]
+    f1c_status: str
+    provider_calls_issued: int
+    output_directory_created: bool
+    scientific_result: bool
+    main_result: bool
+    mr_p4_status: str
     mr_p4_closure_claimed: bool
     mr_p5_status: str
     mr_p6_status: str
+    main_a_status: str
     main_execution_authorized: bool
     main_a_measured_scientific_execution_count: int
 
