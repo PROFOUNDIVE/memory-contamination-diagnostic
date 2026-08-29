@@ -194,6 +194,14 @@ class CallEvent(EventContext):
     provider_cost_usd: float | None = Field(default=None, ge=0)
     provider_response_id: str | None = None
     provider_usage: dict[str, Any] | None = None
+    provider_service_tier: str | None = None
+    provider_returned_model: str | None = None
+    provider_response_status: str | None = None
+    provider_request_contract: dict[str, Any] | None = None
+    provider_authority_contract: dict[str, Any] | None = None
+    authoritative_provider_cost_usd: float | None = Field(default=None, ge=0)
+    derived_cost_usd: float | None = Field(default=None, ge=0)
+    provider_cost_source: str | None = None
 
 
 class FailureEvent(EventContext):
@@ -464,6 +472,14 @@ class MethodCall(BaseModel):
     provider_cost_usd: float | None = Field(default=None, ge=0)
     provider_response_id: str | None = None
     provider_usage: dict[str, Any] | None = None
+    provider_service_tier: str | None = None
+    provider_returned_model: str | None = None
+    provider_response_status: str | None = None
+    provider_request_contract: dict[str, Any] | None = None
+    provider_authority_contract: dict[str, Any] | None = None
+    authoritative_provider_cost_usd: float | None = Field(default=None, ge=0)
+    derived_cost_usd: float | None = Field(default=None, ge=0)
+    provider_cost_source: str | None = None
     retrieved_records: list[RetrievalRecord] = Field(default_factory=list)
     source_spans: list[PromptSourceSpan] = Field(default_factory=list)
 

@@ -4,7 +4,6 @@ import hashlib
 import json
 from pathlib import Path
 
-import pytest
 import yaml
 
 from memcontam.clients.base import LLMResponse
@@ -203,7 +202,7 @@ def test_clean_prefix_runtime_executes_all_frozen_trajectories(
     assert (run_dir / "archive_seal.json").is_file()
 
 
-def test_failed_runtime_preserves_partial_accounting_archive(
+def test_failed_provider_call_is_retained_as_durable_runtime_evidence(
     tmp_path: Path, monkeypatch  # noqa: ANN001
 ) -> None:
     client = _FailingClient()
@@ -212,26 +211,30 @@ def test_failed_runtime_preserves_partial_accounting_archive(
         tmp_path, monkeypatch, "phase13-calibration-failure", config_path
     )
 
-    with pytest.raises(RuntimeError, match="scripted provider failure"):
-        execute_clean_prefix_calibration(
-            config_path,
-            "phase13-calibration-failure",
-            client=client,
-            embedding_provider=_Embedder(),
-            artifact_root=tmp_path,
-            request_path=request_path,
-            authorization_path=authorization_path,
-            expected_authorization_sha256=authorization_sha256,
-            allow_live_calls=True,
-        )
+    result = execute_clean_prefix_calibration(
+        config_path,
+        "phase13-calibration-failure",
+        client=client,
+        embedding_provider=_Embedder(),
+        artifact_root=tmp_path,
+        request_path=request_path,
+        authorization_path=authorization_path,
+        expected_authorization_sha256=authorization_sha256,
+        allow_live_calls=True,
+    )
 
     run_dir = tmp_path / "phase13-calibration-failure"
-    assert json.loads((run_dir / "run.json").read_text(encoding="utf-8"))["status"] == "invalidated"
+    assert result["status"] == "completed"
+    assert json.loads((run_dir / "run.json").read_text(encoding="utf-8"))["status"] == "completed"
     assert json.loads((run_dir / "accounting.json").read_text(encoding="utf-8"))[
         "semantic_calls"
     ] == 1
-    assert len((run_dir / "calls.jsonl").read_text(encoding="utf-8").splitlines()) == 1
-    assert (run_dir / "failures.jsonl").stat().st_size > 0
+    calls = [
+        json.loads(line)
+        for line in (run_dir / "calls.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert any(call.get("error_type") == "_ScriptedProviderError" for call in calls)
+    assert (run_dir / "failures.jsonl").stat().st_size == 0
     assert (run_dir / "archive_seal.json").is_file()
 
 

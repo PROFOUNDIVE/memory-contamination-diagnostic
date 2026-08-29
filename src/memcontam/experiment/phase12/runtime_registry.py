@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Callable, Mapping, TypeVar
 
 from memcontam.baselines.bot_phase12 import BoTPhase12Adapter, BoTStateV3, BoTTrialContextV3
@@ -30,6 +30,7 @@ from memcontam.readiness.phase13_cost_policy import (
     Phase13CostPolicyError,
     Phase13ProviderCallError,
 )
+from memcontam.clients.recording import MethodCallRecorder
 
 
 class RuntimeStateError(ValueError):
@@ -106,12 +107,15 @@ def _config(context: Any, baseline: str) -> dict[str, Any]:
     }
 
 
-def _provider_failure(error: Exception) -> BaselineExecutionOutcome:
+def _provider_failure(
+    error: Exception, method_calls: tuple[object, ...] = ()
+) -> BaselineExecutionOutcome:
     return BaselineExecutionOutcome(
         status="failed",
         error_type="ProviderCallFailure",
         failure_disposition="provider_call_failed",
         scientific_ineligibility_reason="provider_call_failed",
+        method_calls=method_calls,
         metadata={
             "exception_type": type(error).__name__,
             "message": str(error),
@@ -251,12 +255,17 @@ def _reflexion_execute(context: Any, state: object) -> RuntimeTrialResult:
 
 
 def _dc_execute(context: Any, state: object) -> RuntimeTrialResult:
+    recorder = MethodCallRecorder(
+        context.client, trial_context={"trial_id": context.identities.trial_id}
+    )
     try:
-        execution = dc_runtime.execute(context, state)
+        execution = dc_runtime.execute(replace(context, client=recorder), state)
     except (dc_runtime.DcRsRuntimeError, dc_runtime.dc.DcRsContractError) as error:
         raise RuntimeStateError(error.code) from error
     except (Phase13CostPolicyError, Phase13ProviderCallError) as error:
-        return RuntimeTrialResult(_provider_failure(error), state)
+        return RuntimeTrialResult(
+            _provider_failure(error, tuple(recorder.get_records())), state
+        )
     result = execution.result
     native_entries = tuple(
         entry

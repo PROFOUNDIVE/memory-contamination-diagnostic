@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass, replace
 from typing import Any, Literal, Mapping, Sequence
 
@@ -240,7 +242,9 @@ def _prompt_events(
 ) -> tuple[BoTPromptDecision, RetrievalEvent, ContextEvent]:
     decision_data = outcome.metadata.get("retrieval_decision")
     if not isinstance(decision_data, dict):
-        raise BoTContractError("RETRIEVAL_DECISION_MISSING")
+        if outcome.status != "failed":
+            raise BoTContractError("RETRIEVAL_DECISION_MISSING")
+        decision_data = {"decision": "empty_buffer", "matched_entry_id": None}
     matched_entry_id = decision_data.get("matched_entry_id")
     if not isinstance(matched_entry_id, str):
         matched_entry_id = None
@@ -252,6 +256,12 @@ def _prompt_events(
         raise BoTContractError("FINAL_PROMPT_INCLUSION_MISMATCH")
     score = decision_data.get("top_similarity")
     scores = [float(score)] if matched and isinstance(score, (int, float)) else []
+    distilled_problem = outcome.metadata.get("distilled_problem", {})
+    if not isinstance(distilled_problem, Mapping):
+        raise BoTContractError("DISTILLED_PROBLEM_INVALID")
+    query_hash = hashlib.sha256(
+        json.dumps(distilled_problem, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
     retrieval = RetrievalEvent(
         record_type="retrieval_event",
         event_id=f"{trial.trial_id}:retrieval",
@@ -259,7 +269,7 @@ def _prompt_events(
         trial_id=trial.trial_id,
         event_seq=0,
         retrieval_id=f"{trial.trial_id}:retrieval",
-        query_hash="bot-local-retrieval",
+        query_hash=query_hash,
         retrieved_entry_ids=[] if matched_entry_id is None else [matched_entry_id],
         retrieved_scores=scores,
     )

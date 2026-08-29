@@ -273,6 +273,18 @@ class CostPolicyClient:
         self._retry = bundle.retry
         self._stages = {stage.semantic_stage_id: stage for stage in bundle.registry.stages}
         self._registry_id = bundle.registry.registry_id
+        self._registry_sha256 = bundle.registry.registry_hash
+        self._failure_contract_id = bundle.retry.contract_id
+        self._failure_contract_sha256 = bundle.retry.contract_hash
+        self._terminal_failure_contract_id = bundle.retry.terminal_failure_contract_id
+        self._terminal_failure_contract_sha256 = bundle.retry.terminal_failure_contract_sha256
+        self._rate_card_sha256 = hashlib.sha256(
+            json.dumps(
+                bundle.proof.rate_card.model_dump(mode="json"),
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
 
     def chat(self, messages: list[dict[str, str]], model: str, config: dict) -> LLMResponse:
         stage = self._stage(config.get("method_stage"))
@@ -281,8 +293,15 @@ class CostPolicyClient:
         bound = {
             **config,
             "max_output_tokens": stage.maximum_output_tokens,
+            "_phase13_maximum_input_tokens": stage.maximum_input_tokens,
             "_phase13_execution_envelope_id": self._registry_id,
+            "_phase13_execution_envelope_sha256": self._registry_sha256,
             "_phase13_maximum_transport_attempts": self._retry.maximum_transport_attempts_per_semantic_call,
+            "_phase13_failure_contract_id": self._failure_contract_id,
+            "_phase13_failure_contract_sha256": self._failure_contract_sha256,
+            "_phase13_terminal_failure_contract_id": self._terminal_failure_contract_id,
+            "_phase13_terminal_failure_contract_sha256": self._terminal_failure_contract_sha256,
+            "_phase13_rate_card_sha256": self._rate_card_sha256,
         }
         try:
             response = self._client.chat(messages, model, bound)

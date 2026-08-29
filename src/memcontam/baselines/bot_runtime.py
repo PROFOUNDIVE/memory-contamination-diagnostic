@@ -103,6 +103,13 @@ class BotRuntime:
             return _failure_outcome(
                 recorder, memory_before, metadata, "bot_invalid_problem_distillation", None
             )
+        except RuntimeError:
+            records = recorder.get_records()
+            if not records or records[-1].error_type is None:
+                raise
+            return _failure_outcome(
+                recorder, memory_before, metadata, "provider_call_failed", None
+            )
 
         metadata["distilled_problem"] = distilled.model_dump()
         retrieval_decision = retrieve_top_template(distilled, buffer_snapshot, embedding_provider)

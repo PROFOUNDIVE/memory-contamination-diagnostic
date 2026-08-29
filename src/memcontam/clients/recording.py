@@ -89,9 +89,10 @@ class MethodCallRecorder:
                 {key: value for key, value in config.items() if not key.startswith("_logging_")},
             )
         except Exception as exc:
+            provider_error = getattr(exc, "provider_error", exc)
             failure = self._capture_failure()
             failure["function"] = entrypoint
-            failed_usage = getattr(exc, "provider_token_usage", {})
+            failed_usage = getattr(provider_error, "provider_token_usage", {})
             if not isinstance(failed_usage, dict) or not all(
                 isinstance(key, str)
                 and isinstance(value, int)
@@ -100,14 +101,14 @@ class MethodCallRecorder:
                 for key, value in failed_usage.items()
             ):
                 failed_usage = {}
-            failed_latency = getattr(exc, "provider_latency_ms", None)
+            failed_latency = getattr(provider_error, "provider_latency_ms", None)
             if (
                 not isinstance(failed_latency, int)
                 or isinstance(failed_latency, bool)
                 or failed_latency < 0
             ):
                 failed_latency = None
-            failed_attempts = getattr(exc, "provider_attempts_count", retry_count + 1)
+            failed_attempts = getattr(provider_error, "provider_attempts_count", retry_count + 1)
             if (
                 not isinstance(failed_attempts, int)
                 or isinstance(failed_attempts, bool)
@@ -122,18 +123,26 @@ class MethodCallRecorder:
                     "retry_count": max(failed_attempts - 1, 0),
                     "transport_attempts": failed_attempts,
                     "error_type": type(exc).__name__,
-                    "failure_code": getattr(exc, "code", None),
+                    "failure_code": getattr(provider_error, "code", None),
                     "failure_function": failure["function"],
                     "failure_module": failure["module"],
                     "failure_line": failure["line"],
                     "origin": "provider_call",
-                    "provider_status": getattr(exc, "provider_status", None),
+                    "provider_status": getattr(provider_error, "provider_status", None),
                     "provider_incomplete_reason": getattr(
-                        exc, "provider_incomplete_reason", None
+                        provider_error, "provider_incomplete_reason", None
                     ),
-                    "provider_cost_usd": getattr(exc, "provider_cost_usd", None),
-                    "provider_response_id": getattr(exc, "provider_response_id", None),
-                    "provider_usage": getattr(exc, "provider_usage", None),
+                    "provider_cost_usd": getattr(provider_error, "provider_cost_usd", None),
+                    "provider_response_id": getattr(provider_error, "provider_response_id", None),
+                    "provider_usage": getattr(provider_error, "provider_usage", None),
+                    "provider_service_tier": getattr(provider_error, "provider_service_tier", None),
+                    "provider_returned_model": getattr(provider_error, "provider_returned_model", None),
+                    "provider_response_status": getattr(provider_error, "provider_response_status", None),
+                    "provider_request_contract": getattr(provider_error, "provider_request_contract", None),
+                    "provider_authority_contract": getattr(provider_error, "provider_authority_contract", None),
+                    "authoritative_provider_cost_usd": getattr(provider_error, "authoritative_provider_cost_usd", None),
+                    "derived_cost_usd": getattr(provider_error, "derived_cost_usd", None),
+                    "provider_cost_source": getattr(provider_error, "provider_cost_source", None),
                 }
             )
             method_call = self._call_event_to_method_call(call_event, stage)
@@ -150,6 +159,19 @@ class MethodCallRecorder:
                 "token_usage": response.token_usage,
                 "latency_ms": response.latency_ms,
                 "transport_attempts": _response_attempts(response),
+                "provider_cost_usd": response.raw.get("cost_usd"),
+                "provider_response_id": response.raw.get("response_id"),
+                "provider_usage": response.raw.get("usage"),
+                "provider_service_tier": response.raw.get("service_tier"),
+                "provider_returned_model": response.raw.get("model"),
+                "provider_response_status": response.raw.get("status"),
+                "provider_request_contract": response.raw.get("request_contract"),
+                "provider_authority_contract": response.raw.get("authority_contract"),
+                "authoritative_provider_cost_usd": response.raw.get(
+                    "authoritative_provider_cost_usd"
+                ),
+                "derived_cost_usd": response.raw.get("derived_cost_usd"),
+                "provider_cost_source": response.raw.get("cost_source"),
             }
         )
         method_call = self._call_event_to_method_call(call_event, stage)
@@ -219,6 +241,14 @@ class MethodCallRecorder:
             provider_cost_usd=event.provider_cost_usd,
             provider_response_id=event.provider_response_id,
             provider_usage=event.provider_usage,
+            provider_service_tier=event.provider_service_tier,
+            provider_returned_model=getattr(event, "provider_returned_model", None),
+            provider_response_status=getattr(event, "provider_response_status", None),
+            provider_request_contract=event.provider_request_contract,
+            provider_authority_contract=event.provider_authority_contract,
+            authoritative_provider_cost_usd=event.authoritative_provider_cost_usd,
+            derived_cost_usd=event.derived_cost_usd,
+            provider_cost_source=event.provider_cost_source,
             source_spans=event.source_spans,
         )
 

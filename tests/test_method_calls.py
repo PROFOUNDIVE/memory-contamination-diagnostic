@@ -207,6 +207,74 @@ def test_recorder_preserves_provider_accounting_on_failed_call() -> None:
     assert record.provider_usage == {"input_tokens": 7, "output_tokens": 11}
 
 
+def test_recorder_preserves_provider_accounting_on_successful_call() -> None:
+    usage = {"input_tokens": 7, "output_tokens": 11, "total_tokens": 18}
+    recorder = MethodCallRecorder(
+        _FakeClient(
+            [
+                LLMResponse(
+                    content="ok",
+                    raw={
+                        "attempts": 1,
+                        "cost_usd": 0.25,
+                        "response_id": "resp_complete",
+                        "service_tier": "default",
+                        "usage": usage,
+                        "request_contract": {
+                            "model": "gpt-5.6-luna",
+                            "reasoning": {
+                                "mode": "standard",
+                                "effort": "none",
+                                "context": "current_turn",
+                            },
+                            "previous_response_id": None,
+                            "service_tier": "default",
+                            "store": False,
+                            "tools": [],
+                            "max_output_tokens": 512,
+                        },
+                        "authority_contract": {
+                            "maximum_input_tokens": 9330,
+                            "maximum_output_tokens": 512,
+                            "execution_envelope_id": "CORE_EXECUTION_ENVELOPE_REGISTRY_V2",
+                            "execution_envelope_sha256": "1" * 64,
+                            "failure_contract_id": "CORE_TRANSPORT_ATTEMPT_CONTRACT_V2",
+                            "failure_contract_sha256": "2" * 64,
+                            "terminal_failure_contract_id": (
+                                "CORE_TERMINAL_TECHNICAL_MISSINGNESS_V1"
+                            ),
+                            "terminal_failure_contract_sha256": "3" * 64,
+                            "rate_card_sha256": "4" * 64,
+                        },
+                        "authoritative_provider_cost_usd": 0.2,
+                        "derived_cost_usd": 0.25,
+                        "cost_source": "AUTHORITATIVE_PROVIDER",
+                    },
+                    token_usage={"prompt_tokens": 7, "completion_tokens": 11},
+                    latency_ms=23,
+                )
+            ]
+        )
+    )
+
+    recorder.chat([{"role": "user", "content": "x"}], "m", {"method_stage": "complete"})
+
+    record = recorder.get_records()[0]
+    assert record.transport_attempts == 1
+    assert record.token_usage == {"prompt_tokens": 7, "completion_tokens": 11}
+    assert record.latency_ms == 23
+    assert record.provider_cost_usd == 0.25
+    assert record.provider_response_id == "resp_complete"
+    assert record.provider_usage == usage
+    assert record.provider_service_tier == "default"
+    assert record.provider_request_contract["model"] == "gpt-5.6-luna"
+    assert record.provider_request_contract["store"] is False
+    assert record.provider_authority_contract["maximum_input_tokens"] == 9330
+    assert record.authoritative_provider_cost_usd == 0.2
+    assert record.derived_cost_usd == 0.25
+    assert record.provider_cost_source == "AUTHORITATIVE_PROVIDER"
+
+
 def test_recorder_emits_callback_before_return_with_call_id() -> None:
     events: list[CallEvent] = []
     inner = _FakeClient(

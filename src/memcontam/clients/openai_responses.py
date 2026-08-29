@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import inspect
+import hashlib
+import json
 import os
 import time
 from typing import Any, Callable, Mapping, cast
@@ -12,6 +14,7 @@ from openai.resources.responses.responses import Responses
 from memcontam.clients.base import LLMResponse
 from memcontam.clients.config import ProviderConfig
 from memcontam.clients.cost_guard import CostGuard
+from memcontam.readiness.phase13_readiness0_budget import BudgetedResponses, ResponsesResource
 
 
 class LiveCallNotAuthorized(RuntimeError):
@@ -21,6 +24,7 @@ class LiveCallNotAuthorized(RuntimeError):
 class LunaContractError(ValueError):
     def __init__(self, code: str) -> None:
         self.code = code
+        self.provider_attempts_count = 0
         super().__init__(code)
 
 
@@ -31,6 +35,7 @@ class OpenAIResponsesClient:
         *,
         allow_live_calls: bool,
         cost_guard: CostGuard | None = None,
+        maximum_provider_calls: int | None = None,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         if config.provider != "openai_responses":
@@ -53,6 +58,13 @@ class OpenAIResponsesClient:
         if config.timeout_seconds is not None:
             options["timeout"] = config.timeout_seconds
         self.client = OpenAI(**options)
+        self._responses = (
+            self.client.responses
+            if maximum_provider_calls is None
+            else BudgetedResponses(
+                cast(ResponsesResource, self.client.responses), maximum_calls=maximum_provider_calls
+            )
+        )
 
     def chat(self, messages: list[dict[str, str]], model: str, config: dict) -> LLMResponse:
         self._assert_live_call_authorized()
@@ -105,6 +117,8 @@ class OpenAIResponsesClient:
         if "requested_seed" in config and _responses_support_seed():
             request["seed"] = config["requested_seed"]
             seed_parameter_sent = True
+        request_contract = _request_contract(request, messages)
+        authority_contract = _authority_contract(config, max_output_tokens)
 
         start = time.perf_counter()
         attempts = 0
@@ -114,12 +128,15 @@ class OpenAIResponsesClient:
         while True:
             attempts += 1
             try:
-                response = self.client.responses.create(**cast(Any, request))
+                response = self._responses.create(**cast(Any, request))
                 break
             except Exception as error:
                 if not _is_retryable(error) or attempts > retries_after_initial_attempt:
                     setattr(error, "provider_attempts_count", attempts)
                     setattr(error, "provider_latency_ms", int((time.perf_counter() - start) * 1000))
+                    setattr(error, "provider_request_contract", request_contract)
+                    setattr(error, "provider_authority_contract", authority_contract)
+                    setattr(error, "provider_service_tier", self._config.service_tier)
                     raise
                 self._sleep(self._config.retry_delays_seconds[attempts - 1])
 
@@ -127,6 +144,17 @@ class OpenAIResponsesClient:
         usage = _usage_dict(getattr(response, "usage", None))
         token_usage = _token_usage(usage)
         cost_usd = self.cost_guard.record_usage(usage)
+        authoritative_cost = getattr(response, "cost_usd", None)
+        if not isinstance(authoritative_cost, (int, float)) or isinstance(
+            authoritative_cost, bool
+        ):
+            authoritative_cost = None
+        selected_cost = float(authoritative_cost) if authoritative_cost is not None else cost_usd
+        cost_source = (
+            "AUTHORITATIVE_PROVIDER"
+            if authoritative_cost is not None
+            else "DERIVED_FROM_PROVIDER_USAGE"
+        )
         if registered_cost_policy and getattr(response, "status", None) == "incomplete":
             error = LunaContractError("LUNA_PROVIDER_INCOMPLETE")
             setattr(error, "provider_attempts_count", attempts)
@@ -141,17 +169,31 @@ class OpenAIResponsesClient:
             setattr(error, "provider_token_usage", token_usage)
             setattr(error, "provider_cost_usd", cost_usd)
             setattr(error, "provider_response_id", getattr(response, "id", None))
+            setattr(error, "provider_service_tier", getattr(response, "service_tier", self._config.service_tier))
+            setattr(error, "provider_returned_model", getattr(response, "model", model))
+            setattr(error, "provider_response_status", getattr(response, "status", None))
+            setattr(error, "provider_request_contract", request_contract)
+            setattr(error, "provider_authority_contract", authority_contract)
+            setattr(error, "authoritative_provider_cost_usd", authoritative_cost)
+            setattr(error, "derived_cost_usd", cost_usd)
+            setattr(error, "provider_cost_source", cost_source)
             raise error
         return LLMResponse(
             content=_output_text(response),
             raw={
                 "response_id": getattr(response, "id", None),
                 "model": getattr(response, "model", model),
+                "status": getattr(response, "status", None),
                 "usage": usage,
                 "latency_ms": latency_ms,
                 "attempts": attempts,
                 "service_tier": getattr(response, "service_tier", self._config.service_tier),
-                "cost_usd": cost_usd,
+                "cost_usd": selected_cost,
+                "authoritative_provider_cost_usd": authoritative_cost,
+                "derived_cost_usd": cost_usd,
+                "cost_source": cost_source,
+                "request_contract": request_contract,
+                "authority_contract": authority_contract,
                 "seed_parameter_sent": seed_parameter_sent,
             },
             token_usage=token_usage,
@@ -167,6 +209,34 @@ class OpenAIResponsesClient:
 
 def _conservative_input_tokens(messages: list[dict[str, str]]) -> int:
     return sum(len(message.get("content", "")) + 16 for message in messages)
+
+
+def _request_contract(request: dict[str, object], messages: list[dict[str, str]]) -> dict[str, object]:
+    return {
+        "model": request["model"],
+        "input_sha256": hashlib.sha256(json.dumps(
+            messages, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        ).encode()).hexdigest(),
+        "temperature": request["temperature"], "top_p": request["top_p"],
+        "reasoning": request.get("reasoning"),
+        "previous_response_id": request.get("previous_response_id"),
+        "service_tier": request["service_tier"], "store": request["store"],
+        "tools": request.get("tools", []), "max_output_tokens": request["max_output_tokens"],
+    }
+
+
+def _authority_contract(config: dict, max_output_tokens: int) -> dict[str, object]:
+    return {
+        "maximum_input_tokens": config.get("_phase13_maximum_input_tokens"),
+        "maximum_output_tokens": max_output_tokens,
+        "execution_envelope_id": config.get("_phase13_execution_envelope_id"),
+        "execution_envelope_sha256": config.get("_phase13_execution_envelope_sha256"),
+        "failure_contract_id": config.get("_phase13_failure_contract_id"),
+        "failure_contract_sha256": config.get("_phase13_failure_contract_sha256"),
+        "terminal_failure_contract_id": config.get("_phase13_terminal_failure_contract_id"),
+        "terminal_failure_contract_sha256": config.get("_phase13_terminal_failure_contract_sha256"),
+        "rate_card_sha256": config.get("_phase13_rate_card_sha256"),
+    }
 
 
 def _responses_support_seed() -> bool:

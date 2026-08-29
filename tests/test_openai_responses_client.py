@@ -169,7 +169,7 @@ def test_luna_request_rejects_nondefault_provider_service_tier(monkeypatch) -> N
         retry_delays_seconds=(0.0, 0.0),
     )
 
-    with pytest.raises(LunaContractError, match="LUNA_RUNTIME_CONTRACT_MISMATCH"):
+    with pytest.raises(LunaContractError, match="LUNA_RUNTIME_CONTRACT_MISMATCH") as caught:
         client.chat(
             [{"role": "user", "content": "solve"}],
             model="gpt-5.6-luna",
@@ -177,6 +177,7 @@ def test_luna_request_rejects_nondefault_provider_service_tier(monkeypatch) -> N
         )
 
     assert _OpenAI.instance.responses.calls == []
+    assert caught.value.provider_attempts_count == 0
 
 
 def test_luna_cost_policy_disables_transport_retry(monkeypatch) -> None:

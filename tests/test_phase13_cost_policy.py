@@ -119,8 +119,25 @@ def test_cost_policy_binds_stage_caps_and_single_transport_attempt() -> None:
         {
             "method_stage": "bot_problem_distill",
             "max_output_tokens": 384,
+            "_phase13_maximum_input_tokens": 1177,
             "_phase13_execution_envelope_id": "CORE_EXECUTION_ENVELOPE_REGISTRY_V2",
+            "_phase13_execution_envelope_sha256": (
+                "4c48fca92d1d70105d2eb34b5b86984c732c03e3600cb00965501ecabd2d1769"
+            ),
             "_phase13_maximum_transport_attempts": 1,
+            "_phase13_failure_contract_id": "CORE_TRANSPORT_ATTEMPT_CONTRACT_V2",
+            "_phase13_failure_contract_sha256": (
+                "1ee66fcb795f97d483c2ef976133ee61dbd5108c9dae851c2c2786ff496d788f"
+            ),
+            "_phase13_terminal_failure_contract_id": (
+                "CORE_TERMINAL_TECHNICAL_MISSINGNESS_V1"
+            ),
+            "_phase13_terminal_failure_contract_sha256": (
+                "9bbcdd9dd1686af034f7c0d2114ac86d5837a07de0cc6ba8fef7940bbc822b75"
+            ),
+            "_phase13_rate_card_sha256": (
+                "50975b67dce4c59ba9267c3234a873076137ded5078aa3e8b5c9a2fad4ff3e06"
+            ),
         }
     ]
 
