@@ -32,6 +32,11 @@ from .phase13_observability_validate import (
     Phase13ObservabilityValidationError,
 )
 from .phase13_main_readiness import Phase13MainReadinessError
+from memcontam.readiness.phase13_readiness0_live import Readiness0LiveError
+from memcontam.readiness.phase13_readiness0_cli import (
+    add_readiness0_live_parser,
+    run_readiness0_live_command,
+)
 
 
 def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -84,6 +89,7 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
     main_readiness.add_argument("--repository-root", type=Path, required=True)
     main_readiness.add_argument("--root", type=Path, required=True)
     main_readiness.add_argument("--expected-manifest-sha256", required=True)
+    add_readiness0_live_parser(commands)
 
 
 def run(args: argparse.Namespace) -> None:
@@ -162,6 +168,9 @@ def run(args: argparse.Namespace) -> None:
                 args.expected_manifest_sha256,
             )
             print(json.dumps(readiness_report.model_dump(mode="json"), sort_keys=True))
+            return
+        if args.phase13_command == "run-readiness0-live":
+            run_readiness0_live_command(args)
             return
         if args.phase13_command == "materialize-legacy-rag":
             from memcontam.memory.embeddings import BgeM3EmbeddingProvider
@@ -246,5 +255,6 @@ def run(args: argparse.Namespace) -> None:
         LegacyRagValidationError,
         Phase13ObservabilityValidationError,
         Phase13MainReadinessError,
+        Readiness0LiveError,
     ) as error:
         raise SystemExit(error.code) from error
