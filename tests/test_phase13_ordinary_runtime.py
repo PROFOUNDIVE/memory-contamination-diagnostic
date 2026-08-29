@@ -216,7 +216,8 @@ def test_ordinary_runtime_binds_default_provider_service_tier() -> None:
     assert [config["service_tier"] for config in client.configs] == ["default"]
 
 
-def test_ordinary_runtime_binds_approved_cost_policy() -> None:
+def test_ordinary_runtime_binds_approved_cost_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ordinary_runtime, "_validated_common_capacity_tokens", lambda: 8192)
     task = TaskInstance(
         sample_id="game24:cost-policy",
         task_name="game24",
@@ -244,6 +245,25 @@ def test_ordinary_runtime_binds_approved_cost_policy() -> None:
         "CORE_EXECUTION_ENVELOPE_REGISTRY_V2"
     )
     assert client.configs[0]["_phase13_maximum_transport_attempts"] == 1
+    assert client.configs[0]["_phase13_maximum_input_tokens"] == 9330
+    assert client.configs[0]["_phase13_execution_envelope_sha256"] == (
+        "4c48fca92d1d70105d2eb34b5b86984c732c03e3600cb00965501ecabd2d1769"
+    )
+    assert client.configs[0]["_phase13_failure_contract_id"] == (
+        "CORE_TRANSPORT_ATTEMPT_CONTRACT_V2"
+    )
+    assert client.configs[0]["_phase13_failure_contract_sha256"] == (
+        "1ee66fcb795f97d483c2ef976133ee61dbd5108c9dae851c2c2786ff496d788f"
+    )
+    assert client.configs[0]["_phase13_terminal_failure_contract_id"] == (
+        "CORE_TERMINAL_TECHNICAL_MISSINGNESS_V1"
+    )
+    assert client.configs[0]["_phase13_terminal_failure_contract_sha256"] == (
+        "9bbcdd9dd1686af034f7c0d2114ac86d5837a07de0cc6ba8fef7940bbc822b75"
+    )
+    assert client.configs[0]["_phase13_rate_card_sha256"] == (
+        "50975b67dce4c59ba9267c3234a873076137ded5078aa3e8b5c9a2fad4ff3e06"
+    )
 
 
 def test_nomem_runtime_executes_clean_singleton_under_cost_policy(
@@ -625,6 +645,53 @@ def test_core_ordinary_execution_consumes_seeded_bundle_order(
     assert set(first.sample_ids) == {f"engineering:{index}" for index in range(250)}
     assert first.sample_ids != tuple(sorted(first.sample_ids))
     assert all(trial.outcome.status == "succeeded" for trial in first.trials)
+
+
+def test_luna_core_execution_selects_the_frozen_fifty_row_suffix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(ordinary_runtime, "_validated_common_capacity_tokens", lambda: 8192)
+    selection = json.loads(SELECTION_PATH.read_text(encoding="utf-8"))
+    rows = tuple(
+        _core_row(
+            "mmlu_pro_engineering",
+            f"mmlu_pro_engineering:{question_id}",
+            index,
+        )
+        for index, question_id in enumerate(
+            selection["tasks"]["mmlu_pro_engineering"]["question_ids"]
+        )
+    )
+    monkeypatch.setattr(ordinary_runtime, "validate_core_datasets", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(ordinary_runtime, "load_core_task", lambda *_args, **_kwargs: rows)
+    identity = production_identity_from_checkpoint(
+        ordinary_runtime.REPOSITORY_ROOT / "data/phase13/main/mr_p4",
+        ordinary_runtime.REPOSITORY_ROOT,
+        task="mmlu_pro_engineering",
+        trajectory_seed=0,
+        execution_template_id="mmlu_pro_engineering|nomem",
+        registration_packet_sha256="0" * 64,
+    )
+    run = ProspectiveOrdinaryRun(
+        task_name="mmlu_pro_engineering",
+        baseline="nomem",
+        run_id="readiness0-mmlu-engineering",
+        model="gpt-5.6-luna",
+        client=object.__new__(OpenAIResponsesClient),
+        allow_test_client=True,
+        verifier=lambda _answer, _task: True,
+        decoding={"temperature": 0.0},
+        core_bundle=Path("unused-in-test"),
+        trajectory_seed=0,
+        production_identity=identity,
+    )
+
+    ordered = ordinary_runtime._ordered_tasks(run)
+
+    assert len(ordered) == 50
+    assert hashlib.sha256(
+        json.dumps(tuple(row.sample_id for row in ordered), separators=(",", ":")).encode()
+    ).hexdigest() == identity.ordered_sample_ids_sha256
 
 
 def test_new_mcq_rag_is_excluded_from_current_main_after_fired_contingency(

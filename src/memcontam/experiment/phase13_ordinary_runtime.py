@@ -216,6 +216,21 @@ def execute_prospective_ordinary(run: ProspectiveOrdinaryRun) -> ProspectiveOrdi
     )
 
 
+def execute_readiness0_trial(run: ProspectiveOrdinaryRun) -> ProspectiveOrdinaryResult:
+    if (run.task_name, run.baseline) in CORE_MAIN_REGISTRY.current_main_excluded_cells:
+        raise ProspectiveOrdinaryError("EXCLUDED_CURRENT_MAIN_PROSPECTIVE_RAG_EXTENSION")
+    tasks = _ordered_tasks(run)
+    _validate_live_dispatch_identity(run, tasks)
+    context = _context(run, tasks[0], 1)
+    entry = PHASE13_CORE_BASELINE_REGISTRY[run.baseline]
+    state = entry.initial_state(context) if run.branch is None else deepcopy(run.branch.state)
+    result = entry.execute_trial(context, state)
+    _write(context.writer_callbacks, result)
+    return ProspectiveOrdinaryResult(
+        run.task_name, run.baseline, run.arm, tuple(task.sample_id for task in tasks), (result,)
+    )
+
+
 def _validate_live_dispatch_identity(
     run: ProspectiveOrdinaryRun,
     tasks: tuple[TaskInstance, ...],
@@ -262,7 +277,19 @@ def _ordered_tasks(run: ProspectiveOrdinaryRun) -> tuple[TaskInstance, ...]:
     assert run.trajectory_seed is not None
     validate_core_datasets(run.core_bundle, trajectory_seed=run.trajectory_seed)
     rows = load_core_task(run.core_bundle, _core_task(run.task_name))
-    return paired_trajectory_order(rows, trajectory_seed=run.trajectory_seed)
+    ordered = paired_trajectory_order(rows, trajectory_seed=run.trajectory_seed)
+    if run.model != "gpt-5.6-luna":
+        return ordered
+    if run.production_identity is None:
+        raise ProspectiveOrdinaryError("PRODUCTION_TRAJECTORY_SEED_MISMATCH")
+    for start in range(len(ordered) - 49):
+        suffix = ordered[start : start + 50]
+        digest = hashlib.sha256(
+            json.dumps(tuple(row.sample_id for row in suffix), separators=(",", ":")).encode()
+        ).hexdigest()
+        if digest == run.production_identity.ordered_sample_ids_sha256:
+            return suffix
+    raise ProspectiveOrdinaryError("PRODUCTION_SAMPLE_ORDER_MISMATCH")
 
 
 def _core_task(task: OrdinaryTask) -> CoreTask:
@@ -330,5 +357,6 @@ __all__ = [
     "ProspectiveOrdinaryError",
     "ProspectiveOrdinaryResult",
     "ProspectiveOrdinaryRun",
+    "execute_readiness0_trial",
     "execute_prospective_ordinary",
 ]
