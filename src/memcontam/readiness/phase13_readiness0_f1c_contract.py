@@ -5,12 +5,17 @@ import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, TypeAlias
+from typing import Final, TypeAlias, assert_never
 
 from memcontam.baselines.bot_read import COARSE_THOUGHT_STRUCTURES
 from memcontam.readiness.phase13_legacy_rag_models import BRANCHES
 from memcontam.readiness.phase13_main_checkpoint import CommonCheckpointRegistry
 from memcontam.readiness.phase13_readiness0_f1c_models import Arm, RetrievalBaseline, Task
+from memcontam.tasks.dispatch import canonical_task_json
+from memcontam.tasks.game24 import build_instance as build_game24
+from memcontam.tasks.math_equation_balancer import build_instance as build_meb
+from memcontam.tasks.multiple_choice import build_instance as build_multiple_choice
+from memcontam.tasks.word_sorting import build_instance as build_word_sorting
 
 
 TASKS: Final[tuple[Task, ...]] = (
@@ -74,7 +79,18 @@ def queries(root: Path) -> dict[Task, QuerySpec]:
         )
         rows = (root / source).read_text(encoding="utf-8").splitlines()
         row = next(parsed for line in rows if (parsed := json.loads(line))["sample_id"] == sample_id)
-        text = json.dumps(row.get("input", row), sort_keys=True, separators=(",", ":"))
+        match task:
+            case "game24":
+                instance = build_game24(row)
+            case "math_equation_balancer":
+                instance = build_meb(row)
+            case "word_sorting":
+                instance = build_word_sorting(row)
+            case "mmlu_pro_engineering" | "mmlu_pro_physics":
+                instance = build_multiple_choice(row)
+            case unreachable:
+                assert_never(unreachable)
+        text = canonical_task_json(instance)
         result[task] = QuerySpec(text=text, sample_id=sample_id, source=source)
     return result
 

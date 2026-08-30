@@ -35,6 +35,16 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _stale_authorization(tmp_path: Path) -> Path:
+    path = tmp_path / "stale-authorization.json"
+    authorization = json.loads(
+        (ARTIFACT_ROOT / "readiness0_live_authorization_v1.json").read_text(encoding="utf-8")
+    )
+    authorization["request_sha256"] = "0" * 64
+    path.write_text(json.dumps(authorization, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
 def _verified(output_dir: Path) -> live.VerifiedReadiness0:
     binding = live.ArtifactBinding(path="test", sha256="0" * 64)
     request = live.LiveRequest(
@@ -89,6 +99,44 @@ def _case_evidence(
     }[case.baseline]
     bundle = load_cost_policy_bundle(ROOT)
     stages = {stage.semantic_stage_id: stage for stage in bundle.registry.stages}
+    checkpoint = json.loads(
+        (ARTIFACT_ROOT / "main_a_common_checkpoint_registry_v1.json").read_text()
+    )
+    seed = checkpoint["tasks"][case.task]["seeds"][0]
+    f1c = json.loads((ARTIFACT_ROOT / "readiness0_f1c_report_v1.json").read_text())
+    rag_row = next(
+        (
+            row
+            for row in f1c["rows"]
+            if row["task"] == case.task
+            and row["baseline"] == case.baseline
+            and row["arm"] == "clean"
+        ),
+        None,
+    )
+    source_spans = (
+        tuple(
+            PromptSourceSpan(
+                message_index=1,
+                start=index * 2,
+                end=index * 2 + 1,
+                rendered_hash="0" * 64,
+                entry_id=entry_id,
+                source_ids=[],
+                parent_ids=[],
+                lineage_id=entry_id,
+                version="v0",
+                origin="seed",
+                clean_or_contaminated="clean",
+                contamination_class="clean",
+                lineage_status="unavailable",
+                lineage_basis="none",
+            )
+            for index, entry_id in enumerate(rag_row["selected_ids"], start=1)
+        )
+        if rag_row is not None
+        else ()
+    )
     calls = tuple(
         ProviderCallEvidence(
             call_id=f"{case.case_id}:call:{index}", stage=stage, raw_response="answer",
@@ -111,13 +159,17 @@ def _case_evidence(
             normalized_usage={"total_tokens": 2}, authoritative_provider_cost_usd=None,
             derived_cost_usd=0.000001, cost_source="DERIVED_FROM_PROVIDER_USAGE",
             rate_card_sha256="50975b67dce4c59ba9267c3234a873076137ded5078aa3e8b5c9a2fad4ff3e06",
-            source_spans=(),
+            source_spans=source_spans if stage == answer_stage else (),
         )
         for index, stage in enumerate(case.stages, start=1)
     )
     reflexion = case.baseline == "reflexion_style"
     source_span_join = tuple(
-        {"call_id": call.call_id, "source_spans": ()} for call in calls
+        {
+            "call_id": call.call_id,
+            "source_spans": tuple(span.model_dump(mode="json") for span in call.source_spans),
+        }
+        for call in calls
     )
     return live.CaseEvidence(
         case_id=case.case_id,
@@ -127,32 +179,48 @@ def _case_evidence(
         calls=calls,
         answer_call_id=next(call.call_id for call in reversed(calls) if call.stage == answer_stage),
         runtime=RuntimeJoinEvidence(
-            task=case.task, baseline=case.baseline, sample_id="sample-1", suffix_position=1,
+            task=case.task, baseline=case.baseline,
+            sample_id=seed["suffix_sample_ids"][0], suffix_position=1,
             sample_order=1, trajectory_seed=0, concrete_seed_id="0",
             execution_template_id=f"readiness0|{case.task}|{case.baseline}|clean",
-            ordered_sample_ids_sha256="1" * 64,
+            ordered_sample_ids_sha256=seed["suffix_sample_ids_sha256"],
             checkpoint_registry_sha256=_sha256(
                 ARTIFACT_ROOT / "main_a_common_checkpoint_registry_v1.json"
             ),
             registration_packet_sha256=_sha256(
                 ROOT / "data/phase13/observability/registration_packet_v1.json"
             ),
-            retrieval_query_sha256=("6" * 64 if case.baseline == "rag_frozen" else None),
+            retrieval_query_sha256=(rag_row["query_sha256"] if rag_row is not None else None),
             retrieval_candidates_sha256=(
                 hashlib.sha256(
                     json.dumps(
-                        {"entry_ids": ("entry-1",), "scores": (0.9,)},
+                        {
+                            "entry_ids": tuple(rag_row["selected_ids"]),
+                            "scores": tuple(
+                                dict(zip(rag_row["candidate_ids"], rag_row["scores"], strict=True))[
+                                    entry_id
+                                ]
+                                for entry_id in rag_row["selected_ids"]
+                            ),
+                        },
                         sort_keys=True, separators=(",", ":"),
                     ).encode()
                 ).hexdigest()
-                if case.baseline == "rag_frozen" else None
+                if rag_row is not None else None
             ),
             retrieval_source_span_sha256=hashlib.sha256(
                 json.dumps(source_span_join, sort_keys=True, separators=(",", ":")).encode()
             ).hexdigest(),
-            retrieval_event_id=("retrieval-1" if case.baseline == "rag_frozen" else None),
-            retrieved_entry_ids=(("entry-1",) if case.baseline == "rag_frozen" else ()),
-            retrieved_scores=((0.9,) if case.baseline == "rag_frozen" else ()),
+            retrieval_event_id=("retrieval-1" if rag_row is not None else None),
+            retrieved_entry_ids=(tuple(rag_row["selected_ids"]) if rag_row is not None else ()),
+            retrieved_scores=(
+                tuple(
+                    dict(zip(rag_row["candidate_ids"], rag_row["scores"], strict=True))[entry_id]
+                    for entry_id in rag_row["selected_ids"]
+                )
+                if rag_row is not None
+                else ()
+            ),
             memory_before_sha256="4" * 64,
             memory_after_sha256="5" * 64,
             capacity_law_id=(
@@ -327,13 +395,12 @@ def test_preflight_rejects_stale_authorization_before_cache_probe(
 ) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-only-not-dispatched")
     monkeypatch.setenv("MEMCONTAM_BGE_CACHE_DIR", str(tmp_path))
+    authorization_path = _stale_authorization(tmp_path)
     with pytest.raises(live.Readiness0LiveError, match="READINESS0_AUTHORIZATION_REQUEST_MISMATCH"):
         live.verify_preflight(
             request_path=ARTIFACT_ROOT / "readiness0_live_request_v1.json",
-            authorization_path=ARTIFACT_ROOT / "readiness0_live_authorization_v1.json",
-            expected_authorization_sha256=_sha256(
-                ARTIFACT_ROOT / "readiness0_live_authorization_v1.json"
-            ),
+            authorization_path=authorization_path,
+            expected_authorization_sha256=_sha256(authorization_path),
             f1c_registry_path=ARTIFACT_ROOT / "readiness0_f1c_registry_v1.json",
             repository_root=ROOT,
             core_root=ROOT / "data/phase13/core",
@@ -418,13 +485,12 @@ def test_stale_authorization_precedes_missing_credential(
 ) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.setenv("MEMCONTAM_BGE_CACHE_DIR", str(tmp_path))
+    authorization_path = _stale_authorization(tmp_path)
     with pytest.raises(live.Readiness0LiveError, match="READINESS0_AUTHORIZATION_REQUEST_MISMATCH"):
         live.run_readiness0_live(
             request_path=ARTIFACT_ROOT / "readiness0_live_request_v1.json",
-            authorization_path=ARTIFACT_ROOT / "readiness0_live_authorization_v1.json",
-            expected_authorization_sha256=_sha256(
-                ARTIFACT_ROOT / "readiness0_live_authorization_v1.json"
-            ),
+            authorization_path=authorization_path,
+            expected_authorization_sha256=_sha256(authorization_path),
             f1c_registry_path=ARTIFACT_ROOT / "readiness0_f1c_registry_v1.json",
             repository_root=ROOT,
             core_root=ROOT / "data/phase13/core",

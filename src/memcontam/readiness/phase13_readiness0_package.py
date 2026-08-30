@@ -8,6 +8,7 @@ from typing import Annotated, Final, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from memcontam.experiment.phase12.filter_challenge.mft_state_models import JsonValue
+from memcontam.readiness.phase13_authority_files import read_regular_nofollow
 from memcontam.readiness.phase13_main_checkpoint import (
     CommonCheckpointRegistry,
     validate_main_checkpoint_package,
@@ -22,6 +23,9 @@ IMPLEMENTATION_PATHS: Final = {
     "call_budget": "src/memcontam/readiness/phase13_readiness0_budget.py",
     "f1c_runtime": "src/memcontam/readiness/phase13_readiness0_f1c.py",
     "f1c_report": "src/memcontam/readiness/phase13_readiness0_f1c_report.py",
+    "f1c_contract": "src/memcontam/readiness/phase13_readiness0_f1c_contract.py",
+    "f1c_builder": "src/memcontam/readiness/phase13_readiness0_f1c_build.py",
+    "f1c_validator": "src/memcontam/readiness/phase13_readiness0_f1c_validate.py",
     "evidence_models": "src/memcontam/readiness/phase13_readiness0_evidence_models.py",
     "evidence_builder": "src/memcontam/readiness/phase13_readiness0_case_evidence.py",
     "evidence_validator": "src/memcontam/readiness/phase13_readiness0_evidence_validate.py",
@@ -122,15 +126,21 @@ def validate_implementation_manifest(
 def build_window_proof(root: Path, repository_root: Path) -> WindowProof:
     report = validate_main_checkpoint_package(root, repository_root)
     registry = CommonCheckpointRegistry.model_validate_json(
-        (root / "main_a_common_checkpoint_registry_v1.json").read_bytes()
+        read_regular_nofollow(root / "main_a_common_checkpoint_registry_v1.json")
     )
+    if any(
+        len(seed.suffix_sample_ids) != 50
+        for task_row in registry.tasks.values()
+        for seed in task_row.seeds
+    ):
+        raise Readiness0PackageError("READINESS0_WINDOW_PROOF_INVALID")
     contexts = tuple(
         TaskSeedContext(
             task=task,
             seed=seed.seed,
             checkpoint_registry_sha256=report.registry_sha256,
             suffix_sample_ids_sha256=seed.suffix_sample_ids_sha256,
-            suffix_length=len(seed.suffix_sample_ids),
+            suffix_length=50,
         )
         for task, task_row in registry.tasks.items()
         for seed in task_row.seeds
@@ -157,7 +167,7 @@ def build_window_proof(root: Path, repository_root: Path) -> WindowProof:
         H_primary=50,
         primary_analysis_window_id="core_prefix_50",
         provider_dispatch_suffix_positions=(1,),
-        resolved_context_count=sum(row.suffix_length for row in contexts),
+        resolved_context_count=2500,
         contexts=contexts,
         windows=windows,
         proof_hash="0" * 64,
@@ -183,7 +193,7 @@ def _model_hash(model: _FrozenModel, field: str) -> str:
 
 
 def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return hashlib.sha256(read_regular_nofollow(path)).hexdigest()
 
 
 __all__ = [

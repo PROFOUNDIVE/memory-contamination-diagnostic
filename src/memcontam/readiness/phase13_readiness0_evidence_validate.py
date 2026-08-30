@@ -5,7 +5,10 @@ import json
 from collections.abc import Sequence
 from pathlib import Path
 
+from memcontam.readiness.phase13_authority_files import read_regular_nofollow
 from memcontam.readiness.phase13_cost_policy import load_cost_policy_bundle
+from memcontam.readiness.phase13_main_checkpoint import CommonCheckpointRegistry
+from memcontam.readiness.phase13_readiness0_f1c_models import F1CReport
 from memcontam.readiness.phase13_readiness0_live_models import (
     CaseEvidence,
     EvidenceManifest,
@@ -35,7 +38,7 @@ _ANSWER_STAGE = {
 
 
 def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return hashlib.sha256(read_regular_nofollow(path)).hexdigest()
 
 
 def _canonical_hash(value: object) -> str:
@@ -50,6 +53,14 @@ def validate_pass_evidence(
 ) -> None:
     bundle = load_cost_policy_bundle(_ROOT)
     stages = {stage.semantic_stage_id: stage for stage in bundle.registry.stages}
+    checkpoint = CommonCheckpointRegistry.model_validate_json(
+        read_regular_nofollow(
+            _ROOT / "data/phase13/main/mr_p4/main_a_common_checkpoint_registry_v1.json"
+        )
+    )
+    f1c = F1CReport.model_validate_json(
+        read_regular_nofollow(_ROOT / "data/phase13/main/mr_p4/readiness0_f1c_report_v1.json")
+    )
     checkpoint_hash = _sha256(
         _ROOT / "data/phase13/main/mr_p4/main_a_common_checkpoint_registry_v1.json"
     )
@@ -70,11 +81,15 @@ def validate_pass_evidence(
         or manifest.scientific_result
         or manifest.main_result
         or manifest.measured_main_a_trajectory_count != 0
+        or manifest.terminal_case_id is not None
+        or manifest.terminal_stage is not None
+        or manifest.failure_code is not None
         or len(rows) != len(cases)
     ):
         raise EvidenceValidationError("READINESS0_EVIDENCE_CLOSURE_MISMATCH")
     call_ids: set[str] = set()
     for row, case in zip(rows, cases, strict=True):
+        seed = checkpoint.tasks[case.task].seeds[0]
         if (
             row.status != "succeeded"
             or row.case_id != case.case_id
@@ -86,6 +101,10 @@ def validate_pass_evidence(
             or row.answer_call_id not in {call.call_id for call in row.calls}
             or row.runtime.task != case.task
             or row.runtime.baseline != case.baseline
+            or row.runtime.sample_id != seed.suffix_sample_ids[0]
+            or row.runtime.execution_template_id
+            != f"readiness0|{case.task}|{case.baseline}|clean"
+            or row.runtime.ordered_sample_ids_sha256 != seed.suffix_sample_ids_sha256
             or row.runtime.suffix_position != 1
             or row.runtime.sample_order != 1
             or not row.runtime.text_only
@@ -175,14 +194,30 @@ def validate_pass_evidence(
         if runtime.retrieval_source_span_sha256 != _canonical_hash(source_spans):
             raise EvidenceValidationError("READINESS0_RETRIEVAL_JOIN_MISMATCH")
         if case.baseline == "rag_frozen":
+            matching_rows = tuple(
+                item
+                for item in f1c.rows
+                if item.task == case.task
+                and item.baseline == case.baseline
+                and item.arm == "clean"
+            )
+            if len(matching_rows) != 1:
+                raise EvidenceValidationError("READINESS0_RETRIEVAL_JOIN_MISSING")
+            expected = matching_rows[0]
+            scores = dict(zip(expected.candidate_ids, expected.scores, strict=True))
+            expected_scores = tuple(scores[entry_id] for entry_id in expected.selected_ids)
             candidates = {
                 "entry_ids": runtime.retrieved_entry_ids,
                 "scores": runtime.retrieved_scores,
             }
+            answer_span_ids = tuple(span.entry_id for span in answer_calls[0].source_spans)
             if (
                 runtime.retrieval_event_id is None
-                or runtime.retrieval_query_sha256 in {None, "0" * 64}
+                or runtime.retrieval_query_sha256 != expected.query_sha256
+                or runtime.retrieved_entry_ids != expected.selected_ids
+                or runtime.retrieved_scores != expected_scores
                 or runtime.retrieval_candidates_sha256 != _canonical_hash(candidates)
+                or answer_span_ids != expected.selected_ids
             ):
                 raise EvidenceValidationError("READINESS0_RETRIEVAL_JOIN_MISSING")
 
