@@ -1,0 +1,33 @@
+{
+  "schema_version": "phase13_readiness0_live_evidence_manifest_v1",
+  "status": "PASS",
+  "request_sha256": "bd71ed741471a1c9a38e1e465b369223638544e35fbb8ca362a320f562fbe187",
+  "authorization_sha256": "42f07d8b866955bc9464af3ac501f586e2b06a80c99e8d0ed1012e6f8e4c2a81",
+  "f1c_registry_sha256": "76fe787f3d84306742844b66a4b82ba6d90d44569dd62b24273c422ceb2b7518",
+  "f1c_runtime": {
+    "provider_identity": "BAAI/bge-m3@5617a9f61b028005a4858fdac845db406aefb181",
+    "vector_dimension": 1024,
+    "normalize_embeddings": true,
+    "python": "3.11.15",
+    "sentence_transformers": "5.6.0",
+    "torch": "2.13.0",
+    "device": "cpu",
+    "dtype": "torch.float32",
+    "local_files_only": true,
+    "network_attempts": 0,
+    "runtime_hash": "a6352ce4de433467e368c9f67ade1e3603a1f4a4c77fb00ee9703aee4b4117e1"
+  },
+  "cases": {
+    "path": "cases.jsonl",
+    "sha256": "0cb8c3b1910d0db67ad3aac6f2c91b574013c58e0d1c432ad25e88a1a2762656"
+  },
+  "case_count": 7,
+  "provider_call_count": 12,
+  "scientific_result": false,
+  "main_result": false,
+  "measured_main_a_trajectory_count": 0,
+  "terminal_case_id": null,
+  "terminal_stage": null,
+  "failure_code": null,
+  "manifest_hash": "2aedcc0e26ae024c16c79a58ac2b69b56ab8a86baa2b8180055f36173decb17a"
+}
