@@ -16,7 +16,7 @@
   "maximum_provider_calls": 12,
   "implementation_manifest": {
     "path": "data/phase13/main/mr_p4/readiness0_live_implementation_manifest_v1.json",
-    "sha256": "b58a12be3028846ad3537e6ee9ef84672468dbbd31675bf65a8c9a4f75d3a6b9"
+    "sha256": "7059bdaaf010e0aee95e603698795301e720132449df56f94cfa317b14d0aab2"
   },
   "window_proof": {
     "path": "data/phase13/main/mr_p4/readiness0_window_proof_v1.json",
@@ -24,7 +24,7 @@
   },
   "f1c_registry": {
     "path": "data/phase13/main/mr_p4/readiness0_f1c_registry_v1.json",
-    "sha256": "f23e4c3d58ae18f59e78f5692af0cbce746dcf69dc808583ead03520b191e736"
+    "sha256": "76fe787f3d84306742844b66a4b82ba6d90d44569dd62b24273c422ceb2b7518"
   },
   "core_manifest": {
     "path": "data/phase13/core/materialized/manifest.json",
@@ -43,5 +43,5 @@
     "sha256": "b2f9d7b5cced3b7bd4f33272b952d9a2270696a5348121608d13876bce02e454"
   },
   "credentials_source": "CURRENT_PROCESS_ENVIRONMENT_ONLY",
-  "request_hash": "719da50e937f605335cc58d08ccb32662f519cb0743bd4e9e8f14340b14801cf"
+  "request_hash": "3ded3435befde7f44d8628134875067b354afec1a08b6756d7f4cc2ceeb6255b"
 }

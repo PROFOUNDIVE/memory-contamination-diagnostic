@@ -26,6 +26,18 @@
       "path": "src/memcontam/readiness/phase13_readiness0_f1c_report.py",
       "sha256": "21e577df2c18f053a836ef70fb3e7b838d0317dca40e8d9ebc959b9b73df47dd"
     },
+    "f1c_contract": {
+      "path": "src/memcontam/readiness/phase13_readiness0_f1c_contract.py",
+      "sha256": "1778c562685c6e12e455c79defc5748f447c436b5c2ed6b2e49df3bf154cd6ef"
+    },
+    "f1c_builder": {
+      "path": "src/memcontam/readiness/phase13_readiness0_f1c_build.py",
+      "sha256": "fb6c0feb0fb324132b2d3f418a5e7dcee714c42688c55149a2910f0c4f85f6ca"
+    },
+    "f1c_validator": {
+      "path": "src/memcontam/readiness/phase13_readiness0_f1c_validate.py",
+      "sha256": "432561af78d78999508ce518a643eb72cb17280721577ba7d880e07705a08746"
+    },
     "evidence_models": {
       "path": "src/memcontam/readiness/phase13_readiness0_evidence_models.py",
       "sha256": "ed43516bdbba8963fa5dd99362724b6c1b5ac8e2ee2f5e7ff4d3dde332000a02"
@@ -36,7 +48,7 @@
     },
     "evidence_validator": {
       "path": "src/memcontam/readiness/phase13_readiness0_evidence_validate.py",
-      "sha256": "b05c5b76739dab568589431ad02ae746de3a98bc815170729c9237c67c2f54ed"
+      "sha256": "57e66f87dd05f26200eb3bc5dc946494ddd311151e6172499c1e87f7e2384dac"
     },
     "current_status": {
       "path": "src/memcontam/readiness/phase13_readiness0_current_status.py",
@@ -99,5 +111,5 @@
       "sha256": "f0468cd995fc2ec59c5fbccd4a1e899a2379c3ddbb31a313456857cb5d12c4f1"
     }
   },
-  "manifest_hash": "299dea97a205485faa3d5b88c1714ca57deb881bea51ea63ac7db95357186c7b"
+  "manifest_hash": "f83927628fc9e7dbdd1b48bca81c62b4dfb262194d4fd17f935cfec947414fdf"
 }
