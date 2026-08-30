@@ -71,21 +71,18 @@ def test_local_mr_p4_package_materializes_every_policy_fixed_registry() -> None:
     assert report.main_a_measured_scientific_execution_count == 0
 
 
-def test_local_mr_p4_package_fails_closed_only_on_live_external_dependencies() -> None:
+def test_local_mr_p4_package_closes_after_non_scientific_live_readiness() -> None:
     report: MainReadinessReport = validate_main_readiness(PACKAGE, ROOT, _manifest_sha256())
 
-    assert report.status == "READINESS0_LIVE_EXTERNAL_DEPENDENCY_BLOCKED"
-    assert report.blockers == (
-        "OPENAI_API_KEY_MISSING",
-        "READINESS0_REAUTHORIZATION_REQUIRED",
-    )
+    assert report.status == "MR_P4_CLOSED"
+    assert report.blockers == ()
     assert report.f1c_status == "PASS"
-    assert report.provider_calls_issued == 0
-    assert report.output_directory_created is False
+    assert report.provider_calls_issued == 12
+    assert report.output_directory_created is True
     assert report.scientific_result is False
     assert report.main_result is False
-    assert report.mr_p4_status == "OPEN"
-    assert report.mr_p4_closure_claimed is False
+    assert report.mr_p4_status == "CLOSED"
+    assert report.mr_p4_closure_claimed is True
     assert report.mr_p5_status == "NOT_STARTED"
     assert report.mr_p6_status == "NOT_AUTHORIZED"
     assert report.main_a_status == "NOT_STARTED"
@@ -120,6 +117,8 @@ def test_mr_p4_manifest_binds_current_readiness0_attempt_artifacts() -> None:
         "readiness0_live_authorization",
         "readiness0_f1c_registry",
         "readiness0_current_status",
+        "readiness0_live_evidence_manifest",
+        "readiness0_live_evidence_cases",
     } <= set(manifest["artifacts"])
 
 
@@ -133,10 +132,7 @@ def test_historical_readiness0_request_remains_stale_provenance_not_current_stat
         "OPENAI_API_KEY_MISSING",
         "F1C_RUNTIME_ENVIRONMENT_NOT_CONFIGURED",
     ]
-    assert report.blockers == (
-        "OPENAI_API_KEY_MISSING",
-        "READINESS0_REAUTHORIZATION_REQUIRED",
-    )
+    assert report.blockers == ()
     assert report.f1c_status == "PASS"
 
 
@@ -364,6 +360,6 @@ def test_phase13_cli_exposes_main_readiness_validation(
     run(args)
 
     payload = json.loads(capsys.readouterr().out)
-    assert payload["status"] == "READINESS0_LIVE_EXTERNAL_DEPENDENCY_BLOCKED"
-    assert payload["mr_p4_closure_claimed"] is False
+    assert payload["status"] == "MR_P4_CLOSED"
+    assert payload["mr_p4_closure_claimed"] is True
     assert payload["main_execution_authorized"] is False

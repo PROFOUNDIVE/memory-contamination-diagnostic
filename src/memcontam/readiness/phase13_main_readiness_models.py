@@ -100,19 +100,19 @@ class GateStates(_FrozenModel):
     static_readiness0_status: Literal["PASS"]
     tau_star_status: Literal["PASS"]
     cost_feasibility_status: Literal["PASS"]
-    live_api_status: Literal["READINESS0_EXTERNAL_DEPENDENCY_BLOCKED"]
+    live_api_status: Literal["PASS"]
 
 
 class MainReadinessManifest(_FrozenModel):
     schema_version: Literal["phase13_mr_p4_local_closure_manifest_v1"]
-    status: Literal["READINESS0_LIVE_EXTERNAL_DEPENDENCY_BLOCKED"]
+    status: Literal["MR_P4_CLOSED"]
     artifacts: dict[str, ArtifactIdentity]
     execution_templates: ExecutionTemplates
     level2_interactions: Level2Registry
     provider_runtime_contract: ProviderRuntimeContract
     gates: GateStates
     u_t_status: Literal["NOT_REGISTERED_FOR_CURRENT_MAIN"]
-    mr_p4_closure_claimed: Literal[False]
+    mr_p4_closure_claimed: Literal[True]
     mr_p5_status: Literal["NOT_STARTED"]
     mr_p6_status: Literal["NOT_AUTHORIZED"]
     main_execution_authorized: Literal[False]

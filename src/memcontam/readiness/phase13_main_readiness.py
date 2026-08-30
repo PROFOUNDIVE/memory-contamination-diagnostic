@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from pathlib import Path, PurePosixPath
 
 from pydantic import ValidationError
@@ -38,11 +37,12 @@ from memcontam.readiness.phase13_readiness0 import (
     Phase13Readiness0Error,
     validate_readiness0_request,
 )
-from memcontam.readiness.phase13_readiness0_current_status import (
-    CurrentReadiness0Status,
-    CurrentReadiness0StatusError,
-    PreliveArtifactBytes,
-    validate_current_readiness0_status,
+from memcontam.readiness.phase13_readiness0_current_status import PreliveArtifactBytes
+from memcontam.readiness.phase13_readiness0_current_status_v2 import (
+    ClosedReadiness0ArtifactBytes,
+    CurrentReadiness0StatusV2,
+    CurrentReadiness0StatusV2Error,
+    validate_current_readiness0_status_v2,
 )
 from memcontam.readiness.phase13_observability_validate import (
     validate_phase13_observability_package,
@@ -126,7 +126,7 @@ def generate_main_readiness_report(
         Phase13CostActivationError,
         Phase13MainCheckpointError,
         Phase13Readiness0Error,
-        CurrentReadiness0StatusError,
+        CurrentReadiness0StatusV2Error,
     ) as error:
         raise Phase13MainReadinessError("MR_P4_PREREQUISITE_INVALID") from error
     except ProductionObservabilityError as error:
@@ -159,6 +159,7 @@ def _validate_artifacts(root: Path, artifacts: dict[str, ArtifactIdentity]) -> N
         "readiness0_f1c_registry", "readiness0_f1c_report", "readiness0_current_status",
         "readiness0_live_implementation_manifest", "readiness0_window_proof",
         "readiness0_live_models", "readiness0_current_status_validator",
+        "readiness0_live_evidence_manifest", "readiness0_live_evidence_cases",
     }
     if set(artifacts) != required:
         raise Phase13MainReadinessError("MR_P4_ARTIFACT_SET_MISMATCH")
@@ -172,7 +173,7 @@ def _validate_artifacts(root: Path, artifacts: dict[str, ArtifactIdentity]) -> N
 
 def _validate_prerequisites(
     root: Path, manifest: MainReadinessManifest
-) -> CurrentReadiness0Status:
+) -> CurrentReadiness0StatusV2:
     validate_track1(read_regular_nofollow(root / manifest.artifacts["track1"].path))
     validate_package_selection(
         read_regular_nofollow(root / manifest.artifacts["package_selection"].path)
@@ -180,31 +181,56 @@ def _validate_prerequisites(
     validate_main_checkpoint_package(root / "data/phase13/main/mr_p4", root)
     validate_activated_cost_policy(root)
     validate_readiness0_request(root / manifest.artifacts["readiness0_request"].path)
-    current = validate_current_readiness0_status(
+    current = validate_current_readiness0_status_v2(
         read_regular_nofollow(root / manifest.artifacts["readiness0_current_status"].path),
-        PreliveArtifactBytes(
-            live_request=read_regular_nofollow(
-                root / manifest.artifacts["readiness0_live_request"].path
+        ClosedReadiness0ArtifactBytes(
+            prelive=PreliveArtifactBytes(
+                live_request=read_regular_nofollow(
+                    root / manifest.artifacts["readiness0_live_request"].path
+                ),
+                live_authorization=read_regular_nofollow(
+                    root / manifest.artifacts["readiness0_live_authorization"].path
+                ),
+                f1c_registry=read_regular_nofollow(
+                    root / manifest.artifacts["readiness0_f1c_registry"].path
+                ),
+                f1c_report=read_regular_nofollow(
+                    root / manifest.artifacts["readiness0_f1c_report"].path
+                ),
+                implementation_manifest=read_regular_nofollow(
+                    root / manifest.artifacts["readiness0_live_implementation_manifest"].path
+                ),
+                window_proof=read_regular_nofollow(
+                    root / manifest.artifacts["readiness0_window_proof"].path
+                ),
+                repository_root=root,
+                credential_present=False,
             ),
-            live_authorization=read_regular_nofollow(
-                root / manifest.artifacts["readiness0_live_authorization"].path
+            evidence_manifest=read_regular_nofollow(
+                root / manifest.artifacts["readiness0_live_evidence_manifest"].path
             ),
-            f1c_registry=read_regular_nofollow(
-                root / manifest.artifacts["readiness0_f1c_registry"].path
+            evidence_cases=read_regular_nofollow(
+                root / manifest.artifacts["readiness0_live_evidence_cases"].path
             ),
-            f1c_report=read_regular_nofollow(
-                root / manifest.artifacts["readiness0_f1c_report"].path
-            ),
-            implementation_manifest=read_regular_nofollow(
-                root / manifest.artifacts["readiness0_live_implementation_manifest"].path
-            ),
-            window_proof=read_regular_nofollow(
-                root / manifest.artifacts["readiness0_window_proof"].path
-            ),
-            repository_root=root,
-            credential_present=bool(os.environ.get("OPENAI_API_KEY")),
         ),
     )
+    artifact_pairs = {
+        "live_request": "readiness0_live_request",
+        "live_authorization": "readiness0_live_authorization",
+        "f1c_registry": "readiness0_f1c_registry",
+        "f1c_report": "readiness0_f1c_report",
+        "implementation_manifest": "readiness0_live_implementation_manifest",
+        "window_proof": "readiness0_window_proof",
+        "live_evidence_manifest": "readiness0_live_evidence_manifest",
+        "live_evidence_cases": "readiness0_live_evidence_cases",
+    }
+    current_artifacts = current.artifacts.model_dump(mode="json")
+    if any(
+        current_artifacts[current_name]
+        != manifest.artifacts[manifest_name].model_dump(mode="json")
+        for current_name, manifest_name in artifact_pairs.items()
+    ):
+        raise Phase13MainReadinessError("MR_P4_CURRENT_STATUS_MISMATCH")
     if (
         manifest.mr_p4_closure_claimed != current.mr_p4_closure_claimed
         or manifest.mr_p5_status != current.mr_p5_status
