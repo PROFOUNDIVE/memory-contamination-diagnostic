@@ -23,7 +23,7 @@
       "baseline": "rag_frozen",
       "arm": "clean",
       "sample_id": "phase13_main_game24_0057",
-      "query_sha256": "67f14653ddaf000670fd4d23fa3d0fdf322ff8db1e12cc9043e02c802b33a182",
+      "query_sha256": "1f11ef83458b81d94bf8a1c4cf3c1a8e959fe4f1978be84c0f1be9d8c89e7fb5",
       "query_source": "data/phase13/main/game24_main_v1.jsonl",
       "query_source_sha256": "ae682f138d8035fc1de9382eb8903730d392851def720351a78846df160b615f",
       "state_identity_sha256": null,
@@ -32,54 +32,54 @@
       "candidate_ids": [
         "legacy-rag::game24::game24-D04",
         "legacy-rag::game24::game24-D02",
-        "legacy-rag::game24::game24-D06",
         "legacy-rag::game24::game24-D05",
-        "legacy-rag::game24::game24-D01",
-        "legacy-rag::game24::game24-D03",
+        "legacy-rag::game24::game24-D06",
         "legacy-rag::game24::G24-A01",
-        "legacy-rag::game24::G24-C01",
-        "legacy-rag::game24::G24-A04",
-        "legacy-rag::game24::G24-B05",
-        "legacy-rag::game24::G24-B04",
+        "legacy-rag::game24::game24-D03",
+        "legacy-rag::game24::game24-D01",
         "legacy-rag::game24::G24-B06",
+        "legacy-rag::game24::G24-B05",
+        "legacy-rag::game24::G24-C01",
+        "legacy-rag::game24::G24-B04",
         "legacy-rag::game24::G24-C03",
-        "legacy-rag::game24::G24-C04",
-        "legacy-rag::game24::G24-C06",
-        "legacy-rag::game24::G24-A02",
-        "legacy-rag::game24::G24-A03",
+        "legacy-rag::game24::G24-A04",
         "legacy-rag::game24::G24-B01",
+        "legacy-rag::game24::G24-A02",
+        "legacy-rag::game24::G24-C04",
         "legacy-rag::game24::G24-A05",
+        "legacy-rag::game24::G24-C06",
         "legacy-rag::game24::G24-A06",
+        "legacy-rag::game24::G24-A03",
         "legacy-rag::game24::G24-B03",
         "legacy-rag::game24::G24-B02",
-        "legacy-rag::game24::G24-C05",
-        "legacy-rag::game24::G24-C02"
+        "legacy-rag::game24::G24-C02",
+        "legacy-rag::game24::G24-C05"
       ],
       "scores": [
-        0.5918506815652006,
-        0.5363555121559989,
-        0.5213927834685481,
-        0.5195196550533099,
-        0.5169048378996998,
-        0.5099519958532187,
-        0.4866520756524994,
-        0.4851431007875095,
-        0.4677804707794781,
-        0.45896304239323865,
-        0.455540439985216,
-        0.44596521519684584,
-        0.42865018345561995,
-        0.42065843188934454,
-        0.4146939178302972,
-        0.4144277593811288,
-        0.4103573507301734,
-        0.4031033504675087,
-        0.39882962705333985,
-        0.38567450264301756,
-        0.3723792335254743,
-        0.3597052196053975,
-        0.3458242892472787,
-        0.34139905056213227
+        0.6138499654923157,
+        0.5663125940854753,
+        0.5610382449891909,
+        0.5604654510955724,
+        0.553042878580808,
+        0.5430281533826768,
+        0.5401054061356698,
+        0.5288926127586528,
+        0.5113210686846988,
+        0.5109503524588835,
+        0.48236642328944024,
+        0.4719730661341509,
+        0.4691766406917166,
+        0.4649110486799638,
+        0.4601821564263088,
+        0.4598975354443331,
+        0.4260989056840023,
+        0.4198125646866967,
+        0.4070771328427871,
+        0.3963906648120324,
+        0.3899948428807717,
+        0.3768581854168462,
+        0.36227214340974934,
+        0.34085829795430045
       ],
       "ranks": [
         1,
@@ -111,16 +111,16 @@
       "selected_ids": [
         "legacy-rag::game24::game24-D04",
         "legacy-rag::game24::game24-D02",
-        "legacy-rag::game24::game24-D06"
+        "legacy-rag::game24::game24-D05"
       ],
       "threshold": null,
       "top_k": 3,
       "source_span_ids": [
         "legacy-rag::game24::game24-D04",
         "legacy-rag::game24::game24-D02",
-        "legacy-rag::game24::game24-D06"
+        "legacy-rag::game24::game24-D05"
       ],
-      "source_span_join_sha256": "1d5d0d5974f757205f5e727cb861c6bec1c9b473b28ff35183712a8b21f03c65"
+      "source_span_join_sha256": "18281c5e4f5ed535f23750e1b472bf2d88bdbfae42397b52ba2cb692b9afb297"
     },
     {
       "row_id": "be5207e71cf2277428d5d0dde32ba51ac437f5f22c2dbc5552b98161c6e0a823",
@@ -128,7 +128,7 @@
       "baseline": "rag_frozen",
       "arm": "correct",
       "sample_id": "phase13_main_game24_0057",
-      "query_sha256": "67f14653ddaf000670fd4d23fa3d0fdf322ff8db1e12cc9043e02c802b33a182",
+      "query_sha256": "1f11ef83458b81d94bf8a1c4cf3c1a8e959fe4f1978be84c0f1be9d8c89e7fb5",
       "query_source": "data/phase13/main/game24_main_v1.jsonl",
       "query_source_sha256": "ae682f138d8035fc1de9382eb8903730d392851def720351a78846df160b615f",
       "state_identity_sha256": null,
@@ -136,57 +136,57 @@
       "index_identity_sha256": "3b2922469188a234dcc57d6732cbf2475defe7e276be2ea1546ae9bbef45c6a5",
       "candidate_ids": [
         "legacy-rag::game24::game24-D04",
-        "legacy-rag::game24::game24-D02",
         "control-game24-rational-intermediates-v1",
-        "legacy-rag::game24::game24-D06",
+        "legacy-rag::game24::game24-D02",
         "legacy-rag::game24::game24-D05",
-        "legacy-rag::game24::game24-D01",
-        "legacy-rag::game24::game24-D03",
+        "legacy-rag::game24::game24-D06",
         "legacy-rag::game24::G24-A01",
-        "legacy-rag::game24::G24-C01",
-        "legacy-rag::game24::G24-A04",
-        "legacy-rag::game24::G24-B05",
-        "legacy-rag::game24::G24-B04",
+        "legacy-rag::game24::game24-D03",
+        "legacy-rag::game24::game24-D01",
         "legacy-rag::game24::G24-B06",
+        "legacy-rag::game24::G24-B05",
+        "legacy-rag::game24::G24-C01",
+        "legacy-rag::game24::G24-B04",
         "legacy-rag::game24::G24-C03",
-        "legacy-rag::game24::G24-C04",
-        "legacy-rag::game24::G24-C06",
-        "legacy-rag::game24::G24-A02",
-        "legacy-rag::game24::G24-A03",
+        "legacy-rag::game24::G24-A04",
         "legacy-rag::game24::G24-B01",
+        "legacy-rag::game24::G24-A02",
+        "legacy-rag::game24::G24-C04",
         "legacy-rag::game24::G24-A05",
+        "legacy-rag::game24::G24-C06",
         "legacy-rag::game24::G24-A06",
+        "legacy-rag::game24::G24-A03",
         "legacy-rag::game24::G24-B03",
         "legacy-rag::game24::G24-B02",
-        "legacy-rag::game24::G24-C05",
-        "legacy-rag::game24::G24-C02"
+        "legacy-rag::game24::G24-C02",
+        "legacy-rag::game24::G24-C05"
       ],
       "scores": [
-        0.5918506815652006,
-        0.5363555121559989,
-        0.5252287180618898,
-        0.5213927834685481,
-        0.5195196550533099,
-        0.5169048378996998,
-        0.5099519958532187,
-        0.4866520756524994,
-        0.4851431007875095,
-        0.4677804707794781,
-        0.45896304239323865,
-        0.455540439985216,
-        0.44596521519684584,
-        0.42865018345561995,
-        0.42065843188934454,
-        0.4146939178302972,
-        0.4144277593811288,
-        0.4103573507301734,
-        0.4031033504675087,
-        0.39882962705333985,
-        0.38567450264301756,
-        0.3723792335254743,
-        0.3597052196053975,
-        0.3458242892472787,
-        0.34139905056213227
+        0.6138499654923157,
+        0.5718454693708418,
+        0.5663125940854753,
+        0.5610382449891909,
+        0.5604654510955724,
+        0.553042878580808,
+        0.5430281533826768,
+        0.5401054061356698,
+        0.5288926127586528,
+        0.5113210686846988,
+        0.5109503524588835,
+        0.48236642328944024,
+        0.4719730661341509,
+        0.4691766406917166,
+        0.4649110486799638,
+        0.4601821564263088,
+        0.4598975354443331,
+        0.4260989056840023,
+        0.4198125646866967,
+        0.4070771328427871,
+        0.3963906648120324,
+        0.3899948428807717,
+        0.3768581854168462,
+        0.36227214340974934,
+        0.34085829795430045
       ],
       "ranks": [
         1,
@@ -218,17 +218,17 @@
       "tie_policy": "score_desc_id_lexical",
       "selected_ids": [
         "legacy-rag::game24::game24-D04",
-        "legacy-rag::game24::game24-D02",
-        "control-game24-rational-intermediates-v1"
+        "control-game24-rational-intermediates-v1",
+        "legacy-rag::game24::game24-D02"
       ],
       "threshold": null,
       "top_k": 3,
       "source_span_ids": [
         "legacy-rag::game24::game24-D04",
-        "legacy-rag::game24::game24-D02",
-        "control-game24-rational-intermediates-v1"
+        "control-game24-rational-intermediates-v1",
+        "legacy-rag::game24::game24-D02"
       ],
-      "source_span_join_sha256": "640f1904468cd6cd8d30603ad58877c94ee66c5a1be3ffa997f21899770ef20d"
+      "source_span_join_sha256": "77aa7c2e6b0a01ef8f6d93088f63cb8e1d5d3a4e4ff416713b28725a176f6815"
     },
     {
       "row_id": "ac4eb95933957193a758a9b84384fdd707d75a441dde7c97d67dc65ec8e04453",
@@ -236,7 +236,7 @@
       "baseline": "rag_frozen",
       "arm": "irrelevant",
       "sample_id": "phase13_main_game24_0057",
-      "query_sha256": "67f14653ddaf000670fd4d23fa3d0fdf322ff8db1e12cc9043e02c802b33a182",
+      "query_sha256": "1f11ef83458b81d94bf8a1c4cf3c1a8e959fe4f1978be84c0f1be9d8c89e7fb5",
       "query_source": "data/phase13/main/game24_main_v1.jsonl",
       "query_source_sha256": "ae682f138d8035fc1de9382eb8903730d392851def720351a78846df160b615f",
       "state_identity_sha256": null,
@@ -245,56 +245,56 @@
       "candidate_ids": [
         "legacy-rag::game24::game24-D04",
         "legacy-rag::game24::game24-D02",
-        "legacy-rag::game24::game24-D06",
         "legacy-rag::game24::game24-D05",
-        "legacy-rag::game24::game24-D01",
-        "legacy-rag::game24::game24-D03",
+        "legacy-rag::game24::game24-D06",
         "control-game24-integer-subfamily-v1",
         "legacy-rag::game24::G24-A01",
-        "legacy-rag::game24::G24-C01",
-        "legacy-rag::game24::G24-A04",
-        "legacy-rag::game24::G24-B05",
-        "legacy-rag::game24::G24-B04",
+        "legacy-rag::game24::game24-D03",
+        "legacy-rag::game24::game24-D01",
         "legacy-rag::game24::G24-B06",
+        "legacy-rag::game24::G24-B05",
+        "legacy-rag::game24::G24-C01",
+        "legacy-rag::game24::G24-B04",
         "legacy-rag::game24::G24-C03",
-        "legacy-rag::game24::G24-C04",
-        "legacy-rag::game24::G24-C06",
-        "legacy-rag::game24::G24-A02",
-        "legacy-rag::game24::G24-A03",
+        "legacy-rag::game24::G24-A04",
         "legacy-rag::game24::G24-B01",
+        "legacy-rag::game24::G24-A02",
+        "legacy-rag::game24::G24-C04",
         "legacy-rag::game24::G24-A05",
+        "legacy-rag::game24::G24-C06",
         "legacy-rag::game24::G24-A06",
+        "legacy-rag::game24::G24-A03",
         "legacy-rag::game24::G24-B03",
         "legacy-rag::game24::G24-B02",
-        "legacy-rag::game24::G24-C05",
-        "legacy-rag::game24::G24-C02"
+        "legacy-rag::game24::G24-C02",
+        "legacy-rag::game24::G24-C05"
       ],
       "scores": [
-        0.5918506815652006,
-        0.5363555121559989,
-        0.5213927834685481,
-        0.5195196550533099,
-        0.5169048378996998,
-        0.5099519958532187,
-        0.48723412875911654,
-        0.4866520756524994,
-        0.4851431007875095,
-        0.4677804707794781,
-        0.45896304239323865,
-        0.455540439985216,
-        0.44596521519684584,
-        0.42865018345561995,
-        0.42065843188934454,
-        0.4146939178302972,
-        0.4144277593811288,
-        0.4103573507301734,
-        0.4031033504675087,
-        0.39882962705333985,
-        0.38567450264301756,
-        0.3723792335254743,
-        0.3597052196053975,
-        0.3458242892472787,
-        0.34139905056213227
+        0.6138499654923157,
+        0.5663125940854753,
+        0.5610382449891909,
+        0.5604654510955724,
+        0.5580109342105378,
+        0.553042878580808,
+        0.5430281533826768,
+        0.5401054061356698,
+        0.5288926127586528,
+        0.5113210686846988,
+        0.5109503524588835,
+        0.48236642328944024,
+        0.4719730661341509,
+        0.4691766406917166,
+        0.4649110486799638,
+        0.4601821564263088,
+        0.4598975354443331,
+        0.4260989056840023,
+        0.4198125646866967,
+        0.4070771328427871,
+        0.3963906648120324,
+        0.3899948428807717,
+        0.3768581854168462,
+        0.36227214340974934,
+        0.34085829795430045
       ],
       "ranks": [
         1,
@@ -327,16 +327,16 @@
       "selected_ids": [
         "legacy-rag::game24::game24-D04",
         "legacy-rag::game24::game24-D02",
-        "legacy-rag::game24::game24-D06"
+        "legacy-rag::game24::game24-D05"
       ],
       "threshold": null,
       "top_k": 3,
       "source_span_ids": [
         "legacy-rag::game24::game24-D04",
         "legacy-rag::game24::game24-D02",
-        "legacy-rag::game24::game24-D06"
+        "legacy-rag::game24::game24-D05"
       ],
-      "source_span_join_sha256": "1d5d0d5974f757205f5e727cb861c6bec1c9b473b28ff35183712a8b21f03c65"
+      "source_span_join_sha256": "18281c5e4f5ed535f23750e1b472bf2d88bdbfae42397b52ba2cb692b9afb297"
     },
     {
       "row_id": "2bdd644c1c8dd938faa0c17d82eae7190fd52e8e17b701e0fed8f33528bcad95",
@@ -344,65 +344,65 @@
       "baseline": "rag_frozen",
       "arm": "contam",
       "sample_id": "phase13_main_game24_0057",
-      "query_sha256": "67f14653ddaf000670fd4d23fa3d0fdf322ff8db1e12cc9043e02c802b33a182",
+      "query_sha256": "1f11ef83458b81d94bf8a1c4cf3c1a8e959fe4f1978be84c0f1be9d8c89e7fb5",
       "query_source": "data/phase13/main/game24_main_v1.jsonl",
       "query_source_sha256": "ae682f138d8035fc1de9382eb8903730d392851def720351a78846df160b615f",
       "state_identity_sha256": null,
       "corpus_identity_sha256": "ab4b7d48b304adb32f26c79e682d8ce90d997e8103e1f73fd42df71e08a4b05f",
       "index_identity_sha256": "76d43e54cfb92c276e221527b9ddf79538847cb3b3810e276fb3cb2f09ad44fe",
       "candidate_ids": [
-        "legacy-rag::game24::game24-D04",
         "candidate-game24-integer-intermediates-v1",
+        "legacy-rag::game24::game24-D04",
         "legacy-rag::game24::game24-D02",
-        "legacy-rag::game24::game24-D06",
         "legacy-rag::game24::game24-D05",
-        "legacy-rag::game24::game24-D01",
-        "legacy-rag::game24::game24-D03",
+        "legacy-rag::game24::game24-D06",
         "legacy-rag::game24::G24-A01",
-        "legacy-rag::game24::G24-C01",
-        "legacy-rag::game24::G24-A04",
-        "legacy-rag::game24::G24-B05",
-        "legacy-rag::game24::G24-B04",
+        "legacy-rag::game24::game24-D03",
+        "legacy-rag::game24::game24-D01",
         "legacy-rag::game24::G24-B06",
+        "legacy-rag::game24::G24-B05",
+        "legacy-rag::game24::G24-C01",
+        "legacy-rag::game24::G24-B04",
         "legacy-rag::game24::G24-C03",
-        "legacy-rag::game24::G24-C04",
-        "legacy-rag::game24::G24-C06",
-        "legacy-rag::game24::G24-A02",
-        "legacy-rag::game24::G24-A03",
+        "legacy-rag::game24::G24-A04",
         "legacy-rag::game24::G24-B01",
+        "legacy-rag::game24::G24-A02",
+        "legacy-rag::game24::G24-C04",
         "legacy-rag::game24::G24-A05",
+        "legacy-rag::game24::G24-C06",
         "legacy-rag::game24::G24-A06",
+        "legacy-rag::game24::G24-A03",
         "legacy-rag::game24::G24-B03",
         "legacy-rag::game24::G24-B02",
-        "legacy-rag::game24::G24-C05",
-        "legacy-rag::game24::G24-C02"
+        "legacy-rag::game24::G24-C02",
+        "legacy-rag::game24::G24-C05"
       ],
       "scores": [
-        0.5918506815652006,
-        0.5527275144788836,
-        0.5363555121559989,
-        0.5213927834685481,
-        0.5195196550533099,
-        0.5169048378996998,
-        0.5099519958532187,
-        0.4866520756524994,
-        0.4851431007875095,
-        0.4677804707794781,
-        0.45896304239323865,
-        0.455540439985216,
-        0.44596521519684584,
-        0.42865018345561995,
-        0.42065843188934454,
-        0.4146939178302972,
-        0.4144277593811288,
-        0.4103573507301734,
-        0.4031033504675087,
-        0.39882962705333985,
-        0.38567450264301756,
-        0.3723792335254743,
-        0.3597052196053975,
-        0.3458242892472787,
-        0.34139905056213227
+        0.6273342540278479,
+        0.6138499654923157,
+        0.5663125940854753,
+        0.5610382449891909,
+        0.5604654510955724,
+        0.553042878580808,
+        0.5430281533826768,
+        0.5401054061356698,
+        0.5288926127586528,
+        0.5113210686846988,
+        0.5109503524588835,
+        0.48236642328944024,
+        0.4719730661341509,
+        0.4691766406917166,
+        0.4649110486799638,
+        0.4601821564263088,
+        0.4598975354443331,
+        0.4260989056840023,
+        0.4198125646866967,
+        0.4070771328427871,
+        0.3963906648120324,
+        0.3899948428807717,
+        0.3768581854168462,
+        0.36227214340974934,
+        0.34085829795430045
       ],
       "ranks": [
         1,
@@ -433,18 +433,18 @@
       ],
       "tie_policy": "score_desc_id_lexical",
       "selected_ids": [
-        "legacy-rag::game24::game24-D04",
         "candidate-game24-integer-intermediates-v1",
+        "legacy-rag::game24::game24-D04",
         "legacy-rag::game24::game24-D02"
       ],
       "threshold": null,
       "top_k": 3,
       "source_span_ids": [
-        "legacy-rag::game24::game24-D04",
         "candidate-game24-integer-intermediates-v1",
+        "legacy-rag::game24::game24-D04",
         "legacy-rag::game24::game24-D02"
       ],
-      "source_span_join_sha256": "8a88737adee08a1b5aaba80c9bdeed79d92f6f04f3023b934794181273042744"
+      "source_span_join_sha256": "3d79a5ff212fa2b169285693145611746ebe510b1b2182f0ec6eb225f6c62bd7"
     },
     {
       "row_id": "27cfd3aa4f7b1eb8899bdee873a76199315a566d070134729a72dcf169647128",
@@ -452,7 +452,7 @@
       "baseline": "rag_frozen",
       "arm": "clean",
       "sample_id": "phase13_main_meb_0104",
-      "query_sha256": "9c39ebaa31ff9937d4970c564391ea07ffd3115bbd68d7c017016c523d2edea8",
+      "query_sha256": "2a8ddbf8aa99a1901c78d918e216a66209485e41479ba45c879fc60d641b0956",
       "query_source": "data/phase13/main/math_equation_balancer_main_v1.jsonl",
       "query_source_sha256": "dfa07c8c3ada1b0030a735cca97022f98dfb8da30d8ce86f82013eb51b4a7037",
       "state_identity_sha256": null,
@@ -460,55 +460,55 @@
       "index_identity_sha256": "97fc1e6631488bb07851ddd060d83a36dda1f9c8e9d4e4f0090f1d0320bfd859",
       "candidate_ids": [
         "legacy-rag::math_equation_balancer::math_equation_balancer-D02",
-        "legacy-rag::math_equation_balancer::math_equation_balancer-D03",
         "legacy-rag::math_equation_balancer::math_equation_balancer-D04",
         "legacy-rag::math_equation_balancer::math_equation_balancer-D05",
+        "legacy-rag::math_equation_balancer::MEB-A01",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D03",
         "legacy-rag::math_equation_balancer::math_equation_balancer-D06",
         "legacy-rag::math_equation_balancer::math_equation_balancer-D01",
-        "legacy-rag::math_equation_balancer::MEB-A03",
-        "legacy-rag::math_equation_balancer::MEB-A06",
-        "legacy-rag::math_equation_balancer::MEB-A04",
-        "legacy-rag::math_equation_balancer::MEB-B03",
-        "legacy-rag::math_equation_balancer::MEB-A05",
-        "legacy-rag::math_equation_balancer::MEB-C02",
-        "legacy-rag::math_equation_balancer::MEB-C06",
-        "legacy-rag::math_equation_balancer::MEB-C01",
-        "legacy-rag::math_equation_balancer::MEB-C05",
-        "legacy-rag::math_equation_balancer::MEB-A01",
-        "legacy-rag::math_equation_balancer::MEB-B02",
-        "legacy-rag::math_equation_balancer::MEB-B05",
-        "legacy-rag::math_equation_balancer::MEB-C04",
-        "legacy-rag::math_equation_balancer::MEB-C03",
         "legacy-rag::math_equation_balancer::MEB-B01",
+        "legacy-rag::math_equation_balancer::MEB-A05",
+        "legacy-rag::math_equation_balancer::MEB-A06",
+        "legacy-rag::math_equation_balancer::MEB-A03",
+        "legacy-rag::math_equation_balancer::MEB-B06",
+        "legacy-rag::math_equation_balancer::MEB-C06",
+        "legacy-rag::math_equation_balancer::MEB-A04",
+        "legacy-rag::math_equation_balancer::MEB-C01",
+        "legacy-rag::math_equation_balancer::MEB-B03",
+        "legacy-rag::math_equation_balancer::MEB-C02",
+        "legacy-rag::math_equation_balancer::MEB-C05",
+        "legacy-rag::math_equation_balancer::MEB-C04",
+        "legacy-rag::math_equation_balancer::MEB-B05",
+        "legacy-rag::math_equation_balancer::MEB-B02",
+        "legacy-rag::math_equation_balancer::MEB-C03",
         "legacy-rag::math_equation_balancer::MEB-A02",
-        "legacy-rag::math_equation_balancer::MEB-B04",
-        "legacy-rag::math_equation_balancer::MEB-B06"
+        "legacy-rag::math_equation_balancer::MEB-B04"
       ],
       "scores": [
-        0.5848242876041502,
-        0.5344028877112939,
-        0.534055111535562,
-        0.49828602899902397,
-        0.4900246880165267,
-        0.48572560650454844,
-        0.42965847761052645,
-        0.420223203925816,
-        0.4183776729137468,
-        0.4162747522282657,
-        0.3988883503747118,
-        0.39696116276106025,
-        0.38618615885209295,
-        0.38369896332483616,
-        0.3815848101386985,
-        0.3671750149302338,
-        0.35767074781752295,
-        0.3557670987599987,
-        0.35241782231052404,
-        0.3506701570918807,
-        0.34793049418190203,
-        0.34033947599815767,
-        0.3322550542049552,
-        0.32359245663789116
+        0.5936926213034374,
+        0.5283533013631492,
+        0.5234367425928383,
+        0.5170757355554992,
+        0.5157016116904468,
+        0.5015303320581557,
+        0.49010416142959345,
+        0.485102030701859,
+        0.4834442140154787,
+        0.4658307493868961,
+        0.45195519785405736,
+        0.4495864538560526,
+        0.4493940872033253,
+        0.434618691148611,
+        0.4338347482045607,
+        0.42406120065476494,
+        0.42382941899000537,
+        0.41783464387792923,
+        0.4162500947145814,
+        0.41562475819341893,
+        0.38857643689311566,
+        0.377059752655745,
+        0.3591367630042953,
+        0.3473690084067355
       ],
       "ranks": [
         1,
@@ -539,17 +539,17 @@
       "tie_policy": "score_desc_id_lexical",
       "selected_ids": [
         "legacy-rag::math_equation_balancer::math_equation_balancer-D02",
-        "legacy-rag::math_equation_balancer::math_equation_balancer-D03",
-        "legacy-rag::math_equation_balancer::math_equation_balancer-D04"
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D04",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D05"
       ],
       "threshold": null,
       "top_k": 3,
       "source_span_ids": [
         "legacy-rag::math_equation_balancer::math_equation_balancer-D02",
-        "legacy-rag::math_equation_balancer::math_equation_balancer-D03",
-        "legacy-rag::math_equation_balancer::math_equation_balancer-D04"
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D04",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D05"
       ],
-      "source_span_join_sha256": "243f6de1e46af03a9c37c71a4b75c3411b4fd975116f21d65971f51a395ec494"
+      "source_span_join_sha256": "39468ca24c8b99f381b0d2c71d8b5df68238fbf5889e49ca1b0907537b3e2247"
     },
     {
       "row_id": "30826564ca14a27a99d3289f4c0fecc872f31e2d6c51182a3806946d19c09195",
@@ -557,7 +557,7 @@
       "baseline": "rag_frozen",
       "arm": "correct",
       "sample_id": "phase13_main_meb_0104",
-      "query_sha256": "9c39ebaa31ff9937d4970c564391ea07ffd3115bbd68d7c017016c523d2edea8",
+      "query_sha256": "2a8ddbf8aa99a1901c78d918e216a66209485e41479ba45c879fc60d641b0956",
       "query_source": "data/phase13/main/math_equation_balancer_main_v1.jsonl",
       "query_source_sha256": "dfa07c8c3ada1b0030a735cca97022f98dfb8da30d8ce86f82013eb51b4a7037",
       "state_identity_sha256": null,
@@ -565,57 +565,57 @@
       "index_identity_sha256": "a561f4d57c390870799434319360a0a6667986739c29320a27d97da8e7295311",
       "candidate_ids": [
         "legacy-rag::math_equation_balancer::math_equation_balancer-D02",
-        "legacy-rag::math_equation_balancer::math_equation_balancer-D03",
         "legacy-rag::math_equation_balancer::math_equation_balancer-D04",
         "legacy-rag::math_equation_balancer::math_equation_balancer-D05",
+        "legacy-rag::math_equation_balancer::MEB-A01",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D03",
         "legacy-rag::math_equation_balancer::math_equation_balancer-D06",
         "legacy-rag::math_equation_balancer::math_equation_balancer-D01",
-        "legacy-rag::math_equation_balancer::MEB-A03",
-        "control-meb-precedence-v1",
-        "legacy-rag::math_equation_balancer::MEB-A06",
-        "legacy-rag::math_equation_balancer::MEB-A04",
-        "legacy-rag::math_equation_balancer::MEB-B03",
-        "legacy-rag::math_equation_balancer::MEB-A05",
-        "legacy-rag::math_equation_balancer::MEB-C02",
-        "legacy-rag::math_equation_balancer::MEB-C06",
-        "legacy-rag::math_equation_balancer::MEB-C01",
-        "legacy-rag::math_equation_balancer::MEB-C05",
-        "legacy-rag::math_equation_balancer::MEB-A01",
-        "legacy-rag::math_equation_balancer::MEB-B02",
-        "legacy-rag::math_equation_balancer::MEB-B05",
-        "legacy-rag::math_equation_balancer::MEB-C04",
-        "legacy-rag::math_equation_balancer::MEB-C03",
         "legacy-rag::math_equation_balancer::MEB-B01",
+        "legacy-rag::math_equation_balancer::MEB-A05",
+        "legacy-rag::math_equation_balancer::MEB-A06",
+        "legacy-rag::math_equation_balancer::MEB-A03",
+        "legacy-rag::math_equation_balancer::MEB-B06",
+        "legacy-rag::math_equation_balancer::MEB-C06",
+        "control-meb-precedence-v1",
+        "legacy-rag::math_equation_balancer::MEB-A04",
+        "legacy-rag::math_equation_balancer::MEB-C01",
+        "legacy-rag::math_equation_balancer::MEB-B03",
+        "legacy-rag::math_equation_balancer::MEB-C02",
+        "legacy-rag::math_equation_balancer::MEB-C05",
+        "legacy-rag::math_equation_balancer::MEB-C04",
+        "legacy-rag::math_equation_balancer::MEB-B05",
+        "legacy-rag::math_equation_balancer::MEB-B02",
+        "legacy-rag::math_equation_balancer::MEB-C03",
         "legacy-rag::math_equation_balancer::MEB-A02",
-        "legacy-rag::math_equation_balancer::MEB-B04",
-        "legacy-rag::math_equation_balancer::MEB-B06"
+        "legacy-rag::math_equation_balancer::MEB-B04"
       ],
       "scores": [
-        0.5848242876041502,
-        0.5344028877112939,
-        0.534055111535562,
-        0.49828602899902397,
-        0.4900246880165267,
-        0.48572560650454844,
-        0.42965847761052645,
-        0.4218536333717923,
-        0.420223203925816,
-        0.4183776729137468,
-        0.4162747522282657,
-        0.3988883503747118,
-        0.39696116276106025,
-        0.38618615885209295,
-        0.38369896332483616,
-        0.3815848101386985,
-        0.3671750149302338,
-        0.35767074781752295,
-        0.3557670987599987,
-        0.35241782231052404,
-        0.3506701570918807,
-        0.34793049418190203,
-        0.34033947599815767,
-        0.3322550542049552,
-        0.32359245663789116
+        0.5936926213034374,
+        0.5283533013631492,
+        0.5234367425928383,
+        0.5170757355554992,
+        0.5157016116904468,
+        0.5015303320581557,
+        0.49010416142959345,
+        0.485102030701859,
+        0.4834442140154787,
+        0.4658307493868961,
+        0.45195519785405736,
+        0.4495864538560526,
+        0.4493940872033253,
+        0.44423333332267706,
+        0.434618691148611,
+        0.4338347482045607,
+        0.42406120065476494,
+        0.42382941899000537,
+        0.41783464387792923,
+        0.4162500947145814,
+        0.41562475819341893,
+        0.38857643689311566,
+        0.377059752655745,
+        0.3591367630042953,
+        0.3473690084067355
       ],
       "ranks": [
         1,
@@ -647,17 +647,17 @@
       "tie_policy": "score_desc_id_lexical",
       "selected_ids": [
         "legacy-rag::math_equation_balancer::math_equation_balancer-D02",
-        "legacy-rag::math_equation_balancer::math_equation_balancer-D03",
-        "legacy-rag::math_equation_balancer::math_equation_balancer-D04"
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D04",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D05"
       ],
       "threshold": null,
       "top_k": 3,
       "source_span_ids": [
         "legacy-rag::math_equation_balancer::math_equation_balancer-D02",
-        "legacy-rag::math_equation_balancer::math_equation_balancer-D03",
-        "legacy-rag::math_equation_balancer::math_equation_balancer-D04"
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D04",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D05"
       ],
-      "source_span_join_sha256": "243f6de1e46af03a9c37c71a4b75c3411b4fd975116f21d65971f51a395ec494"
+      "source_span_join_sha256": "39468ca24c8b99f381b0d2c71d8b5df68238fbf5889e49ca1b0907537b3e2247"
     },
     {
       "row_id": "1b0b15f957a70077138e5e2f4ccb262a74cf2c84c407c223aced32a00fd5b304",
@@ -665,7 +665,7 @@
       "baseline": "rag_frozen",
       "arm": "irrelevant",
       "sample_id": "phase13_main_meb_0104",
-      "query_sha256": "9c39ebaa31ff9937d4970c564391ea07ffd3115bbd68d7c017016c523d2edea8",
+      "query_sha256": "2a8ddbf8aa99a1901c78d918e216a66209485e41479ba45c879fc60d641b0956",
       "query_source": "data/phase13/main/math_equation_balancer_main_v1.jsonl",
       "query_source_sha256": "dfa07c8c3ada1b0030a735cca97022f98dfb8da30d8ce86f82013eb51b4a7037",
       "state_identity_sha256": null,
@@ -673,57 +673,57 @@
       "index_identity_sha256": "c558e1bbc756df827a0edaca254f6167f6e3624a43e6b46e293c3c641ff7a3de",
       "candidate_ids": [
         "legacy-rag::math_equation_balancer::math_equation_balancer-D02",
-        "legacy-rag::math_equation_balancer::math_equation_balancer-D03",
         "legacy-rag::math_equation_balancer::math_equation_balancer-D04",
         "legacy-rag::math_equation_balancer::math_equation_balancer-D05",
+        "legacy-rag::math_equation_balancer::MEB-A01",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D03",
         "legacy-rag::math_equation_balancer::math_equation_balancer-D06",
         "legacy-rag::math_equation_balancer::math_equation_balancer-D01",
+        "legacy-rag::math_equation_balancer::MEB-B01",
+        "legacy-rag::math_equation_balancer::MEB-A05",
+        "legacy-rag::math_equation_balancer::MEB-A06",
         "control-meb-same-precedence-v1",
         "legacy-rag::math_equation_balancer::MEB-A03",
-        "legacy-rag::math_equation_balancer::MEB-A06",
-        "legacy-rag::math_equation_balancer::MEB-A04",
-        "legacy-rag::math_equation_balancer::MEB-B03",
-        "legacy-rag::math_equation_balancer::MEB-A05",
-        "legacy-rag::math_equation_balancer::MEB-C02",
+        "legacy-rag::math_equation_balancer::MEB-B06",
         "legacy-rag::math_equation_balancer::MEB-C06",
+        "legacy-rag::math_equation_balancer::MEB-A04",
         "legacy-rag::math_equation_balancer::MEB-C01",
+        "legacy-rag::math_equation_balancer::MEB-B03",
+        "legacy-rag::math_equation_balancer::MEB-C02",
         "legacy-rag::math_equation_balancer::MEB-C05",
-        "legacy-rag::math_equation_balancer::MEB-A01",
-        "legacy-rag::math_equation_balancer::MEB-B02",
-        "legacy-rag::math_equation_balancer::MEB-B05",
         "legacy-rag::math_equation_balancer::MEB-C04",
+        "legacy-rag::math_equation_balancer::MEB-B05",
+        "legacy-rag::math_equation_balancer::MEB-B02",
         "legacy-rag::math_equation_balancer::MEB-C03",
-        "legacy-rag::math_equation_balancer::MEB-B01",
         "legacy-rag::math_equation_balancer::MEB-A02",
-        "legacy-rag::math_equation_balancer::MEB-B04",
-        "legacy-rag::math_equation_balancer::MEB-B06"
+        "legacy-rag::math_equation_balancer::MEB-B04"
       ],
       "scores": [
-        0.5848242876041502,
-        0.5344028877112939,
-        0.534055111535562,
-        0.49828602899902397,
-        0.4900246880165267,
-        0.48572560650454844,
-        0.4579166714603776,
-        0.42965847761052645,
-        0.420223203925816,
-        0.4183776729137468,
-        0.4162747522282657,
-        0.3988883503747118,
-        0.39696116276106025,
-        0.38618615885209295,
-        0.38369896332483616,
-        0.3815848101386985,
-        0.3671750149302338,
-        0.35767074781752295,
-        0.3557670987599987,
-        0.35241782231052404,
-        0.3506701570918807,
-        0.34793049418190203,
-        0.34033947599815767,
-        0.3322550542049552,
-        0.32359245663789116
+        0.5936926213034374,
+        0.5283533013631492,
+        0.5234367425928383,
+        0.5170757355554992,
+        0.5157016116904468,
+        0.5015303320581557,
+        0.49010416142959345,
+        0.485102030701859,
+        0.4834442140154787,
+        0.4658307493868961,
+        0.4520106246470553,
+        0.45195519785405736,
+        0.4495864538560526,
+        0.4493940872033253,
+        0.434618691148611,
+        0.4338347482045607,
+        0.42406120065476494,
+        0.42382941899000537,
+        0.41783464387792923,
+        0.4162500947145814,
+        0.41562475819341893,
+        0.38857643689311566,
+        0.377059752655745,
+        0.3591367630042953,
+        0.3473690084067355
       ],
       "ranks": [
         1,
@@ -755,17 +755,17 @@
       "tie_policy": "score_desc_id_lexical",
       "selected_ids": [
         "legacy-rag::math_equation_balancer::math_equation_balancer-D02",
-        "legacy-rag::math_equation_balancer::math_equation_balancer-D03",
-        "legacy-rag::math_equation_balancer::math_equation_balancer-D04"
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D04",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D05"
       ],
       "threshold": null,
       "top_k": 3,
       "source_span_ids": [
         "legacy-rag::math_equation_balancer::math_equation_balancer-D02",
-        "legacy-rag::math_equation_balancer::math_equation_balancer-D03",
-        "legacy-rag::math_equation_balancer::math_equation_balancer-D04"
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D04",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D05"
       ],
-      "source_span_join_sha256": "243f6de1e46af03a9c37c71a4b75c3411b4fd975116f21d65971f51a395ec494"
+      "source_span_join_sha256": "39468ca24c8b99f381b0d2c71d8b5df68238fbf5889e49ca1b0907537b3e2247"
     },
     {
       "row_id": "78f7381d40b8a5c1a94494ceeffcb6d4c3aae95feba2659258550fcc7da1793a",
@@ -773,7 +773,7 @@
       "baseline": "rag_frozen",
       "arm": "contam",
       "sample_id": "phase13_main_meb_0104",
-      "query_sha256": "9c39ebaa31ff9937d4970c564391ea07ffd3115bbd68d7c017016c523d2edea8",
+      "query_sha256": "2a8ddbf8aa99a1901c78d918e216a66209485e41479ba45c879fc60d641b0956",
       "query_source": "data/phase13/main/math_equation_balancer_main_v1.jsonl",
       "query_source_sha256": "dfa07c8c3ada1b0030a735cca97022f98dfb8da30d8ce86f82013eb51b4a7037",
       "state_identity_sha256": null,
@@ -781,57 +781,57 @@
       "index_identity_sha256": "14f49043075fa75c28604b0d01efa3ca377833904a7c4d639df61c189233e24c",
       "candidate_ids": [
         "legacy-rag::math_equation_balancer::math_equation_balancer-D02",
-        "legacy-rag::math_equation_balancer::math_equation_balancer-D03",
         "legacy-rag::math_equation_balancer::math_equation_balancer-D04",
         "candidate-meb-left-to-right-v1",
         "legacy-rag::math_equation_balancer::math_equation_balancer-D05",
+        "legacy-rag::math_equation_balancer::MEB-A01",
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D03",
         "legacy-rag::math_equation_balancer::math_equation_balancer-D06",
         "legacy-rag::math_equation_balancer::math_equation_balancer-D01",
-        "legacy-rag::math_equation_balancer::MEB-A03",
-        "legacy-rag::math_equation_balancer::MEB-A06",
-        "legacy-rag::math_equation_balancer::MEB-A04",
-        "legacy-rag::math_equation_balancer::MEB-B03",
-        "legacy-rag::math_equation_balancer::MEB-A05",
-        "legacy-rag::math_equation_balancer::MEB-C02",
-        "legacy-rag::math_equation_balancer::MEB-C06",
-        "legacy-rag::math_equation_balancer::MEB-C01",
-        "legacy-rag::math_equation_balancer::MEB-C05",
-        "legacy-rag::math_equation_balancer::MEB-A01",
-        "legacy-rag::math_equation_balancer::MEB-B02",
-        "legacy-rag::math_equation_balancer::MEB-B05",
-        "legacy-rag::math_equation_balancer::MEB-C04",
-        "legacy-rag::math_equation_balancer::MEB-C03",
         "legacy-rag::math_equation_balancer::MEB-B01",
+        "legacy-rag::math_equation_balancer::MEB-A05",
+        "legacy-rag::math_equation_balancer::MEB-A06",
+        "legacy-rag::math_equation_balancer::MEB-A03",
+        "legacy-rag::math_equation_balancer::MEB-B06",
+        "legacy-rag::math_equation_balancer::MEB-C06",
+        "legacy-rag::math_equation_balancer::MEB-A04",
+        "legacy-rag::math_equation_balancer::MEB-C01",
+        "legacy-rag::math_equation_balancer::MEB-B03",
+        "legacy-rag::math_equation_balancer::MEB-C02",
+        "legacy-rag::math_equation_balancer::MEB-C05",
+        "legacy-rag::math_equation_balancer::MEB-C04",
+        "legacy-rag::math_equation_balancer::MEB-B05",
+        "legacy-rag::math_equation_balancer::MEB-B02",
+        "legacy-rag::math_equation_balancer::MEB-C03",
         "legacy-rag::math_equation_balancer::MEB-A02",
-        "legacy-rag::math_equation_balancer::MEB-B04",
-        "legacy-rag::math_equation_balancer::MEB-B06"
+        "legacy-rag::math_equation_balancer::MEB-B04"
       ],
       "scores": [
-        0.5848242876041502,
-        0.5344028877112939,
-        0.534055111535562,
-        0.5196283388498739,
-        0.49828602899902397,
-        0.4900246880165267,
-        0.48572560650454844,
-        0.42965847761052645,
-        0.420223203925816,
-        0.4183776729137468,
-        0.4162747522282657,
-        0.3988883503747118,
-        0.39696116276106025,
-        0.38618615885209295,
-        0.38369896332483616,
-        0.3815848101386985,
-        0.3671750149302338,
-        0.35767074781752295,
-        0.3557670987599987,
-        0.35241782231052404,
-        0.3506701570918807,
-        0.34793049418190203,
-        0.34033947599815767,
-        0.3322550542049552,
-        0.32359245663789116
+        0.5936926213034374,
+        0.5283533013631492,
+        0.5258364139340691,
+        0.5234367425928383,
+        0.5170757355554992,
+        0.5157016116904468,
+        0.5015303320581557,
+        0.49010416142959345,
+        0.485102030701859,
+        0.4834442140154787,
+        0.4658307493868961,
+        0.45195519785405736,
+        0.4495864538560526,
+        0.4493940872033253,
+        0.434618691148611,
+        0.4338347482045607,
+        0.42406120065476494,
+        0.42382941899000537,
+        0.41783464387792923,
+        0.4162500947145814,
+        0.41562475819341893,
+        0.38857643689311566,
+        0.377059752655745,
+        0.3591367630042953,
+        0.3473690084067355
       ],
       "ranks": [
         1,
@@ -863,17 +863,17 @@
       "tie_policy": "score_desc_id_lexical",
       "selected_ids": [
         "legacy-rag::math_equation_balancer::math_equation_balancer-D02",
-        "legacy-rag::math_equation_balancer::math_equation_balancer-D03",
-        "legacy-rag::math_equation_balancer::math_equation_balancer-D04"
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D04",
+        "candidate-meb-left-to-right-v1"
       ],
       "threshold": null,
       "top_k": 3,
       "source_span_ids": [
         "legacy-rag::math_equation_balancer::math_equation_balancer-D02",
-        "legacy-rag::math_equation_balancer::math_equation_balancer-D03",
-        "legacy-rag::math_equation_balancer::math_equation_balancer-D04"
+        "legacy-rag::math_equation_balancer::math_equation_balancer-D04",
+        "candidate-meb-left-to-right-v1"
       ],
-      "source_span_join_sha256": "243f6de1e46af03a9c37c71a4b75c3411b4fd975116f21d65971f51a395ec494"
+      "source_span_join_sha256": "8e81f2908e37f833e053818012ac70089417a02a8022406b0ec37b3eb5647b73"
     },
     {
       "row_id": "dec64a4caea525984a938d14d32ca61d4c36d64151528366457992e1a3fe99e9",
@@ -881,7 +881,7 @@
       "baseline": "rag_frozen",
       "arm": "clean",
       "sample_id": "phase13_main_word_sorting_0123",
-      "query_sha256": "5605a0372b9adf71737afefed055d2761297f49d4e0578754c33a49056fd862d",
+      "query_sha256": "4adc9ed2a0ce27c1ba9c20e7913ffe08022005483b9ba70c32a6d3900c8ef301",
       "query_source": "data/phase13/main/word_sorting_main_v1.jsonl",
       "query_source_sha256": "e7ff0507512af4e71ae027a5226984b175d9b75dca898df79ca88535326c9c54",
       "state_identity_sha256": null,
@@ -891,53 +891,53 @@
         "legacy-rag::word_sorting::WS-A02",
         "legacy-rag::word_sorting::word_sorting-D02",
         "legacy-rag::word_sorting::word_sorting-D01",
-        "legacy-rag::word_sorting::word_sorting-D04",
         "legacy-rag::word_sorting::word_sorting-D03",
+        "legacy-rag::word_sorting::word_sorting-D04",
         "legacy-rag::word_sorting::WS-C02",
-        "legacy-rag::word_sorting::WS-B03",
-        "legacy-rag::word_sorting::WS-B01",
-        "legacy-rag::word_sorting::WS-A03",
-        "legacy-rag::word_sorting::WS-A05",
         "legacy-rag::word_sorting::word_sorting-D05",
-        "legacy-rag::word_sorting::WS-C03",
         "legacy-rag::word_sorting::word_sorting-D06",
+        "legacy-rag::word_sorting::WS-B03",
+        "legacy-rag::word_sorting::WS-C03",
+        "legacy-rag::word_sorting::WS-B01",
+        "legacy-rag::word_sorting::WS-A05",
+        "legacy-rag::word_sorting::WS-C01",
+        "legacy-rag::word_sorting::WS-A03",
+        "legacy-rag::word_sorting::WS-A01",
         "legacy-rag::word_sorting::WS-C06",
         "legacy-rag::word_sorting::WS-A04",
-        "legacy-rag::word_sorting::WS-C04",
         "legacy-rag::word_sorting::WS-B04",
-        "legacy-rag::word_sorting::WS-C01",
-        "legacy-rag::word_sorting::WS-A01",
+        "legacy-rag::word_sorting::WS-C04",
         "legacy-rag::word_sorting::WS-C05",
-        "legacy-rag::word_sorting::WS-A06",
         "legacy-rag::word_sorting::WS-B06",
-        "legacy-rag::word_sorting::WS-B05",
-        "legacy-rag::word_sorting::WS-B02"
+        "legacy-rag::word_sorting::WS-A06",
+        "legacy-rag::word_sorting::WS-B02",
+        "legacy-rag::word_sorting::WS-B05"
       ],
       "scores": [
-        0.5282261647330628,
-        0.5272939738371281,
-        0.5051785386045813,
-        0.5032822150550217,
-        0.5025354752206055,
-        0.4952764491399349,
-        0.4915185151555158,
-        0.48948023995112244,
-        0.4888715466625649,
-        0.4830888814727876,
-        0.4776453974914561,
-        0.4741482764900352,
-        0.4734350976035254,
-        0.4705804546108894,
-        0.46748167662869056,
-        0.45127125979681465,
-        0.449634301223244,
-        0.44944318926609134,
-        0.4481497179485555,
-        0.41298423459964895,
-        0.41120396066789644,
-        0.4079147232605581,
-        0.39105872132979924,
-        0.3869721465129293
+        0.5647819409623346,
+        0.5538522175739857,
+        0.544756771773144,
+        0.5360401147213785,
+        0.5313171326114565,
+        0.5172474215930117,
+        0.5142140349544427,
+        0.5078386415462928,
+        0.5072250741306451,
+        0.5035624254085166,
+        0.49626574763367143,
+        0.4938582074336638,
+        0.4880981511395299,
+        0.4875383857389926,
+        0.48160111761971186,
+        0.47932689656432564,
+        0.4755706997097465,
+        0.46506978730315424,
+        0.4524868274638536,
+        0.4190492044790139,
+        0.41591488188841247,
+        0.4140693419421931,
+        0.40560770043340433,
+        0.3905269065315962
       ],
       "ranks": [
         1,
@@ -986,65 +986,65 @@
       "baseline": "rag_frozen",
       "arm": "correct",
       "sample_id": "phase13_main_word_sorting_0123",
-      "query_sha256": "5605a0372b9adf71737afefed055d2761297f49d4e0578754c33a49056fd862d",
+      "query_sha256": "4adc9ed2a0ce27c1ba9c20e7913ffe08022005483b9ba70c32a6d3900c8ef301",
       "query_source": "data/phase13/main/word_sorting_main_v1.jsonl",
       "query_source_sha256": "e7ff0507512af4e71ae027a5226984b175d9b75dca898df79ca88535326c9c54",
       "state_identity_sha256": null,
       "corpus_identity_sha256": "e77a382780f583a5be1f102358ab7da31eea6e25de92e167fc0e13329b2fe0b0",
       "index_identity_sha256": "6a878a6823bd918f6271a9638b8b4d905c9cf64d9c5da9a777b1daddeb409fcc",
       "candidate_ids": [
-        "control-word-first-difference-v1",
         "legacy-rag::word_sorting::WS-A02",
+        "control-word-first-difference-v1",
         "legacy-rag::word_sorting::word_sorting-D02",
         "legacy-rag::word_sorting::word_sorting-D01",
-        "legacy-rag::word_sorting::word_sorting-D04",
         "legacy-rag::word_sorting::word_sorting-D03",
+        "legacy-rag::word_sorting::word_sorting-D04",
         "legacy-rag::word_sorting::WS-C02",
-        "legacy-rag::word_sorting::WS-B03",
-        "legacy-rag::word_sorting::WS-B01",
-        "legacy-rag::word_sorting::WS-A03",
-        "legacy-rag::word_sorting::WS-A05",
         "legacy-rag::word_sorting::word_sorting-D05",
-        "legacy-rag::word_sorting::WS-C03",
         "legacy-rag::word_sorting::word_sorting-D06",
+        "legacy-rag::word_sorting::WS-B03",
+        "legacy-rag::word_sorting::WS-C03",
+        "legacy-rag::word_sorting::WS-B01",
+        "legacy-rag::word_sorting::WS-A05",
+        "legacy-rag::word_sorting::WS-C01",
+        "legacy-rag::word_sorting::WS-A03",
+        "legacy-rag::word_sorting::WS-A01",
         "legacy-rag::word_sorting::WS-C06",
         "legacy-rag::word_sorting::WS-A04",
-        "legacy-rag::word_sorting::WS-C04",
         "legacy-rag::word_sorting::WS-B04",
-        "legacy-rag::word_sorting::WS-C01",
-        "legacy-rag::word_sorting::WS-A01",
+        "legacy-rag::word_sorting::WS-C04",
         "legacy-rag::word_sorting::WS-C05",
-        "legacy-rag::word_sorting::WS-A06",
         "legacy-rag::word_sorting::WS-B06",
-        "legacy-rag::word_sorting::WS-B05",
-        "legacy-rag::word_sorting::WS-B02"
+        "legacy-rag::word_sorting::WS-A06",
+        "legacy-rag::word_sorting::WS-B02",
+        "legacy-rag::word_sorting::WS-B05"
       ],
       "scores": [
-        0.5362793468979603,
-        0.5282261647330628,
-        0.5272939738371281,
-        0.5051785386045813,
-        0.5032822150550217,
-        0.5025354752206055,
-        0.4952764491399349,
-        0.4915185151555158,
-        0.48948023995112244,
-        0.4888715466625649,
-        0.4830888814727876,
-        0.4776453974914561,
-        0.4741482764900352,
-        0.4734350976035254,
-        0.4705804546108894,
-        0.46748167662869056,
-        0.45127125979681465,
-        0.449634301223244,
-        0.44944318926609134,
-        0.4481497179485555,
-        0.41298423459964895,
-        0.41120396066789644,
-        0.4079147232605581,
-        0.39105872132979924,
-        0.3869721465129293
+        0.5647819409623346,
+        0.5639421359801762,
+        0.5538522175739857,
+        0.544756771773144,
+        0.5360401147213785,
+        0.5313171326114565,
+        0.5172474215930117,
+        0.5142140349544427,
+        0.5078386415462928,
+        0.5072250741306451,
+        0.5035624254085166,
+        0.49626574763367143,
+        0.4938582074336638,
+        0.4880981511395299,
+        0.4875383857389926,
+        0.48160111761971186,
+        0.47932689656432564,
+        0.4755706997097465,
+        0.46506978730315424,
+        0.4524868274638536,
+        0.4190492044790139,
+        0.41591488188841247,
+        0.4140693419421931,
+        0.40560770043340433,
+        0.3905269065315962
       ],
       "ranks": [
         1,
@@ -1075,18 +1075,18 @@
       ],
       "tie_policy": "score_desc_id_lexical",
       "selected_ids": [
-        "control-word-first-difference-v1",
         "legacy-rag::word_sorting::WS-A02",
+        "control-word-first-difference-v1",
         "legacy-rag::word_sorting::word_sorting-D02"
       ],
       "threshold": null,
       "top_k": 3,
       "source_span_ids": [
-        "control-word-first-difference-v1",
         "legacy-rag::word_sorting::WS-A02",
+        "control-word-first-difference-v1",
         "legacy-rag::word_sorting::word_sorting-D02"
       ],
-      "source_span_join_sha256": "b94411899bc98ccfa6fe7cbde5324c0df3b15a18eb0b62855f99fbd1d9c9b122"
+      "source_span_join_sha256": "03a75565aa6563ff16b2a296cdaef50a4bae5af5b3beb8024cd48f26ebbe4ba1"
     },
     {
       "row_id": "c4878778eac0896b7370b8a9036dd1bc07fa3519ed3ea1762b2fce837d6ccb47",
@@ -1094,7 +1094,7 @@
       "baseline": "rag_frozen",
       "arm": "irrelevant",
       "sample_id": "phase13_main_word_sorting_0123",
-      "query_sha256": "5605a0372b9adf71737afefed055d2761297f49d4e0578754c33a49056fd862d",
+      "query_sha256": "4adc9ed2a0ce27c1ba9c20e7913ffe08022005483b9ba70c32a6d3900c8ef301",
       "query_source": "data/phase13/main/word_sorting_main_v1.jsonl",
       "query_source_sha256": "e7ff0507512af4e71ae027a5226984b175d9b75dca898df79ca88535326c9c54",
       "state_identity_sha256": null,
@@ -1104,55 +1104,55 @@
         "legacy-rag::word_sorting::WS-A02",
         "legacy-rag::word_sorting::word_sorting-D02",
         "legacy-rag::word_sorting::word_sorting-D01",
-        "legacy-rag::word_sorting::word_sorting-D04",
         "legacy-rag::word_sorting::word_sorting-D03",
+        "legacy-rag::word_sorting::word_sorting-D04",
         "legacy-rag::word_sorting::WS-C02",
-        "legacy-rag::word_sorting::WS-B03",
-        "legacy-rag::word_sorting::WS-B01",
-        "legacy-rag::word_sorting::WS-A03",
-        "legacy-rag::word_sorting::WS-A05",
         "legacy-rag::word_sorting::word_sorting-D05",
-        "legacy-rag::word_sorting::WS-C03",
         "legacy-rag::word_sorting::word_sorting-D06",
+        "legacy-rag::word_sorting::WS-B03",
+        "legacy-rag::word_sorting::WS-C03",
+        "legacy-rag::word_sorting::WS-B01",
+        "legacy-rag::word_sorting::WS-A05",
+        "legacy-rag::word_sorting::WS-C01",
+        "legacy-rag::word_sorting::WS-A03",
+        "legacy-rag::word_sorting::WS-A01",
         "legacy-rag::word_sorting::WS-C06",
         "legacy-rag::word_sorting::WS-A04",
-        "legacy-rag::word_sorting::WS-C04",
         "legacy-rag::word_sorting::WS-B04",
-        "legacy-rag::word_sorting::WS-C01",
-        "legacy-rag::word_sorting::WS-A01",
+        "legacy-rag::word_sorting::WS-C04",
         "control-word-single-character-v1",
         "legacy-rag::word_sorting::WS-C05",
-        "legacy-rag::word_sorting::WS-A06",
         "legacy-rag::word_sorting::WS-B06",
-        "legacy-rag::word_sorting::WS-B05",
-        "legacy-rag::word_sorting::WS-B02"
+        "legacy-rag::word_sorting::WS-A06",
+        "legacy-rag::word_sorting::WS-B02",
+        "legacy-rag::word_sorting::WS-B05"
       ],
       "scores": [
-        0.5282261647330628,
-        0.5272939738371281,
-        0.5051785386045813,
-        0.5032822150550217,
-        0.5025354752206055,
-        0.4952764491399349,
-        0.4915185151555158,
-        0.48948023995112244,
-        0.4888715466625649,
-        0.4830888814727876,
-        0.4776453974914561,
-        0.4741482764900352,
-        0.4734350976035254,
-        0.4705804546108894,
-        0.46748167662869056,
-        0.45127125979681465,
-        0.449634301223244,
-        0.44944318926609134,
-        0.4481497179485555,
-        0.43621579368861624,
-        0.41298423459964895,
-        0.41120396066789644,
-        0.4079147232605581,
-        0.39105872132979924,
-        0.3869721465129293
+        0.5647819409623346,
+        0.5538522175739857,
+        0.544756771773144,
+        0.5360401147213785,
+        0.5313171326114565,
+        0.5172474215930117,
+        0.5142140349544427,
+        0.5078386415462928,
+        0.5072250741306451,
+        0.5035624254085166,
+        0.49626574763367143,
+        0.4938582074336638,
+        0.4880981511395299,
+        0.4875383857389926,
+        0.48160111761971186,
+        0.47932689656432564,
+        0.4755706997097465,
+        0.46506978730315424,
+        0.4524868274638536,
+        0.45145777144713617,
+        0.4190492044790139,
+        0.41591488188841247,
+        0.4140693419421931,
+        0.40560770043340433,
+        0.3905269065315962
       ],
       "ranks": [
         1,
@@ -1202,7 +1202,7 @@
       "baseline": "rag_frozen",
       "arm": "contam",
       "sample_id": "phase13_main_word_sorting_0123",
-      "query_sha256": "5605a0372b9adf71737afefed055d2761297f49d4e0578754c33a49056fd862d",
+      "query_sha256": "4adc9ed2a0ce27c1ba9c20e7913ffe08022005483b9ba70c32a6d3900c8ef301",
       "query_source": "data/phase13/main/word_sorting_main_v1.jsonl",
       "query_source_sha256": "e7ff0507512af4e71ae027a5226984b175d9b75dca898df79ca88535326c9c54",
       "state_identity_sha256": null,
@@ -1210,57 +1210,57 @@
       "index_identity_sha256": "84d4f2a64ba5d9c10f9e5c0ca6a8ab5fcf81b4f0abbc242bb3771c0d855cfe03",
       "candidate_ids": [
         "legacy-rag::word_sorting::WS-A02",
-        "legacy-rag::word_sorting::word_sorting-D02",
         "candidate-word-final-char-v1",
+        "legacy-rag::word_sorting::word_sorting-D02",
         "legacy-rag::word_sorting::word_sorting-D01",
-        "legacy-rag::word_sorting::word_sorting-D04",
         "legacy-rag::word_sorting::word_sorting-D03",
+        "legacy-rag::word_sorting::word_sorting-D04",
         "legacy-rag::word_sorting::WS-C02",
-        "legacy-rag::word_sorting::WS-B03",
-        "legacy-rag::word_sorting::WS-B01",
-        "legacy-rag::word_sorting::WS-A03",
-        "legacy-rag::word_sorting::WS-A05",
         "legacy-rag::word_sorting::word_sorting-D05",
-        "legacy-rag::word_sorting::WS-C03",
         "legacy-rag::word_sorting::word_sorting-D06",
+        "legacy-rag::word_sorting::WS-B03",
+        "legacy-rag::word_sorting::WS-C03",
+        "legacy-rag::word_sorting::WS-B01",
+        "legacy-rag::word_sorting::WS-A05",
+        "legacy-rag::word_sorting::WS-C01",
+        "legacy-rag::word_sorting::WS-A03",
+        "legacy-rag::word_sorting::WS-A01",
         "legacy-rag::word_sorting::WS-C06",
         "legacy-rag::word_sorting::WS-A04",
-        "legacy-rag::word_sorting::WS-C04",
         "legacy-rag::word_sorting::WS-B04",
-        "legacy-rag::word_sorting::WS-C01",
-        "legacy-rag::word_sorting::WS-A01",
+        "legacy-rag::word_sorting::WS-C04",
         "legacy-rag::word_sorting::WS-C05",
-        "legacy-rag::word_sorting::WS-A06",
         "legacy-rag::word_sorting::WS-B06",
-        "legacy-rag::word_sorting::WS-B05",
-        "legacy-rag::word_sorting::WS-B02"
+        "legacy-rag::word_sorting::WS-A06",
+        "legacy-rag::word_sorting::WS-B02",
+        "legacy-rag::word_sorting::WS-B05"
       ],
       "scores": [
-        0.5282261647330628,
-        0.5272939738371281,
-        0.5224251473719088,
-        0.5051785386045813,
-        0.5032822150550217,
-        0.5025354752206055,
-        0.4952764491399349,
-        0.4915185151555158,
-        0.48948023995112244,
-        0.4888715466625649,
-        0.4830888814727876,
-        0.4776453974914561,
-        0.4741482764900352,
-        0.4734350976035254,
-        0.4705804546108894,
-        0.46748167662869056,
-        0.45127125979681465,
-        0.449634301223244,
-        0.44944318926609134,
-        0.4481497179485555,
-        0.41298423459964895,
-        0.41120396066789644,
-        0.4079147232605581,
-        0.39105872132979924,
-        0.3869721465129293
+        0.5647819409623346,
+        0.5564829519636219,
+        0.5538522175739857,
+        0.544756771773144,
+        0.5360401147213785,
+        0.5313171326114565,
+        0.5172474215930117,
+        0.5142140349544427,
+        0.5078386415462928,
+        0.5072250741306451,
+        0.5035624254085166,
+        0.49626574763367143,
+        0.4938582074336638,
+        0.4880981511395299,
+        0.4875383857389926,
+        0.48160111761971186,
+        0.47932689656432564,
+        0.4755706997097465,
+        0.46506978730315424,
+        0.4524868274638536,
+        0.4190492044790139,
+        0.41591488188841247,
+        0.4140693419421931,
+        0.40560770043340433,
+        0.3905269065315962
       ],
       "ranks": [
         1,
@@ -1292,17 +1292,17 @@
       "tie_policy": "score_desc_id_lexical",
       "selected_ids": [
         "legacy-rag::word_sorting::WS-A02",
-        "legacy-rag::word_sorting::word_sorting-D02",
-        "candidate-word-final-char-v1"
+        "candidate-word-final-char-v1",
+        "legacy-rag::word_sorting::word_sorting-D02"
       ],
       "threshold": null,
       "top_k": 3,
       "source_span_ids": [
         "legacy-rag::word_sorting::WS-A02",
-        "legacy-rag::word_sorting::word_sorting-D02",
-        "candidate-word-final-char-v1"
+        "candidate-word-final-char-v1",
+        "legacy-rag::word_sorting::word_sorting-D02"
       ],
-      "source_span_join_sha256": "0d997e0c3898a15921ca69ded603b1f20dbc3f0a36904f416fb607b5b321f344"
+      "source_span_join_sha256": "2b53dcb62cca6214cf603645555dcebbdb876ef36240e1aa105ff3a573ada4ca"
     },
     {
       "row_id": "03410430381613e4257524fb7352ffbb6ee92597b7a878788532fce0cfaec66e",
@@ -1310,21 +1310,21 @@
       "baseline": "bot_style",
       "arm": "clean",
       "sample_id": "phase13_main_game24_0057",
-      "query_sha256": "67f14653ddaf000670fd4d23fa3d0fdf322ff8db1e12cc9043e02c802b33a182",
+      "query_sha256": "1f11ef83458b81d94bf8a1c4cf3c1a8e959fe4f1978be84c0f1be9d8c89e7fb5",
       "query_source": "data/phase13/main/game24_main_v1.jsonl",
       "query_source_sha256": "ae682f138d8035fc1de9382eb8903730d392851def720351a78846df160b615f",
       "state_identity_sha256": "1abafc1a218253329cd10610ea405d02ac61eed8ffd6ec91cb80980a0929173f",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "7fd183903ddc8066bb2c736e1f05cc46d3a56c3725920407916182bc531b8df4",
+      "index_identity_sha256": "cb49df62d76862411327598aa91cf51789bbf601f5167d49f52715df9f5ce5e5",
       "candidate_ids": [
         "bot::procedure-based",
         "bot::prompt-based",
         "bot::programming-based"
       ],
       "scores": [
-        0.5249577060901539,
-        0.5025435729186187,
-        0.43955769454500726
+        0.5566956251263636,
+        0.49423901729914516,
+        0.4466519870340323
       ],
       "ranks": [
         1,
@@ -1344,21 +1344,21 @@
       "baseline": "bot_style",
       "arm": "correct",
       "sample_id": "phase13_main_game24_0057",
-      "query_sha256": "67f14653ddaf000670fd4d23fa3d0fdf322ff8db1e12cc9043e02c802b33a182",
+      "query_sha256": "1f11ef83458b81d94bf8a1c4cf3c1a8e959fe4f1978be84c0f1be9d8c89e7fb5",
       "query_source": "data/phase13/main/game24_main_v1.jsonl",
       "query_source_sha256": "ae682f138d8035fc1de9382eb8903730d392851def720351a78846df160b615f",
       "state_identity_sha256": "aa0a7e5ab46d9a4cc1cd8397abc4a409ac9554e8877b863f09d17563e84ebeb7",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "7fd183903ddc8066bb2c736e1f05cc46d3a56c3725920407916182bc531b8df4",
+      "index_identity_sha256": "cb49df62d76862411327598aa91cf51789bbf601f5167d49f52715df9f5ce5e5",
       "candidate_ids": [
         "bot::procedure-based",
         "bot::prompt-based",
         "bot::programming-based"
       ],
       "scores": [
-        0.5249577060901539,
-        0.5025435729186187,
-        0.43955769454500726
+        0.5566956251263636,
+        0.49423901729914516,
+        0.4466519870340323
       ],
       "ranks": [
         1,
@@ -1378,21 +1378,21 @@
       "baseline": "bot_style",
       "arm": "irrelevant",
       "sample_id": "phase13_main_game24_0057",
-      "query_sha256": "67f14653ddaf000670fd4d23fa3d0fdf322ff8db1e12cc9043e02c802b33a182",
+      "query_sha256": "1f11ef83458b81d94bf8a1c4cf3c1a8e959fe4f1978be84c0f1be9d8c89e7fb5",
       "query_source": "data/phase13/main/game24_main_v1.jsonl",
       "query_source_sha256": "ae682f138d8035fc1de9382eb8903730d392851def720351a78846df160b615f",
       "state_identity_sha256": "2ad9716738af64a08fef80382ff14b26676c47b7ee59ac17b23a2286e3c8b60a",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "7fd183903ddc8066bb2c736e1f05cc46d3a56c3725920407916182bc531b8df4",
+      "index_identity_sha256": "cb49df62d76862411327598aa91cf51789bbf601f5167d49f52715df9f5ce5e5",
       "candidate_ids": [
         "bot::procedure-based",
         "bot::prompt-based",
         "bot::programming-based"
       ],
       "scores": [
-        0.5249577060901539,
-        0.5025435729186187,
-        0.43955769454500726
+        0.5566956251263636,
+        0.49423901729914516,
+        0.4466519870340323
       ],
       "ranks": [
         1,
@@ -1412,21 +1412,21 @@
       "baseline": "bot_style",
       "arm": "contam",
       "sample_id": "phase13_main_game24_0057",
-      "query_sha256": "67f14653ddaf000670fd4d23fa3d0fdf322ff8db1e12cc9043e02c802b33a182",
+      "query_sha256": "1f11ef83458b81d94bf8a1c4cf3c1a8e959fe4f1978be84c0f1be9d8c89e7fb5",
       "query_source": "data/phase13/main/game24_main_v1.jsonl",
       "query_source_sha256": "ae682f138d8035fc1de9382eb8903730d392851def720351a78846df160b615f",
       "state_identity_sha256": "11d9285b8f1bfc7526c47e372a3cf0d885265cd452ec930e38181f3b31cf4b26",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "7fd183903ddc8066bb2c736e1f05cc46d3a56c3725920407916182bc531b8df4",
+      "index_identity_sha256": "cb49df62d76862411327598aa91cf51789bbf601f5167d49f52715df9f5ce5e5",
       "candidate_ids": [
         "bot::procedure-based",
         "bot::prompt-based",
         "bot::programming-based"
       ],
       "scores": [
-        0.5249577060901539,
-        0.5025435729186187,
-        0.43955769454500726
+        0.5566956251263636,
+        0.49423901729914516,
+        0.4466519870340323
       ],
       "ranks": [
         1,
@@ -1446,21 +1446,21 @@
       "baseline": "bot_style",
       "arm": "clean",
       "sample_id": "phase13_main_meb_0104",
-      "query_sha256": "9c39ebaa31ff9937d4970c564391ea07ffd3115bbd68d7c017016c523d2edea8",
+      "query_sha256": "2a8ddbf8aa99a1901c78d918e216a66209485e41479ba45c879fc60d641b0956",
       "query_source": "data/phase13/main/math_equation_balancer_main_v1.jsonl",
       "query_source_sha256": "dfa07c8c3ada1b0030a735cca97022f98dfb8da30d8ce86f82013eb51b4a7037",
       "state_identity_sha256": "aebe0f718e4e62aa95ffc2eafa664fb799bf32a897bbbdb8d839a6709fdd215b",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "93fd8220a21a121d5aa0df059cfc19cee7cb6a4c9886e472e4f2b90a292c88e0",
+      "index_identity_sha256": "e5929ebb83e0380e535adcb77a4c5911e97ab517b734a5c440da888c737733d1",
       "candidate_ids": [
         "bot::procedure-based",
-        "bot::programming-based",
-        "bot::prompt-based"
+        "bot::prompt-based",
+        "bot::programming-based"
       ],
       "scores": [
-        0.4507324483797726,
-        0.4231525099157978,
-        0.413850217691204
+        0.5231636992207919,
+        0.45257892940746025,
+        0.44115795198551994
       ],
       "ranks": [
         1,
@@ -1480,21 +1480,21 @@
       "baseline": "bot_style",
       "arm": "correct",
       "sample_id": "phase13_main_meb_0104",
-      "query_sha256": "9c39ebaa31ff9937d4970c564391ea07ffd3115bbd68d7c017016c523d2edea8",
+      "query_sha256": "2a8ddbf8aa99a1901c78d918e216a66209485e41479ba45c879fc60d641b0956",
       "query_source": "data/phase13/main/math_equation_balancer_main_v1.jsonl",
       "query_source_sha256": "dfa07c8c3ada1b0030a735cca97022f98dfb8da30d8ce86f82013eb51b4a7037",
       "state_identity_sha256": "63d6d5b47debcc3b88fbacec060de0bd3fd9287bb2c972557529d30453b853e4",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "93fd8220a21a121d5aa0df059cfc19cee7cb6a4c9886e472e4f2b90a292c88e0",
+      "index_identity_sha256": "e5929ebb83e0380e535adcb77a4c5911e97ab517b734a5c440da888c737733d1",
       "candidate_ids": [
         "bot::procedure-based",
-        "bot::programming-based",
-        "bot::prompt-based"
+        "bot::prompt-based",
+        "bot::programming-based"
       ],
       "scores": [
-        0.4507324483797726,
-        0.4231525099157978,
-        0.413850217691204
+        0.5231636992207919,
+        0.45257892940746025,
+        0.44115795198551994
       ],
       "ranks": [
         1,
@@ -1514,21 +1514,21 @@
       "baseline": "bot_style",
       "arm": "irrelevant",
       "sample_id": "phase13_main_meb_0104",
-      "query_sha256": "9c39ebaa31ff9937d4970c564391ea07ffd3115bbd68d7c017016c523d2edea8",
+      "query_sha256": "2a8ddbf8aa99a1901c78d918e216a66209485e41479ba45c879fc60d641b0956",
       "query_source": "data/phase13/main/math_equation_balancer_main_v1.jsonl",
       "query_source_sha256": "dfa07c8c3ada1b0030a735cca97022f98dfb8da30d8ce86f82013eb51b4a7037",
       "state_identity_sha256": "f4c2dfe282d8a79998cfa71ef1149594b1be231a870d50505950c4f6d48a047d",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "93fd8220a21a121d5aa0df059cfc19cee7cb6a4c9886e472e4f2b90a292c88e0",
+      "index_identity_sha256": "e5929ebb83e0380e535adcb77a4c5911e97ab517b734a5c440da888c737733d1",
       "candidate_ids": [
         "bot::procedure-based",
-        "bot::programming-based",
-        "bot::prompt-based"
+        "bot::prompt-based",
+        "bot::programming-based"
       ],
       "scores": [
-        0.4507324483797726,
-        0.4231525099157978,
-        0.413850217691204
+        0.5231636992207919,
+        0.45257892940746025,
+        0.44115795198551994
       ],
       "ranks": [
         1,
@@ -1548,21 +1548,21 @@
       "baseline": "bot_style",
       "arm": "contam",
       "sample_id": "phase13_main_meb_0104",
-      "query_sha256": "9c39ebaa31ff9937d4970c564391ea07ffd3115bbd68d7c017016c523d2edea8",
+      "query_sha256": "2a8ddbf8aa99a1901c78d918e216a66209485e41479ba45c879fc60d641b0956",
       "query_source": "data/phase13/main/math_equation_balancer_main_v1.jsonl",
       "query_source_sha256": "dfa07c8c3ada1b0030a735cca97022f98dfb8da30d8ce86f82013eb51b4a7037",
       "state_identity_sha256": "9a0b24199487988e7abdec7c0b1e6ce488382689e61b1032d7c3748a0c570697",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "93fd8220a21a121d5aa0df059cfc19cee7cb6a4c9886e472e4f2b90a292c88e0",
+      "index_identity_sha256": "e5929ebb83e0380e535adcb77a4c5911e97ab517b734a5c440da888c737733d1",
       "candidate_ids": [
         "bot::procedure-based",
-        "bot::programming-based",
-        "bot::prompt-based"
+        "bot::prompt-based",
+        "bot::programming-based"
       ],
       "scores": [
-        0.4507324483797726,
-        0.4231525099157978,
-        0.413850217691204
+        0.5231636992207919,
+        0.45257892940746025,
+        0.44115795198551994
       ],
       "ranks": [
         1,
@@ -1582,21 +1582,21 @@
       "baseline": "bot_style",
       "arm": "clean",
       "sample_id": "phase13_main_word_sorting_0123",
-      "query_sha256": "5605a0372b9adf71737afefed055d2761297f49d4e0578754c33a49056fd862d",
+      "query_sha256": "4adc9ed2a0ce27c1ba9c20e7913ffe08022005483b9ba70c32a6d3900c8ef301",
       "query_source": "data/phase13/main/word_sorting_main_v1.jsonl",
       "query_source_sha256": "e7ff0507512af4e71ae027a5226984b175d9b75dca898df79ca88535326c9c54",
       "state_identity_sha256": "401102000954b04f7748237ed50212db74de1a5b3c254930af3633084749a0d7",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "632ae27419158d6295a199296cd6eeff69180573a20c678b012bf26be0e197ca",
+      "index_identity_sha256": "390dd7be7dcad4405d94dafba5cb761bd173ffcc099c10d2f95efe8556a63d25",
       "candidate_ids": [
         "bot::procedure-based",
         "bot::prompt-based",
         "bot::programming-based"
       ],
       "scores": [
-        0.5016923867452715,
-        0.46220290639290446,
-        0.41824158894689273
+        0.5597330668675361,
+        0.5007726569541934,
+        0.46032987313570867
       ],
       "ranks": [
         1,
@@ -1616,21 +1616,21 @@
       "baseline": "bot_style",
       "arm": "correct",
       "sample_id": "phase13_main_word_sorting_0123",
-      "query_sha256": "5605a0372b9adf71737afefed055d2761297f49d4e0578754c33a49056fd862d",
+      "query_sha256": "4adc9ed2a0ce27c1ba9c20e7913ffe08022005483b9ba70c32a6d3900c8ef301",
       "query_source": "data/phase13/main/word_sorting_main_v1.jsonl",
       "query_source_sha256": "e7ff0507512af4e71ae027a5226984b175d9b75dca898df79ca88535326c9c54",
       "state_identity_sha256": "9393cfeed64b48d84f1e22c061e37c2bf7d6090933c69c992fb7d12bf8863008",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "632ae27419158d6295a199296cd6eeff69180573a20c678b012bf26be0e197ca",
+      "index_identity_sha256": "390dd7be7dcad4405d94dafba5cb761bd173ffcc099c10d2f95efe8556a63d25",
       "candidate_ids": [
         "bot::procedure-based",
         "bot::prompt-based",
         "bot::programming-based"
       ],
       "scores": [
-        0.5016923867452715,
-        0.46220290639290446,
-        0.41824158894689273
+        0.5597330668675361,
+        0.5007726569541934,
+        0.46032987313570867
       ],
       "ranks": [
         1,
@@ -1650,21 +1650,21 @@
       "baseline": "bot_style",
       "arm": "irrelevant",
       "sample_id": "phase13_main_word_sorting_0123",
-      "query_sha256": "5605a0372b9adf71737afefed055d2761297f49d4e0578754c33a49056fd862d",
+      "query_sha256": "4adc9ed2a0ce27c1ba9c20e7913ffe08022005483b9ba70c32a6d3900c8ef301",
       "query_source": "data/phase13/main/word_sorting_main_v1.jsonl",
       "query_source_sha256": "e7ff0507512af4e71ae027a5226984b175d9b75dca898df79ca88535326c9c54",
       "state_identity_sha256": "9a1d3498072ffc32441a96a37ea4c7d3976d6424336c9e0d3d4fbb09df7fcd12",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "632ae27419158d6295a199296cd6eeff69180573a20c678b012bf26be0e197ca",
+      "index_identity_sha256": "390dd7be7dcad4405d94dafba5cb761bd173ffcc099c10d2f95efe8556a63d25",
       "candidate_ids": [
         "bot::procedure-based",
         "bot::prompt-based",
         "bot::programming-based"
       ],
       "scores": [
-        0.5016923867452715,
-        0.46220290639290446,
-        0.41824158894689273
+        0.5597330668675361,
+        0.5007726569541934,
+        0.46032987313570867
       ],
       "ranks": [
         1,
@@ -1684,21 +1684,21 @@
       "baseline": "bot_style",
       "arm": "contam",
       "sample_id": "phase13_main_word_sorting_0123",
-      "query_sha256": "5605a0372b9adf71737afefed055d2761297f49d4e0578754c33a49056fd862d",
+      "query_sha256": "4adc9ed2a0ce27c1ba9c20e7913ffe08022005483b9ba70c32a6d3900c8ef301",
       "query_source": "data/phase13/main/word_sorting_main_v1.jsonl",
       "query_source_sha256": "e7ff0507512af4e71ae027a5226984b175d9b75dca898df79ca88535326c9c54",
       "state_identity_sha256": "6daffacbc9033e84a9ea097bad1f4c0325d37213fc8b2d3e928850ad56806d4a",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "632ae27419158d6295a199296cd6eeff69180573a20c678b012bf26be0e197ca",
+      "index_identity_sha256": "390dd7be7dcad4405d94dafba5cb761bd173ffcc099c10d2f95efe8556a63d25",
       "candidate_ids": [
         "bot::procedure-based",
         "bot::prompt-based",
         "bot::programming-based"
       ],
       "scores": [
-        0.5016923867452715,
-        0.46220290639290446,
-        0.41824158894689273
+        0.5597330668675361,
+        0.5007726569541934,
+        0.46032987313570867
       ],
       "ranks": [
         1,
@@ -1718,21 +1718,21 @@
       "baseline": "bot_style",
       "arm": "clean",
       "sample_id": "mmlu_pro_engineering:11642",
-      "query_sha256": "64bbc32eeef0d22c1f543e63fd6de7d8f9f208ec70f2b9cf59cf4a2288f89043",
+      "query_sha256": "e61f0ba923c85f28f87e5d94d4283e0c6999519ce8013da3bfc60bbdaadc6b66",
       "query_source": "data/phase13/core/materialized/mmlu_pro_engineering.jsonl",
       "query_source_sha256": "c8ff52f9f797ee91c69692a9802f421f2b1117695727da2502140e6e4e92ad36",
       "state_identity_sha256": "d6206033b720a314289491a3d70570e52c5beed32a740af3d4875f0617700d91",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "094943cc38079e3ab57a323a4709fcc125449306ccafadd00e57cfb4d20ea36d",
+      "index_identity_sha256": "c7763bd5fb37328866f3ae5717ddca01a5d5fc87ddadbe73a171ab7efc007b88",
       "candidate_ids": [
-        "bot::programming-based",
         "bot::prompt-based",
+        "bot::programming-based",
         "bot::procedure-based"
       ],
       "scores": [
-        0.39996404884860925,
-        0.3842343637077869,
-        0.36486427470698235
+        0.40511840970628127,
+        0.4006196370751324,
+        0.39752162173707356
       ],
       "ranks": [
         1,
@@ -1752,21 +1752,21 @@
       "baseline": "bot_style",
       "arm": "correct",
       "sample_id": "mmlu_pro_engineering:11642",
-      "query_sha256": "64bbc32eeef0d22c1f543e63fd6de7d8f9f208ec70f2b9cf59cf4a2288f89043",
+      "query_sha256": "e61f0ba923c85f28f87e5d94d4283e0c6999519ce8013da3bfc60bbdaadc6b66",
       "query_source": "data/phase13/core/materialized/mmlu_pro_engineering.jsonl",
       "query_source_sha256": "c8ff52f9f797ee91c69692a9802f421f2b1117695727da2502140e6e4e92ad36",
       "state_identity_sha256": "4ebae2c969090be3e494a88c891d1ca0d9673a0c95e0ac5e4bc859ea21ca3ad5",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "094943cc38079e3ab57a323a4709fcc125449306ccafadd00e57cfb4d20ea36d",
+      "index_identity_sha256": "c7763bd5fb37328866f3ae5717ddca01a5d5fc87ddadbe73a171ab7efc007b88",
       "candidate_ids": [
-        "bot::programming-based",
         "bot::prompt-based",
+        "bot::programming-based",
         "bot::procedure-based"
       ],
       "scores": [
-        0.39996404884860925,
-        0.3842343637077869,
-        0.36486427470698235
+        0.40511840970628127,
+        0.4006196370751324,
+        0.39752162173707356
       ],
       "ranks": [
         1,
@@ -1786,21 +1786,21 @@
       "baseline": "bot_style",
       "arm": "irrelevant",
       "sample_id": "mmlu_pro_engineering:11642",
-      "query_sha256": "64bbc32eeef0d22c1f543e63fd6de7d8f9f208ec70f2b9cf59cf4a2288f89043",
+      "query_sha256": "e61f0ba923c85f28f87e5d94d4283e0c6999519ce8013da3bfc60bbdaadc6b66",
       "query_source": "data/phase13/core/materialized/mmlu_pro_engineering.jsonl",
       "query_source_sha256": "c8ff52f9f797ee91c69692a9802f421f2b1117695727da2502140e6e4e92ad36",
       "state_identity_sha256": "c2708c641a5caa866696e360381ae48ee7e6c5877d6b6805196e29d87bdbd925",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "094943cc38079e3ab57a323a4709fcc125449306ccafadd00e57cfb4d20ea36d",
+      "index_identity_sha256": "c7763bd5fb37328866f3ae5717ddca01a5d5fc87ddadbe73a171ab7efc007b88",
       "candidate_ids": [
-        "bot::programming-based",
         "bot::prompt-based",
+        "bot::programming-based",
         "bot::procedure-based"
       ],
       "scores": [
-        0.39996404884860925,
-        0.3842343637077869,
-        0.36486427470698235
+        0.40511840970628127,
+        0.4006196370751324,
+        0.39752162173707356
       ],
       "ranks": [
         1,
@@ -1820,21 +1820,21 @@
       "baseline": "bot_style",
       "arm": "contam",
       "sample_id": "mmlu_pro_engineering:11642",
-      "query_sha256": "64bbc32eeef0d22c1f543e63fd6de7d8f9f208ec70f2b9cf59cf4a2288f89043",
+      "query_sha256": "e61f0ba923c85f28f87e5d94d4283e0c6999519ce8013da3bfc60bbdaadc6b66",
       "query_source": "data/phase13/core/materialized/mmlu_pro_engineering.jsonl",
       "query_source_sha256": "c8ff52f9f797ee91c69692a9802f421f2b1117695727da2502140e6e4e92ad36",
       "state_identity_sha256": "4c719a1f1b18821c3240e71c073d77b899739287c31f8252e13f5a0f9fd103d1",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "094943cc38079e3ab57a323a4709fcc125449306ccafadd00e57cfb4d20ea36d",
+      "index_identity_sha256": "c7763bd5fb37328866f3ae5717ddca01a5d5fc87ddadbe73a171ab7efc007b88",
       "candidate_ids": [
-        "bot::programming-based",
         "bot::prompt-based",
+        "bot::programming-based",
         "bot::procedure-based"
       ],
       "scores": [
-        0.39996404884860925,
-        0.3842343637077869,
-        0.36486427470698235
+        0.40511840970628127,
+        0.4006196370751324,
+        0.39752162173707356
       ],
       "ranks": [
         1,
@@ -1854,21 +1854,21 @@
       "baseline": "bot_style",
       "arm": "clean",
       "sample_id": "mmlu_pro_physics:10004",
-      "query_sha256": "6d5455dfe834f5cad2bd62d5a84b43b88aeddee849fea9f94e7c12e0263ab186",
+      "query_sha256": "a5dd319a7887659a2ae2d0640ea4b80992c33db89562e1df9e534fd12dd4ed63",
       "query_source": "data/phase13/core/materialized/mmlu_pro_physics.jsonl",
       "query_source_sha256": "adcb50a3ab7303470a07df495f822ad06cf7b14fc6a78c357558e2aad7871743",
       "state_identity_sha256": "951c433f4d5e4afed2e682a26637213fff8311b2802a45d1ae5d31e56c4ab679",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "bbc659e98e5fc0dd4250ab52ce9c5e1481fc9532346f1f75e01b24f0f77b4553",
+      "index_identity_sha256": "e1ea7f6fd3aedd177e0ecfdd435b5e14f1ccc551f2a489115ea0ea52b8ed24e7",
       "candidate_ids": [
-        "bot::prompt-based",
         "bot::procedure-based",
+        "bot::prompt-based",
         "bot::programming-based"
       ],
       "scores": [
-        0.45327924879615755,
-        0.45303663729702587,
-        0.44555771603279565
+        0.4597559613489564,
+        0.44511099015901995,
+        0.43021375959586633
       ],
       "ranks": [
         1,
@@ -1888,21 +1888,21 @@
       "baseline": "bot_style",
       "arm": "correct",
       "sample_id": "mmlu_pro_physics:10004",
-      "query_sha256": "6d5455dfe834f5cad2bd62d5a84b43b88aeddee849fea9f94e7c12e0263ab186",
+      "query_sha256": "a5dd319a7887659a2ae2d0640ea4b80992c33db89562e1df9e534fd12dd4ed63",
       "query_source": "data/phase13/core/materialized/mmlu_pro_physics.jsonl",
       "query_source_sha256": "adcb50a3ab7303470a07df495f822ad06cf7b14fc6a78c357558e2aad7871743",
       "state_identity_sha256": "64395da79b352b5b4a6f3e3e4bfbc8681384039574a3c8bf67273ce4a2175b8c",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "bbc659e98e5fc0dd4250ab52ce9c5e1481fc9532346f1f75e01b24f0f77b4553",
+      "index_identity_sha256": "e1ea7f6fd3aedd177e0ecfdd435b5e14f1ccc551f2a489115ea0ea52b8ed24e7",
       "candidate_ids": [
-        "bot::prompt-based",
         "bot::procedure-based",
+        "bot::prompt-based",
         "bot::programming-based"
       ],
       "scores": [
-        0.45327924879615755,
-        0.45303663729702587,
-        0.44555771603279565
+        0.4597559613489564,
+        0.44511099015901995,
+        0.43021375959586633
       ],
       "ranks": [
         1,
@@ -1922,21 +1922,21 @@
       "baseline": "bot_style",
       "arm": "irrelevant",
       "sample_id": "mmlu_pro_physics:10004",
-      "query_sha256": "6d5455dfe834f5cad2bd62d5a84b43b88aeddee849fea9f94e7c12e0263ab186",
+      "query_sha256": "a5dd319a7887659a2ae2d0640ea4b80992c33db89562e1df9e534fd12dd4ed63",
       "query_source": "data/phase13/core/materialized/mmlu_pro_physics.jsonl",
       "query_source_sha256": "adcb50a3ab7303470a07df495f822ad06cf7b14fc6a78c357558e2aad7871743",
       "state_identity_sha256": "50106cc5c36f4b8a8ec8b89c7bd9af13d53a0ea9287449e9659bfec09ed71926",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "bbc659e98e5fc0dd4250ab52ce9c5e1481fc9532346f1f75e01b24f0f77b4553",
+      "index_identity_sha256": "e1ea7f6fd3aedd177e0ecfdd435b5e14f1ccc551f2a489115ea0ea52b8ed24e7",
       "candidate_ids": [
-        "bot::prompt-based",
         "bot::procedure-based",
+        "bot::prompt-based",
         "bot::programming-based"
       ],
       "scores": [
-        0.45327924879615755,
-        0.45303663729702587,
-        0.44555771603279565
+        0.4597559613489564,
+        0.44511099015901995,
+        0.43021375959586633
       ],
       "ranks": [
         1,
@@ -1956,21 +1956,21 @@
       "baseline": "bot_style",
       "arm": "contam",
       "sample_id": "mmlu_pro_physics:10004",
-      "query_sha256": "6d5455dfe834f5cad2bd62d5a84b43b88aeddee849fea9f94e7c12e0263ab186",
+      "query_sha256": "a5dd319a7887659a2ae2d0640ea4b80992c33db89562e1df9e534fd12dd4ed63",
       "query_source": "data/phase13/core/materialized/mmlu_pro_physics.jsonl",
       "query_source_sha256": "adcb50a3ab7303470a07df495f822ad06cf7b14fc6a78c357558e2aad7871743",
       "state_identity_sha256": "a8eeab553c842827e7cf99a5fb2635d96b6d1ec30ee4fd09615e80fe6464eedb",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "bbc659e98e5fc0dd4250ab52ce9c5e1481fc9532346f1f75e01b24f0f77b4553",
+      "index_identity_sha256": "e1ea7f6fd3aedd177e0ecfdd435b5e14f1ccc551f2a489115ea0ea52b8ed24e7",
       "candidate_ids": [
-        "bot::prompt-based",
         "bot::procedure-based",
+        "bot::prompt-based",
         "bot::programming-based"
       ],
       "scores": [
-        0.45327924879615755,
-        0.45303663729702587,
-        0.44555771603279565
+        0.4597559613489564,
+        0.44511099015901995,
+        0.43021375959586633
       ],
       "ranks": [
         1,
@@ -1990,17 +1990,17 @@
       "baseline": "dc_rs",
       "arm": "clean",
       "sample_id": "phase13_main_game24_0057",
-      "query_sha256": "67f14653ddaf000670fd4d23fa3d0fdf322ff8db1e12cc9043e02c802b33a182",
+      "query_sha256": "1f11ef83458b81d94bf8a1c4cf3c1a8e959fe4f1978be84c0f1be9d8c89e7fb5",
       "query_source": "data/phase13/main/game24_main_v1.jsonl",
       "query_source_sha256": "ae682f138d8035fc1de9382eb8903730d392851def720351a78846df160b615f",
       "state_identity_sha256": "1879f97b1785aff7d1cf5b0388879ced81fdbe1da33cfc1e67080890cbc16bd9",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "fb35ddeccdcd04d178bf02dc59f04d0117bfd58af1e93c2d8ae6d1ab1a41350c",
+      "index_identity_sha256": "d704fa08445941ccc36492ad260aa41fb47b52108e0dfd4ec3290f9494040a45",
       "candidate_ids": [
         "dc-rs::clean::phase13_main_game24_0024"
       ],
       "scores": [
-        0.7076970721669643
+        0.7600974258869777
       ],
       "ranks": [
         1
@@ -2022,17 +2022,17 @@
       "baseline": "dc_rs",
       "arm": "correct",
       "sample_id": "phase13_main_game24_0057",
-      "query_sha256": "67f14653ddaf000670fd4d23fa3d0fdf322ff8db1e12cc9043e02c802b33a182",
+      "query_sha256": "1f11ef83458b81d94bf8a1c4cf3c1a8e959fe4f1978be84c0f1be9d8c89e7fb5",
       "query_source": "data/phase13/main/game24_main_v1.jsonl",
       "query_source_sha256": "ae682f138d8035fc1de9382eb8903730d392851def720351a78846df160b615f",
       "state_identity_sha256": "51d967b51ffb2d3a8050a4e41602db37dcfdeca44cd5a3dccada5d8476271dcc",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "315defbaf28ae45fe1b0c82902e80307ab01471f96087b9d6e14d7beb6a7df6f",
+      "index_identity_sha256": "80e54ec53cb4c3ad81d7a9eb44960bc31739fb4ee0fcd2e251fb0256520421fd",
       "candidate_ids": [
         "dc-rs::correct::phase13_main_game24_0024"
       ],
       "scores": [
-        0.7076970721669643
+        0.7600974258869777
       ],
       "ranks": [
         1
@@ -2054,17 +2054,17 @@
       "baseline": "dc_rs",
       "arm": "irrelevant",
       "sample_id": "phase13_main_game24_0057",
-      "query_sha256": "67f14653ddaf000670fd4d23fa3d0fdf322ff8db1e12cc9043e02c802b33a182",
+      "query_sha256": "1f11ef83458b81d94bf8a1c4cf3c1a8e959fe4f1978be84c0f1be9d8c89e7fb5",
       "query_source": "data/phase13/main/game24_main_v1.jsonl",
       "query_source_sha256": "ae682f138d8035fc1de9382eb8903730d392851def720351a78846df160b615f",
       "state_identity_sha256": "11f80e6417b67466ca8c973e24e57223289535caf4d03aebee3f66c32e74cd9f",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "60d0350dd43275017a88edf1483c1a53ead97f3be7a096e3bab8977482e44d2c",
+      "index_identity_sha256": "b91d8481ea60daad90262b68e076b0a126d1968436aee2aa099450ea1200d637",
       "candidate_ids": [
         "dc-rs::irrelevant::phase13_main_game24_0024"
       ],
       "scores": [
-        0.7076970721669643
+        0.7600974258869777
       ],
       "ranks": [
         1
@@ -2086,17 +2086,17 @@
       "baseline": "dc_rs",
       "arm": "contam",
       "sample_id": "phase13_main_game24_0057",
-      "query_sha256": "67f14653ddaf000670fd4d23fa3d0fdf322ff8db1e12cc9043e02c802b33a182",
+      "query_sha256": "1f11ef83458b81d94bf8a1c4cf3c1a8e959fe4f1978be84c0f1be9d8c89e7fb5",
       "query_source": "data/phase13/main/game24_main_v1.jsonl",
       "query_source_sha256": "ae682f138d8035fc1de9382eb8903730d392851def720351a78846df160b615f",
       "state_identity_sha256": "1145838f68155ac39ff6e48816ee607222dc0f97126578c4e1f9975422fec708",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "1473423dd74bea678169179ca95602300b507c5e0ff95ab963941c0c4c5cec4a",
+      "index_identity_sha256": "05308d2c678bea6cbf68a111a2116109aef975ecdfcbe8e41957c807a1837844",
       "candidate_ids": [
         "dc-rs::contam::phase13_main_game24_0024"
       ],
       "scores": [
-        0.7076970721669643
+        0.7600974258869777
       ],
       "ranks": [
         1
@@ -2118,17 +2118,17 @@
       "baseline": "dc_rs",
       "arm": "clean",
       "sample_id": "phase13_main_meb_0104",
-      "query_sha256": "9c39ebaa31ff9937d4970c564391ea07ffd3115bbd68d7c017016c523d2edea8",
+      "query_sha256": "2a8ddbf8aa99a1901c78d918e216a66209485e41479ba45c879fc60d641b0956",
       "query_source": "data/phase13/main/math_equation_balancer_main_v1.jsonl",
       "query_source_sha256": "dfa07c8c3ada1b0030a735cca97022f98dfb8da30d8ce86f82013eb51b4a7037",
       "state_identity_sha256": "8d42a7c39f1a0b575b3e9daa4d8209a91c9224f3a98467b7bc40a7da8d8d7a97",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "5aa8657cbe83562b55532e70662ed2f49b6b0f5514ddb5f648fe6dc3ebf0fa5b",
+      "index_identity_sha256": "66bbe2bc1beefe25ede2c0ad5b19476284ee1bb6c0f092846079340e0d0e59a5",
       "candidate_ids": [
         "dc-rs::clean::phase13_main_meb_0188"
       ],
       "scores": [
-        0.2767542906815178
+        0.45191745997012756
       ],
       "ranks": [
         1
@@ -2150,17 +2150,17 @@
       "baseline": "dc_rs",
       "arm": "correct",
       "sample_id": "phase13_main_meb_0104",
-      "query_sha256": "9c39ebaa31ff9937d4970c564391ea07ffd3115bbd68d7c017016c523d2edea8",
+      "query_sha256": "2a8ddbf8aa99a1901c78d918e216a66209485e41479ba45c879fc60d641b0956",
       "query_source": "data/phase13/main/math_equation_balancer_main_v1.jsonl",
       "query_source_sha256": "dfa07c8c3ada1b0030a735cca97022f98dfb8da30d8ce86f82013eb51b4a7037",
       "state_identity_sha256": "9d98b403d984bede805cb3122a54d4b8ef51232420864631bc162f786149f562",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "581671b6e9ffe72294e964b0202ed48b115ecdf3c3bc337eb5a1059e6aedcd77",
+      "index_identity_sha256": "9f95c3cd6611cf5ab4f1ca23e4be45a9d633ce210eee27f434a618826bb9c0d1",
       "candidate_ids": [
         "dc-rs::correct::phase13_main_meb_0188"
       ],
       "scores": [
-        0.2767542906815178
+        0.45191745997012756
       ],
       "ranks": [
         1
@@ -2182,17 +2182,17 @@
       "baseline": "dc_rs",
       "arm": "irrelevant",
       "sample_id": "phase13_main_meb_0104",
-      "query_sha256": "9c39ebaa31ff9937d4970c564391ea07ffd3115bbd68d7c017016c523d2edea8",
+      "query_sha256": "2a8ddbf8aa99a1901c78d918e216a66209485e41479ba45c879fc60d641b0956",
       "query_source": "data/phase13/main/math_equation_balancer_main_v1.jsonl",
       "query_source_sha256": "dfa07c8c3ada1b0030a735cca97022f98dfb8da30d8ce86f82013eb51b4a7037",
       "state_identity_sha256": "6b3664a59623e351dff923a61e242122df6046e8744bd844ef9fd34c35c9b744",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "cac89b8382ce9d64bc239d03ff1cdd7858b2c30ee9195edab8ec3f4b9428ca1f",
+      "index_identity_sha256": "4f3f9bd7bb38f18e108a370d405539e134ec9ac0ea3169ad03478599661595fe",
       "candidate_ids": [
         "dc-rs::irrelevant::phase13_main_meb_0188"
       ],
       "scores": [
-        0.2767542906815178
+        0.45191745997012756
       ],
       "ranks": [
         1
@@ -2214,17 +2214,17 @@
       "baseline": "dc_rs",
       "arm": "contam",
       "sample_id": "phase13_main_meb_0104",
-      "query_sha256": "9c39ebaa31ff9937d4970c564391ea07ffd3115bbd68d7c017016c523d2edea8",
+      "query_sha256": "2a8ddbf8aa99a1901c78d918e216a66209485e41479ba45c879fc60d641b0956",
       "query_source": "data/phase13/main/math_equation_balancer_main_v1.jsonl",
       "query_source_sha256": "dfa07c8c3ada1b0030a735cca97022f98dfb8da30d8ce86f82013eb51b4a7037",
       "state_identity_sha256": "e4b692b1bc4af8d5abd13d67b312fa7d936aee17e1939a7d589378f4271641ae",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "a9643432bcd5b219d513ec2a40ac3df877506e21fd875cb7444627e831b06554",
+      "index_identity_sha256": "3a15e708e2fe6c9d23ea20081ec2391690b0b0d958c0de6ebc80d5454d11b4b9",
       "candidate_ids": [
         "dc-rs::contam::phase13_main_meb_0188"
       ],
       "scores": [
-        0.2767542906815178
+        0.45191745997012756
       ],
       "ranks": [
         1
@@ -2246,17 +2246,17 @@
       "baseline": "dc_rs",
       "arm": "clean",
       "sample_id": "phase13_main_word_sorting_0123",
-      "query_sha256": "5605a0372b9adf71737afefed055d2761297f49d4e0578754c33a49056fd862d",
+      "query_sha256": "4adc9ed2a0ce27c1ba9c20e7913ffe08022005483b9ba70c32a6d3900c8ef301",
       "query_source": "data/phase13/main/word_sorting_main_v1.jsonl",
       "query_source_sha256": "e7ff0507512af4e71ae027a5226984b175d9b75dca898df79ca88535326c9c54",
       "state_identity_sha256": "fb6fb2b22045df9f54db6f0ef121f508caa0e70ca6ae228942f51826ecb5abd8",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "96b8e40414ba216741227e9bd5899df87a33e104cc5bf97dbd0d28392e5aa061",
+      "index_identity_sha256": "53a13ee5af21e17708482633488c53fe2e21f492c49c9c113391af3bbc5603eb",
       "candidate_ids": [
         "dc-rs::clean::phase13_main_word_sorting_0115"
       ],
       "scores": [
-        0.5904758091635123
+        0.6714823018860139
       ],
       "ranks": [
         1
@@ -2278,17 +2278,17 @@
       "baseline": "dc_rs",
       "arm": "correct",
       "sample_id": "phase13_main_word_sorting_0123",
-      "query_sha256": "5605a0372b9adf71737afefed055d2761297f49d4e0578754c33a49056fd862d",
+      "query_sha256": "4adc9ed2a0ce27c1ba9c20e7913ffe08022005483b9ba70c32a6d3900c8ef301",
       "query_source": "data/phase13/main/word_sorting_main_v1.jsonl",
       "query_source_sha256": "e7ff0507512af4e71ae027a5226984b175d9b75dca898df79ca88535326c9c54",
       "state_identity_sha256": "e60a7bf5e460056e4221ccff467b114e975df0dc85e46426768b2860834f4fba",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "bfb6f4fdaa09401a117b6c8b594ab1259592019c310cfef4313fb9062689e29a",
+      "index_identity_sha256": "18bca961d875dfc22cbec1ff1d74ab6e93238561c2768e9cac2c6ff09edee173",
       "candidate_ids": [
         "dc-rs::correct::phase13_main_word_sorting_0115"
       ],
       "scores": [
-        0.5904758091635123
+        0.6714823018860139
       ],
       "ranks": [
         1
@@ -2310,17 +2310,17 @@
       "baseline": "dc_rs",
       "arm": "irrelevant",
       "sample_id": "phase13_main_word_sorting_0123",
-      "query_sha256": "5605a0372b9adf71737afefed055d2761297f49d4e0578754c33a49056fd862d",
+      "query_sha256": "4adc9ed2a0ce27c1ba9c20e7913ffe08022005483b9ba70c32a6d3900c8ef301",
       "query_source": "data/phase13/main/word_sorting_main_v1.jsonl",
       "query_source_sha256": "e7ff0507512af4e71ae027a5226984b175d9b75dca898df79ca88535326c9c54",
       "state_identity_sha256": "8d85da640e112e0b2ffd3f5591ae2f0f3ffd55a9b2010910db30f39ff67bafe6",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "f334616bcf8d0524243f67e07ebd6a1c0df06bb6899a4eb59e38c62005994466",
+      "index_identity_sha256": "81972810592e8e53c7e472dc98e600d582323f34cedc2aa67290b7ac171e9e03",
       "candidate_ids": [
         "dc-rs::irrelevant::phase13_main_word_sorting_0115"
       ],
       "scores": [
-        0.5904758091635123
+        0.6714823018860139
       ],
       "ranks": [
         1
@@ -2342,17 +2342,17 @@
       "baseline": "dc_rs",
       "arm": "contam",
       "sample_id": "phase13_main_word_sorting_0123",
-      "query_sha256": "5605a0372b9adf71737afefed055d2761297f49d4e0578754c33a49056fd862d",
+      "query_sha256": "4adc9ed2a0ce27c1ba9c20e7913ffe08022005483b9ba70c32a6d3900c8ef301",
       "query_source": "data/phase13/main/word_sorting_main_v1.jsonl",
       "query_source_sha256": "e7ff0507512af4e71ae027a5226984b175d9b75dca898df79ca88535326c9c54",
       "state_identity_sha256": "c8f699ec36aa544e09d513925934c5eefcf4a6963c66454c149f6fba5a5649f6",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "308c9439a394946eb0c4aa67f5b0fcf32758cd0f587df50b76cd2b5369da6ef7",
+      "index_identity_sha256": "8cea94b84e53dcab67b96d193daecbddb4a41ea5283c7d456b1932aa3b9bbf8e",
       "candidate_ids": [
         "dc-rs::contam::phase13_main_word_sorting_0115"
       ],
       "scores": [
-        0.5904758091635123
+        0.6714823018860139
       ],
       "ranks": [
         1
@@ -2374,17 +2374,17 @@
       "baseline": "dc_rs",
       "arm": "clean",
       "sample_id": "mmlu_pro_engineering:11642",
-      "query_sha256": "64bbc32eeef0d22c1f543e63fd6de7d8f9f208ec70f2b9cf59cf4a2288f89043",
+      "query_sha256": "e61f0ba923c85f28f87e5d94d4283e0c6999519ce8013da3bfc60bbdaadc6b66",
       "query_source": "data/phase13/core/materialized/mmlu_pro_engineering.jsonl",
       "query_source_sha256": "c8ff52f9f797ee91c69692a9802f421f2b1117695727da2502140e6e4e92ad36",
       "state_identity_sha256": "5bf556ef093dc004f64de67e2b48a7623bf059b267e0e52bc5d3997516f4451b",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "b7b58807eaf2bc5712b5ba9e4b7ae2d8df68b1f680f0562e3a7ff770c3068bc5",
+      "index_identity_sha256": "312cd3abf0ca59d985a953179621f580032d3e40d5da080df082097bb07c5f35",
       "candidate_ids": [
         "dc-rs::clean::mmlu_pro_engineering:11492"
       ],
       "scores": [
-        0.3656712234999948
+        0.4677088622612711
       ],
       "ranks": [
         1
@@ -2406,17 +2406,17 @@
       "baseline": "dc_rs",
       "arm": "correct",
       "sample_id": "mmlu_pro_engineering:11642",
-      "query_sha256": "64bbc32eeef0d22c1f543e63fd6de7d8f9f208ec70f2b9cf59cf4a2288f89043",
+      "query_sha256": "e61f0ba923c85f28f87e5d94d4283e0c6999519ce8013da3bfc60bbdaadc6b66",
       "query_source": "data/phase13/core/materialized/mmlu_pro_engineering.jsonl",
       "query_source_sha256": "c8ff52f9f797ee91c69692a9802f421f2b1117695727da2502140e6e4e92ad36",
       "state_identity_sha256": "55c314239841073cc786f5d098ce342c16801c333de1f5352f8788e13e5a84ea",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "e7304e4d6c86969ef3656b59c6e6305157c5431f534b09ed082b3e3491ce3eee",
+      "index_identity_sha256": "40f6cc793f617fc84d3d9ab5267c47b1b69fdfe2ea5fa6c3ce45a4b589ce739b",
       "candidate_ids": [
         "dc-rs::correct::mmlu_pro_engineering:11492"
       ],
       "scores": [
-        0.3656712234999948
+        0.4677088622612711
       ],
       "ranks": [
         1
@@ -2438,17 +2438,17 @@
       "baseline": "dc_rs",
       "arm": "irrelevant",
       "sample_id": "mmlu_pro_engineering:11642",
-      "query_sha256": "64bbc32eeef0d22c1f543e63fd6de7d8f9f208ec70f2b9cf59cf4a2288f89043",
+      "query_sha256": "e61f0ba923c85f28f87e5d94d4283e0c6999519ce8013da3bfc60bbdaadc6b66",
       "query_source": "data/phase13/core/materialized/mmlu_pro_engineering.jsonl",
       "query_source_sha256": "c8ff52f9f797ee91c69692a9802f421f2b1117695727da2502140e6e4e92ad36",
       "state_identity_sha256": "3ec0d3316a55e4fa87421383f50bd93cd7c184ac0522f509b3cc0bd9d0201ec8",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "0b3b149764e1fdd6792598f8c7b7fc42c617da200b8abdac225bd8d78dc1db0f",
+      "index_identity_sha256": "e531ef9e119557b4e1306b72c19590ad602dae16af1a1edc9d7ec9346c381786",
       "candidate_ids": [
         "dc-rs::irrelevant::mmlu_pro_engineering:11492"
       ],
       "scores": [
-        0.3656712234999948
+        0.4677088622612711
       ],
       "ranks": [
         1
@@ -2470,17 +2470,17 @@
       "baseline": "dc_rs",
       "arm": "contam",
       "sample_id": "mmlu_pro_engineering:11642",
-      "query_sha256": "64bbc32eeef0d22c1f543e63fd6de7d8f9f208ec70f2b9cf59cf4a2288f89043",
+      "query_sha256": "e61f0ba923c85f28f87e5d94d4283e0c6999519ce8013da3bfc60bbdaadc6b66",
       "query_source": "data/phase13/core/materialized/mmlu_pro_engineering.jsonl",
       "query_source_sha256": "c8ff52f9f797ee91c69692a9802f421f2b1117695727da2502140e6e4e92ad36",
       "state_identity_sha256": "2adde3e5dc4f6176f0e0189a9736e4a40130af9129a674960556278981672c54",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "8639c9a12e002c8da2cbf4378cbde77084be999db7cd90cf21bd38b8cc033961",
+      "index_identity_sha256": "f1038ef1e501e886e0ac58083fcea1140e9882e96fc8012644bfd854a6aa7057",
       "candidate_ids": [
         "dc-rs::contam::mmlu_pro_engineering:11492"
       ],
       "scores": [
-        0.3656712234999948
+        0.4677088622612711
       ],
       "ranks": [
         1
@@ -2502,17 +2502,17 @@
       "baseline": "dc_rs",
       "arm": "clean",
       "sample_id": "mmlu_pro_physics:10004",
-      "query_sha256": "6d5455dfe834f5cad2bd62d5a84b43b88aeddee849fea9f94e7c12e0263ab186",
+      "query_sha256": "a5dd319a7887659a2ae2d0640ea4b80992c33db89562e1df9e534fd12dd4ed63",
       "query_source": "data/phase13/core/materialized/mmlu_pro_physics.jsonl",
       "query_source_sha256": "adcb50a3ab7303470a07df495f822ad06cf7b14fc6a78c357558e2aad7871743",
       "state_identity_sha256": "85df3030fc5ed50b644e3b145b49d54db8ad11591ce6dcbac973f77ac90956f3",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "14defcb43bfda2d54dfb84b77ec9a52374964f20c785d80f90a716ec56ba381c",
+      "index_identity_sha256": "9cbc038320428c2b3ed2ffb88cc9dc8400ea335c23e46ed01949c0be6188e843",
       "candidate_ids": [
         "dc-rs::clean::mmlu_pro_physics:9960"
       ],
       "scores": [
-        0.44761304818594644
+        0.5004933123214932
       ],
       "ranks": [
         1
@@ -2534,17 +2534,17 @@
       "baseline": "dc_rs",
       "arm": "correct",
       "sample_id": "mmlu_pro_physics:10004",
-      "query_sha256": "6d5455dfe834f5cad2bd62d5a84b43b88aeddee849fea9f94e7c12e0263ab186",
+      "query_sha256": "a5dd319a7887659a2ae2d0640ea4b80992c33db89562e1df9e534fd12dd4ed63",
       "query_source": "data/phase13/core/materialized/mmlu_pro_physics.jsonl",
       "query_source_sha256": "adcb50a3ab7303470a07df495f822ad06cf7b14fc6a78c357558e2aad7871743",
       "state_identity_sha256": "b0a4d293a1062286ede3acab2a07d0565d4d1d9ae93792743c7e347321282623",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "b7b3427935b7fedbb7d323be8dd6f1b5df6e3f2f1ec28c10617a72cfb5975859",
+      "index_identity_sha256": "ecf0ff675e58f159d7f227f43a9315419ab4a08383703b0291ece1aa1282c8f4",
       "candidate_ids": [
         "dc-rs::correct::mmlu_pro_physics:9960"
       ],
       "scores": [
-        0.44761304818594644
+        0.5004933123214932
       ],
       "ranks": [
         1
@@ -2566,17 +2566,17 @@
       "baseline": "dc_rs",
       "arm": "irrelevant",
       "sample_id": "mmlu_pro_physics:10004",
-      "query_sha256": "6d5455dfe834f5cad2bd62d5a84b43b88aeddee849fea9f94e7c12e0263ab186",
+      "query_sha256": "a5dd319a7887659a2ae2d0640ea4b80992c33db89562e1df9e534fd12dd4ed63",
       "query_source": "data/phase13/core/materialized/mmlu_pro_physics.jsonl",
       "query_source_sha256": "adcb50a3ab7303470a07df495f822ad06cf7b14fc6a78c357558e2aad7871743",
       "state_identity_sha256": "92faf184287b06618f787d53040aeb8f1ac9a0043b804cb58151687d623e78fb",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "0d84ea8d31c843411843c9428a78850f835591d34e11edf29fe578c13937bbc1",
+      "index_identity_sha256": "606931c0080eb84df64e769baf10a85a7d435482e319f9288ef896d35c27f2a9",
       "candidate_ids": [
         "dc-rs::irrelevant::mmlu_pro_physics:9960"
       ],
       "scores": [
-        0.44761304818594644
+        0.5004933123214932
       ],
       "ranks": [
         1
@@ -2598,17 +2598,17 @@
       "baseline": "dc_rs",
       "arm": "contam",
       "sample_id": "mmlu_pro_physics:10004",
-      "query_sha256": "6d5455dfe834f5cad2bd62d5a84b43b88aeddee849fea9f94e7c12e0263ab186",
+      "query_sha256": "a5dd319a7887659a2ae2d0640ea4b80992c33db89562e1df9e534fd12dd4ed63",
       "query_source": "data/phase13/core/materialized/mmlu_pro_physics.jsonl",
       "query_source_sha256": "adcb50a3ab7303470a07df495f822ad06cf7b14fc6a78c357558e2aad7871743",
       "state_identity_sha256": "06d0ca5a02b45c56aa4c7d297225e4ff6b9fe6fe2589edb921ea088250e830cc",
       "corpus_identity_sha256": null,
-      "index_identity_sha256": "c2d31fe36afaf72174b4d674e0c58aea59e779e5c174fc5ef4f9bdb0e26ccc7d",
+      "index_identity_sha256": "0fcc51800d2183b43096b4c744993448f72a3c308caa8a71cc0401b290da6ac6",
       "candidate_ids": [
         "dc-rs::contam::mmlu_pro_physics:9960"
       ],
       "scores": [
-        0.44761304818594644
+        0.5004933123214932
       ],
       "ranks": [
         1
@@ -2625,5 +2625,5 @@
       "source_span_join_sha256": "898ea4df7f8dac78d2778b8cc944f3a061342bc91aa25d3d60fbcf2890294144"
     }
   ],
-  "report_hash": "6e8e97567ff0e3b873dce41fdc172196b3867ceb0416a1048ccef07bd720b33c"
+  "report_hash": "de463ea16269bbc709558138d21b05e40ec7e682e573a0be9af865338edc1ff4"
 }

@@ -1,24 +1,20 @@
 {
-  "schema_version": "phase13_readiness0_current_status_v1",
-  "status": "PRE_DISPATCH_BLOCKED",
-  "failure_code": "READINESS0_PRE_DISPATCH_BLOCKED",
-  "external_blockers": [
-    "OPENAI_API_KEY_MISSING",
-    "READINESS0_REAUTHORIZATION_REQUIRED"
-  ],
+  "schema_version": "phase13_readiness0_current_status_v2",
+  "status": "PASS",
+  "failure_code": null,
+  "external_blockers": [],
   "f1c_status": "PASS",
-  "provider_calls_issued": 0,
-  "output_directory_created": false,
+  "provider_calls_issued": 12,
+  "output_directory_created": true,
   "scientific_result": false,
   "main_result": false,
   "measured_main_a_trajectory_count": 0,
-  "mr_p4_status": "OPEN",
-  "mr_p4_closure_claimed": false,
+  "mr_p4_status": "CLOSED",
+  "mr_p4_closure_claimed": true,
   "mr_p5_status": "NOT_STARTED",
   "mr_p6_status": "NOT_AUTHORIZED",
   "main_a_status": "NOT_STARTED",
   "main_execution_authorized": false,
-  "credential_present": false,
   "artifacts": {
     "live_request": {
       "path": "data/phase13/main/mr_p4/readiness0_live_request_v1.json",
@@ -26,7 +22,7 @@
     },
     "live_authorization": {
       "path": "data/phase13/main/mr_p4/readiness0_live_authorization_v1.json",
-      "sha256": "a8e96a099fc0d89d550c299509bf14617467266e455a7e732263027064a3110b"
+      "sha256": "42f07d8b866955bc9464af3ac501f586e2b06a80c99e8d0ed1012e6f8e4c2a81"
     },
     "f1c_registry": {
       "path": "data/phase13/main/mr_p4/readiness0_f1c_registry_v1.json",
@@ -43,7 +39,15 @@
     "window_proof": {
       "path": "data/phase13/main/mr_p4/readiness0_window_proof_v1.json",
       "sha256": "99decc17225dcf6f87b60de71ab6d38729a01c032ffd90ba0397b191c6e0a191"
+    },
+    "live_evidence_manifest": {
+      "path": "data/phase13/main/mr_p4/readiness0_live_evidence_v1/evidence_manifest.json",
+      "sha256": "ab3f361d6684d0015c02377e03041304d6e3ed1048d8ede6686c0eacf1a855ec"
+    },
+    "live_evidence_cases": {
+      "path": "data/phase13/main/mr_p4/readiness0_live_evidence_v1/cases.jsonl",
+      "sha256": "0cb8c3b1910d0db67ad3aac6f2c91b574013c58e0d1c432ad25e88a1a2762656"
     }
   },
-  "status_hash": "c12981de222d0ba7a9fc11d7ccc58e4e8497571f000cc278c90c6d1ffe7a549b"
+  "status_hash": "08df8b1881de84db23abf71ddafc2eb59b992838817090a9b66db85ac70814f6"
 }
