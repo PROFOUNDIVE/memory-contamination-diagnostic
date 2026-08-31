@@ -45,6 +45,14 @@ EXPECTED_ARTIFACT_PATHS: Final = {
     "production_runtime_models": "src/memcontam/readiness/phase13_production_runtime_models.py",
     "logging_schema": "src/memcontam/logging/schema.py",
     "recording_client": "src/memcontam/clients/recording.py",
+    "main_runner": "src/memcontam/readiness/phase13_main_runner.py",
+    "main_runner_ledger": "src/memcontam/readiness/phase13_main_runner_ledger.py",
+    "main_runner_models": "src/memcontam/readiness/phase13_main_runner_models.py",
+    "main_runner_store": "src/memcontam/readiness/phase13_main_runner_store.py",
+    "main_runner_cli": "src/memcontam/readiness/phase13_main_runner_cli.py",
+    "main_execution": "src/memcontam/readiness/phase13_main_execution.py",
+    "main_execution_models": "src/memcontam/readiness/phase13_main_execution_models.py",
+    "main_execution_bindings": "src/memcontam/readiness/phase13_main_execution_bindings.py",
 }
 PRODUCTION_ROLES: Final = (
     "production_observability_adapter",
@@ -105,6 +113,17 @@ def validate_semantic_joins(package: MainExecutionFreeze, paths: dict[str, Path]
     production_hash = canonical_hash([bindings[role] for role in PRODUCTION_ROLES])
     if production_hash != package.observability.production_reconstruction_binding_sha256:
         raise MainExecutionBindingError("MAIN_EXECUTION_OBSERVABILITY_BINDING_INVALID")
+    runner_hash = canonical_hash(
+        [
+            bindings["main_runner"],
+            bindings["main_runner_ledger"],
+            bindings["main_runner_models"],
+            bindings["main_runner_store"],
+            bindings["main_runner_cli"],
+        ]
+    )
+    if runner_hash != package.execution_control.runner_code_sha256:
+        raise MainExecutionBindingError("MAIN_EXECUTION_RUNNER_BINDING_INVALID")
     provider = json.loads(read_regular_nofollow(paths["provider_contract"]))
     stage = json.loads(read_regular_nofollow(paths["stage_envelope_registry"]))
     retry = json.loads(read_regular_nofollow(paths["retry_failure_contract"]))

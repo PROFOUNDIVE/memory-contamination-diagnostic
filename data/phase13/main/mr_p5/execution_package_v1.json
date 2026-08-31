@@ -36,7 +36,15 @@
     {"role": "production_runtime_memory", "path": "src/memcontam/readiness/phase13_production_runtime_memory.py", "sha256": "6cdab986a3e8f58f7bc98b9ef8ce88939a3834a6cc5a65f91bd4d891bc97c9fc"},
     {"role": "production_runtime_models", "path": "src/memcontam/readiness/phase13_production_runtime_models.py", "sha256": "097575fe126f34888a60972be84526a5c7efc936ff65cf2ed390284c35b4b635"},
     {"role": "logging_schema", "path": "src/memcontam/logging/schema.py", "sha256": "842cd854f060bc5e3b793efc56604b729287193646d64906c7f55a160dbda26a"},
-    {"role": "recording_client", "path": "src/memcontam/clients/recording.py", "sha256": "d4e416f191397437a6f57a742acf49af39e9b1297cb365bf0be3f6cf749ef27c"}
+    {"role": "recording_client", "path": "src/memcontam/clients/recording.py", "sha256": "d4e416f191397437a6f57a742acf49af39e9b1297cb365bf0be3f6cf749ef27c"},
+    {"role": "main_runner", "path": "src/memcontam/readiness/phase13_main_runner.py", "sha256": "5fe54729c7f0f6f7e53e4dd822d63ee56b42adfffede87af1bcef1286384c492"},
+    {"role": "main_runner_ledger", "path": "src/memcontam/readiness/phase13_main_runner_ledger.py", "sha256": "c3c974d91af29df92a8e0f301087c69f93e3674da9d434d0e2667da6e3a5944b"},
+    {"role": "main_runner_models", "path": "src/memcontam/readiness/phase13_main_runner_models.py", "sha256": "78894bb665f40719bd764ba15df82f2b07864f4dc00d932df6fe913ac52fb53c"},
+    {"role": "main_runner_store", "path": "src/memcontam/readiness/phase13_main_runner_store.py", "sha256": "a908baba18b85014e1284ee0bba0fe9c5576ce8f54eb57f0aec8cf8dc04c4fcb"},
+    {"role": "main_runner_cli", "path": "src/memcontam/readiness/phase13_main_runner_cli.py", "sha256": "42c28c0b3df96660e30c0e9374728c7c7dda16add51d5d105bc304f2a5d05ef9"},
+    {"role": "main_execution", "path": "src/memcontam/readiness/phase13_main_execution.py", "sha256": "84b987bffac971c296aa86b9171dc4864486e0a968efe21c7b82a50eaf30ed82"},
+    {"role": "main_execution_models", "path": "src/memcontam/readiness/phase13_main_execution_models.py", "sha256": "69a344f55a8cdd763b1fc3c6634b913839b0c28062e3db59726511fa0aa63b7f"},
+    {"role": "main_execution_bindings", "path": "src/memcontam/readiness/phase13_main_execution_bindings.py", "sha256": "4d857f5c8dda3c59395149b151dcb315b50ba0874c4a0ed6a2fae958aa89c000"}
   ],
   "dispatch": {
     "realization_id": "phase13-seed-major-global-dispatch-v1",
@@ -124,6 +132,18 @@
     "cmax_main_krw": 442130,
     "margin_krw": 7870
   },
+  "execution_control": {
+    "runner_id": "phase13-main-a-runner-v1",
+    "runner_code_sha256": "db437d79d35dce81d7f517c0d239782a3d38d02f66badb47772d44e02eedf81e",
+    "ledger_schema_id": "phase13-main-a-ledger-v1",
+    "unit_identity_law_id": "phase13-main-a-disjoint-unit-id-v1",
+    "nomem_realization_law_id": "singleton_per_task_seed",
+    "dispatch_contract_id": "phase13-main-a-at-most-once-no-replay-v1",
+    "planned_pause_contract_id": "phase13-main-a-pre-intent-tranche-pause-v1",
+    "resume_contract_id": "phase13-main-a-validated-resume-v1",
+    "inflight_reconciliation_contract_id": "phase13-main-a-evidence-only-reconcile-v1",
+    "quota_terminal_contract_id": "CORE_TERMINAL_TECHNICAL_MISSINGNESS_V1"
+  },
   "measured_main_a_trajectory_count": 0,
-  "package_hash": "863d4d02baaaeb37d8bb76b6f1411cec5a25d613bc34c60a39c951d823d004a7"
+  "package_hash": "68016a22f317f07a79dcde4c950373d1d9fe3a7b7c56ac7226ba4fcd419f41dd"
 }

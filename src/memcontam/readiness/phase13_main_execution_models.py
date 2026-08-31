@@ -148,6 +148,19 @@ class CostGuardBinding(_FrozenModel):
     margin_krw: Literal[7870]
 
 
+class ExecutionControlBinding(_FrozenModel):
+    runner_id: Literal["phase13-main-a-runner-v1"]
+    runner_code_sha256: Sha256
+    ledger_schema_id: Literal["phase13-main-a-ledger-v1"]
+    unit_identity_law_id: Literal["phase13-main-a-disjoint-unit-id-v1"]
+    nomem_realization_law_id: Literal["singleton_per_task_seed"]
+    dispatch_contract_id: Literal["phase13-main-a-at-most-once-no-replay-v1"]
+    planned_pause_contract_id: Literal["phase13-main-a-pre-intent-tranche-pause-v1"]
+    resume_contract_id: Literal["phase13-main-a-validated-resume-v1"]
+    inflight_reconciliation_contract_id: Literal["phase13-main-a-evidence-only-reconcile-v1"]
+    quota_terminal_contract_id: Literal["CORE_TERMINAL_TECHNICAL_MISSINGNESS_V1"]
+
+
 class MainExecutionFreeze(_FrozenModel):
     schema_version: Literal["phase13_main_execution_freeze_v1"]
     package_id: Literal["phase13-main-a-execution-freeze-v1"]
@@ -172,6 +185,7 @@ class MainExecutionFreeze(_FrozenModel):
     runtime: RuntimeBinding
     observability: ObservabilityBinding
     cost_guard: CostGuardBinding
+    execution_control: ExecutionControlBinding
     measured_main_a_trajectory_count: Literal[0]
     package_hash: Sha256
 
