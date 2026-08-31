@@ -4,12 +4,12 @@
   "status": "AUTHORIZED_EXECUTION",
   "execution_package_id": "phase13-main-a-execution-freeze-v1",
   "execution_package_path": "data/phase13/main/mr_p5/execution_package_v1.json",
-  "execution_package_sha256": "d19e46522ceb2b4f1049951f0eba496399dd1aee4b1e1a8d47441fa2ff43d25c",
-  "execution_package_hash": "863d4d02baaaeb37d8bb76b6f1411cec5a25d613bc34c60a39c951d823d004a7",
+  "execution_package_sha256": "09eec668a7426c5878d722549046bab0ed8f22e2f59ee89fe3177ed0bb8722f2",
+  "execution_package_hash": "68016a22f317f07a79dcde4c950373d1d9fe3a7b7c56ac7226ba4fcd419f41dd",
   "mr_p4_status": "CLOSED",
   "mr_p5_status": "FROZEN",
   "mr_p6_status": "PASS",
   "main_a_status": "NOT_STARTED",
   "measured_main_a_trajectory_count": 0,
-  "authorization_hash": "8063763561804dc4fae767e459e542fdd51ed0e4d9e762d9d80ee473e6a0a067"
+  "authorization_hash": "a79ade3e54d6e61d7c858585204b3db8074e35e8b84514c066543468b6be4e46"
 }
