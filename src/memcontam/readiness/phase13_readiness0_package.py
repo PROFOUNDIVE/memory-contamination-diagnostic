@@ -45,6 +45,17 @@ IMPLEMENTATION_PATHS: Final = {
     "failure_contract": "data/phase13/main/cost_envelope_v2/retry_failure_contract_v1.json",
     "activated_cost_policy": "data/phase13/main/cost_envelope_v2/activated_policy_v1.json",
 }
+HISTORICAL_READINESS0_BINDINGS: Final = frozenset(
+    {
+        "provider_adapter",
+        "recording_adapter",
+        "evidence_validator",
+        "cost_policy",
+        "cost_policy_models",
+        "stage_envelopes",
+        "activated_cost_policy",
+    }
+)
 
 
 class Readiness0PackageError(ValueError):
@@ -118,7 +129,19 @@ def validate_implementation_manifest(
         manifest = LiveImplementationManifest.model_validate_json(raw)
     except ValidationError as error:
         raise Readiness0PackageError("READINESS0_IMPLEMENTATION_MANIFEST_INVALID") from error
-    if manifest != build_implementation_manifest(repository_root):
+    current = build_implementation_manifest(repository_root)
+    if (
+        manifest.manifest_hash != _model_hash(manifest, "manifest_hash")
+        or set(manifest.artifacts) != set(current.artifacts)
+        or any(
+            identity.path != current.artifacts[name].path
+            or (
+                name not in HISTORICAL_READINESS0_BINDINGS
+                and identity.sha256 != current.artifacts[name].sha256
+            )
+            for name, identity in manifest.artifacts.items()
+        )
+    ):
         raise Readiness0PackageError("READINESS0_IMPLEMENTATION_MANIFEST_INVALID")
     return manifest
 

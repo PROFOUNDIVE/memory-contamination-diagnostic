@@ -103,7 +103,7 @@ CORE_MAIN_REGISTRY = CoreMainRegistry(
         ("mmlu_pro_physics", "rag_frozen"),
     ),
     prospective_rag_extension_id="new_mcq_rag_prospective_extension_v1",
-    authority_router_sha256="c30f7c621218451affbee7bbe01359c76014f7baca9159cc6349b371e8d01b8f",
+    authority_router_sha256="76af55a04ce47f5bfe82795a99b0654b509becc7e202b3e05db29550297cf430",
     post_cutoff_addendum_path="2026-08-24_Phase13_MainA_PostCutoff_Acceleration_Addendum.md",
     post_cutoff_rule_id="experiment_v8_two_retained_new_mcq_rag_deadline_contingency",
     current_main_package_id="phase13_main_a_post_cutoff_partial_crossed_v1",
@@ -122,11 +122,11 @@ CORE_MAIN_REGISTRY = CoreMainRegistry(
         ),
         (
             "post_cutoff_addendum",
-            "e55ab2fe57380f870eecc6331ebf47f7642ddc39807d294a912dd09c9122ca22",
+            "6ab2db4041333a26e9c76a034266c2d7de64491c5c109634c97ecebef9b2f59b",
         ),
         (
             "experiment_design",
-            "5597f27d688c19efbcf47dc7369de02a947eac55a5493a69a3aa9098dfe25616",
+            "174002b407c2c4055c42298bd16ca13463e80af5c935f9593f556c3f71d7671c",
         ),
     ),
 )

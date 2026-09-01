@@ -22,17 +22,22 @@ EXPECTED_ARTIFACT_PATHS: Final = {
         "data/phase13/main/mr_p4/main_a_common_checkpoint_registry_v1.json"
     ),
     "analysis_window_registry": "data/phase13/main/mr_p4/readiness0_window_proof_v1.json",
-    "package_selection": "data/phase13/main/post_cutoff_package_selection_v1.json",
+    "package_selection": "data/phase13/main/post_cutoff_package_selection_v2.json",
     "common_capacity": "data/phase13/common_capacity_v1.json",
     "legacy_rag_manifest": "data/phase13/rag/legacy/manifest.json",
     "legacy_rag_seal": "data/phase13/rag/legacy_seal_v1.json",
     "observability_manifest": "data/phase13/observability/manifest_v1.json",
     "observability_packet": "data/phase13/observability/registration_packet_v1.json",
     "provider_contract": "data/phase13/openai_luna_provider_contract_v1.json",
+    "openai_client": "src/memcontam/clients/openai_responses.py",
     "stage_envelope_registry": "data/phase13/main/cost_envelope_v2/stage_envelope_registry_v1.json",
     "retry_failure_contract": "data/phase13/main/cost_envelope_v2/retry_failure_contract_v1.json",
     "cost_proof": "data/phase13/main/cost_envelope_v2/cost_proof_v1.json",
     "activated_cost_policy": "data/phase13/main/cost_envelope_v2/activated_policy_v1.json",
+    "readiness0_acceptance_policy": "src/memcontam/readiness/phase13_readiness0_package.py",
+    "readiness0_evidence_policy": (
+        "src/memcontam/readiness/phase13_readiness0_evidence_validate.py"
+    ),
     "ordinary_runtime": "src/memcontam/experiment/phase13_ordinary_runtime.py",
     "production_observability_adapter": (
         "src/memcontam/readiness/phase13_production_observability.py"
@@ -50,16 +55,42 @@ EXPECTED_ARTIFACT_PATHS: Final = {
     "main_runner_models": "src/memcontam/readiness/phase13_main_runner_models.py",
     "main_runner_store": "src/memcontam/readiness/phase13_main_runner_store.py",
     "main_runner_cli": "src/memcontam/readiness/phase13_main_runner_cli.py",
+    "main_production": "src/memcontam/readiness/phase13_main_production.py",
+    "main_production_backend": (
+        "src/memcontam/readiness/phase13_main_production_backend.py"
+    ),
+    "main_live_contract": "src/memcontam/readiness/phase13_main_live_contract.py",
+    "main_live_contract_artifact": "data/phase13/main/main_live_contract_v1.json",
+    "main_live_evidence": "src/memcontam/readiness/phase13_main_live_evidence.py",
+    "main_live_dispatch": "src/memcontam/readiness/phase13_main_live_dispatch.py",
+    "main_live_cli": "src/memcontam/readiness/phase13_main_live_cli.py",
     "main_execution": "src/memcontam/readiness/phase13_main_execution.py",
     "main_execution_models": "src/memcontam/readiness/phase13_main_execution_models.py",
     "main_execution_bindings": "src/memcontam/readiness/phase13_main_execution_bindings.py",
 }
 PRODUCTION_ROLES: Final = (
+    "openai_client",
     "production_observability_adapter",
     "production_runtime_join",
     "production_runtime_evidence",
     "production_runtime_memory",
     "production_runtime_models",
+    "main_production_backend",
+    "main_live_evidence",
+    "main_live_dispatch",
+)
+RUNNER_ROLES: Final = (
+    "main_runner",
+    "main_runner_ledger",
+    "main_runner_models",
+    "main_runner_store",
+    "main_runner_cli",
+    "main_production",
+    "main_production_backend",
+    "main_live_contract",
+    "main_live_evidence",
+    "main_live_dispatch",
+    "main_live_cli",
 )
 
 
@@ -113,15 +144,7 @@ def validate_semantic_joins(package: MainExecutionFreeze, paths: dict[str, Path]
     production_hash = canonical_hash([bindings[role] for role in PRODUCTION_ROLES])
     if production_hash != package.observability.production_reconstruction_binding_sha256:
         raise MainExecutionBindingError("MAIN_EXECUTION_OBSERVABILITY_BINDING_INVALID")
-    runner_hash = canonical_hash(
-        [
-            bindings["main_runner"],
-            bindings["main_runner_ledger"],
-            bindings["main_runner_models"],
-            bindings["main_runner_store"],
-            bindings["main_runner_cli"],
-        ]
-    )
+    runner_hash = canonical_hash([bindings[role] for role in RUNNER_ROLES])
     if runner_hash != package.execution_control.runner_code_sha256:
         raise MainExecutionBindingError("MAIN_EXECUTION_RUNNER_BINDING_INVALID")
     provider = json.loads(read_regular_nofollow(paths["provider_contract"]))

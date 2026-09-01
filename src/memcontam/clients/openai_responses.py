@@ -167,7 +167,7 @@ class OpenAIResponsesClient:
             )
             setattr(error, "provider_usage", usage)
             setattr(error, "provider_token_usage", token_usage)
-            setattr(error, "provider_cost_usd", cost_usd)
+            setattr(error, "provider_cost_usd", selected_cost)
             setattr(error, "provider_response_id", getattr(response, "id", None))
             setattr(error, "provider_service_tier", getattr(response, "service_tier", self._config.service_tier))
             setattr(error, "provider_returned_model", getattr(response, "model", model))

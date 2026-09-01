@@ -8,7 +8,7 @@ from pathlib import Path
 from memcontam.readiness.phase13_execution_contract import CORE_MAIN_REGISTRY
 
 STATUS_PATH = Path("data/phase13/rag/new_mcq_rag_status_v1.json")
-POST_CUTOFF_PATH = Path("data/phase13/main/post_cutoff_package_selection_v1.json")
+POST_CUTOFF_PATH = Path("data/phase13/main/post_cutoff_package_selection_v2.json")
 TASKS = ("mmlu_pro_engineering", "mmlu_pro_physics")
 
 
@@ -46,9 +46,9 @@ def test_post_cutoff_package_records_fired_contingency_without_rewriting_pre_cut
     assert POST_CUTOFF_PATH.exists()
     package = json.loads(POST_CUTOFF_PATH.read_text(encoding="utf-8"))
 
-    assert package["schema_version"] == "phase13_post_cutoff_package_selection_v1"
+    assert package["schema_version"] == "phase13_post_cutoff_package_selection_v2"
     assert package["authority"]["addendum_sha256"] == (
-        "e55ab2fe57380f870eecc6331ebf47f7642ddc39807d294a912dd09c9122ca22"
+        "6ab2db4041333a26e9c76a034266c2d7de64491c5c109634c97ecebef9b2f59b"
     )
     assert package["cutoff"]["status"] == "CONTINGENCY_FIRED"
     assert package["pre_cutoff_package"]["status"] == "NOT_READY"

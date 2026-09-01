@@ -29,6 +29,8 @@ class Capacity(_FrozenModel):
 class StageEnvelope(_FrozenModel):
     semantic_stage_id: str = Field(min_length=1)
     authority_stage_id: str = Field(min_length=1)
+    suffix_calls: int = Field(ge=0)
+    prefix_calls: int = Field(ge=0)
     calls: int = Field(gt=0)
     maximum_input_tokens: int = Field(gt=0)
     maximum_output_tokens: int = Field(gt=0)
@@ -109,6 +111,16 @@ class StageCost(_FrozenModel):
     stage_krw: int = Field(ge=0)
 
 
+class CleanPrefixReconciliation(_FrozenModel):
+    status: Literal["CLOSED"]
+    case: Literal["B"]
+    authorization: Literal["EXPLICIT_USER_AUTHORIZATION_2026-08-31"]
+    main_outcome_blind: Literal[True]
+    prefix_ownership_instances: Literal[230]
+    prefix_semantic_calls: Literal[430]
+    suffix_semantic_calls: Literal[108500]
+
+
 class CostProof(_FrozenModel):
     schema_version: Literal["cost_envelope_v2_cost_proof_v1"]
     proof_id: Literal["cost_envelope_v2_main_a_450k_v1"]
@@ -120,7 +132,10 @@ class CostProof(_FrozenModel):
     common_capacity_sha256: Sha256
     cost_envelope_id: Literal["COST_ENVELOPE_V2"]
     cost_envelope_sha256: Literal[
-        "806b4f6fe752b3ed12d6dd9c081f75f54873a575870ffab62a84ca1fc032460a"
+        "6de377752cd80e45147a8b47aa83828f2921363b564c44004ac90650dac65cf2"
+    ]
+    cost_envelope_path: Literal[
+        "data/phase13/main/cost_envelope_v2/corrected_cost_envelope_v2.txt"
     ]
     stage_envelope_registry_id: Literal["CORE_EXECUTION_ENVELOPE_REGISTRY_V2"]
     stage_envelope_registry_authority_sha256: Literal[
@@ -133,13 +148,14 @@ class CostProof(_FrozenModel):
     terminal_failure_contract_sha256: Literal[
         "9bbcdd9dd1686af034f7c0d2114ac86d5837a07de0cc6ba8fef7940bbc822b75"
     ]
-    semantic_calls: Literal[108500]
+    reconciliation: CleanPrefixReconciliation
+    semantic_calls: Literal[108930]
     rate_card: RateCard
     budget: Budget
     rounding: Literal["ceil_each_stage_input_and_output_krw_component_then_sum"]
     stage_costs: tuple[StageCost, ...]
-    cmax_main_krw: Literal[442130]
-    margin_to_core_gate_krw: Literal[7870]
+    cmax_main_krw: Literal[444126]
+    margin_to_core_gate_krw: Literal[5874]
     proof_hash: Sha256
 
 

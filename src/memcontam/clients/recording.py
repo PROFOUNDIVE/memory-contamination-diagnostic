@@ -160,6 +160,7 @@ class MethodCallRecorder:
                 "latency_ms": response.latency_ms,
                 "transport_attempts": _response_attempts(response),
                 "provider_cost_usd": response.raw.get("cost_usd"),
+                "provider_status": response.raw.get("status"),
                 "provider_response_id": response.raw.get("response_id"),
                 "provider_usage": response.raw.get("usage"),
                 "provider_service_tier": response.raw.get("service_tier"),

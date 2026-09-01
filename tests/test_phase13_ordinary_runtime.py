@@ -247,7 +247,7 @@ def test_ordinary_runtime_binds_approved_cost_policy(monkeypatch: pytest.MonkeyP
     assert client.configs[0]["_phase13_maximum_transport_attempts"] == 1
     assert client.configs[0]["_phase13_maximum_input_tokens"] == 9330
     assert client.configs[0]["_phase13_execution_envelope_sha256"] == (
-        "4c48fca92d1d70105d2eb34b5b86984c732c03e3600cb00965501ecabd2d1769"
+        "41cd7e7310a961d0856e2020b05a3ae455811fb0660455b4c7dfbcb0a9aafd93"
     )
     assert client.configs[0]["_phase13_failure_contract_id"] == (
         "CORE_TRANSPORT_ATTEMPT_CONTRACT_V2"

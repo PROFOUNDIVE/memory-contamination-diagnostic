@@ -44,9 +44,9 @@ class ActivatedCostPolicy(_FrozenModel):
     status: Literal["PASS"]
     authority: AuthorityIdentity
     candidate: CandidateIdentity
-    cmax_main_krw: Literal[442130]
+    cmax_main_krw: Literal[444126]
     core_authorization_gate_krw: Literal[450000]
-    margin_to_core_gate_krw: Literal[7870]
+    margin_to_core_gate_krw: Literal[5874]
     main_execution_authorized: Literal[False]
     main_a_measured_scientific_execution_count: Literal[0]
     activation_hash: Sha256

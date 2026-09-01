@@ -14,6 +14,11 @@ from memcontam.readiness.phase13_main_execution import (
     validate_main_authorization,
 )
 from memcontam.readiness.phase13_main_execution_models import MainExecutionFreeze
+from memcontam.readiness.phase13_main_live_contract import (
+    MainLiveContractError,
+    load_main_live_contract,
+    validate_main_live_contract,
+)
 from memcontam.readiness.phase13_main_runner_ledger import MainRunLedger
 from memcontam.readiness.phase13_main_runner_models import (
     DispatchCompleted,
@@ -28,7 +33,6 @@ from memcontam.readiness.phase13_main_runner_models import (
 
 
 Dispatch = Callable[[ExecutionUnit], DispatchCompleted]
-ProjectedCost = Callable[[ExecutionUnit], int]
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,7 +50,7 @@ def prepare_main_run(request: MainRunRequest) -> MainRunLedger:
     return MainRunLedger.create(
         _ledger_path(request),
         binding,
-        enumerate_execution_units(package),
+        enumerate_execution_units(package, request.repository_root),
     )
 
 
@@ -55,7 +59,7 @@ def open_main_run(request: MainRunRequest) -> MainRunLedger:
     return MainRunLedger.open(
         _ledger_path(request),
         binding,
-        enumerate_execution_units(package),
+        enumerate_execution_units(package, request.repository_root),
     )
 
 
@@ -63,14 +67,12 @@ def run_main(
     request: MainRunRequest,
     dispatch: Dispatch,
     *,
-    projected_cost_krw: ProjectedCost,
     tranche_ceiling_krw: int,
     max_units: int | None = None,
 ) -> MainRunReport:
     return run_pending(
         prepare_main_run(request),
         dispatch,
-        projected_cost_krw=projected_cost_krw,
         tranche_ceiling_krw=tranche_ceiling_krw,
         max_units=max_units,
     )
@@ -80,14 +82,12 @@ def resume_main(
     request: MainRunRequest,
     dispatch: Dispatch,
     *,
-    projected_cost_krw: ProjectedCost,
     tranche_ceiling_krw: int,
     max_units: int | None = None,
 ) -> MainRunReport:
     return run_pending(
         open_main_run(request),
         dispatch,
-        projected_cost_krw=projected_cost_krw,
         tranche_ceiling_krw=tranche_ceiling_krw,
         max_units=max_units,
     )
@@ -97,7 +97,6 @@ def run_pending(
     ledger: MainRunLedger,
     dispatch: Dispatch,
     *,
-    projected_cost_krw: ProjectedCost,
     tranche_ceiling_krw: int,
     max_units: int | None = None,
 ) -> MainRunReport:
@@ -109,8 +108,11 @@ def run_pending(
         unit = ledger.next_pending()
         if unit is None:
             break
-        projected = projected_cost_krw(unit)
-        if not ledger.claim_dispatch(unit.unit_id, projected, tranche_ceiling_krw):
+        if not ledger.claim_dispatch(
+            unit.unit_id,
+            unit.projected_cost_krw,
+            tranche_ceiling_krw,
+        ):
             return _report(ledger, attempted)
         try:
             completed = dispatch(unit)
@@ -148,11 +150,15 @@ def _validated_inputs(
         if hashlib.sha256(package_raw).hexdigest() != authorization.execution_package_sha256:
             raise MainRunError("MAIN_RUN_PACKAGE_BYTES_CHANGED")
         package = MainExecutionFreeze.model_validate_json(package_raw)
+        contract = load_main_live_contract(
+            request.repository_root / "data/phase13/main/main_live_contract_v1.json"
+        )
+        validate_main_live_contract(contract, package)
     except Phase13MainExecutionError as error:
         raise MainRunError(error.code) from error
     except MainRunError:
         raise
-    except (AuthorityFileError, OSError, ValidationError) as error:
+    except (AuthorityFileError, MainLiveContractError, OSError, ValidationError) as error:
         raise MainRunError("MAIN_RUN_INPUT_INVALID") from error
     return package, MainRunBinding(
         package.package_id,
@@ -162,6 +168,7 @@ def _validated_inputs(
         authorization.authorization_sha256,
         authorization.authorization_hash,
         package.execution_control.runner_code_sha256,
+        package.cost_guard.core_authorization_gate_krw,
     )
 
 

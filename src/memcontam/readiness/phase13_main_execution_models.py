@@ -140,12 +140,12 @@ class ObservabilityBinding(_FrozenModel):
 class CostGuardBinding(_FrozenModel):
     cost_envelope_id: Literal["COST_ENVELOPE_V2"]
     cost_envelope_sha256: Sha256
-    semantic_calls: Literal[108500]
+    semantic_calls: Literal[108930]
     total_budget_ceiling_krw: Literal[500000]
     reserve_krw: Literal[50000]
     core_authorization_gate_krw: Literal[450000]
-    cmax_main_krw: Literal[442130]
-    margin_krw: Literal[7870]
+    cmax_main_krw: Literal[444126]
+    margin_krw: Literal[5874]
 
 
 class ExecutionControlBinding(_FrozenModel):

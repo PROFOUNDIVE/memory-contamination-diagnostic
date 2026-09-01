@@ -87,7 +87,7 @@ def validate_package_selection(raw: bytes) -> None:
             "selected_current_main",
             "track2",
         }
-        or payload.get("schema_version") != "phase13_post_cutoff_package_selection_v1"
+        or payload.get("schema_version") != "phase13_post_cutoff_package_selection_v2"
         or set(authority) != {"addendum_path", "addendum_sha256"}
         or authority.get("addendum_path") != CORE_MAIN_REGISTRY.post_cutoff_addendum_path
         or authority.get("addendum_sha256") != authority_hashes["post_cutoff_addendum"]

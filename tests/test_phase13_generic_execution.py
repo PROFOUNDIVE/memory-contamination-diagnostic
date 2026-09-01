@@ -170,11 +170,11 @@ def test_core_main_registry_matches_final_phase13_authority() -> None:
         ),
         (
             "post_cutoff_addendum",
-            "e55ab2fe57380f870eecc6331ebf47f7642ddc39807d294a912dd09c9122ca22",
+            "6ab2db4041333a26e9c76a034266c2d7de64491c5c109634c97ecebef9b2f59b",
         ),
         (
             "experiment_design",
-            "5597f27d688c19efbcf47dc7369de02a947eac55a5493a69a3aa9098dfe25616",
+            "174002b407c2c4055c42298bd16ca13463e80af5c935f9593f556c3f71d7671c",
         ),
     )
 

@@ -67,7 +67,7 @@
     "httpx_version": "0.28.1",
     "httpcore_version": "1.0.9",
     "pydantic_version": "2.13.4",
-    "client_implementation_sha256": "896527e0308adb0eb55c52b668b2df484d4c05980ef5bfdb2d5c72accc17ca40"
+    "client_implementation_sha256": "bb83936fdc4534f7588061dd6b436083ab60400cd1cee2ace0d033aeded4f73b"
   },
   "provider_contract_artifact": {
     "path": "data/phase13/openai_luna_provider_contract_v1.json",
@@ -82,7 +82,7 @@
   },
   "capacity_artifact": {
     "path": "data/phase13/common_capacity_v1.json",
-    "sha256": "102da3f554294c0e802c6894cbcf03074704f465e9595ef27134b3897a56ad31"
+    "sha256": "c85e5be6f2d555e711b91688a518c5042eaf2bb1c5edc0bb7e396e06c18eb152"
   },
   "validator": {
     "path": "src/memcontam/readiness/phase13_capacity_realization.py",

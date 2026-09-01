@@ -2,19 +2,19 @@
   "schema_version": "phase13_activated_cost_policy_v1",
   "status": "PASS",
   "authority": {
-    "router_sha256": "c30f7c621218451affbee7bbe01359c76014f7baca9159cc6349b371e8d01b8f",
-    "post_cutoff_addendum_sha256": "e55ab2fe57380f870eecc6331ebf47f7642ddc39807d294a912dd09c9122ca22",
-    "experiment_design_v10_sha256": "5597f27d688c19efbcf47dc7369de02a947eac55a5493a69a3aa9098dfe25616"
+    "router_sha256": "76af55a04ce47f5bfe82795a99b0654b509becc7e202b3e05db29550297cf430",
+    "post_cutoff_addendum_sha256": "6ab2db4041333a26e9c76a034266c2d7de64491c5c109634c97ecebef9b2f59b",
+    "experiment_design_v10_sha256": "174002b407c2c4055c42298bd16ca13463e80af5c935f9593f556c3f71d7671c"
   },
   "candidate": {
     "path": "data/phase13/main/cost_envelope_v2/candidate_manifest_v1.json",
-    "sha256": "3125805adeab0146297b3b238d225e623b14486f294f4c33ddc09579851dfb68",
+    "sha256": "dbbfdffed26007fdb9fdf47011afd1f428ff49301f09b0a640bc0ebc6563f1c6",
     "provenance_status": "PRESERVED_HISTORICAL_CONTROLLED_HANDOFF"
   },
-  "cmax_main_krw": 442130,
+  "cmax_main_krw": 444126,
   "core_authorization_gate_krw": 450000,
-  "margin_to_core_gate_krw": 7870,
+  "margin_to_core_gate_krw": 5874,
   "main_execution_authorized": false,
   "main_a_measured_scientific_execution_count": 0,
-  "activation_hash": "6d56c8edb8904ef09f21a538f97507a336cec941a3036bce9e874e9902b25cd9"
+  "activation_hash": "7ffa06ba56a4ab9f492830c88886871e4b01fcb67e7aa98ea99ade89f5fded47"
 }

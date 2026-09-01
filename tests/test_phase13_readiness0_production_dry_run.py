@@ -202,7 +202,7 @@ def test_scripted_responses_drive_all_production_readiness0_cases(
         and call.tools == ()
         and call.maximum_input_tokens == stage_inputs[call.stage]
         and call.execution_envelope_sha256
-        == "4c48fca92d1d70105d2eb34b5b86984c732c03e3600cb00965501ecabd2d1769"
+            == "41cd7e7310a961d0856e2020b05a3ae455811fb0660455b4c7dfbcb0a9aafd93"
         and call.failure_contract_sha256
         == "1ee66fcb795f97d483c2ef976133ee61dbd5108c9dae851c2c2786ff496d788f"
         and call.terminal_failure_contract_sha256

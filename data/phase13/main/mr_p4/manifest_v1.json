@@ -4,15 +4,15 @@
   "artifacts": {
     "track1": {
       "path": "data/phase13/main/track1_authority_state_sync_checkpoint_v1.json",
-      "sha256": "84ce7b495b6450e82333aeb008fd6b7279532007648f4667038c1e8834e09d0d"
+      "sha256": "5c234069bfd73b86e45d75c8a330d4900a3253e47751b3a17cd34cc238c04bc0"
     },
     "package_selection": {
-      "path": "data/phase13/main/post_cutoff_package_selection_v1.json",
-      "sha256": "851f033f75f04861d8f53217faac8108296d7b0dba9d27e07a57ab94841dd3a9"
+      "path": "data/phase13/main/post_cutoff_package_selection_v2.json",
+      "sha256": "2efa745c72045ba84e7c3070424b76a9c65d87a02ae601a90ac367517d6890c9"
     },
     "capacity": {
       "path": "data/phase13/common_capacity_v1.json",
-      "sha256": "102da3f554294c0e802c6894cbcf03074704f465e9595ef27134b3897a56ad31"
+      "sha256": "c85e5be6f2d555e711b91688a518c5042eaf2bb1c5edc0bb7e396e06c18eb152"
     },
     "legacy_rag_seal": {
       "path": "data/phase13/rag/legacy_seal_v1.json",
@@ -20,7 +20,7 @@
     },
     "observability_manifest": {
       "path": "data/phase13/observability/manifest_v1.json",
-      "sha256": "5a75938244754fbaff98f0bf24c99a3d965335de945b5e29c16b7d241a328d7b"
+      "sha256": "e5736593651570430e54db2a7213bcdfc0f900bb56de86de802917811bc5d051"
     },
     "observability_packet": {
       "path": "data/phase13/observability/registration_packet_v1.json",
@@ -36,7 +36,7 @@
     },
     "openai_client": {
       "path": "src/memcontam/clients/openai_responses.py",
-      "sha256": "896527e0308adb0eb55c52b668b2df484d4c05980ef5bfdb2d5c72accc17ca40"
+      "sha256": "bb83936fdc4534f7588061dd6b436083ab60400cd1cee2ace0d033aeded4f73b"
     },
     "ordinary_runtime": {
       "path": "src/memcontam/experiment/phase13_ordinary_runtime.py",
@@ -68,7 +68,7 @@
     },
     "recording_client": {
       "path": "src/memcontam/clients/recording.py",
-      "sha256": "d4e416f191397437a6f57a742acf49af39e9b1297cb365bf0be3f6cf749ef27c"
+      "sha256": "6e551a3e6631c8beeb4ee416434ced4708a163de9b20a10e1a66f765e1a5f202"
     },
     "logging_schema": {
       "path": "src/memcontam/logging/schema.py",
@@ -80,11 +80,11 @@
     },
     "cost_policy": {
       "path": "src/memcontam/readiness/phase13_cost_policy.py",
-      "sha256": "4c188eb6be4664c5571978c4e7ed75f1aee4782428b7822321d03afc1f4f80d9"
+      "sha256": "51cf94de34636d5f9c5dc34a9b02569b3a428631f031966aaec6b08cbf7ca3ae"
     },
     "cost_policy_models": {
       "path": "src/memcontam/readiness/phase13_cost_policy_models.py",
-      "sha256": "696d04ff57e257c7dc96aae7c738cf58ff782055dc28f9be1d8e5f9e9e445f68"
+      "sha256": "0c97ef82392c556ff2294181ac6b7860212be8606e18a1456022dd96224073f8"
     },
     "cost_policy_handoff": {
       "path": "src/memcontam/readiness/phase13_cost_policy_handoff.py",
@@ -100,7 +100,7 @@
     },
     "main_readiness_authority": {
       "path": "src/memcontam/readiness/phase13_main_readiness_authority.py",
-      "sha256": "66d40858dbf06ff9ba246de1dca573c48598126298332b278ac4c8954baa0507"
+      "sha256": "1313b374b1647eb6d9d94c14271a9a6b6ac56c0a29a7c6b032147d86522de90a"
     },
     "main_readiness_models": {
       "path": "src/memcontam/readiness/phase13_main_readiness_models.py",
@@ -120,11 +120,11 @@
     },
     "activated_cost_policy": {
       "path": "data/phase13/main/cost_envelope_v2/activated_policy_v1.json",
-      "sha256": "f0468cd995fc2ec59c5fbccd4a1e899a2379c3ddbb31a313456857cb5d12c4f1"
+      "sha256": "b4d86ac748f4778d6f3ded99ec21692ee01e42a0a21ed1ebbd339d0c126a6855"
     },
     "cost_activation_validator": {
       "path": "src/memcontam/readiness/phase13_cost_activation.py",
-      "sha256": "1f7955ee5bb69a79d871e791c74d2684ab68156f52220c3bbbf504571351e510"
+      "sha256": "02124573d3e5e333ba811ff5239479fdec51176a10fa9a283d74134b709de5b2"
     },
     "readiness0_request": {
       "path": "data/phase13/main/mr_p4/readiness0_request_v1.json",
@@ -400,5 +400,5 @@
   "mr_p6_status": "NOT_AUTHORIZED",
   "main_execution_authorized": false,
   "main_a_measured_scientific_execution_count": 0,
-  "closure_hash": "c974c086c68d4b9d0b4e8701b57f7bc134ef19d7fbba671e732cce74850f68ba"
+  "closure_hash": "b625d15bf4476215efc8864607b6857f5b643009ba149449508c95031adca11e"
 }

@@ -30,6 +30,7 @@ INPUT_KRW_PER_TOKEN = Decimal("0.0004")
 OUTPUT_KRW_PER_TOKEN = Decimal("0.00192")
 ModelT = TypeVar("ModelT", bound=BaseModel)
 CANONICAL_ARTIFACT_PATHS: Final = {
+    "corrected_cost_envelope": PACKAGE / "corrected_cost_envelope_v2.txt",
     "stage_envelope_registry": PACKAGE / "stage_envelope_registry_v1.json",
     "retry_failure_contract": PACKAGE / "retry_failure_contract_v1.json",
     "cost_proof": PACKAGE / "cost_proof_v1.json",
@@ -45,16 +46,16 @@ CANONICAL_SOURCE_HASHES: Final = {
     "experiment_v10": "bf6cf602d3ead47e95d9e158c1e3fe89ffab1ba4093a40f7d7ccb781faa0e0ec",
 }
 CANONICAL_STAGES: Final = (
-    ("full_history_generate", "FH_generation", 10000, 9330, 512),
-    ("rag_generate", "RAG_generation", 6000, 290, 512),
-    ("bot_problem_distill", "BoT_problem_distillation", 10000, 1177, 384),
-    ("bot_instantiate_solve", "BoT_solve", 10000, 1949, 512),
-    ("bot_thought_distill", "BoT_thought_distillation", 10000, 2545, 384),
-    ("reflexion_generate", "Reflexion_actor_generation", 20000, 2282, 512),
-    ("reflexion_reflect", "Reflexion_reflection", 20000, 3349, 384),
-    ("dc_rs_generate", "DC_RS_generation", 10000, 9212, 512),
-    ("dc_rs_synthesize", "DC_RS_writer_synthesis", 10000, 13521, 8192),
-    ("no_memory_generate", "NoMem_generation", 2500, 1160, 512),
+    ("full_history_generate", "FH_generation", 10000, 50, 10050, 9330, 512),
+    ("rag_generate", "RAG_generation", 6000, 30, 6030, 290, 512),
+    ("bot_problem_distill", "BoT_problem_distillation", 10000, 50, 10050, 1177, 384),
+    ("bot_instantiate_solve", "BoT_solve", 10000, 50, 10050, 1949, 512),
+    ("bot_thought_distill", "BoT_thought_distillation", 10000, 50, 10050, 2545, 384),
+    ("reflexion_generate", "Reflexion_actor_generation", 20000, 50, 20050, 2282, 512),
+    ("reflexion_reflect", "Reflexion_reflection", 20000, 50, 20050, 3349, 384),
+    ("dc_rs_generate", "DC_RS_generation", 10000, 50, 10050, 9212, 512),
+    ("dc_rs_synthesize", "DC_RS_writer_synthesis", 10000, 50, 10050, 13521, 8192),
+    ("no_memory_generate", "NoMem_generation", 2500, 0, 2500, 1160, 512),
 )
 CANONICAL_RESIDUAL_PATCH: Final = b"""--- a/2026-08-24_Phase13_MainA_PostCutoff_Acceleration_Addendum.md
 +++ b/2026-08-24_Phase13_MainA_PostCutoff_Acceleration_Addendum.md
@@ -137,6 +138,7 @@ def load_cost_policy_bundle(root: Path) -> CostPolicyBundle:
         "stage_envelope_registry",
         "retry_failure_contract",
         "cost_proof",
+        "corrected_cost_envelope",
         "controlled_external_write",
         "residual_authority_patch",
     }
@@ -186,7 +188,7 @@ def _validate_bundle(bundle: CostPolicyBundle, root: Path) -> None:
         raise Phase13CostPolicyError("COST_PROOF_HASH_MISMATCH")
     if (
         proof.package_selection_path
-        != "data/phase13/main/post_cutoff_package_selection_v1.json"
+        != "data/phase13/main/post_cutoff_package_selection_v2.json"
         or proof.common_capacity_path != "data/phase13/common_capacity_v1.json"
     ):
         raise Phase13CostPolicyError("CANONICAL_PATH_MISMATCH")
@@ -210,6 +212,8 @@ def _validate_bundle(bundle: CostPolicyBundle, root: Path) -> None:
         (
             stage.semantic_stage_id,
             stage.authority_stage_id,
+            stage.suffix_calls,
+            stage.prefix_calls,
             stage.calls,
             stage.maximum_input_tokens,
             stage.maximum_output_tokens,
@@ -220,6 +224,16 @@ def _validate_bundle(bundle: CostPolicyBundle, root: Path) -> None:
         raise Phase13CostPolicyError("CANONICAL_STAGE_MISMATCH")
     if len(stages) != 10 or set(stages) != set(costs):
         raise Phase13CostPolicyError("STAGE_REGISTRY_MISMATCH")
+    if (
+        sum(stage.prefix_calls for stage in registry.stages)
+        != proof.reconciliation.prefix_semantic_calls
+        or sum(stage.suffix_calls for stage in registry.stages)
+        != proof.reconciliation.suffix_semantic_calls
+        or any(stage.calls != stage.suffix_calls + stage.prefix_calls for stage in registry.stages)
+        or hashlib.sha256(_read(root, Path(proof.cost_envelope_path)).removesuffix(b"\n")).hexdigest()
+        != proof.cost_envelope_sha256
+    ):
+        raise Phase13CostPolicyError("CLEAN_PREFIX_RECONCILIATION_MISMATCH")
     total = 0
     for stage_id, stage in stages.items():
         input_krw = _ceil(stage.calls * stage.maximum_input_tokens * INPUT_KRW_PER_TOKEN)

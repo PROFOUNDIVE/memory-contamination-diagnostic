@@ -27,6 +27,7 @@ _ENVELOPE_HASH = "4c48fca92d1d70105d2eb34b5b86984c732c03e3600cb00965501ecabd2d17
 _FAILURE_HASH = "1ee66fcb795f97d483c2ef976133ee61dbd5108c9dae851c2c2786ff496d788f"
 _TERMINAL_HASH = "9bbcdd9dd1686af034f7c0d2114ac86d5837a07de0cc6ba8fef7940bbc822b75"
 _RATE_CARD_HASH = "50975b67dce4c59ba9267c3234a873076137ded5078aa3e8b5c9a2fad4ff3e06"
+_HISTORICAL_CAPACITY_HASH = "102da3f554294c0e802c6894cbcf03074704f465e9595ef27134b3897a56ad31"
 _ANSWER_STAGE = {
     "nomem": "no_memory_generate",
     "fh_bounded": "full_history_generate",
@@ -87,6 +88,12 @@ def validate_pass_evidence(
         or len(rows) != len(cases)
     ):
         raise EvidenceValidationError("READINESS0_EVIDENCE_CLOSURE_MISMATCH")
+    capacity_hashes = {row.runtime.capacity_artifact_sha256 for row in rows}
+    if len(capacity_hashes) != 1 or not capacity_hashes <= {
+        _HISTORICAL_CAPACITY_HASH,
+        bundle.proof.common_capacity_sha256,
+    }:
+        raise EvidenceValidationError("READINESS0_CAPACITY_JOIN_MISMATCH")
     call_ids: set[str] = set()
     for row, case in zip(rows, cases, strict=True):
         seed = checkpoint.tasks[case.task].seeds[0]
@@ -176,7 +183,6 @@ def validate_pass_evidence(
             or runtime.checkpoint_registry_sha256 != checkpoint_hash
             or runtime.registration_packet_sha256 != registration_hash
             or runtime.ordered_sample_ids_sha256 == "0" * 64
-            or runtime.capacity_artifact_sha256 != bundle.proof.common_capacity_sha256
             or runtime.task_order_sha256 != task_order_hash
             or runtime.analysis_window_id != "core_prefix_50"
             or runtime.analysis_window_registry_sha256 != window_hash

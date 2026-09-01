@@ -1,0 +1,36 @@
+{
+  "schema_version": "phase13_main_live_contract_v1",
+  "authority_sha256": "76af55a04ce47f5bfe82795a99b0654b509becc7e202b3e05db29550297cf430",
+  "package_id": "phase13-main-a-execution-freeze-v1",
+  "checkpoint_registry_sha256": "ec26757928ee3e9883aab23f6e7b416e71159b5e6b740e63effee6b8eb58a64b",
+  "observability_packet_sha256": "b2f9d7b5cced3b7bd4f33272b952d9a2270696a5348121608d13876bce02e454",
+  "production_units_sha256": "758c32ffa5f9d8c5a6213aced00203a60f8e38ccbcb3ea3dfa35d5c2ec031273",
+  "prefix": {
+    "contract_id": "phase13-main-prefix-realization-v1",
+    "dispatch_order_id": "phase13-main-production-object-order-v1",
+    "owner_law_id": "phase13-main-prefix-four-consumers-v1",
+    "failure_law_id": "phase13-main-prefix-atomic-terminal-fanout-v1",
+    "checkpoint_evidence_schema_id": "phase13_main_prefix_checkpoint_v1",
+    "realization_count": 230,
+    "dispatch_order_sha256": "cf898bc3a5bb4b22eb1ab1aca8813e8ebe1c773c5ea06cce84c2ec3b4cc6c340",
+    "ownership_sha256": "f99dc6c116c3ef618e6ced1c434c9c0298247b0df2d3bd0ea74edb383ba7c540",
+    "stage_call_counts": {
+      "bot_instantiate_solve": 50,
+      "bot_problem_distill": 50,
+      "bot_thought_distill": 50,
+      "dc_rs_generate": 50,
+      "dc_rs_synthesize": 50,
+      "full_history_generate": 50,
+      "rag_generate": 30,
+      "reflexion_generate": 50,
+      "reflexion_reflect": 50
+    }
+  },
+  "cost": {
+    "cost_envelope_id": "COST_ENVELOPE_V2",
+    "cost_envelope_sha256": "6de377752cd80e45147a8b47aa83828f2921363b564c44004ac90650dac65cf2",
+    "semantic_calls": 108930,
+    "cmax_main_krw": 444126,
+    "core_authorization_gate_krw": 450000
+  }
+}

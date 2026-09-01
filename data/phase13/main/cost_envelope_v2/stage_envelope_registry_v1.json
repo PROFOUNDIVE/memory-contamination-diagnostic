@@ -15,16 +15,16 @@
     "L_DC_tokens": 8192
   },
   "stages": [
-    {"semantic_stage_id": "full_history_generate", "authority_stage_id": "FH_generation", "calls": 10000, "maximum_input_tokens": 9330, "maximum_output_tokens": 512},
-    {"semantic_stage_id": "rag_generate", "authority_stage_id": "RAG_generation", "calls": 6000, "maximum_input_tokens": 290, "maximum_output_tokens": 512},
-    {"semantic_stage_id": "bot_problem_distill", "authority_stage_id": "BoT_problem_distillation", "calls": 10000, "maximum_input_tokens": 1177, "maximum_output_tokens": 384},
-    {"semantic_stage_id": "bot_instantiate_solve", "authority_stage_id": "BoT_solve", "calls": 10000, "maximum_input_tokens": 1949, "maximum_output_tokens": 512},
-    {"semantic_stage_id": "bot_thought_distill", "authority_stage_id": "BoT_thought_distillation", "calls": 10000, "maximum_input_tokens": 2545, "maximum_output_tokens": 384},
-    {"semantic_stage_id": "reflexion_generate", "authority_stage_id": "Reflexion_actor_generation", "calls": 20000, "maximum_input_tokens": 2282, "maximum_output_tokens": 512},
-    {"semantic_stage_id": "reflexion_reflect", "authority_stage_id": "Reflexion_reflection", "calls": 20000, "maximum_input_tokens": 3349, "maximum_output_tokens": 384},
-    {"semantic_stage_id": "dc_rs_generate", "authority_stage_id": "DC_RS_generation", "calls": 10000, "maximum_input_tokens": 9212, "maximum_output_tokens": 512},
-    {"semantic_stage_id": "dc_rs_synthesize", "authority_stage_id": "DC_RS_writer_synthesis", "calls": 10000, "maximum_input_tokens": 13521, "maximum_output_tokens": 8192},
-    {"semantic_stage_id": "no_memory_generate", "authority_stage_id": "NoMem_generation", "calls": 2500, "maximum_input_tokens": 1160, "maximum_output_tokens": 512}
+    {"semantic_stage_id": "full_history_generate", "authority_stage_id": "FH_generation", "suffix_calls": 10000, "prefix_calls": 50, "calls": 10050, "maximum_input_tokens": 9330, "maximum_output_tokens": 512},
+    {"semantic_stage_id": "rag_generate", "authority_stage_id": "RAG_generation", "suffix_calls": 6000, "prefix_calls": 30, "calls": 6030, "maximum_input_tokens": 290, "maximum_output_tokens": 512},
+    {"semantic_stage_id": "bot_problem_distill", "authority_stage_id": "BoT_problem_distillation", "suffix_calls": 10000, "prefix_calls": 50, "calls": 10050, "maximum_input_tokens": 1177, "maximum_output_tokens": 384},
+    {"semantic_stage_id": "bot_instantiate_solve", "authority_stage_id": "BoT_solve", "suffix_calls": 10000, "prefix_calls": 50, "calls": 10050, "maximum_input_tokens": 1949, "maximum_output_tokens": 512},
+    {"semantic_stage_id": "bot_thought_distill", "authority_stage_id": "BoT_thought_distillation", "suffix_calls": 10000, "prefix_calls": 50, "calls": 10050, "maximum_input_tokens": 2545, "maximum_output_tokens": 384},
+    {"semantic_stage_id": "reflexion_generate", "authority_stage_id": "Reflexion_actor_generation", "suffix_calls": 20000, "prefix_calls": 50, "calls": 20050, "maximum_input_tokens": 2282, "maximum_output_tokens": 512},
+    {"semantic_stage_id": "reflexion_reflect", "authority_stage_id": "Reflexion_reflection", "suffix_calls": 20000, "prefix_calls": 50, "calls": 20050, "maximum_input_tokens": 3349, "maximum_output_tokens": 384},
+    {"semantic_stage_id": "dc_rs_generate", "authority_stage_id": "DC_RS_generation", "suffix_calls": 10000, "prefix_calls": 50, "calls": 10050, "maximum_input_tokens": 9212, "maximum_output_tokens": 512},
+    {"semantic_stage_id": "dc_rs_synthesize", "authority_stage_id": "DC_RS_writer_synthesis", "suffix_calls": 10000, "prefix_calls": 50, "calls": 10050, "maximum_input_tokens": 13521, "maximum_output_tokens": 8192},
+    {"semantic_stage_id": "no_memory_generate", "authority_stage_id": "NoMem_generation", "suffix_calls": 2500, "prefix_calls": 0, "calls": 2500, "maximum_input_tokens": 1160, "maximum_output_tokens": 512}
   ],
-  "registry_hash": "4c48fca92d1d70105d2eb34b5b86984c732c03e3600cb00965501ecabd2d1769"
+  "registry_hash": "41cd7e7310a961d0856e2020b05a3ae455811fb0660455b4c7dfbcb0a9aafd93"
 }

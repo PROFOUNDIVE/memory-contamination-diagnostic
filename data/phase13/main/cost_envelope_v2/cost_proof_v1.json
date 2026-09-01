@@ -3,20 +3,30 @@
   "proof_id": "cost_envelope_v2_main_a_450k_v1",
   "activation_status": "PENDING_CONTROLLED_EXTERNAL_AUTHORITY_WRITE",
   "package_id": "phase13_main_a_post_cutoff_partial_crossed_v1",
-  "package_selection_path": "data/phase13/main/post_cutoff_package_selection_v1.json",
-  "package_selection_sha256": "851f033f75f04861d8f53217faac8108296d7b0dba9d27e07a57ab94841dd3a9",
+  "package_selection_path": "data/phase13/main/post_cutoff_package_selection_v2.json",
+  "package_selection_sha256": "2efa745c72045ba84e7c3070424b76a9c65d87a02ae601a90ac367517d6890c9",
   "common_capacity_path": "data/phase13/common_capacity_v1.json",
-  "common_capacity_sha256": "102da3f554294c0e802c6894cbcf03074704f465e9595ef27134b3897a56ad31",
+  "common_capacity_sha256": "c85e5be6f2d555e711b91688a518c5042eaf2bb1c5edc0bb7e396e06c18eb152",
   "cost_envelope_id": "COST_ENVELOPE_V2",
-  "cost_envelope_sha256": "806b4f6fe752b3ed12d6dd9c081f75f54873a575870ffab62a84ca1fc032460a",
+  "cost_envelope_sha256": "6de377752cd80e45147a8b47aa83828f2921363b564c44004ac90650dac65cf2",
+  "cost_envelope_path": "data/phase13/main/cost_envelope_v2/corrected_cost_envelope_v2.txt",
   "stage_envelope_registry_id": "CORE_EXECUTION_ENVELOPE_REGISTRY_V2",
   "stage_envelope_registry_authority_sha256": "4dec48f105c8d4730706d1d99d05bb14bab96a8e643811db1ebdd26e612590d5",
-  "stage_envelope_registry_hash": "4c48fca92d1d70105d2eb34b5b86984c732c03e3600cb00965501ecabd2d1769",
+  "stage_envelope_registry_hash": "41cd7e7310a961d0856e2020b05a3ae455811fb0660455b4c7dfbcb0a9aafd93",
   "retry_failure_contract_id": "CORE_TRANSPORT_ATTEMPT_CONTRACT_V2",
   "retry_failure_contract_hash": "1ee66fcb795f97d483c2ef976133ee61dbd5108c9dae851c2c2786ff496d788f",
   "terminal_failure_contract_id": "CORE_TERMINAL_TECHNICAL_MISSINGNESS_V1",
   "terminal_failure_contract_sha256": "9bbcdd9dd1686af034f7c0d2114ac86d5837a07de0cc6ba8fef7940bbc822b75",
-  "semantic_calls": 108500,
+  "reconciliation": {
+    "status": "CLOSED",
+    "case": "B",
+    "authorization": "EXPLICIT_USER_AUTHORIZATION_2026-08-31",
+    "main_outcome_blind": true,
+    "prefix_ownership_instances": 230,
+    "prefix_semantic_calls": 430,
+    "suffix_semantic_calls": 108500
+  },
+  "semantic_calls": 108930,
   "rate_card": {
     "input_usd_per_million": "0.20",
     "cached_input_usd_per_million": "0.02",
@@ -37,57 +47,57 @@
   "stage_costs": [
     {
       "semantic_stage_id": "full_history_generate",
-      "input_krw_ceiling": 37320,
-      "output_krw_ceiling": 9831,
-      "stage_krw": 47151
+      "input_krw_ceiling": 37507,
+      "output_krw_ceiling": 9880,
+      "stage_krw": 47387
     },
     {
       "semantic_stage_id": "rag_generate",
-      "input_krw_ceiling": 696,
-      "output_krw_ceiling": 5899,
-      "stage_krw": 6595
+      "input_krw_ceiling": 700,
+      "output_krw_ceiling": 5928,
+      "stage_krw": 6628
     },
     {
       "semantic_stage_id": "bot_problem_distill",
-      "input_krw_ceiling": 4708,
-      "output_krw_ceiling": 7373,
-      "stage_krw": 12081
+      "input_krw_ceiling": 4732,
+      "output_krw_ceiling": 7410,
+      "stage_krw": 12142
     },
     {
       "semantic_stage_id": "bot_instantiate_solve",
-      "input_krw_ceiling": 7796,
-      "output_krw_ceiling": 9831,
-      "stage_krw": 17627
+      "input_krw_ceiling": 7835,
+      "output_krw_ceiling": 9880,
+      "stage_krw": 17715
     },
     {
       "semantic_stage_id": "bot_thought_distill",
-      "input_krw_ceiling": 10180,
-      "output_krw_ceiling": 7373,
-      "stage_krw": 17553
+      "input_krw_ceiling": 10231,
+      "output_krw_ceiling": 7410,
+      "stage_krw": 17641
     },
     {
       "semantic_stage_id": "reflexion_generate",
-      "input_krw_ceiling": 18256,
-      "output_krw_ceiling": 19661,
-      "stage_krw": 37917
+      "input_krw_ceiling": 18302,
+      "output_krw_ceiling": 19710,
+      "stage_krw": 38012
     },
     {
       "semantic_stage_id": "reflexion_reflect",
-      "input_krw_ceiling": 26792,
-      "output_krw_ceiling": 14746,
-      "stage_krw": 41538
+      "input_krw_ceiling": 26859,
+      "output_krw_ceiling": 14783,
+      "stage_krw": 41642
     },
     {
       "semantic_stage_id": "dc_rs_generate",
-      "input_krw_ceiling": 36848,
-      "output_krw_ceiling": 9831,
-      "stage_krw": 46679
+      "input_krw_ceiling": 37033,
+      "output_krw_ceiling": 9880,
+      "stage_krw": 46913
     },
     {
       "semantic_stage_id": "dc_rs_synthesize",
-      "input_krw_ceiling": 54084,
-      "output_krw_ceiling": 157287,
-      "stage_krw": 211371
+      "input_krw_ceiling": 54355,
+      "output_krw_ceiling": 158073,
+      "stage_krw": 212428
     },
     {
       "semantic_stage_id": "no_memory_generate",
@@ -96,7 +106,7 @@
       "stage_krw": 3618
     }
   ],
-  "cmax_main_krw": 442130,
-  "margin_to_core_gate_krw": 7870,
-  "proof_hash": "bdc95e15501bf52814bff40c8c127bfd8b189149f4b658f799e02b7014821572"
+  "cmax_main_krw": 444126,
+  "margin_to_core_gate_krw": 5874,
+  "proof_hash": "bb0351fc5029190318099014a27c204a93cdb862199e89c32d2b4477375e6fe5"
 }

@@ -1,8 +1,8 @@
 {
-  "schema_version": "phase13_post_cutoff_package_selection_v1",
+  "schema_version": "phase13_post_cutoff_package_selection_v2",
   "authority": {
     "addendum_path": "2026-08-24_Phase13_MainA_PostCutoff_Acceleration_Addendum.md",
-    "addendum_sha256": "f0f12356f02403dc4783a727de59952964075f299da9b1f66d802ee5a7a50195"
+    "addendum_sha256": "6ab2db4041333a26e9c76a034266c2d7de64491c5c109634c97ecebef9b2f59b"
   },
   "cutoff": {
     "timestamp": "2026-08-22T18:00:00+09:00",
@@ -66,5 +66,5 @@
     ],
     "main_execution_authorized": false
   },
-  "package_hash": "565a8ba2b3f5d0ec76a6e78e73a1e045c17bc6d290f6f84188b9480239a70096"
+  "package_hash": "d0aafaf164627f7c128a68b8da645678bbd1dee0a28b6bb448c35116fac9e3e4"
 }

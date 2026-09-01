@@ -51,7 +51,7 @@ def expected_metadata(
     return {
         "ledger_schema_id": LEDGER_SCHEMA_ID,
         "units_sha256": units_sha256(units),
-        **asdict(binding),
+        **{key: str(value) for key, value in asdict(binding).items()},
     }
 
 
@@ -136,6 +136,7 @@ def transition(current: str, kind: str) -> str:
         ("PENDING", "PAUSED"): "PENDING",
         ("DISPATCH_INTENT_PERSISTED", "COMPLETED"): "COMPLETED",
         ("DISPATCH_INTENT_PERSISTED", "TERMINAL"): "TERMINAL_TECHNICAL_MISSING",
+        ("PENDING", "DEPENDENCY_TERMINAL"): "TERMINAL_TECHNICAL_MISSING",
         ("DISPATCH_INTENT_PERSISTED", "NO_REQUEST"): "PENDING",
     }
     try:

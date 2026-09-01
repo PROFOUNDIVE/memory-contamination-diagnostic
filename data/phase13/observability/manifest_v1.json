@@ -48,7 +48,7 @@
     },
     "measurement_reconstruction_validator": {
       "path": "src/memcontam/readiness/phase13_observability_validate.py",
-      "sha256": "d7f219406652db53fbf2faed6f89d2f24be7a54b3c7fe4c4dd05cc9772755323"
+      "sha256": "f4df354bb259a2053b7756d263e02e21dcee7cee39dc65f82dfa8ae0439c67ce"
     },
     "phase13_cli": {
       "path": "src/memcontam/readiness/phase13_cli.py",
@@ -56,7 +56,7 @@
     },
     "track1_authority_state": {
       "path": "data/phase13/main/track1_authority_state_sync_checkpoint_v1.json",
-      "sha256": "84ce7b495b6450e82333aeb008fd6b7279532007648f4667038c1e8834e09d0d"
+      "sha256": "005ba95b83a74bf0de4a43c1c43d3c58394d5616dbf9bc8c08b1e727fa415e96"
     },
     "track2_legacy_rag_seal": {
       "path": "data/phase13/rag/legacy_seal_v1.json",
@@ -64,7 +64,7 @@
     },
     "core_main_registry": {
       "path": "src/memcontam/readiness/phase13_execution_contract.py",
-      "sha256": "e44f33feff64b386484aef48bfa5a1f00cabf4af80d5d89a94f17de439c2ccdb"
+      "sha256": "e95fab97ba51a9df635240a2dee500a9dcc54c6605adc341a0572673e34e3380"
     }
   },
   "expected_reconstruction_sha256": "e0e57053cf676439670e160ca49bb2d21df42d2f54e0afdc135248938a803d9f",

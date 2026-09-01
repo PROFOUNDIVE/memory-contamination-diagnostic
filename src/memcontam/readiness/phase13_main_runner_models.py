@@ -1,19 +1,24 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
+from pydantic import ValidationError
+
+from memcontam.readiness.phase13_authority_files import read_regular_nofollow
 from memcontam.readiness.phase13_main_execution_models import MainExecutionFreeze
+from memcontam.readiness.phase13_main_production import (
+    ProductionObject as ExecutionUnit,
+    build_production_objects,
+    units_sha256 as units_sha256,
+)
 
 
 LEDGER_SCHEMA_ID = "phase13-main-a-ledger-v1"
 RUNNER_ID = "phase13-main-a-runner-v1"
-UNIT_IDENTITY_LAW_ID = "phase13-main-a-disjoint-unit-id-v1"
-
-UnitKind = Literal["MEMORY_BEARING", "NO_MEMORY_SINGLETON"]
 UnitState = Literal[
     "PENDING",
     "DISPATCH_INTENT_PERSISTED",
@@ -37,17 +42,6 @@ class MainRunError(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
-class ExecutionUnit:
-    sequence: int
-    unit_id: str
-    kind: UnitKind
-    seed: int
-    task: str
-    memory_baseline: str | None
-    arm: str
-
-
-@dataclass(frozen=True, slots=True)
 class MainRunBinding:
     package_id: str
     package_sha256: str
@@ -56,6 +50,7 @@ class MainRunBinding:
     authorization_sha256: str
     authorization_hash: str
     runner_sha256: str
+    core_authorization_gate_krw: int = 450000
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,6 +92,7 @@ class InFlightEvidence:
     context: InFlightContext
     evidence_sha256: str
     realized_cost_krw: int = 0
+    failure_code: str | None = None
 
     def __post_init__(self) -> None:
         _require_sha256(self.context.intent_event_hash)
@@ -127,9 +123,16 @@ class InFlightEvidence:
         cls,
         context: InFlightContext,
         evidence_sha256: str,
+        failure_code: str,
         realized_cost_krw: int = 0,
     ) -> InFlightEvidence:
-        return cls("TERMINAL_FAILURE", context, evidence_sha256, realized_cost_krw)
+        return cls(
+            "TERMINAL_FAILURE",
+            context,
+            evidence_sha256,
+            realized_cost_krw,
+            failure_code,
+        )
 
     @classmethod
     def ambiguous(cls, context: InFlightContext, evidence_sha256: str) -> InFlightEvidence:
@@ -155,58 +158,30 @@ class MainRunReport:
     terminal_technical_missing_count: int
 
 
-def enumerate_execution_units(package: MainExecutionFreeze) -> tuple[ExecutionUnit, ...]:
-    pairs_by_task = {
-        task: tuple(baseline for pair_task, baseline in package.active_cells.included_task_baseline_pairs if pair_task == task)
-        for task in package.dispatch.task_order
-    }
-    units: list[ExecutionUnit] = []
-    for seed_rank, seed in enumerate(package.dispatch.concrete_seed_ids):
-        arms = package.arm_order.sequences[package.arm_order.seed_sequence_indices[seed_rank]].arms
-        for task in package.dispatch.task_order:
-            for baseline in pairs_by_task[task]:
-                for arm in arms:
-                    units.append(_unit(len(units), "MEMORY_BEARING", seed, task, baseline, arm))
-            units.append(
-                _unit(len(units), "NO_MEMORY_SINGLETON", seed, task, None, "NOT_APPLICABLE")
+def enumerate_execution_units(
+    package: MainExecutionFreeze,
+    repository_root: Path | None = None,
+) -> tuple[ExecutionUnit, ...]:
+    try:
+        ordered_hashes = None
+        if repository_root is not None:
+            from memcontam.readiness.phase13_main_checkpoint import CommonCheckpointRegistry
+
+            binding = next(
+                row for row in package.artifacts if row.role == "common_checkpoint_registry"
             )
-    if len(units) != package.active_cells.attempted_trajectory_count:
-        raise MainRunError("MAIN_RUN_UNIT_DOMAIN_INVALID")
-    if len({unit.unit_id for unit in units}) != len(units):
-        raise MainRunError("MAIN_RUN_UNIT_IDENTITY_NOT_INJECTIVE")
-    return tuple(units)
-
-
-def units_sha256(units: tuple[ExecutionUnit, ...]) -> str:
-    rows = [
-        [unit.sequence, unit.unit_id, unit.kind, unit.seed, unit.task, unit.memory_baseline, unit.arm]
-        for unit in units
-    ]
-    return hashlib.sha256(_canonical(rows)).hexdigest()
-
-
-def _unit(
-    sequence: int,
-    kind: UnitKind,
-    seed: int,
-    task: str,
-    baseline: str | None,
-    arm: str,
-) -> ExecutionUnit:
-    identity = [UNIT_IDENTITY_LAW_ID, kind, seed, task, baseline, arm]
-    return ExecutionUnit(
-        sequence,
-        hashlib.sha256(_canonical(identity)).hexdigest(),
-        kind,
-        seed,
-        task,
-        baseline,
-        arm,
-    )
-
-
-def _canonical(value: list) -> bytes:
-    return json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+            raw = read_regular_nofollow(repository_root / binding.path)
+            if hashlib.sha256(raw).hexdigest() != binding.sha256:
+                raise MainRunError("MAIN_RUN_CHECKPOINT_REGISTRY_INVALID")
+            registry = CommonCheckpointRegistry.model_validate_json(raw)
+            ordered_hashes = {
+                (task, seed.seed): seed.suffix_sample_ids_sha256
+                for task, task_row in registry.tasks.items()
+                for seed in task_row.seeds
+            }
+        return build_production_objects(package, ordered_hashes)
+    except (OSError, StopIteration, ValidationError, ValueError) as error:
+        raise MainRunError(str(error)) from error
 
 
 def _require_sha256(value: str) -> None:

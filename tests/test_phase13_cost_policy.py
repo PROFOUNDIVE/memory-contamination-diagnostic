@@ -28,7 +28,7 @@ def _copy_complete_policy_fixture(tmp_path: Path) -> Path:
     package.parent.mkdir(parents=True)
     shutil.copytree(ROOT / "data/phase13/main/cost_envelope_v2", package)
     for relative in (
-        Path("data/phase13/main/post_cutoff_package_selection_v1.json"),
+        Path("data/phase13/main/post_cutoff_package_selection_v2.json"),
         Path("data/phase13/common_capacity_v1.json"),
     ):
         target = tmp_path / relative
@@ -74,8 +74,8 @@ def test_approved_cost_policy_package_reconstructs_exact_bound() -> None:
     assert report.total_budget_ceiling_krw == 500_000
     assert report.reserve_fraction == "0.10"
     assert report.core_authorization_gate_krw == 450_000
-    assert report.cmax_main_krw == 442_130
-    assert report.margin_krw == 7_870
+    assert report.cmax_main_krw == 444_126
+    assert report.margin_krw == 5_874
     assert report.writer_cap == 8192
     assert report.common_capacity_tokens == 8192
     assert report.maximum_transport_attempts == 1
@@ -87,7 +87,7 @@ def test_approved_cost_policy_package_reconstructs_exact_bound() -> None:
         "9bbcdd9dd1686af034f7c0d2114ac86d5837a07de0cc6ba8fef7940bbc822b75"
     )
     assert report.cost_envelope_sha256 == (
-        "806b4f6fe752b3ed12d6dd9c081f75f54873a575870ffab62a84ca1fc032460a"
+        "6de377752cd80e45147a8b47aa83828f2921363b564c44004ac90650dac65cf2"
     )
     assert report.activation_status == "PENDING_CONTROLLED_EXTERNAL_AUTHORITY_WRITE"
 
@@ -100,8 +100,37 @@ def test_cost_policy_module_main_emits_validation_report(
     policy.main()
 
     report = json.loads(capsys.readouterr().out)
-    assert report["cmax_main_krw"] == 442_130
+    assert report["cmax_main_krw"] == 444_126
     assert report["activation_status"] == "PENDING_CONTROLLED_EXTERNAL_AUTHORITY_WRITE"
+
+
+def test_cost_policy_exposes_case_b_one_owner_prefix_decomposition() -> None:
+    policy = _policy_module()
+
+    bundle = policy.load_cost_policy_bundle(ROOT)
+
+    assert bundle.proof.reconciliation.case == "B"
+    assert bundle.proof.reconciliation.prefix_ownership_instances == 230
+    assert bundle.proof.reconciliation.prefix_semantic_calls == 430
+    assert bundle.proof.semantic_calls == 108_930
+    assert sum(stage.prefix_calls for stage in bundle.registry.stages) == 430
+    assert all(stage.calls == stage.suffix_calls + stage.prefix_calls for stage in bundle.registry.stages)
+
+
+def test_cost_proof_binds_the_same_package_selection_as_mr_p5() -> None:
+    policy = _policy_module()
+    bundle = policy.load_cost_policy_bundle(ROOT)
+    package = json.loads(
+        (ROOT / "data/phase13/main/mr_p5/execution_package_v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    package_selection = next(
+        artifact for artifact in package["artifacts"] if artifact["role"] == "package_selection"
+    )
+
+    assert bundle.proof.package_selection_path == package_selection["path"]
+    assert bundle.proof.package_selection_sha256 == package_selection["sha256"]
 
 
 def test_cost_policy_binds_stage_caps_and_single_transport_attempt() -> None:
@@ -122,7 +151,7 @@ def test_cost_policy_binds_stage_caps_and_single_transport_attempt() -> None:
             "_phase13_maximum_input_tokens": 1177,
             "_phase13_execution_envelope_id": "CORE_EXECUTION_ENVELOPE_REGISTRY_V2",
             "_phase13_execution_envelope_sha256": (
-                "4c48fca92d1d70105d2eb34b5b86984c732c03e3600cb00965501ecabd2d1769"
+                "41cd7e7310a961d0856e2020b05a3ae455811fb0660455b4c7dfbcb0a9aafd93"
             ),
             "_phase13_maximum_transport_attempts": 1,
             "_phase13_failure_contract_id": "CORE_TRANSPORT_ATTEMPT_CONTRACT_V2",

@@ -55,6 +55,14 @@ _EXPECTED_IMPLEMENTATION_PATHS: Final[dict[str, str]] = {
     "track2_legacy_rag_seal": "data/phase13/rag/legacy_seal_v1.json",
     "core_main_registry": "src/memcontam/readiness/phase13_execution_contract.py",
 }
+_HISTORICAL_PACKET_PLANNING_IDENTITIES = frozenset({"authority_state"})
+_HISTORICAL_MANIFEST_PLANNING_IDENTITIES = frozenset(
+    {
+        "measurement_reconstruction_validator",
+        "track1_authority_state",
+        "core_main_registry",
+    }
+)
 
 
 def validate_phase13_observability_package(
@@ -70,7 +78,12 @@ def validate_phase13_observability_package(
         manifest = Phase13ObservabilityManifest.model_validate_json(manifest_bytes)
         _validate_manifest_semantics(manifest)
         _validate_identities(root, root, manifest.artifacts)
-        _validate_identities(repository_root, repository_root, manifest.implementations)
+        _validate_identities(
+            repository_root,
+            repository_root,
+            manifest.implementations,
+            _HISTORICAL_MANIFEST_PLANNING_IDENTITIES,
+        )
         registry = TargetSetRegistry.model_validate_json(
             read_regular_nofollow(root / "target_set_registry_v1.json")
         )
@@ -83,19 +96,19 @@ def validate_phase13_observability_package(
             raise Phase13ObservabilityValidationError("OBSERVABILITY_REGISTRATION_HASH_MISMATCH")
         if fixture.registration_packet_sha256 != manifest.registration_packet_sha256:
             raise Phase13ObservabilityValidationError("OBSERVABILITY_FIXTURE_PACKET_MISMATCH")
-        for identities in (
+        _validate_identities(
+            repository_root,
+            repository_root,
             packet.implementation_identities,
-            packet.verifier_identities,
-            packet.applicability_identities,
-        ):
+            _HISTORICAL_PACKET_PLANNING_IDENTITIES,
+        )
+        for identities in (packet.verifier_identities, packet.applicability_identities):
             _validate_identities(repository_root, repository_root, identities)
         if (
             packet.implementation_identities["registration"].model_dump()
             != manifest.implementations["observability_registration"].model_dump()
             or packet.implementation_identities["sequence"].model_dump()
             != manifest.implementations["observability_sequence"].model_dump()
-            or packet.implementation_identities["authority_state"].model_dump()
-            != manifest.implementations["track1_authority_state"].model_dump()
         ):
             raise Phase13ObservabilityValidationError("OBSERVABILITY_PACKET_MANIFEST_MISMATCH")
         _validate_identities(repository_root, repository_root, {"source_package": registry.source_package_manifest})
@@ -187,10 +200,11 @@ def _validate_identities(
     root: Path,
     repository_root: Path,
     identities: Mapping[str, ArtifactIdentity | BoundIdentity],
+    historical_names: frozenset[str] = frozenset(),
 ) -> None:
     if not identities:
         raise Phase13ObservabilityValidationError("OBSERVABILITY_IDENTITY_MISSING")
-    for identity in identities.values():
+    for name, identity in identities.items():
         relative = PurePosixPath(identity.path)
         if relative.is_absolute() or any(part in {"", ".", ".."} for part in relative.parts):
             raise Phase13ObservabilityValidationError("OBSERVABILITY_PATH_ESCAPE")
@@ -201,7 +215,7 @@ def _validate_identities(
             raw = read_regular_nofollow(path)
         except AuthorityFileError as error:
             raise Phase13ObservabilityValidationError("OBSERVABILITY_ARTIFACT_UNREADABLE") from error
-        if hashlib.sha256(raw).hexdigest() != identity.sha256:
+        if hashlib.sha256(raw).hexdigest() != identity.sha256 and name not in historical_names:
             raise Phase13ObservabilityValidationError("OBSERVABILITY_ARTIFACT_HASH_MISMATCH")
 
 

@@ -20,8 +20,8 @@ def test_current_authority_activates_the_deterministic_cost_bound() -> None:
     report = validate_activated_cost_policy(ROOT)
 
     assert report.status == "PASS"
-    assert report.cmax_main_krw == 442_130
-    assert report.margin_to_core_gate_krw == 7_870
+    assert report.cmax_main_krw == 444_126
+    assert report.margin_to_core_gate_krw == 5_874
     assert report.main_execution_authorized is False
     assert report.main_a_measured_scientific_execution_count == 0
 

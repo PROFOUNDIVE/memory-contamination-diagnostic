@@ -11,7 +11,7 @@
   "artifacts": {
     "stage_envelope_registry": {
       "path": "data/phase13/main/cost_envelope_v2/stage_envelope_registry_v1.json",
-      "sha256": "55b27d76bb89c08e9ad9ca9de5b38230467616f2a97f471a7d3238072194ea52"
+      "sha256": "382a5555d881cf7c6752f36187b4b5c5131e9db64b112f698d8de6c425e4f1c9"
     },
     "retry_failure_contract": {
       "path": "data/phase13/main/cost_envelope_v2/retry_failure_contract_v1.json",
@@ -19,7 +19,11 @@
     },
     "cost_proof": {
       "path": "data/phase13/main/cost_envelope_v2/cost_proof_v1.json",
-      "sha256": "5562acaeaf10b286d57bc638686d51751a09d0d22aa331829121ac18ac828481"
+      "sha256": "96ae4d10f69e6ec7d2e618e2a59f0f4cd379b7816a3e539c4399cbd58c46e13f"
+    },
+    "corrected_cost_envelope": {
+      "path": "data/phase13/main/cost_envelope_v2/corrected_cost_envelope_v2.txt",
+      "sha256": "b3c2296440299011c710a80bc58643fef6cade71a66b72ce614a449c2321d9b6"
     },
     "controlled_external_write": {
       "path": "data/phase13/main/cost_envelope_v2/controlled_external_write_v1.json",
@@ -51,5 +55,5 @@
     "main_execution_authorized": false,
     "main_a_measured_scientific_execution_count": 0
   },
-  "manifest_hash": "1aaee4368d6e7691edc54f8463a67ce8121a344a721db69b836ab7c01dc5ce57"
+  "manifest_hash": "1194af04d16cedce462f8d6d1de29ca7a6daeed66ea6155a98fb8a3d655c31f1"
 }

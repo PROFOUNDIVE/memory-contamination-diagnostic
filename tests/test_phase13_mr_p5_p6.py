@@ -10,6 +10,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 P5 = ROOT / "data/phase13/main/mr_p5/execution_package_v1.json"
 P6 = ROOT / "data/phase13/main/mr_p6/authorized_execution_v1.json"
+MR_P4 = ROOT / "data/phase13/main/mr_p4"
 
 
 def _sha256(path: Path) -> str:
@@ -42,6 +43,24 @@ def test_main_execution_freeze_cli_validates_exact_package() -> None:
     assert report["mr_p5_status"] == "FROZEN"
     assert report["measured_main_a_trajectory_count"] == 0
     assert len(report["package_sha256"]) == 64
+
+
+def test_historical_readiness0_and_current_main_bind_separate_recorder_versions() -> None:
+    historical_manifest = json.loads(
+        (MR_P4 / "readiness0_live_implementation_manifest_v1.json").read_text()
+    )
+    historical_request = json.loads((MR_P4 / "readiness0_live_request_v1.json").read_text())
+    current_package = json.loads(P5.read_text())
+    current_binding = next(
+        row for row in current_package["artifacts"] if row["role"] == "recording_client"
+    )
+    current_recorder_sha256 = _sha256(ROOT / "src/memcontam/clients/recording.py")
+
+    assert historical_manifest["artifacts"]["recording_adapter"]["sha256"] != current_recorder_sha256
+    assert historical_request["implementation_manifest"]["sha256"] == _sha256(
+        MR_P4 / "readiness0_live_implementation_manifest_v1.json"
+    )
+    assert current_binding["sha256"] == current_recorder_sha256
 
 
 def test_main_authorization_cli_binds_exact_frozen_package() -> None:
@@ -140,6 +159,29 @@ def test_main_freeze_rejects_rehashed_artifact_role_detachment(tmp_path: Path) -
 
     assert result.returncode != 0
     assert "MAIN_EXECUTION_ARTIFACT_PATH_INVALID" in result.stderr
+
+
+def test_main_freeze_rejects_rehashed_current_recorder_detachment(tmp_path: Path) -> None:
+    package = json.loads(P5.read_text())
+    binding = next(row for row in package["artifacts"] if row["role"] == "recording_client")
+    binding["sha256"] = "0" * 64
+    payload = {key: value for key, value in package.items() if key != "package_hash"}
+    package["package_hash"] = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    changed = tmp_path / "execution_package_v1.json"
+    changed.write_text(json.dumps(package))
+
+    result = _run(
+        "validate-freeze",
+        "--repository-root",
+        str(ROOT),
+        "--package",
+        str(changed),
+    )
+
+    assert result.returncode != 0
+    assert "MAIN_EXECUTION_ARTIFACT_HASH_MISMATCH" in result.stderr
 
 
 def test_main_authorization_requires_expected_raw_hash() -> None:
