@@ -9,7 +9,15 @@ from memcontam.tasks.base import TaskInstance
 
 
 Branch = Literal["clean", "correct", "irrelevant", "contam", "filter"]
-MAIN_TASKS = frozenset({"game24", "math_equation_balancer", "word_sorting"})
+MAIN_TASKS = frozenset(
+    {
+        "game24",
+        "math_equation_balancer",
+        "word_sorting",
+        "mmlu_pro_engineering",
+        "mmlu_pro_physics",
+    }
+)
 
 
 @dataclass(frozen=True)

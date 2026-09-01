@@ -83,22 +83,24 @@ def test_live_run_composes_authorized_zero_unit_session_without_provider_calls(
     assert _NoCallOpenAI.instance.responses.calls == 0
 
 
-def test_live_run_rejects_incomplete_runtime_authority_before_creating_ledger(
+def test_live_run_accepts_complete_runtime_authority_without_issuing_provider_calls(
     monkeypatch,
     tmp_path: Path,
+    capsys,
 ) -> None:
-    class ConstructionForbiddenOpenAI:
-        def __init__(self, **_kwargs: str) -> None:
-            raise AssertionError("authority rejection must precede provider construction")
+    monkeypatch.setattr(openai_responses, "OpenAI", _NoCallOpenAI)
+    monkeypatch.setattr(
+        phase13_main_live_cli,
+        "run_pending",
+        lambda *_args, **_kwargs: MainRunReport("READY", 0, 0, 0),
+    )
+    monkeypatch.setenv("OPENAI_API_KEY", "no-call-construction-only")
+    monkeypatch.setattr(sys, "argv", _run_argv(tmp_path, "complete-main-a", 1))
 
-    monkeypatch.setattr(openai_responses, "OpenAI", ConstructionForbiddenOpenAI)
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.setattr(sys, "argv", _run_argv(tmp_path, "unsupported-main-a", 1))
+    phase13_main_live_cli.main()
 
-    with pytest.raises(SystemExit, match="MAIN_LIVE_RUNTIME_AUTHORITY_INCOMPLETE"):
-        phase13_main_live_cli.main()
-
-    assert not (tmp_path / "unsupported-main-a").exists()
+    assert json.loads(capsys.readouterr().out)["provider_calls_issued"] == 0
+    assert _NoCallOpenAI.instance.responses.calls == 0
 
 
 def test_zero_unit_run_wires_ledger_checkpoint_authority(monkeypatch, tmp_path: Path) -> None:

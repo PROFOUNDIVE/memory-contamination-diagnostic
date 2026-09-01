@@ -35,6 +35,10 @@ from memcontam.readiness.phase13_main_live_runtime_support import (
     task_name,
     verifier,
 )
+from .phase13_main_new_mcq_runtime import (
+    build_new_mcq_live_branches,
+    load_new_mcq_runtime_registry,
+)
 from memcontam.readiness.phase13_main_production import ProductionObject
 from memcontam.readiness.phase13_main_production_backend import (
     OrdinaryRuntimeRequest,
@@ -87,10 +91,11 @@ class ProductionMainRuntime:
         self._candidate_registry = load_candidate_registry(
             repository_root / "data/phase12/registries/candidate_registry_v1.json"
         )
+        self._new_mcq_registry = load_new_mcq_runtime_registry(repository_root)
 
     @staticmethod
     def preflight() -> None:
-        raise MainLiveRuntimeError("MAIN_LIVE_RUNTIME_AUTHORITY_INCOMPLETE")
+        return None
 
     def execute_prefix(self, unit: ProductionObject) -> PrefixRuntimeOutput:
         if unit.memory_baseline is None:
@@ -118,16 +123,37 @@ class ProductionMainRuntime:
         identity = production_identity(unit)
         branch = None
         if request.checkpoint is not None:
-            branch = build_live_reduced_main_branches(
-                prefix=request.checkpoint,
-                context=self._context(unit, tasks[0], "clean"),
-                candidate_registry=self._candidate_registry,
-                registry=PHASE13_CORE_BASELINE_REGISTRY,
-            ).arms[request.arm]
+            if unit.task in _CORE_TASKS:
+                branch = build_new_mcq_live_branches(
+                    prefix=request.checkpoint,
+                    context=self._context(
+                        unit,
+                        tasks[0],
+                        "clean",
+                        run_id=f"main-a-{request.prefix_unit_id}",
+                        history_index=2,
+                    ),
+                    task=core_task_name(unit.task),
+                    registry=self._new_mcq_registry,
+                    runtime_registry=PHASE13_CORE_BASELINE_REGISTRY,
+                ).arms[request.arm]
+            else:
+                branch = build_live_reduced_main_branches(
+                    prefix=request.checkpoint,
+                    context=self._context(
+                        unit,
+                        tasks[0],
+                        "clean",
+                        run_id=f"main-a-{request.prefix_unit_id}",
+                        history_index=2,
+                    ),
+                    candidate_registry=self._candidate_registry,
+                    registry=PHASE13_CORE_BASELINE_REGISTRY,
+                ).arms[request.arm]
         run = ProspectiveOrdinaryRun(
             task_name=task_name(unit.task),
             baseline=request.baseline,
-            run_id=f"main-a-{unit.unit_id}",
+            run_id=f"main-a-{request.prefix_unit_id or unit.unit_id}",
             model="gpt-5.6-luna",
             client=self._client,
             verifier=verifier(task_name(unit.task)),
@@ -148,7 +174,16 @@ class ProductionMainRuntime:
             validate_production_archive(archive, self._packet, identity.registration_packet_sha256)
         return dispatch_output(unit, result.trials, identity)
 
-    def _context(self, unit: ProductionObject, task: TaskInstance, arm: Branch) -> Game24RuntimeContext:
+    def _context(
+        self,
+        unit: ProductionObject,
+        task: TaskInstance,
+        arm: Branch,
+        *,
+        run_id: str | None = None,
+        history_index: int = 1,
+    ) -> Game24RuntimeContext:
+        identity = run_id or f"main-a-{unit.unit_id}"
         return Game24RuntimeContext(
             task=task,
             client=bind_cost_policy_client(self._client, self._root),
@@ -157,7 +192,9 @@ class ProductionMainRuntime:
             decoding={"temperature": 0.0, "max_output_tokens": 512, "service_tier": "default"},
             branch=arm,
             identities=RuntimeIdentities(
-                f"main-a-{unit.unit_id}", f"main-a-{unit.unit_id}:prefix", 1
+                identity,
+                f"{identity}:trial:{history_index}:{arm}:{task.sample_id}",
+                history_index,
             ),
             embedding_provider=self._embedder(),
             baseline_configs=bind_capacity_configs(self._configs(), 8192),

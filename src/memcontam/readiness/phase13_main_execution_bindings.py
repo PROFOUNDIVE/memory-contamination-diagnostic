@@ -39,6 +39,12 @@ EXPECTED_ARTIFACT_PATHS: Final = {
         "src/memcontam/readiness/phase13_readiness0_evidence_validate.py"
     ),
     "ordinary_runtime": "src/memcontam/experiment/phase13_ordinary_runtime.py",
+    "runtime_registry": "src/memcontam/experiment/phase12/runtime_registry.py",
+    "live_branch": "src/memcontam/experiment/phase12/live_branch.py",
+    "dc_rs_runtime": "src/memcontam/experiment/phase13_dc_rs_runtime.py",
+    "dc_rs_validation": "src/memcontam/experiment/phase13_dc_rs_validation.py",
+    "main_runtime_context": "src/memcontam/experiment/phase12/game24_runner.py",
+    "bot_adapter": "src/memcontam/baselines/bot_phase12.py",
     "production_observability_adapter": (
         "src/memcontam/readiness/phase13_production_observability.py"
     ),
@@ -68,6 +74,19 @@ EXPECTED_ARTIFACT_PATHS: Final = {
     "main_live_runtime_support": (
         "src/memcontam/readiness/phase13_main_live_runtime_support.py"
     ),
+    "main_new_mcq_runtime": (
+        "src/memcontam/readiness/phase13_main_new_mcq_runtime.py"
+    ),
+    "main_new_mcq_renderer": (
+        "src/memcontam/readiness/phase13_new_mcq_candidate_evidence_v2_rendering.py"
+    ),
+    "main_new_mcq_models": "src/memcontam/readiness/phase13_new_mcq_rag_models.py",
+    "main_new_mcq_authority_selection": (
+        "data/phase13/rag/new_mcq/authority_selection_v1.json"
+    ),
+    "main_new_mcq_intervention_registry": (
+        "data/phase13/rag/new_mcq/intervention_registry_v1.json"
+    ),
     "main_execution": "src/memcontam/readiness/phase13_main_execution.py",
     "main_execution_models": "src/memcontam/readiness/phase13_main_execution_models.py",
     "main_execution_bindings": "src/memcontam/readiness/phase13_main_execution_bindings.py",
@@ -84,6 +103,17 @@ PRODUCTION_ROLES: Final = (
     "main_live_dispatch",
     "main_live_runtime",
     "main_live_runtime_support",
+    "main_runtime_context",
+    "bot_adapter",
+    "main_new_mcq_runtime",
+    "main_new_mcq_renderer",
+    "main_new_mcq_authority_selection",
+    "main_new_mcq_intervention_registry",
+    "runtime_registry",
+    "live_branch",
+    "dc_rs_runtime",
+    "dc_rs_validation",
+    "main_new_mcq_models",
 )
 RUNNER_ROLES: Final = (
     "main_runner",
@@ -99,6 +129,17 @@ RUNNER_ROLES: Final = (
     "main_live_cli",
     "main_live_runtime",
     "main_live_runtime_support",
+    "main_runtime_context",
+    "bot_adapter",
+    "main_new_mcq_runtime",
+    "main_new_mcq_renderer",
+    "main_new_mcq_authority_selection",
+    "main_new_mcq_intervention_registry",
+    "runtime_registry",
+    "live_branch",
+    "dc_rs_runtime",
+    "dc_rs_validation",
+    "main_new_mcq_models",
 )
 
 

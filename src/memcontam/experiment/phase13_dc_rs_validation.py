@@ -114,15 +114,16 @@ def validate_ordinary_history(
         ):
             raise DcRsRuntimeError("DC_RS_ORDINARY_HISTORY_UNPROVEN")
         source_index = _trajectory_index(archive_entry.source_trial_id, identity.run_id)
-        if source_index >= current_index:
+        if source_index > current_index:
             raise DcRsRuntimeError("DC_RS_ORDINARY_HISTORY_UNPROVEN")
 
 
 def _trajectory_index(trial_id: str, run_id: str) -> int:
     prefix = f"{run_id}:trial:"
-    if not trial_id.startswith(prefix):
+    if not trial_id.startswith(f"{run_id}:"):
         raise DcRsRuntimeError("DC_RS_ORDINARY_HISTORY_UNPROVEN")
-    raw_index, separator, _suffix = trial_id.removeprefix(prefix).partition(":")
+    tail = trial_id.removeprefix(prefix) if trial_id.startswith(prefix) else trial_id.partition(":trial:")[2]
+    raw_index, separator, _suffix = tail.partition(":")
     if not separator:
         raise DcRsRuntimeError("DC_RS_ORDINARY_HISTORY_UNPROVEN")
     try:

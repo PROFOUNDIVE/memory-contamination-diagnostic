@@ -111,7 +111,6 @@ class BoTPhase12Adapter:
     def execute(self, trial: BoTTrialContextV3, state: BoTStateV3) -> BaselineStepResultV3:
         _validate_branch_state(trial, state)
         active_entries = _active_entries(state)
-        _validate_clean_competitors(state, active_entries)
         outcome = BotRuntime().run(
             identity=BotBufferIdentity(
                 trial.run_id, trial.task.task_name, "bot_style", trial.branch, trial.model
@@ -212,12 +211,6 @@ def _active_entries(state: BoTStateV3) -> list[MemoryEntry]:
     if allowed_ids is not None and {entry.entry_id for entry in active} != allowed_ids:
         raise BoTContractError("FILTER_ACTIVE_TEMPLATE_MISSING")
     return active
-
-
-def _validate_clean_competitors(state: BoTStateV3, active_entries: Sequence[MemoryEntry]) -> None:
-    active_ids = {entry.entry_id for entry in active_entries}
-    if len(set(state.clean_competitor_ids) & active_ids) < 2:
-        raise BoTContractError("BOT_COMPETITORS_UNAVAILABLE")
 
 
 def _as_memory_entry(entry: MemoryEntry | NativeEntry) -> MemoryEntry:

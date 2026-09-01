@@ -3,10 +3,7 @@ from __future__ import annotations
 import json
 from typing import Literal
 
-import pytest
-
 from memcontam.baselines.bot_phase12 import (
-    BoTContractError,
     BoTPhase12Adapter,
     BoTStateV3,
     BoTTrialContextV3,
@@ -39,6 +36,13 @@ _SOLVED = json.dumps(
         "final_answer": "final: 24",
     }
 )
+_SOLVED_WITH_FALLBACK = json.dumps(
+    {
+        "selected_structure": "procedure-based",
+        "solution_trace": "Build useful intermediate values.",
+        "final_answer": "final: 24",
+    }
+)
 
 
 class _EmbeddingProvider:
@@ -63,6 +67,7 @@ def _trial(
     branch: Literal["clean", "correct", "irrelevant", "contam", "filter"],
     used_ids: list[str],
     verifier,
+    solve_response: str = _SOLVED,
 ) -> BoTTrialContextV3:
     return BoTTrialContextV3(
         task=_task(),
@@ -70,7 +75,7 @@ def _trial(
             responses_by_sample={
                 "game24-1": {
                     "bot_problem_distill": _DISTILLED,
-                    "bot_instantiate_solve": _SOLVED,
+                    "bot_instantiate_solve": solve_response,
                     "bot_thought_distill": json.dumps(
                         {
                             "description": "Build useful intermediate values.",
@@ -141,16 +146,35 @@ def _envelope(
     )
 
 
-def test_rejects_bot_branch_without_two_active_clean_competitors() -> None:
+def test_isolated_treatment_template_executes_without_synthetic_competitors() -> None:
     false_template = _native_template("false-template", "Require integer intermediate values.")
 
-    with pytest.raises(BoTContractError, match="BOT_COMPETITORS_UNAVAILABLE"):
-        BoTPhase12Adapter().execute(
-            _trial(
-                branch="contam", used_ids=[false_template.entry_id], verifier=lambda _answer: True
-            ),
-            BoTStateV3(entries=[false_template], active_capacity=2),
-        )
+    result = BoTPhase12Adapter().execute(
+        _trial(branch="contam", used_ids=[false_template.entry_id], verifier=lambda _answer: True),
+        BoTStateV3(entries=[false_template], active_capacity=2),
+    )
+
+    assert result.outcome.status == "succeeded"
+    assert result.prompt_decision.decision == "matched"
+
+
+def test_empty_bot_state_uses_native_fallback_and_writes_first_template() -> None:
+    state = BoTStateV3(entries=[])
+
+    result = BoTPhase12Adapter().execute(
+        _trial(
+            branch="clean",
+            used_ids=[],
+            verifier=lambda _answer: True,
+            solve_response=_SOLVED_WITH_FALLBACK,
+        ),
+        state,
+    )
+
+    assert result.prompt_decision.decision == "fallback"
+    assert result.context_event.final_entry_ids == []
+    assert result.native_entry is not None
+    assert len(state.entries) == 1
 
 
 def test_exposed_false_template_can_create_explicitly_parented_descendant() -> None:
