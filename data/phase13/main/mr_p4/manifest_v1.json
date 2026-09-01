@@ -80,7 +80,7 @@
     },
     "cost_policy": {
       "path": "src/memcontam/readiness/phase13_cost_policy.py",
-      "sha256": "51cf94de34636d5f9c5dc34a9b02569b3a428631f031966aaec6b08cbf7ca3ae"
+      "sha256": "ad8e8ecd57e0ea88b6c8475dbfbe74bdab407cac6041148f8845e36450f495ca"
     },
     "cost_policy_models": {
       "path": "src/memcontam/readiness/phase13_cost_policy_models.py",
@@ -120,7 +120,7 @@
     },
     "activated_cost_policy": {
       "path": "data/phase13/main/cost_envelope_v2/activated_policy_v1.json",
-      "sha256": "b4d86ac748f4778d6f3ded99ec21692ee01e42a0a21ed1ebbd339d0c126a6855"
+      "sha256": "3ed496e25ad20aa6cab176d2f24c25dc49c2d14fa38f63db48b156e58cea1d03"
     },
     "cost_activation_validator": {
       "path": "src/memcontam/readiness/phase13_cost_activation.py",
@@ -400,5 +400,5 @@
   "mr_p6_status": "NOT_AUTHORIZED",
   "main_execution_authorized": false,
   "main_a_measured_scientific_execution_count": 0,
-  "closure_hash": "b625d15bf4476215efc8864607b6857f5b643009ba149449508c95031adca11e"
+  "closure_hash": "8a4a29eacbf64d5d4609083ad955e2045772172ba527587b35749ba31982d9f0"
 }
