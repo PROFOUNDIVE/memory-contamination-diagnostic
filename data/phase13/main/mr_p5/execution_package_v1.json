@@ -51,10 +51,12 @@
     {"role": "main_live_contract_artifact", "path": "data/phase13/main/main_live_contract_v1.json", "sha256": "21ea042e7a06fba569e00bfe6c620056438ff2bac6eda59f33863e8a2d128993"},
     {"role": "main_live_evidence", "path": "src/memcontam/readiness/phase13_main_live_evidence.py", "sha256": "3d6da4d8655ea097171da63df32cf1612582d2b7d0c8e54ffc3b59a0a0738f6f"},
     {"role": "main_live_dispatch", "path": "src/memcontam/readiness/phase13_main_live_dispatch.py", "sha256": "8c981aa336b73b2e8cce165b83b164e5b611f47f6a7284984aa07a34bbaae116"},
-    {"role": "main_live_cli", "path": "src/memcontam/readiness/phase13_main_live_cli.py", "sha256": "eac7cd8dd8500d12893edaf8785a170b3b86a7177085b1deffbaafbab6a57d5b"},
+    {"role": "main_live_cli", "path": "src/memcontam/readiness/phase13_main_live_cli.py", "sha256": "779b1c5f33e38a50b7bc0a2fecb5c28976b488f973c3318633422015b81f4e0b"},
+    {"role": "main_live_runtime", "path": "src/memcontam/readiness/phase13_main_live_runtime.py", "sha256": "a6de249dda25ff685340318a2729f8b9b3ea818dc39360ee8e7faca670f49fd2"},
+    {"role": "main_live_runtime_support", "path": "src/memcontam/readiness/phase13_main_live_runtime_support.py", "sha256": "f35568abce1bebf445d1a3b5e7b6ad10cf4face2092ea3e919ce4a20083492b5"},
     {"role": "main_execution", "path": "src/memcontam/readiness/phase13_main_execution.py", "sha256": "84b987bffac971c296aa86b9171dc4864486e0a968efe21c7b82a50eaf30ed82"},
     {"role": "main_execution_models", "path": "src/memcontam/readiness/phase13_main_execution_models.py", "sha256": "bc45564e2a32569c1a1377e82657825e6ed5e3b2dabdcd29ad4375f459ee4457"},
-    {"role": "main_execution_bindings", "path": "src/memcontam/readiness/phase13_main_execution_bindings.py", "sha256": "47497ec58607d0a505ac7a83f31aa8223f1ba0841ec1619b7c5182dd65d7a099"}
+    {"role": "main_execution_bindings", "path": "src/memcontam/readiness/phase13_main_execution_bindings.py", "sha256": "d8286508e685ed7ea23cf9010f1697a7b2f5282e32fc4b7cbc26316822865ffa"}
   ],
   "dispatch": {
     "realization_id": "phase13-seed-major-global-dispatch-v1",
@@ -130,7 +132,7 @@
     "censoring_rule": "RIGHT_CENSORED_AT_REGISTERED_OR_FIXTURE_ENDPOINT",
     "u_t_status": "NOT_REGISTERED_FOR_CURRENT_MAIN",
     "production_reconstruction_binding_id": "phase13-production-observability-reconstruction-binding-v1",
-    "production_reconstruction_binding_sha256": "0d3fd75a56df950989eddf6cca0d4a033bc107a2eaeb360aa9d9e723149f49b3"
+    "production_reconstruction_binding_sha256": "c4b8cb3874ebe6459532e37121397d20d015a9e9b51589a80c32205eff647117"
   },
   "cost_guard": {
     "cost_envelope_id": "COST_ENVELOPE_V2",
@@ -144,7 +146,7 @@
   },
   "execution_control": {
     "runner_id": "phase13-main-a-runner-v1",
-    "runner_code_sha256": "6376cf93e9deb504fffff59b784d0c994fcd35333afd577102e93d9d609205ed",
+    "runner_code_sha256": "0c62e42ba202e395458e4b5ed6bf356321b5cc3761eef565905bffb7e53e0b1c",
     "ledger_schema_id": "phase13-main-a-ledger-v1",
     "unit_identity_law_id": "phase13-main-a-disjoint-unit-id-v1",
     "nomem_realization_law_id": "singleton_per_task_seed",
@@ -155,5 +157,5 @@
     "quota_terminal_contract_id": "CORE_TERMINAL_TECHNICAL_MISSINGNESS_V1"
   },
   "measured_main_a_trajectory_count": 0,
-  "package_hash": "79090c92eb9505c10502d329d569b43fcc4be612e09d77d72dc958c0b78c3fbc"
+  "package_hash": "91f630e14f5f020081b0d598143d845ab76866d35eb25f88d4b7951c6871fb6c"
 }
