@@ -64,6 +64,10 @@ EXPECTED_ARTIFACT_PATHS: Final = {
     "main_live_evidence": "src/memcontam/readiness/phase13_main_live_evidence.py",
     "main_live_dispatch": "src/memcontam/readiness/phase13_main_live_dispatch.py",
     "main_live_cli": "src/memcontam/readiness/phase13_main_live_cli.py",
+    "main_live_runtime": "src/memcontam/readiness/phase13_main_live_runtime.py",
+    "main_live_runtime_support": (
+        "src/memcontam/readiness/phase13_main_live_runtime_support.py"
+    ),
     "main_execution": "src/memcontam/readiness/phase13_main_execution.py",
     "main_execution_models": "src/memcontam/readiness/phase13_main_execution_models.py",
     "main_execution_bindings": "src/memcontam/readiness/phase13_main_execution_bindings.py",
@@ -78,6 +82,8 @@ PRODUCTION_ROLES: Final = (
     "main_production_backend",
     "main_live_evidence",
     "main_live_dispatch",
+    "main_live_runtime",
+    "main_live_runtime_support",
 )
 RUNNER_ROLES: Final = (
     "main_runner",
@@ -91,6 +97,8 @@ RUNNER_ROLES: Final = (
     "main_live_evidence",
     "main_live_dispatch",
     "main_live_cli",
+    "main_live_runtime",
+    "main_live_runtime_support",
 )
 
 
