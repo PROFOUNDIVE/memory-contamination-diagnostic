@@ -4,7 +4,7 @@
   "status": "FROZEN",
   "selected_package_id": "phase13_main_a_post_cutoff_partial_crossed_v1",
   "mr_p4_status": "CLOSED",
-  "mr_p4_closure_hash": "8a4a29eacbf64d5d4609083ad955e2045772172ba527587b35749ba31982d9f0",
+  "mr_p4_closure_hash": "c838097f5cb5543abed7aad3ae30b10b77343d3da3ff5a5325d5a329c588a93b",
   "authority": [
     {"role": "authority_router", "sha256": "76af55a04ce47f5bfe82795a99b0654b509becc7e202b3e05db29550297cf430"},
     {"role": "theory", "sha256": "34f63f37a49e92607c78ced038c4c70b4c9d5e3fa8fc57d6e97de1ee79db59a8"},
@@ -14,12 +14,12 @@
     {"role": "experiment_design", "sha256": "174002b407c2c4055c42298bd16ca13463e80af5c935f9593f556c3f71d7671c"}
   ],
   "artifacts": [
-    {"role": "mr_p4_manifest", "path": "data/phase13/main/mr_p4/manifest_v1.json", "sha256": "68df23d618d99edf78650145091ada146c7b5c930d362f97b8c24eeb7017aa33"},
+    {"role": "mr_p4_manifest", "path": "data/phase13/main/mr_p4/manifest_v1.json", "sha256": "f2897ad6170ef788547fe7e25ba247960a3008c520bc69a8fc15d62727279a15"},
     {"role": "task_seed_orders", "path": "data/phase13/main/mr_p4/task_seed_orders_v1.json", "sha256": "4ec3a6c04deb9ff475b59beaf2fd9a3d73fab1215ffb0ddb3c9d7efa8fdab448"},
     {"role": "common_checkpoint_registry", "path": "data/phase13/main/mr_p4/main_a_common_checkpoint_registry_v1.json", "sha256": "ec26757928ee3e9883aab23f6e7b416e71159b5e6b740e63effee6b8eb58a64b"},
     {"role": "analysis_window_registry", "path": "data/phase13/main/mr_p4/readiness0_window_proof_v1.json", "sha256": "99decc17225dcf6f87b60de71ab6d38729a01c032ffd90ba0397b191c6e0a191"},
     {"role": "package_selection", "path": "data/phase13/main/post_cutoff_package_selection_v2.json", "sha256": "2efa745c72045ba84e7c3070424b76a9c65d87a02ae601a90ac367517d6890c9"},
-    {"role": "common_capacity", "path": "data/phase13/common_capacity_v1.json", "sha256": "c85e5be6f2d555e711b91688a518c5042eaf2bb1c5edc0bb7e396e06c18eb152"},
+    {"role": "common_capacity", "path": "data/phase13/common_capacity_v1.json", "sha256": "6ed2bb43b85c3021cb621074cc7ec14ac2c354542c04f0c1849977bce8975fba"},
     {"role": "legacy_rag_manifest", "path": "data/phase13/rag/legacy/manifest.json", "sha256": "7017ed990edc78d76cb300d443eb69281900e564c2e02f4bc7fadba9aa69fd10"},
     {"role": "legacy_rag_seal", "path": "data/phase13/rag/legacy_seal_v1.json", "sha256": "00a5ebc22b81945e12d69e53bd3e5174fed6ade14d4b93539f4e8da3c7796fc3"},
     {"role": "observability_manifest", "path": "data/phase13/observability/manifest_v1.json", "sha256": "e5736593651570430e54db2a7213bcdfc0f900bb56de86de802917811bc5d051"},
@@ -28,11 +28,17 @@
     {"role": "openai_client", "path": "src/memcontam/clients/openai_responses.py", "sha256": "bb83936fdc4534f7588061dd6b436083ab60400cd1cee2ace0d033aeded4f73b"},
     {"role": "stage_envelope_registry", "path": "data/phase13/main/cost_envelope_v2/stage_envelope_registry_v1.json", "sha256": "382a5555d881cf7c6752f36187b4b5c5131e9db64b112f698d8de6c425e4f1c9"},
     {"role": "retry_failure_contract", "path": "data/phase13/main/cost_envelope_v2/retry_failure_contract_v1.json", "sha256": "f566f39667dfc34f5809e8cc6ec3c9af895119ed38234792fbf161652df357be"},
-    {"role": "cost_proof", "path": "data/phase13/main/cost_envelope_v2/cost_proof_v1.json", "sha256": "96ae4d10f69e6ec7d2e618e2a59f0f4cd379b7816a3e539c4399cbd58c46e13f"},
-    {"role": "activated_cost_policy", "path": "data/phase13/main/cost_envelope_v2/activated_policy_v1.json", "sha256": "3ed496e25ad20aa6cab176d2f24c25dc49c2d14fa38f63db48b156e58cea1d03"},
+    {"role": "cost_proof", "path": "data/phase13/main/cost_envelope_v2/cost_proof_v1.json", "sha256": "c863f46657b6ecf99ccf7f453b44a1390ad63800cfa3612b9ee9a5811a8d0f1e"},
+    {"role": "activated_cost_policy", "path": "data/phase13/main/cost_envelope_v2/activated_policy_v1.json", "sha256": "fd987db6e5f27f70e05dd6f62a8b8124a4df2f8e405f86be587ea31f134d23d5"},
     {"role": "readiness0_acceptance_policy", "path": "src/memcontam/readiness/phase13_readiness0_package.py", "sha256": "7198ea7a26a295e7248b69076e76c8b71f54bd0111a01a50f4992cc5dee25453"},
     {"role": "readiness0_evidence_policy", "path": "src/memcontam/readiness/phase13_readiness0_evidence_validate.py", "sha256": "b61c06217f3f311b8c0618f96ec9c1dd7700f08aa7d390a6342f1bf03651fd86"},
     {"role": "ordinary_runtime", "path": "src/memcontam/experiment/phase13_ordinary_runtime.py", "sha256": "05492b3ff486e101536243597e2d5b07a00d984dbbcdd49152905f45c847859c"},
+    {"role": "runtime_registry", "path": "src/memcontam/experiment/phase12/runtime_registry.py", "sha256": "ea3dd96e2c6f67b0b3e0c397d2072000f4b141a6a29340b81577a677032f128e"},
+    {"role": "live_branch", "path": "src/memcontam/experiment/phase12/live_branch.py", "sha256": "bbf2c882df2bccece6fe55d9ef1848a554f1df1e85bfc02d5e092b7c31985b99"},
+    {"role": "dc_rs_runtime", "path": "src/memcontam/experiment/phase13_dc_rs_runtime.py", "sha256": "66274d3056457e5dd0c6e84c3df5a5f8bbf2380404bea59000928478c831723f"},
+    {"role": "dc_rs_validation", "path": "src/memcontam/experiment/phase13_dc_rs_validation.py", "sha256": "c6050cd212023cd27d2838a4bbe12dc0632eb3aeb24c7fd01759cdb2df1d7286"},
+    {"role": "main_runtime_context", "path": "src/memcontam/experiment/phase12/game24_runner.py", "sha256": "841f943ba90043b800a216e234fbc066a3dddb6a3d681569ea4e1e7e0189e5da"},
+    {"role": "bot_adapter", "path": "src/memcontam/baselines/bot_phase12.py", "sha256": "f74bd24254ab8cdda82512d0c14bd0442fb319763bc903a70117d3d085815f4f"},
     {"role": "production_observability_adapter", "path": "src/memcontam/readiness/phase13_production_observability.py", "sha256": "986fb86c2768ad9e51e6bb5b671e998d0497efaab5f53683074c29544c723a2e"},
     {"role": "production_runtime_join", "path": "src/memcontam/readiness/phase13_production_runtime_join.py", "sha256": "7806b93be9231c7c9f4fd7dfbb28f1ea8bd53e47faa07c93f61ccbfa5d9e5b82"},
     {"role": "production_runtime_evidence", "path": "src/memcontam/readiness/phase13_production_runtime_evidence.py", "sha256": "ace2a54569b44f6919815d010abb61027909e41d744284bb5d4380515e853ffe"},
@@ -52,11 +58,16 @@
     {"role": "main_live_evidence", "path": "src/memcontam/readiness/phase13_main_live_evidence.py", "sha256": "3d6da4d8655ea097171da63df32cf1612582d2b7d0c8e54ffc3b59a0a0738f6f"},
     {"role": "main_live_dispatch", "path": "src/memcontam/readiness/phase13_main_live_dispatch.py", "sha256": "8c981aa336b73b2e8cce165b83b164e5b611f47f6a7284984aa07a34bbaae116"},
     {"role": "main_live_cli", "path": "src/memcontam/readiness/phase13_main_live_cli.py", "sha256": "779b1c5f33e38a50b7bc0a2fecb5c28976b488f973c3318633422015b81f4e0b"},
-    {"role": "main_live_runtime", "path": "src/memcontam/readiness/phase13_main_live_runtime.py", "sha256": "a6de249dda25ff685340318a2729f8b9b3ea818dc39360ee8e7faca670f49fd2"},
+    {"role": "main_live_runtime", "path": "src/memcontam/readiness/phase13_main_live_runtime.py", "sha256": "83baef8043c4343b6fcdb6f5a80dd884b2fa2c7359b99f34ae659870d2d9ba02"},
     {"role": "main_live_runtime_support", "path": "src/memcontam/readiness/phase13_main_live_runtime_support.py", "sha256": "f35568abce1bebf445d1a3b5e7b6ad10cf4face2092ea3e919ce4a20083492b5"},
+    {"role": "main_new_mcq_runtime", "path": "src/memcontam/readiness/phase13_main_new_mcq_runtime.py", "sha256": "cece5696081cef6062043c9af844268925a346bf62c97b8021c9241b7b9ea773"},
+    {"role": "main_new_mcq_renderer", "path": "src/memcontam/readiness/phase13_new_mcq_candidate_evidence_v2_rendering.py", "sha256": "4a1f7a560e7b1834077c663162f81fb1b19e9603297691e0c593c3ca117bd26e"},
+    {"role": "main_new_mcq_models", "path": "src/memcontam/readiness/phase13_new_mcq_rag_models.py", "sha256": "6293572ca8a8958f36b878363e9f275f19958b258ab44c598deee5edb6fd47e3"},
+    {"role": "main_new_mcq_authority_selection", "path": "data/phase13/rag/new_mcq/authority_selection_v1.json", "sha256": "1717cf63dcffd3a7f2bed3db4bb3f7357bc3b4ec29ea7d980ce2bc8c07ce9fbc"},
+    {"role": "main_new_mcq_intervention_registry", "path": "data/phase13/rag/new_mcq/intervention_registry_v1.json", "sha256": "7c827c59a353a081beb4d4c74f8af6a0053930b8f9f7e41b185f2ba65871f91c"},
     {"role": "main_execution", "path": "src/memcontam/readiness/phase13_main_execution.py", "sha256": "84b987bffac971c296aa86b9171dc4864486e0a968efe21c7b82a50eaf30ed82"},
     {"role": "main_execution_models", "path": "src/memcontam/readiness/phase13_main_execution_models.py", "sha256": "bc45564e2a32569c1a1377e82657825e6ed5e3b2dabdcd29ad4375f459ee4457"},
-    {"role": "main_execution_bindings", "path": "src/memcontam/readiness/phase13_main_execution_bindings.py", "sha256": "d8286508e685ed7ea23cf9010f1697a7b2f5282e32fc4b7cbc26316822865ffa"}
+    {"role": "main_execution_bindings", "path": "src/memcontam/readiness/phase13_main_execution_bindings.py", "sha256": "d8d050f6d340668b7d11d20c38077d7fec03316d43cc56989288e1338a93e632"}
   ],
   "dispatch": {
     "realization_id": "phase13-seed-major-global-dispatch-v1",
@@ -132,7 +143,7 @@
     "censoring_rule": "RIGHT_CENSORED_AT_REGISTERED_OR_FIXTURE_ENDPOINT",
     "u_t_status": "NOT_REGISTERED_FOR_CURRENT_MAIN",
     "production_reconstruction_binding_id": "phase13-production-observability-reconstruction-binding-v1",
-    "production_reconstruction_binding_sha256": "c4b8cb3874ebe6459532e37121397d20d015a9e9b51589a80c32205eff647117"
+    "production_reconstruction_binding_sha256": "335cb1e11f524342071402369d3f5cdf7402cd6e82d72ab0ac636a264b531243"
   },
   "cost_guard": {
     "cost_envelope_id": "COST_ENVELOPE_V2",
@@ -146,7 +157,7 @@
   },
   "execution_control": {
     "runner_id": "phase13-main-a-runner-v1",
-    "runner_code_sha256": "0c62e42ba202e395458e4b5ed6bf356321b5cc3761eef565905bffb7e53e0b1c",
+    "runner_code_sha256": "e4f0253df81fd14da43c6f05efe2a4b6eabd34c0a2ead16b77fc82e5620c7ba1",
     "ledger_schema_id": "phase13-main-a-ledger-v1",
     "unit_identity_law_id": "phase13-main-a-disjoint-unit-id-v1",
     "nomem_realization_law_id": "singleton_per_task_seed",
@@ -157,5 +168,5 @@
     "quota_terminal_contract_id": "CORE_TERMINAL_TECHNICAL_MISSINGNESS_V1"
   },
   "measured_main_a_trajectory_count": 0,
-  "package_hash": "91f630e14f5f020081b0d598143d845ab76866d35eb25f88d4b7951c6871fb6c"
+  "package_hash": "49b7f9cd629c46b998ddc4b8c7d81f997bb43c5f80a89a040553c384a57052e8"
 }

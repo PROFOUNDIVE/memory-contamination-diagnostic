@@ -12,7 +12,7 @@
     },
     "capacity": {
       "path": "data/phase13/common_capacity_v1.json",
-      "sha256": "c85e5be6f2d555e711b91688a518c5042eaf2bb1c5edc0bb7e396e06c18eb152"
+      "sha256": "6ed2bb43b85c3021cb621074cc7ec14ac2c354542c04f0c1849977bce8975fba"
     },
     "legacy_rag_seal": {
       "path": "data/phase13/rag/legacy_seal_v1.json",
@@ -120,7 +120,7 @@
     },
     "activated_cost_policy": {
       "path": "data/phase13/main/cost_envelope_v2/activated_policy_v1.json",
-      "sha256": "3ed496e25ad20aa6cab176d2f24c25dc49c2d14fa38f63db48b156e58cea1d03"
+      "sha256": "fd987db6e5f27f70e05dd6f62a8b8124a4df2f8e405f86be587ea31f134d23d5"
     },
     "cost_activation_validator": {
       "path": "src/memcontam/readiness/phase13_cost_activation.py",
@@ -400,5 +400,5 @@
   "mr_p6_status": "NOT_AUTHORIZED",
   "main_execution_authorized": false,
   "main_a_measured_scientific_execution_count": 0,
-  "closure_hash": "8a4a29eacbf64d5d4609083ad955e2045772172ba527587b35749ba31982d9f0"
+  "closure_hash": "c838097f5cb5543abed7aad3ae30b10b77343d3da3ff5a5325d5a329c588a93b"
 }
