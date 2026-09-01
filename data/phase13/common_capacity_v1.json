@@ -41,7 +41,7 @@
     "new_mcq_core_manifest_sha256": "9640831f3dfd6e99abd796e0cee4d4c6e3e9d6e5fd8460512fd81b6d63963203"
   },
   "production_builder_hashes": {
-    "measurement_implementation_sha256": "6ca9adb24e6fdada05a20b39771d66f36fa8190e689e5fcee5ada54b9963da08",
+    "measurement_implementation_sha256": "d208d3f59debd4bd9ee24850e963746769d15a2fc1854927cc12f2349c9bd000",
     "openai_client_sha256": "bb83936fdc4534f7588061dd6b436083ab60400cd1cee2ace0d033aeded4f73b",
     "full_history_builder_sha256": "92f25e2cb8f8d937085bcae36030116956f2d47dbc927f3c4e2c4034b5d1eb89",
     "dc_rs_builder_sha256": "2e4f2ed823ff0622cdac8b156892d787f24125132633cddfb1fab257b1344f9f",

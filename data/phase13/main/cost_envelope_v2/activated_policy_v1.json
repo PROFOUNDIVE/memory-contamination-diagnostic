@@ -8,7 +8,7 @@
   },
   "candidate": {
     "path": "data/phase13/main/cost_envelope_v2/candidate_manifest_v1.json",
-    "sha256": "dbbfdffed26007fdb9fdf47011afd1f428ff49301f09b0a640bc0ebc6563f1c6",
+    "sha256": "2c9b7c19243c8f956814a165abce7680c5f4dad9001bac9626d1df75f1444892",
     "provenance_status": "PRESERVED_HISTORICAL_CONTROLLED_HANDOFF"
   },
   "cmax_main_krw": 444126,
@@ -16,5 +16,5 @@
   "margin_to_core_gate_krw": 5874,
   "main_execution_authorized": false,
   "main_a_measured_scientific_execution_count": 0,
-  "activation_hash": "7ffa06ba56a4ab9f492830c88886871e4b01fcb67e7aa98ea99ade89f5fded47"
+  "activation_hash": "f8544cdeb7303a6880bf5999248c5f5b48d6596ca4e746fbf167c6e6f73d8d73"
 }

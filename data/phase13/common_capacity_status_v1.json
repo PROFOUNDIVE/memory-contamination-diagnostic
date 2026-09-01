@@ -57,7 +57,7 @@
     "implementation_sha256": "2e4f2ed823ff0622cdac8b156892d787f24125132633cddfb1fab257b1344f9f"
   },
   "production_builder_hashes": {
-    "measurement_implementation_sha256": "6ca9adb24e6fdada05a20b39771d66f36fa8190e689e5fcee5ada54b9963da08",
+    "measurement_implementation_sha256": "d208d3f59debd4bd9ee24850e963746769d15a2fc1854927cc12f2349c9bd000",
     "dc_rs_runtime_builder_sha256": "66274d3056457e5dd0c6e84c3df5a5f8bbf2380404bea59000928478c831723f",
     "dc_rs_prompt_builder_sha256": "2e4f2ed823ff0622cdac8b156892d787f24125132633cddfb1fab257b1344f9f",
     "ordinary_runtime_builder_sha256": "05492b3ff486e101536243597e2d5b07a00d984dbbcdd49152905f45c847859c"
@@ -82,7 +82,7 @@
   },
   "capacity_artifact": {
     "path": "data/phase13/common_capacity_v1.json",
-    "sha256": "c85e5be6f2d555e711b91688a518c5042eaf2bb1c5edc0bb7e396e06c18eb152"
+    "sha256": "6ed2bb43b85c3021cb621074cc7ec14ac2c354542c04f0c1849977bce8975fba"
   },
   "validator": {
     "path": "src/memcontam/readiness/phase13_capacity_realization.py",

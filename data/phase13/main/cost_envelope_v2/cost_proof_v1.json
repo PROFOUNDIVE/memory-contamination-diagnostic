@@ -6,7 +6,7 @@
   "package_selection_path": "data/phase13/main/post_cutoff_package_selection_v2.json",
   "package_selection_sha256": "2efa745c72045ba84e7c3070424b76a9c65d87a02ae601a90ac367517d6890c9",
   "common_capacity_path": "data/phase13/common_capacity_v1.json",
-  "common_capacity_sha256": "c85e5be6f2d555e711b91688a518c5042eaf2bb1c5edc0bb7e396e06c18eb152",
+  "common_capacity_sha256": "6ed2bb43b85c3021cb621074cc7ec14ac2c354542c04f0c1849977bce8975fba",
   "cost_envelope_id": "COST_ENVELOPE_V2",
   "cost_envelope_sha256": "6de377752cd80e45147a8b47aa83828f2921363b564c44004ac90650dac65cf2",
   "cost_envelope_path": "data/phase13/main/cost_envelope_v2/corrected_cost_envelope_v2.txt",
@@ -108,5 +108,5 @@
   ],
   "cmax_main_krw": 444126,
   "margin_to_core_gate_krw": 5874,
-  "proof_hash": "bb0351fc5029190318099014a27c204a93cdb862199e89c32d2b4477375e6fe5"
+  "proof_hash": "311e6736be87690bd6bf1000f70dab7e51271a75b42e200ce2d175a9aa854829"
 }
