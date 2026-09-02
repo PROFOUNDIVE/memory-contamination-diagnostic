@@ -7,6 +7,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from memcontam.clients.replay import ReplayClient
 from memcontam.readiness.phase13_authority_files import read_regular_nofollow
 from memcontam.readiness.phase13_main_execution import (
     Phase13MainExecutionError,
@@ -46,6 +47,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--package", type=Path, required=True)
     validate.add_argument("--authorization", type=Path, required=True)
     validate.add_argument("--expected-authorization-sha256", required=True)
+    validate.add_argument("--cache-root", type=Path, required=True)
     telemetry = commands.add_parser("telemetry")
     telemetry.add_argument("--evidence-root", type=Path, required=True)
     for name in ("run", "resume"):
@@ -70,9 +72,11 @@ def main() -> None:
             print(summarize_telemetry(args.evidence_root).model_dump_json())
             return
         if args.command in {"run", "resume"}:
-            if args.max_units != 0:
-                ProductionMainRuntime.preflight()
+            package = MainExecutionFreeze.model_validate_json(read_regular_nofollow(args.package))
+            units = build_production_objects(package)
             runtime = ProductionMainRuntime(args.repository_root, args.cache_root)
+            if args.max_units != 0:
+                runtime.preflight(units)
             request = MainRunRequest(
                 args.repository_root,
                 args.package,
@@ -118,6 +122,11 @@ def main() -> None:
         )
         validate_main_live_contract(contract, package)
         units = build_production_objects(package)
+        ProductionMainRuntime(
+            args.repository_root,
+            args.cache_root,
+            client=ReplayClient(),
+        ).preflight(units)
         prefix_count = sum(unit.kind == "CLEAN_PREFIX" for unit in units)
         print(
             json.dumps(

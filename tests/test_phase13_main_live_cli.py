@@ -4,7 +4,7 @@ import hashlib
 import json
 import sys
 from pathlib import Path
-from types import MethodType
+from types import MethodType, SimpleNamespace
 
 import pytest
 
@@ -57,6 +57,8 @@ def _run_argv(tmp_path: Path, run_id: str, max_units: int) -> list[str]:
         "80000",
         "--max-units",
         str(max_units),
+        "--cache-root",
+        str(Path.home() / ".cache/huggingface/hub"),
         "--allow-live-calls",
     ]
 
@@ -101,6 +103,60 @@ def test_live_run_accepts_complete_runtime_authority_without_issuing_provider_ca
 
     assert json.loads(capsys.readouterr().out)["provider_calls_issued"] == 0
     assert _NoCallOpenAI.instance.responses.calls == 0
+
+
+def test_validate_runs_provider_free_production_preflight(
+    monkeypatch,
+    capsys,
+) -> None:
+    calls: list[tuple] = []
+
+    class CaptureRuntime:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def preflight(self, units) -> None:
+            calls.append(tuple(units))
+
+    monkeypatch.setattr(
+        phase13_main_live_cli,
+        "validate_main_authorization",
+        lambda *_args: SimpleNamespace(
+            authorization_id="phase13-main-a-authorized-execution-v1",
+            main_a_status="NOT_STARTED",
+        ),
+    )
+    monkeypatch.setattr(phase13_main_live_cli, "load_main_live_contract", lambda _path: None)
+    monkeypatch.setattr(phase13_main_live_cli, "validate_main_live_contract", lambda *_args: None)
+    monkeypatch.setattr(
+        phase13_main_live_cli,
+        "build_production_objects",
+        lambda _package: (SimpleNamespace(kind="CLEAN_PREFIX"),),
+    )
+    monkeypatch.setattr(phase13_main_live_cli, "ProductionMainRuntime", CaptureRuntime)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "phase13-main-a-live",
+            "validate",
+            "--repository-root",
+            str(ROOT),
+            "--package",
+            str(P5),
+            "--authorization",
+            str(P6),
+            "--expected-authorization-sha256",
+            hashlib.sha256(P6.read_bytes()).hexdigest(),
+            "--cache-root",
+            str(Path.home() / ".cache/huggingface/hub"),
+        ],
+    )
+
+    phase13_main_live_cli.main()
+
+    assert len(calls) == 1
+    assert json.loads(capsys.readouterr().out)["status"] == "READY_NO_CALLS"
 
 
 def test_zero_unit_run_wires_ledger_checkpoint_authority(monkeypatch, tmp_path: Path) -> None:
