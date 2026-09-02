@@ -55,11 +55,11 @@
     {"role": "main_production_backend", "path": "src/memcontam/readiness/phase13_main_production_backend.py", "sha256": "54384509ddd314e83094101af23a46c2d9af52040de40e165c039c71601d073a"},
     {"role": "main_live_contract", "path": "src/memcontam/readiness/phase13_main_live_contract.py", "sha256": "afa7741e49ae019a20dce82c409568826572d66ab0d0c5a7fa1f705faa6c617d"},
     {"role": "main_live_contract_artifact", "path": "data/phase13/main/main_live_contract_v1.json", "sha256": "21ea042e7a06fba569e00bfe6c620056438ff2bac6eda59f33863e8a2d128993"},
-    {"role": "main_live_evidence", "path": "src/memcontam/readiness/phase13_main_live_evidence.py", "sha256": "3d6da4d8655ea097171da63df32cf1612582d2b7d0c8e54ffc3b59a0a0738f6f"},
+    {"role": "main_live_evidence", "path": "src/memcontam/readiness/phase13_main_live_evidence.py", "sha256": "62aa0475ac3966a3c7d9a3fc14061f59d746211d739224fbb9221f9f9a4bdab3"},
     {"role": "main_live_dispatch", "path": "src/memcontam/readiness/phase13_main_live_dispatch.py", "sha256": "8c981aa336b73b2e8cce165b83b164e5b611f47f6a7284984aa07a34bbaae116"},
-    {"role": "main_live_cli", "path": "src/memcontam/readiness/phase13_main_live_cli.py", "sha256": "779b1c5f33e38a50b7bc0a2fecb5c28976b488f973c3318633422015b81f4e0b"},
-    {"role": "main_live_runtime", "path": "src/memcontam/readiness/phase13_main_live_runtime.py", "sha256": "83baef8043c4343b6fcdb6f5a80dd884b2fa2c7359b99f34ae659870d2d9ba02"},
-    {"role": "main_live_runtime_support", "path": "src/memcontam/readiness/phase13_main_live_runtime_support.py", "sha256": "f35568abce1bebf445d1a3b5e7b6ad10cf4face2092ea3e919ce4a20083492b5"},
+    {"role": "main_live_cli", "path": "src/memcontam/readiness/phase13_main_live_cli.py", "sha256": "499170555b6a09aa166d99efb7cc51f59d8524749ac0afaf0353889185d634c6"},
+    {"role": "main_live_runtime", "path": "src/memcontam/readiness/phase13_main_live_runtime.py", "sha256": "63fe22f2aab0f56e57b0769ecea3b9d807763ddcd358ff2600d988fd96505f7d"},
+    {"role": "main_live_runtime_support", "path": "src/memcontam/readiness/phase13_main_live_runtime_support.py", "sha256": "ebf37e55f2d6ac47a84c917ae632cbdd007f2ddb51d646ca8e8614947f455577"},
     {"role": "main_new_mcq_runtime", "path": "src/memcontam/readiness/phase13_main_new_mcq_runtime.py", "sha256": "cece5696081cef6062043c9af844268925a346bf62c97b8021c9241b7b9ea773"},
     {"role": "main_new_mcq_renderer", "path": "src/memcontam/readiness/phase13_new_mcq_candidate_evidence_v2_rendering.py", "sha256": "4a1f7a560e7b1834077c663162f81fb1b19e9603297691e0c593c3ca117bd26e"},
     {"role": "main_new_mcq_models", "path": "src/memcontam/readiness/phase13_new_mcq_rag_models.py", "sha256": "6293572ca8a8958f36b878363e9f275f19958b258ab44c598deee5edb6fd47e3"},
@@ -143,7 +143,7 @@
     "censoring_rule": "RIGHT_CENSORED_AT_REGISTERED_OR_FIXTURE_ENDPOINT",
     "u_t_status": "NOT_REGISTERED_FOR_CURRENT_MAIN",
     "production_reconstruction_binding_id": "phase13-production-observability-reconstruction-binding-v1",
-    "production_reconstruction_binding_sha256": "335cb1e11f524342071402369d3f5cdf7402cd6e82d72ab0ac636a264b531243"
+    "production_reconstruction_binding_sha256": "8009d6157f5ffd9b711cf44cbf78ef0fdb02d16794efb17ef4801798550d7450"
   },
   "cost_guard": {
     "cost_envelope_id": "COST_ENVELOPE_V2",
@@ -157,7 +157,7 @@
   },
   "execution_control": {
     "runner_id": "phase13-main-a-runner-v1",
-    "runner_code_sha256": "e4f0253df81fd14da43c6f05efe2a4b6eabd34c0a2ead16b77fc82e5620c7ba1",
+    "runner_code_sha256": "50b5f73dfdaf5f3a7d9e3f2feb3cac2949f22f18ccf21fee825b742f1399e438",
     "ledger_schema_id": "phase13-main-a-ledger-v1",
     "unit_identity_law_id": "phase13-main-a-disjoint-unit-id-v1",
     "nomem_realization_law_id": "singleton_per_task_seed",
@@ -168,5 +168,5 @@
     "quota_terminal_contract_id": "CORE_TERMINAL_TECHNICAL_MISSINGNESS_V1"
   },
   "measured_main_a_trajectory_count": 0,
-  "package_hash": "49b7f9cd629c46b998ddc4b8c7d81f997bb43c5f80a89a040553c384a57052e8"
+  "package_hash": "ea1050a53184b0158f3a8a8e2158a41a4203b1df4e87a3d9eef915ad3efca2de"
 }
