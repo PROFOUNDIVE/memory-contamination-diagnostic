@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Final
 
 from memcontam.baselines.bot_phase12 import BoTStateV3
 from memcontam.baselines.retrieval_rag_phase12 import RagFrozenStateV3
+from memcontam.clients.base import LLMClient
 from memcontam.clients.config import ProviderConfig
 from memcontam.clients.openai_responses import OpenAIResponsesClient
 from memcontam.contamination.phase12.registry import load_candidate_registry
@@ -58,12 +60,18 @@ _CORE_TASKS: Final = frozenset({"mmlu_pro_engineering", "mmlu_pro_physics"})
 
 
 class ProductionMainRuntime:
-    def __init__(self, repository_root: Path, cache_root: Path) -> None:
+    def __init__(
+        self,
+        repository_root: Path,
+        cache_root: Path,
+        *,
+        client: LLMClient | None = None,
+    ) -> None:
         self._root = repository_root
         self._core = repository_root / "data/phase13/core/materialized"
         self._cache = cache_root
         self._embedder_instance: BgeM3EmbeddingProvider | None = None
-        self._client = OpenAIResponsesClient(
+        self._client: LLMClient = client or OpenAIResponsesClient(
             ProviderConfig(
                 provider="openai_responses",
                 api_key_env="OPENAI_API_KEY",
@@ -93,17 +101,38 @@ class ProductionMainRuntime:
         )
         self._new_mcq_registry = load_new_mcq_runtime_registry(repository_root)
 
-    @staticmethod
-    def preflight() -> None:
-        return None
+    def preflight(self, units: tuple[ProductionObject, ...]) -> None:
+        checked: set[tuple[str, str]] = set()
+        for unit in units:
+            if unit.kind != "CLEAN_PREFIX" or unit.memory_baseline is None:
+                continue
+            key = (unit.task, unit.memory_baseline)
+            if key in checked:
+                continue
+            checked.add(key)
+            try:
+                task = self._tasks(unit.task, unit.seed, prefix=True)[0]
+                context = self._prefix_context(unit, task)
+                if not context.identities.condition_id:
+                    raise MainLiveRuntimeError("MAIN_PREFIX_CONDITION_ID_REQUIRED")
+                entry = PHASE13_CORE_BASELINE_REGISTRY[unit.memory_baseline]
+                snapshot = entry.serialize_state(entry.initial_state(context))
+            except (RuntimeError, ValueError) as error:
+                raise MainLiveRuntimeError(
+                    f"MAIN_PREFIX_PREFLIGHT_INVALID:{error}"
+                ) from error
+            if not isinstance(snapshot, NativeState):
+                raise MainLiveRuntimeError("MAIN_PREFIX_PREFLIGHT_CHECKPOINT_INVALID")
 
     def execute_prefix(self, unit: ProductionObject) -> PrefixRuntimeOutput:
         if unit.memory_baseline is None:
             raise MainLiveRuntimeError("MAIN_PREFIX_BASELINE_REQUIRED")
         task = self._tasks(unit.task, unit.seed, prefix=True)[0]
-        context = self._context(unit, task, "clean")
+        context = self._prefix_context(unit, task)
         entry = PHASE13_CORE_BASELINE_REGISTRY[unit.memory_baseline]
         result = entry.execute_trial(context, entry.initial_state(context))
+        if unit.memory_baseline == "reflexion_style" and result.outcome.status != "succeeded":
+            raise MainLiveRuntimeError("MAIN_PREFIX_EXECUTION_FAILED")
         snapshot = entry.serialize_state(result.state)
         if not isinstance(snapshot, NativeState):
             raise MainLiveRuntimeError("MAIN_PREFIX_CHECKPOINT_INVALID")
@@ -116,6 +145,25 @@ class ProductionMainRuntime:
             )
         )
         return PrefixRuntimeOutput(checkpoint, dispatch_output(unit, (result,), production_identity(unit)))
+
+    def _prefix_context(
+        self,
+        unit: ProductionObject,
+        task: TaskInstance,
+    ) -> Game24RuntimeContext:
+        context = self._context(unit, task, "clean").for_condition(
+            f"{unit.memory_baseline}-clean"
+        )
+        return replace(
+            context,
+            baseline_configs={
+                **context.baseline_configs,
+                "reflexion_style": {
+                    **context.baseline_configs.get("reflexion_style", {}),
+                    "max_attempts": 1,
+                },
+            },
+        )
 
     def execute_ordinary(self, request: OrdinaryRuntimeRequest) -> MainUnitDispatchOutput:
         unit = request.unit
@@ -157,7 +205,7 @@ class ProductionMainRuntime:
             model="gpt-5.6-luna",
             client=self._client,
             verifier=verifier(task_name(unit.task)),
-            decoding={"temperature": 0.0},
+            decoding={"temperature": 0.0, "top_p": 1.0},
             arm=request.arm,
             branch=branch,
             tasks=() if unit.task in _CORE_TASKS else tasks,
@@ -189,7 +237,12 @@ class ProductionMainRuntime:
             client=bind_cost_policy_client(self._client, self._root),
             model="gpt-5.6-luna",
             verifier=verifier(task_name(unit.task)),
-            decoding={"temperature": 0.0, "max_output_tokens": 512, "service_tier": "default"},
+            decoding={
+                "temperature": 0.0,
+                "top_p": 1.0,
+                "max_output_tokens": 512,
+                "service_tier": "default",
+            },
             branch=arm,
             identities=RuntimeIdentities(
                 identity,

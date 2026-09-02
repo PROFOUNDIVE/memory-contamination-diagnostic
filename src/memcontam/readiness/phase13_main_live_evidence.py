@@ -41,6 +41,7 @@ class MainRuntimeEvidence(_FrozenModel):
     arm: str = Field(min_length=1)
     production_identity: ProductionOrdinaryRunIdentity
     observability_registration_packet_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    verifier_result: bool | None = None
     request: ProviderRequestRecord
 
     @model_validator(mode="after")
@@ -150,7 +151,7 @@ def validate_dispatch_evidence(
     if (
         any(not call_id for call_id in call_ids)
         or len(call_ids) != len(set(call_ids))
-        or Counter(call.stage for call in calls) != _expected_stages(unit)
+        or not _stages_valid(unit, calls, evidence)
         or any(not _completed_call(call, evidence.runtime_evidence.request) for call in calls)
         or any(not _reconciled_cost(call) for call in calls)
     ):
@@ -166,6 +167,25 @@ def validate_dispatch_evidence(
     if supplied.claimed_cost_krw != realized:
         raise MainEvidenceValidationError("MAIN_UNIT_REALIZED_COST_MISMATCH")
     return evidence, realized
+
+
+def _stages_valid(
+    unit: ProductionObject,
+    calls: tuple[MethodCall, ...],
+    evidence: UnitEvidence,
+) -> bool:
+    stages = tuple(call.stage for call in calls)
+    if unit.kind == "CLEAN_PREFIX" and unit.memory_baseline == "reflexion_style":
+        verifier_result = evidence.runtime_evidence.verifier_result
+        if verifier_result is None:
+            return False
+        expected = (
+            ("reflexion_generate",)
+            if verifier_result is True
+            else ("reflexion_generate", "reflexion_reflect")
+        )
+        return stages == expected
+    return Counter(stages) == _expected_stages(unit)
 
 
 def load_durable_unit_evidence(
@@ -267,7 +287,9 @@ def _completed_call(call: MethodCall, runtime_request: ProviderRequestRecord) ->
         and request.model == runtime_request.model
         and request.input_sha256 == expected_input_sha256
         and request.temperature == call.temperature
+        and call.temperature == 0.0
         and request.top_p == call.top_p
+        and call.top_p == 1.0
         and request.reasoning.mode == runtime_request.reasoning_mode
         and request.reasoning.effort == runtime_request.reasoning_effort
         and request.reasoning.context == runtime_request.reasoning_context

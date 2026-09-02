@@ -60,6 +60,8 @@ def _request_contract(messages: list[dict[str, str]], stage: str) -> dict[str, J
         "bot_problem_distill": 384,
         "bot_instantiate_solve": 512,
         "bot_thought_distill": 384,
+        "reflexion_generate": 512,
+        "reflexion_reflect": 384,
     }
     return {
         "model": "gpt-5.6-luna",
@@ -85,6 +87,8 @@ def _authority_contract(stage: str) -> dict[str, JsonValue]:
         "bot_problem_distill": (1177, 384),
         "bot_instantiate_solve": (1949, 512),
         "bot_thought_distill": (2545, 384),
+        "reflexion_generate": (2282, 512),
+        "reflexion_reflect": (3349, 384),
     }
     maximum_input_tokens, maximum_output_tokens = limits[stage]
     return {
@@ -143,7 +147,11 @@ def _evidence() -> dict[str, JsonValue]:
     return _evidence_for(_unit())
 
 
-def _evidence_for(unit: ExecutionUnit) -> dict[str, JsonValue]:
+def _evidence_for(
+    unit: ExecutionUnit,
+    *,
+    verifier_result: bool | None = True,
+) -> dict[str, JsonValue]:
     return {
         "evidence_kind": "CLEAN_PREFIX",
         "prefix_unit_id": unit.unit_id,
@@ -171,6 +179,7 @@ def _evidence_for(unit: ExecutionUnit) -> dict[str, JsonValue]:
                 "checkpoint_registry_sha256": unit.checkpoint_registry_sha256,
             },
             "observability_registration_packet_sha256": unit.registration_packet_sha256,
+            "verifier_result": verifier_result,
             "request": {
                 "api": "OpenAI Responses API",
                 "model": "gpt-5.6-luna",
@@ -200,6 +209,24 @@ def _bot_unit() -> ExecutionUnit:
         None,
         3,
         "game24|bot_style|prefix",
+        "f" * 64,
+        "a" * 64,
+        "b" * 64,
+    )
+
+
+def _reflexion_unit() -> ExecutionUnit:
+    return ExecutionUnit(
+        0,
+        "2" * 64,
+        "CLEAN_PREFIX",
+        0,
+        "game24",
+        "reflexion_style",
+        "NOT_APPLICABLE",
+        None,
+        2,
+        "game24|reflexion_style|prefix",
         "f" * 64,
         "a" * 64,
         "b" * 64,
@@ -303,6 +330,52 @@ def test_durable_dispatch_rejects_incorrect_stage(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
+    "stages",
+    (
+        ("reflexion_generate",),
+        ("reflexion_generate", "reflexion_reflect"),
+    ),
+)
+def test_reflexion_prefix_accepts_failure_dependent_reflection_stage(
+    tmp_path: Path,
+    stages: tuple[str, ...],
+) -> None:
+    unit = _reflexion_unit()
+    calls = tuple(_call(stage, f"call-{index}") for index, stage in enumerate(stages, start=1))
+
+    completed = persist_unit_dispatch(
+        tmp_path,
+        unit,
+        MainUnitDispatchOutput(
+            evidence=_evidence_for(unit, verifier_result=len(stages) == 1),
+            provider_calls=calls,
+            realized_cost_krw=16 * len(calls),
+        ),
+    )
+
+    assert completed.realized_cost_krw == 16 * len(calls)
+
+
+def test_reflexion_prefix_rejects_unknown_verifier_result(tmp_path: Path) -> None:
+    unit = _reflexion_unit()
+    calls = (
+        _call("reflexion_generate", "call-1"),
+        _call("reflexion_reflect", "call-2"),
+    )
+
+    with pytest.raises(MainLiveDispatchError, match="MAIN_UNIT_PROVIDER_CALLS_INVALID"):
+        persist_unit_dispatch(
+            tmp_path,
+            unit,
+            MainUnitDispatchOutput(
+                evidence=_evidence_for(unit, verifier_result=None),
+                provider_calls=calls,
+                realized_cost_krw=32,
+            ),
+        )
+
+
+@pytest.mark.parametrize(
     "updates",
     [
         {"call_id": None},
@@ -345,6 +418,26 @@ def test_completed_call_must_match_frozen_provider_contract(
             MainUnitDispatchOutput(
                 evidence=_evidence(),
                 provider_calls=(call,),
+                realized_cost_krw=16,
+            ),
+        )
+
+
+def test_completed_call_rejects_consistently_mutated_top_p(tmp_path: Path) -> None:
+    call = _call()
+    request = dict(call.provider_request_contract or {})
+    request["top_p"] = 0.5
+    mutated = call.model_copy(
+        update={"top_p": 0.5, "provider_request_contract": request}
+    )
+
+    with pytest.raises(MainLiveDispatchError, match="MAIN_UNIT_PROVIDER_CALLS_INVALID"):
+        persist_unit_dispatch(
+            tmp_path,
+            _unit(),
+            MainUnitDispatchOutput(
+                evidence=_evidence(),
+                provider_calls=(mutated,),
                 realized_cost_krw=16,
             ),
         )
@@ -446,6 +539,8 @@ def test_live_cli_validates_bound_contract_without_ledger(tmp_path: Path) -> Non
             str(P6),
             "--expected-authorization-sha256",
             hashlib.sha256(P6.read_bytes()).hexdigest(),
+            "--cache-root",
+            str(Path.home() / ".cache/huggingface/hub"),
         ),
         cwd=ROOT,
         check=False,

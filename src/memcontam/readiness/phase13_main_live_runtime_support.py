@@ -103,7 +103,7 @@ def dispatch_output(
     identity: ProductionOrdinaryRunIdentity,
 ) -> MainUnitDispatchOutput:
     calls = tuple(
-        call
+        _reconcile_decoding(call)
         for trial in trials
         for call in trial.outcome.method_calls
         if isinstance(call, MethodCall)
@@ -125,6 +125,7 @@ def dispatch_output(
             "arm": unit.arm,
             "production_identity": identity.model_dump(mode="json"),
             "observability_registration_packet_sha256": identity.registration_packet_sha256,
+            "verifier_result": _verifier_result(trials[-1].outcome.verifier_result),
             "request": ProviderRequestRecord(
                 api="OpenAI Responses API",
                 model="gpt-5.6-luna",
@@ -142,6 +143,25 @@ def dispatch_output(
         provider_calls=calls,
         realized_cost_krw=realized,
     )
+
+
+def _reconcile_decoding(call: MethodCall) -> MethodCall:
+    request = call.provider_request_contract
+    if not isinstance(request, dict):
+        return call
+    return call.model_copy(
+        update={
+            key: request[key]
+            for key in ("temperature", "top_p")
+            if key in request
+        }
+    )
+
+
+def _verifier_result(value: object) -> bool | None:
+    if isinstance(value, VerifierResult):
+        return value.is_correct
+    return value if isinstance(value, bool) else None
 
 
 __all__ = [
