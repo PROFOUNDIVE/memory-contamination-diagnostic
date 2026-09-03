@@ -61,10 +61,11 @@ def test_existing_production_archive_round_trips_and_validates_registered_fixtur
     assert report.record_count == len(archive.records)
 
 
-def test_current_archive_record_cannot_retain_the_parsed_answer() -> None:
+def test_archive_record_retains_the_parsed_answer_field() -> None:
     archive, _packet = _archive()
 
-    assert "parsed_answer" not in ProductionTrialRecord.model_fields
+    assert "parsed_answer" in ProductionTrialRecord.model_fields
+    assert all(record.parsed_answer is None for record in archive.records)
     assert "parsed_answer" not in type(archive.records[0].evidence).model_fields
 
 
@@ -129,8 +130,9 @@ def _execute_with_observed_archive(
         assert value is archive
         events.append("archive-validated")
 
-    def create_dispatch(_unit, trials, _identity) -> _Marker:
+    def create_dispatch(_unit, trials, _identity, observed_archive) -> _Marker:
         assert len(trials) == 50
+        assert observed_archive is archive
         events.append("condensed-dispatch-returned")
         return condensed
 
@@ -165,7 +167,7 @@ class _CapturedNoMemRequest(RuntimeError):
     pass
 
 
-def test_nomem_backend_supplies_no_checkpoint_and_runtime_skips_archive(
+def test_nomem_backend_supplies_no_checkpoint_and_runtime_persists_archive(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -189,4 +191,4 @@ def test_nomem_backend_supplies_no_checkpoint_and_runtime_skips_archive(
     output, events, condensed = _execute_with_observed_archive(monkeypatch, request)
 
     assert output is condensed
-    assert events == ["condensed-dispatch-returned"]
+    assert events == ["archive-created", "archive-validated", "condensed-dispatch-returned"]

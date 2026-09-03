@@ -16,6 +16,7 @@ from memcontam.evaluation.phase13_observability_registration import (
 )
 from memcontam.evaluation.phase13_observability_sequence import reconstruct_registered_sequence
 from memcontam.readiness.phase13_observability_models import Phase13ObservabilityFixture
+from memcontam.readiness.phase13_production_runtime_models import ProductionNoMemTrialEvidence
 from memcontam.logging.schema import MethodCall
 
 
@@ -61,20 +62,26 @@ class ProductionTrialRecord(_FrozenModel):
     execution_template_id: str = Field(min_length=1)
     run_id: str = Field(min_length=1)
     session_id: str = Field(min_length=1)
-    scientific_result: Literal[False]
+    scientific_result: bool
     ordered_sample_ids_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     request: ProviderRequestRecord
-    evidence: Phase13TrialEvidence
+    parsed_answer: str | None
+    method_calls: tuple[MethodCall, ...]
+    evidence: Phase13TrialEvidence | ProductionNoMemTrialEvidence
     terminal_method_call: MethodCall | None = None
     terminal_provider_evidence: TerminalProviderEvidence | None = None
 
     @model_validator(mode="after")
     def _runtime_identity(self) -> ProductionTrialRecord:
-        event_run_ids = {
-            *(event.run_id for event in self.evidence.retrievals),
-            *(event.run_id for event in self.evidence.memory_events),
-            *((self.evidence.context.run_id,) if self.evidence.context is not None else ()),
-        }
+        event_run_ids = (
+            {
+                *(event.run_id for event in self.evidence.retrievals),
+                *(event.run_id for event in self.evidence.memory_events),
+                *((self.evidence.context.run_id,) if self.evidence.context is not None else ()),
+            }
+            if isinstance(self.evidence, Phase13TrialEvidence)
+            else set()
+        )
         if event_run_ids and event_run_ids != {self.run_id}:
             raise ProductionObservabilityError("PRODUCTION_RUN_JOIN_MISMATCH")
         failed = self.evidence.trial.execution_status == "failed"
@@ -86,11 +93,16 @@ class ProductionTrialRecord(_FrozenModel):
             terminal_provider_evidence(self.terminal_method_call)
         ):
             raise ProductionObservabilityError("TERMINAL_PROVIDER_EVIDENCE_MISMATCH")
+        if self.terminal_method_call is not None and self.terminal_method_call not in self.method_calls:
+            raise ProductionObservabilityError("TERMINAL_PROVIDER_EVIDENCE_MISMATCH")
         return self
 
 
 class ProductionObservabilityArchive(_FrozenModel):
-    schema_version: Literal["phase13_production_observability_archive_v1"]
+    schema_version: Literal[
+        "phase13_production_observability_archive_v1",
+        "phase13_production_observability_archive_v2",
+    ]
     registration_packet_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     u_t_status: Literal["NOT_REGISTERED_FOR_CURRENT_MAIN"]
     records: tuple[ProductionTrialRecord, ...]
@@ -100,6 +112,9 @@ class ProductionObservabilityArchive(_FrozenModel):
         sessions = tuple(record.session_id for record in self.records)
         if len(sessions) != len(set(sessions)):
             raise ProductionObservabilityError("CROSS_TRIAL_SESSION_REUSE")
+        scientific_result = self.schema_version == "phase13_production_observability_archive_v2"
+        if any(record.scientific_result is not scientific_result for record in self.records):
+            raise ProductionObservabilityError("PRODUCTION_SCIENTIFIC_RESULT_MISMATCH")
         return self
 
 
@@ -144,6 +159,8 @@ def conformance_archive(
                 retries_after_initial_attempt=0,
                 semantic_invalid_generic_retry=False,
             ),
+            parsed_answer=None,
+            method_calls=(),
             evidence=trial,
         )
         for index, trial in enumerate(fixture.trials)
@@ -175,16 +192,34 @@ def validate_production_archive(
     ):
         raise ProductionObservabilityError("TERMINAL_TECHNICAL_MISSINGNESS_MISMATCH")
     completed = evidence[: len(evidence) - len(technical)]
+    memory_completed = tuple(
+        row for row in completed if isinstance(row, Phase13TrialEvidence)
+    )
+    nomem_completed = tuple(
+        row for row in completed if isinstance(row, ProductionNoMemTrialEvidence)
+    )
+    if memory_completed and nomem_completed:
+        raise ProductionObservabilityError("PRODUCTION_EVIDENCE_KIND_MISMATCH")
+    registered_target_present = any(
+        row.target_set.target_entry_ids for row in memory_completed
+    )
     try:
-        base = tuple(reconstruct_phase13_trial(row) for row in completed)
+        base = (
+            tuple(reconstruct_phase13_trial(row) for row in memory_completed)
+            if registered_target_present
+            else ()
+        )
         reconstructed = (
-            reconstruct_registered_sequence(completed, base, packet.recurrence_lookback_h)
-            if completed
+            reconstruct_registered_sequence(memory_completed, base, packet.recurrence_lookback_h)
+            if registered_target_present
             else ()
         )
     except Phase13ObservabilityError as error:
         raise ProductionObservabilityError("PRODUCTION_RECONSTRUCTION_FAILED") from error
-    payload = [row.model_dump(mode="json") for row in reconstructed]
+    payload = [
+        row.model_dump(mode="json")
+        for row in reconstructed or memory_completed or nomem_completed
+    ]
     payload.extend(row.model_dump(mode="json") for row in technical)
     digest = hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
