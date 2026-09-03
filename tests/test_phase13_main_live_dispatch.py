@@ -550,7 +550,7 @@ def test_live_cli_validates_bound_contract_without_ledger(tmp_path: Path) -> Non
 
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout) == {
-        "authorization_id": "phase13-main-a-authorized-execution-v1",
+        "authorization_id": "phase13-main-a-corrected-authorized-execution-v2",
         "main_a_status": "NOT_STARTED",
         "prefix_count": 230,
         "provider_calls_issued": 0,
