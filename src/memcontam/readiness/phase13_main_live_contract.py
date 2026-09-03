@@ -64,9 +64,15 @@ class MainCostContract(_FrozenModel):
 
 
 class MainLiveContract(_FrozenModel):
-    schema_version: Literal["phase13_main_live_contract_v1"]
+    schema_version: Literal[
+        "phase13_main_live_contract_v1",
+        "phase13_main_live_contract_v2",
+    ]
     authority_sha256: Sha256
-    package_id: Literal["phase13-main-a-execution-freeze-v1"]
+    package_id: Literal[
+        "phase13-main-a-execution-freeze-v1",
+        "phase13-main-a-corrected-execution-freeze-v2",
+    ]
     checkpoint_registry_sha256: Sha256
     observability_packet_sha256: Sha256
     production_units_sha256: Sha256

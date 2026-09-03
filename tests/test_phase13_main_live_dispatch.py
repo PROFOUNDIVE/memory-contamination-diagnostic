@@ -26,8 +26,8 @@ from memcontam.readiness.phase13_main_runner_models import ExecutionUnit
 
 
 ROOT = Path(__file__).resolve().parents[1]
-P5 = ROOT / "data/phase13/main/mr_p5/execution_package_v1.json"
-P6 = ROOT / "data/phase13/main/mr_p6/authorized_execution_v1.json"
+P5 = ROOT / "data/phase13/main/mr_p5/execution_package_v2.json"
+P6 = ROOT / "data/phase13/main/mr_p6/authorized_execution_v2.json"
 
 
 def _contract_payload() -> dict[str, JsonValue]:
@@ -96,7 +96,7 @@ def _authority_contract(stage: str) -> dict[str, JsonValue]:
         "maximum_output_tokens": maximum_output_tokens,
         "execution_envelope_id": "CORE_EXECUTION_ENVELOPE_REGISTRY_V2",
         "execution_envelope_sha256": (
-            "41cd7e7310a961d0856e2020b05a3ae455811fb0660455b4c7dfbcb0a9aafd93"
+            "58e1ebda33a63fba4cb5289d21531298a7803a765b3525214d45700bc993cc22"
         ),
         "failure_contract_id": "CORE_TRANSPORT_ATTEMPT_CONTRACT_V2",
         "failure_contract_sha256": (

@@ -117,8 +117,13 @@ def main() -> None:
             args.expected_authorization_sha256,
         )
         package = MainExecutionFreeze.model_validate_json(read_regular_nofollow(args.package))
+        contract_name = (
+            "main_live_contract_v2.json"
+            if package.schema_version == "phase13_main_execution_freeze_v2"
+            else "main_live_contract_v1.json"
+        )
         contract = load_main_live_contract(
-            args.repository_root / "data/phase13/main/main_live_contract_v1.json"
+            args.repository_root / "data/phase13/main" / contract_name
         )
         validate_main_live_contract(contract, package)
         units = build_production_objects(package)
