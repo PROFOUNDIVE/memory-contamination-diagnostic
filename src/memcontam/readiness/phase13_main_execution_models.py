@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 Sha256 = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+GitSha1 = Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
 Identifier = Annotated[str, Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$")]
 Task = Literal[
     "game24",
@@ -144,8 +145,8 @@ class CostGuardBinding(_FrozenModel):
     total_budget_ceiling_krw: Literal[500000]
     reserve_krw: Literal[50000]
     core_authorization_gate_krw: Literal[450000]
-    cmax_main_krw: Literal[444126]
-    margin_krw: Literal[5874]
+    cmax_main_krw: int = Field(gt=0, lt=450000)
+    margin_krw: int = Field(gt=0)
 
 
 class ExecutionControlBinding(_FrozenModel):
@@ -162,8 +163,14 @@ class ExecutionControlBinding(_FrozenModel):
 
 
 class MainExecutionFreeze(_FrozenModel):
-    schema_version: Literal["phase13_main_execution_freeze_v1"]
-    package_id: Literal["phase13-main-a-execution-freeze-v1"]
+    schema_version: Literal[
+        "phase13_main_execution_freeze_v1",
+        "phase13_main_execution_freeze_v2",
+    ]
+    package_id: Literal[
+        "phase13-main-a-execution-freeze-v1",
+        "phase13-main-a-corrected-execution-freeze-v2",
+    ]
     status: Literal["FROZEN"]
     selected_package_id: Literal["phase13_main_a_post_cutoff_partial_crossed_v1"]
     mr_p4_status: Literal["CLOSED"]
@@ -188,18 +195,46 @@ class MainExecutionFreeze(_FrozenModel):
     execution_control: ExecutionControlBinding
     measured_main_a_trajectory_count: Literal[0]
     package_hash: Sha256
+    corrected_run_id: Identifier | None = None
+    repository_commit: GitSha1 | None = None
+    repository_tree_sha256: Sha256 | None = None
 
     @field_validator("authority", "artifacts", mode="before")
     @classmethod
     def _bindings(cls, value: list[dict[str, str]]) -> tuple[dict[str, str], ...]:
         return tuple(value)
 
+    @model_validator(mode="after")
+    def _prospective_identity(self) -> MainExecutionFreeze:
+        identity = (
+            self.corrected_run_id,
+            self.repository_commit,
+            self.repository_tree_sha256,
+        )
+        match self.schema_version:
+            case "phase13_main_execution_freeze_v1":
+                if any(value is not None for value in identity):
+                    raise ValueError("legacy freeze cannot carry corrected identity")
+            case "phase13_main_execution_freeze_v2":
+                if any(value is None for value in identity):
+                    raise ValueError("corrected freeze requires prospective identity")
+        return self
+
 
 class AuthorizedExecution(_FrozenModel):
-    schema_version: Literal["phase13_main_authorization_v1"]
-    authorization_id: Literal["phase13-main-a-authorized-execution-v1"]
+    schema_version: Literal[
+        "phase13_main_authorization_v1",
+        "phase13_main_authorization_v2",
+    ]
+    authorization_id: Literal[
+        "phase13-main-a-authorized-execution-v1",
+        "phase13-main-a-corrected-authorized-execution-v2",
+    ]
     status: Literal["AUTHORIZED_EXECUTION"]
-    execution_package_id: Literal["phase13-main-a-execution-freeze-v1"]
+    execution_package_id: Literal[
+        "phase13-main-a-execution-freeze-v1",
+        "phase13-main-a-corrected-execution-freeze-v2",
+    ]
     execution_package_path: str
     execution_package_sha256: Sha256
     execution_package_hash: Sha256
@@ -209,6 +244,18 @@ class AuthorizedExecution(_FrozenModel):
     main_a_status: Literal["NOT_STARTED"]
     measured_main_a_trajectory_count: Literal[0]
     authorization_hash: Sha256
+    corrected_run_id: Identifier | None = None
+
+    @model_validator(mode="after")
+    def _prospective_identity(self) -> AuthorizedExecution:
+        match self.schema_version:
+            case "phase13_main_authorization_v1":
+                if self.corrected_run_id is not None:
+                    raise ValueError("legacy authorization cannot carry corrected identity")
+            case "phase13_main_authorization_v2":
+                if self.corrected_run_id is None:
+                    raise ValueError("corrected authorization requires prospective identity")
+        return self
 
 
 class MainExecutionFreezeReport(_FrozenModel):
