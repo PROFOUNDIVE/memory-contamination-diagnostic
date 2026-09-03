@@ -15,7 +15,7 @@ EXPECTED_AUTHORITIES: Final = {
     "authority_router": CORE_MAIN_REGISTRY.authority_router_sha256,
     **dict(CORE_MAIN_REGISTRY.authority_stack),
 }
-EXPECTED_ARTIFACT_PATHS: Final = {
+LEGACY_ARTIFACT_PATHS: Final = {
     "mr_p4_manifest": "data/phase13/main/mr_p4/manifest_v1.json",
     "task_seed_orders": "data/phase13/main/mr_p4/task_seed_orders_v1.json",
     "common_checkpoint_registry": (
@@ -91,6 +91,20 @@ EXPECTED_ARTIFACT_PATHS: Final = {
     "main_execution_models": "src/memcontam/readiness/phase13_main_execution_models.py",
     "main_execution_bindings": "src/memcontam/readiness/phase13_main_execution_bindings.py",
 }
+
+CORRECTED_ARTIFACT_PATHS: Final = {
+    **LEGACY_ARTIFACT_PATHS,
+    "mr_p4_manifest": "data/phase13/main/mr_p4/corrected_v1/manifest_v2.json",
+    "common_capacity": "data/phase13/common_capacity_corrected_v2.json",
+    "stage_envelope_registry": (
+        "data/phase13/main/cost_envelope_v2/stage_envelope_registry_corrected_v2.json"
+    ),
+    "cost_proof": "data/phase13/main/cost_envelope_v2/cost_proof_corrected_v2.json",
+    "activated_cost_policy": (
+        "data/phase13/main/cost_envelope_v2/activated_policy_corrected_v2.json"
+    ),
+    "main_live_contract_artifact": "data/phase13/main/main_live_contract_v2.json",
+}
 PRODUCTION_ROLES: Final = (
     "openai_client",
     "production_observability_adapter",
@@ -165,11 +179,12 @@ def validate_artifact_bindings(
         or authorities != EXPECTED_AUTHORITIES
     ):
         raise MainExecutionBindingError("MAIN_EXECUTION_AUTHORITY_MISMATCH")
-    if len(package.artifacts) != len(EXPECTED_ARTIFACT_PATHS):
+    expected_paths = _expected_artifact_paths(package, repository_root)
+    if len(package.artifacts) != len(expected_paths):
         raise MainExecutionBindingError("MAIN_EXECUTION_ARTIFACT_SET_INVALID")
     paths: dict[str, Path] = {}
     for binding in package.artifacts:
-        expected = EXPECTED_ARTIFACT_PATHS.get(binding.role)
+        expected = expected_paths.get(binding.role)
         if binding.role in paths or expected is None:
             raise MainExecutionBindingError("MAIN_EXECUTION_ARTIFACT_SET_INVALID")
         if binding.path != expected:
@@ -181,9 +196,25 @@ def validate_artifact_bindings(
         if hashlib.sha256(read_regular_nofollow(path)).hexdigest() != binding.sha256:
             raise MainExecutionBindingError("MAIN_EXECUTION_ARTIFACT_HASH_MISMATCH")
         paths[binding.role] = path
-    if set(paths) != set(EXPECTED_ARTIFACT_PATHS):
+    if set(paths) != set(expected_paths):
         raise MainExecutionBindingError("MAIN_EXECUTION_ARTIFACT_SET_INVALID")
     return paths
+
+
+def _expected_artifact_paths(
+    package: MainExecutionFreeze, repository_root: Path
+) -> dict[str, str]:
+    if package.schema_version == "phase13_main_execution_freeze_v1":
+        return dict(LEGACY_ARTIFACT_PATHS)
+    expected = dict(CORRECTED_ARTIFACT_PATHS)
+    bound_paths = set(expected.values())
+    for path in sorted((repository_root / "src/memcontam").rglob("*.py")):
+        relative = path.relative_to(repository_root).as_posix()
+        if relative in bound_paths:
+            continue
+        role = f"transitive_source_{hashlib.sha256(relative.encode()).hexdigest()[:16]}"
+        expected[role] = relative
+    return expected
 
 
 def validate_semantic_joins(package: MainExecutionFreeze, paths: dict[str, Path]) -> None:

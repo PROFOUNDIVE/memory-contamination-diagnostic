@@ -107,11 +107,14 @@ def validate_main_execution_freeze(
             raise Phase13MainExecutionError("MAIN_EXECUTION_MR_P4_BINDING_INVALID")
         if canonical_hash(p4.get("level2_interactions")) != package.level2_registry_sha256:
             raise Phase13MainExecutionError("MAIN_EXECUTION_LEVEL2_BINDING_INVALID")
-        validate_main_readiness(
-            paths["mr_p4_manifest"].parent,
-            repository_root,
-            hashlib.sha256(p4_raw).hexdigest(),
-        )
+        if package.schema_version == "phase13_main_execution_freeze_v1":
+            validate_main_readiness(
+                paths["mr_p4_manifest"].parent,
+                repository_root,
+                hashlib.sha256(p4_raw).hexdigest(),
+            )
+        else:
+            _validate_corrected_mr_p4(p4, repository_root)
         checkpoint = validate_main_checkpoint_package(
             paths["common_checkpoint_registry"].parent,
             repository_root,
@@ -139,6 +142,24 @@ def validate_main_execution_freeze(
         raise Phase13MainExecutionError(error.code) from error
     except (AuthorityFileError, OSError, ValidationError, ValueError, json.JSONDecodeError) as error:
         raise Phase13MainExecutionError("MAIN_EXECUTION_PACKAGE_INVALID") from error
+
+
+def _validate_corrected_mr_p4(p4: dict[str, JsonValue], repository_root: Path) -> None:
+    payload = dict(p4)
+    closure_hash = payload.pop("closure_hash", None)
+    if closure_hash != canonical_hash(payload):
+        raise Phase13MainExecutionError("MAIN_EXECUTION_MR_P4_BINDING_INVALID")
+    artifacts = p4.get("artifacts")
+    if not isinstance(artifacts, dict):
+        raise Phase13MainExecutionError("MAIN_EXECUTION_MR_P4_BINDING_INVALID")
+    for identity in artifacts.values():
+        if not isinstance(identity, dict):
+            raise Phase13MainExecutionError("MAIN_EXECUTION_MR_P4_BINDING_INVALID")
+        path, expected = identity.get("path"), identity.get("sha256")
+        if not isinstance(path, str) or not isinstance(expected, str):
+            raise Phase13MainExecutionError("MAIN_EXECUTION_MR_P4_BINDING_INVALID")
+        if hashlib.sha256(read_regular_nofollow(repository_root / path)).hexdigest() != expected:
+            raise Phase13MainExecutionError("MAIN_EXECUTION_MR_P4_BINDING_INVALID")
 
 
 def validate_main_authorization(
