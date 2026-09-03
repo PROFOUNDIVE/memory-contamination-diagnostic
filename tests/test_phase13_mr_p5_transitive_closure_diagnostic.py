@@ -63,3 +63,40 @@ def test_mr_p5_diagnostic_traverses_parent_package_initializers(tmp_path: Path) 
     assert set(json.loads(result.stdout)["omitted_local_imports"]) == set(files) - {
         "data/phase13/main/mr_p5/execution_package_v1.json"
     }
+
+
+def test_mr_p5_diagnostic_accepts_a_separately_versioned_package(tmp_path: Path) -> None:
+    files = {
+        "src/memcontam/__init__.py": "",
+        "src/memcontam/readiness/__init__.py": "",
+        "src/memcontam/readiness/phase13_main_live_cli.py": "",
+        "data/phase13/main/mr_p5/execution_package_v2.json": json.dumps(
+            {
+                "artifacts": [
+                    {
+                        "path": "src/memcontam/__init__.py",
+                    },
+                    {
+                        "path": "src/memcontam/readiness/__init__.py",
+                    },
+                    {
+                        "path": "src/memcontam/readiness/phase13_main_live_cli.py",
+                    },
+                ]
+            }
+        ),
+    }
+    for relative, content in files.items():
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+    result = _run(
+        "--package",
+        "data/phase13/main/mr_p5/execution_package_v2.json",
+        "--require-closed",
+        repository_root=tmp_path,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["omitted_local_import_count"] == 0

@@ -83,9 +83,9 @@ def _closure(source_root: Path, entrypoint: Path) -> tuple[Path, ...]:
     return tuple(sorted(visited))
 
 
-def _report(repository_root: Path) -> ClosureReport:
+def _report(repository_root: Path, package_relative: Path) -> ClosureReport:
     source_root = repository_root / "src"
-    package_path = repository_root / "data/phase13/main/mr_p5/execution_package_v1.json"
+    package_path = repository_root / package_relative
     package = json.loads(package_path.read_text(encoding="utf-8"))
     bound = {
         repository_root / row["path"]
@@ -109,9 +109,14 @@ def main() -> int:
         description="Compare an AST-derived approximation of Main-A local imports with MR-P5 bindings."
     )
     parser.add_argument("--repository-root", type=Path, required=True)
+    parser.add_argument(
+        "--package",
+        type=Path,
+        default=Path("data/phase13/main/mr_p5/execution_package_v1.json"),
+    )
     parser.add_argument("--require-closed", action="store_true")
     args = parser.parse_args()
-    report = _report(args.repository_root.resolve())
+    report = _report(args.repository_root.resolve(), args.package)
     print(json.dumps(asdict(report), indent=2, sort_keys=True))
     return int(args.require_closed and bool(report.omitted_local_imports))
 
