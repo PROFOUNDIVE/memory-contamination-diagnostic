@@ -1,0 +1,2324 @@
+{
+  "schema_version": "phase13_main_execution_freeze_v2",
+  "package_id": "phase13-main-a-corrected-execution-freeze-v2",
+  "status": "FROZEN",
+  "selected_package_id": "phase13_main_a_post_cutoff_partial_crossed_v1",
+  "mr_p4_status": "CLOSED",
+  "mr_p4_closure_hash": "261b984fcf646f062b51adf540a9bb062d79824538c388971410098d50ce60cc",
+  "authority": [
+    {
+      "role": "authority_router",
+      "sha256": "76af55a04ce47f5bfe82795a99b0654b509becc7e202b3e05db29550297cf430"
+    },
+    {
+      "role": "theory",
+      "sha256": "34f63f37a49e92607c78ced038c4c70b4c9d5e3fa8fc57d6e97de1ee79db59a8"
+    },
+    {
+      "role": "baseline",
+      "sha256": "0bacce62718a93c14ce4da0c1b426e3823b75cf70b362f8f9a0632e83f4166c1"
+    },
+    {
+      "role": "protocol",
+      "sha256": "022879f559b145e30e645b6ccbd139e9927899d370f1956d27a0562580acf85f"
+    },
+    {
+      "role": "post_cutoff_addendum",
+      "sha256": "6ab2db4041333a26e9c76a034266c2d7de64491c5c109634c97ecebef9b2f59b"
+    },
+    {
+      "role": "experiment_design",
+      "sha256": "174002b407c2c4055c42298bd16ca13463e80af5c935f9593f556c3f71d7671c"
+    }
+  ],
+  "artifacts": [
+    {
+      "role": "mr_p4_manifest",
+      "path": "data/phase13/main/mr_p4/corrected_v1/manifest_v2.json",
+      "sha256": "03b76fb9b285b8a765e10adda1e70bd426af5c29cd6e4202dd10724d52e4841a"
+    },
+    {
+      "role": "task_seed_orders",
+      "path": "data/phase13/main/mr_p4/task_seed_orders_v1.json",
+      "sha256": "4ec3a6c04deb9ff475b59beaf2fd9a3d73fab1215ffb0ddb3c9d7efa8fdab448"
+    },
+    {
+      "role": "common_checkpoint_registry",
+      "path": "data/phase13/main/mr_p4/main_a_common_checkpoint_registry_v1.json",
+      "sha256": "ec26757928ee3e9883aab23f6e7b416e71159b5e6b740e63effee6b8eb58a64b"
+    },
+    {
+      "role": "analysis_window_registry",
+      "path": "data/phase13/main/mr_p4/readiness0_window_proof_v1.json",
+      "sha256": "99decc17225dcf6f87b60de71ab6d38729a01c032ffd90ba0397b191c6e0a191"
+    },
+    {
+      "role": "package_selection",
+      "path": "data/phase13/main/post_cutoff_package_selection_v2.json",
+      "sha256": "2efa745c72045ba84e7c3070424b76a9c65d87a02ae601a90ac367517d6890c9"
+    },
+    {
+      "role": "common_capacity",
+      "path": "data/phase13/common_capacity_corrected_v2.json",
+      "sha256": "8b4690b895117ea6ed05d9f98d91720b284f9c075c566d6d01dc63b577dd59ae"
+    },
+    {
+      "role": "legacy_rag_manifest",
+      "path": "data/phase13/rag/legacy/manifest.json",
+      "sha256": "7017ed990edc78d76cb300d443eb69281900e564c2e02f4bc7fadba9aa69fd10"
+    },
+    {
+      "role": "legacy_rag_seal",
+      "path": "data/phase13/rag/legacy_seal_v1.json",
+      "sha256": "00a5ebc22b81945e12d69e53bd3e5174fed6ade14d4b93539f4e8da3c7796fc3"
+    },
+    {
+      "role": "observability_manifest",
+      "path": "data/phase13/observability/manifest_v1.json",
+      "sha256": "e5736593651570430e54db2a7213bcdfc0f900bb56de86de802917811bc5d051"
+    },
+    {
+      "role": "observability_packet",
+      "path": "data/phase13/observability/registration_packet_v1.json",
+      "sha256": "b2f9d7b5cced3b7bd4f33272b952d9a2270696a5348121608d13876bce02e454"
+    },
+    {
+      "role": "provider_contract",
+      "path": "data/phase13/openai_luna_provider_contract_v1.json",
+      "sha256": "7fa5f400d6193ec64229597c0f6f2b193f9613b636d4bfb69c46e831a92bff33"
+    },
+    {
+      "role": "openai_client",
+      "path": "src/memcontam/clients/openai_responses.py",
+      "sha256": "bb83936fdc4534f7588061dd6b436083ab60400cd1cee2ace0d033aeded4f73b"
+    },
+    {
+      "role": "stage_envelope_registry",
+      "path": "data/phase13/main/cost_envelope_v2/stage_envelope_registry_corrected_v2.json",
+      "sha256": "715e063a6bb230ce2fdbc015e0e3d53ddc88bb1746f527bc8728eeea53d9e51f"
+    },
+    {
+      "role": "retry_failure_contract",
+      "path": "data/phase13/main/cost_envelope_v2/retry_failure_contract_v1.json",
+      "sha256": "f566f39667dfc34f5809e8cc6ec3c9af895119ed38234792fbf161652df357be"
+    },
+    {
+      "role": "cost_proof",
+      "path": "data/phase13/main/cost_envelope_v2/cost_proof_corrected_v2.json",
+      "sha256": "aa0e9833cc87a6904b6ff9a67382808c642c5b803e6ba450b673cccdee766403"
+    },
+    {
+      "role": "activated_cost_policy",
+      "path": "data/phase13/main/cost_envelope_v2/activated_policy_corrected_v2.json",
+      "sha256": "9a7ecbd7abf3d30fc05f1bab376154cb94551c133504151b9a39f17bb74967ee"
+    },
+    {
+      "role": "readiness0_acceptance_policy",
+      "path": "src/memcontam/readiness/phase13_readiness0_package.py",
+      "sha256": "7198ea7a26a295e7248b69076e76c8b71f54bd0111a01a50f4992cc5dee25453"
+    },
+    {
+      "role": "readiness0_evidence_policy",
+      "path": "src/memcontam/readiness/phase13_readiness0_evidence_validate.py",
+      "sha256": "b61c06217f3f311b8c0618f96ec9c1dd7700f08aa7d390a6342f1bf03651fd86"
+    },
+    {
+      "role": "ordinary_runtime",
+      "path": "src/memcontam/experiment/phase13_ordinary_runtime.py",
+      "sha256": "05492b3ff486e101536243597e2d5b07a00d984dbbcdd49152905f45c847859c"
+    },
+    {
+      "role": "runtime_registry",
+      "path": "src/memcontam/experiment/phase12/runtime_registry.py",
+      "sha256": "ea3dd96e2c6f67b0b3e0c397d2072000f4b141a6a29340b81577a677032f128e"
+    },
+    {
+      "role": "live_branch",
+      "path": "src/memcontam/experiment/phase12/live_branch.py",
+      "sha256": "bbf2c882df2bccece6fe55d9ef1848a554f1df1e85bfc02d5e092b7c31985b99"
+    },
+    {
+      "role": "dc_rs_runtime",
+      "path": "src/memcontam/experiment/phase13_dc_rs_runtime.py",
+      "sha256": "66274d3056457e5dd0c6e84c3df5a5f8bbf2380404bea59000928478c831723f"
+    },
+    {
+      "role": "dc_rs_validation",
+      "path": "src/memcontam/experiment/phase13_dc_rs_validation.py",
+      "sha256": "c6050cd212023cd27d2838a4bbe12dc0632eb3aeb24c7fd01759cdb2df1d7286"
+    },
+    {
+      "role": "main_runtime_context",
+      "path": "src/memcontam/experiment/phase12/game24_runner.py",
+      "sha256": "841f943ba90043b800a216e234fbc066a3dddb6a3d681569ea4e1e7e0189e5da"
+    },
+    {
+      "role": "bot_adapter",
+      "path": "src/memcontam/baselines/bot_phase12.py",
+      "sha256": "f74bd24254ab8cdda82512d0c14bd0442fb319763bc903a70117d3d085815f4f"
+    },
+    {
+      "role": "production_observability_adapter",
+      "path": "src/memcontam/readiness/phase13_production_observability.py",
+      "sha256": "c0bc7d9be1539629f96d50789b8b3f7980559c9eb374c7efe0bf70eb8762a63e"
+    },
+    {
+      "role": "production_runtime_join",
+      "path": "src/memcontam/readiness/phase13_production_runtime_join.py",
+      "sha256": "172ed9a2f060f38e67acfd45ed76f491f083955be40c04af3ee32b4b916633a5"
+    },
+    {
+      "role": "production_runtime_evidence",
+      "path": "src/memcontam/readiness/phase13_production_runtime_evidence.py",
+      "sha256": "d23c7b17656d6b017ebfe7386c7e6060452ebb3583517d3b8aec01dfbf89dd2d"
+    },
+    {
+      "role": "production_runtime_memory",
+      "path": "src/memcontam/readiness/phase13_production_runtime_memory.py",
+      "sha256": "6cdab986a3e8f58f7bc98b9ef8ce88939a3834a6cc5a65f91bd4d891bc97c9fc"
+    },
+    {
+      "role": "production_runtime_models",
+      "path": "src/memcontam/readiness/phase13_production_runtime_models.py",
+      "sha256": "f09038ad7ae2c83d6b424df54dbaa16d22ebebc6ae904da76de398a740b8d52c"
+    },
+    {
+      "role": "logging_schema",
+      "path": "src/memcontam/logging/schema.py",
+      "sha256": "842cd854f060bc5e3b793efc56604b729287193646d64906c7f55a160dbda26a"
+    },
+    {
+      "role": "recording_client",
+      "path": "src/memcontam/clients/recording.py",
+      "sha256": "6e551a3e6631c8beeb4ee416434ced4708a163de9b20a10e1a66f765e1a5f202"
+    },
+    {
+      "role": "main_runner",
+      "path": "src/memcontam/readiness/phase13_main_runner.py",
+      "sha256": "d74bd1f05ac1356507fdcd37ffc333a6277564c38bad912f613b699d80c64192"
+    },
+    {
+      "role": "main_runner_ledger",
+      "path": "src/memcontam/readiness/phase13_main_runner_ledger.py",
+      "sha256": "86c9f4bfcecacaefc0c2bb7ab13e3350a2f567d8427e998455573cddf390326a"
+    },
+    {
+      "role": "main_runner_models",
+      "path": "src/memcontam/readiness/phase13_main_runner_models.py",
+      "sha256": "550771b8cb6129886696c8dc05951a9a324d0f7cc0829e31e1a9c33458ecaf2e"
+    },
+    {
+      "role": "main_runner_store",
+      "path": "src/memcontam/readiness/phase13_main_runner_store.py",
+      "sha256": "dc1c1d01911771c9a9609da0e1d1130ec3bc8d45958671bc19ab0cfce94e4818"
+    },
+    {
+      "role": "main_runner_cli",
+      "path": "src/memcontam/readiness/phase13_main_runner_cli.py",
+      "sha256": "42c28c0b3df96660e30c0e9374728c7c7dda16add51d5d105bc304f2a5d05ef9"
+    },
+    {
+      "role": "main_production",
+      "path": "src/memcontam/readiness/phase13_main_production.py",
+      "sha256": "9a95375790608a612fae3fc0a5bf5ad0a7b5263296faf8c582b734d4393c0117"
+    },
+    {
+      "role": "main_production_backend",
+      "path": "src/memcontam/readiness/phase13_main_production_backend.py",
+      "sha256": "54384509ddd314e83094101af23a46c2d9af52040de40e165c039c71601d073a"
+    },
+    {
+      "role": "main_live_contract",
+      "path": "src/memcontam/readiness/phase13_main_live_contract.py",
+      "sha256": "aa78505772138015276e17eac40ba81649852f89b12713698f9a68ba1d6a9292"
+    },
+    {
+      "role": "main_live_contract_artifact",
+      "path": "data/phase13/main/main_live_contract_v2.json",
+      "sha256": "b11087d100af76da1f8ca488137c35465dc32ba096492c9f8f2320889a1e5334"
+    },
+    {
+      "role": "main_live_evidence",
+      "path": "src/memcontam/readiness/phase13_main_live_evidence.py",
+      "sha256": "e6a9a572d633285a82cac9b90eb253c2237eb0bc80aca1712977f2846a3b390f"
+    },
+    {
+      "role": "main_live_dispatch",
+      "path": "src/memcontam/readiness/phase13_main_live_dispatch.py",
+      "sha256": "8c981aa336b73b2e8cce165b83b164e5b611f47f6a7284984aa07a34bbaae116"
+    },
+    {
+      "role": "main_live_cli",
+      "path": "src/memcontam/readiness/phase13_main_live_cli.py",
+      "sha256": "43dc7fe40ae5ae3a212c6bf40361665c6bdcc32fdfc631fdbf551db3d003ec58"
+    },
+    {
+      "role": "main_live_runtime",
+      "path": "src/memcontam/readiness/phase13_main_live_runtime.py",
+      "sha256": "e2c9e2452ba6901472aceb939cf806482ed5f62c5b47ece290f004a2dc4ae76e"
+    },
+    {
+      "role": "main_live_runtime_support",
+      "path": "src/memcontam/readiness/phase13_main_live_runtime_support.py",
+      "sha256": "f75a31f8d2b89c448b0f9cb7d7f45a9af9fb2b3efa17f5dc713444d4ab5effab"
+    },
+    {
+      "role": "main_new_mcq_runtime",
+      "path": "src/memcontam/readiness/phase13_main_new_mcq_runtime.py",
+      "sha256": "cece5696081cef6062043c9af844268925a346bf62c97b8021c9241b7b9ea773"
+    },
+    {
+      "role": "main_new_mcq_renderer",
+      "path": "src/memcontam/readiness/phase13_new_mcq_candidate_evidence_v2_rendering.py",
+      "sha256": "4a1f7a560e7b1834077c663162f81fb1b19e9603297691e0c593c3ca117bd26e"
+    },
+    {
+      "role": "main_new_mcq_models",
+      "path": "src/memcontam/readiness/phase13_new_mcq_rag_models.py",
+      "sha256": "6293572ca8a8958f36b878363e9f275f19958b258ab44c598deee5edb6fd47e3"
+    },
+    {
+      "role": "main_new_mcq_authority_selection",
+      "path": "data/phase13/rag/new_mcq/authority_selection_v1.json",
+      "sha256": "1717cf63dcffd3a7f2bed3db4bb3f7357bc3b4ec29ea7d980ce2bc8c07ce9fbc"
+    },
+    {
+      "role": "main_new_mcq_intervention_registry",
+      "path": "data/phase13/rag/new_mcq/intervention_registry_v1.json",
+      "sha256": "7c827c59a353a081beb4d4c74f8af6a0053930b8f9f7e41b185f2ba65871f91c"
+    },
+    {
+      "role": "main_execution",
+      "path": "src/memcontam/readiness/phase13_main_execution.py",
+      "sha256": "b9039456535d6c9f75d1219be3b7385904d08c80b866a7598a0b23e60c82ff3f"
+    },
+    {
+      "role": "main_execution_models",
+      "path": "src/memcontam/readiness/phase13_main_execution_models.py",
+      "sha256": "a642d4c03fd70912b73be73353e19bbec5bad36127af9fd6d1d7ba70b4182f75"
+    },
+    {
+      "role": "main_execution_bindings",
+      "path": "src/memcontam/readiness/phase13_main_execution_bindings.py",
+      "sha256": "36be19c465747263e43410e4b862a248244afe5c9d0addebcbf51cff4d922537"
+    },
+    {
+      "role": "transitive_source_87a87e8bfaf80fc9",
+      "path": "src/memcontam/__init__.py",
+      "sha256": "cd91d2749b7ed776832d566c3f9e3bbed9633258dd9ab0e597b9ff179abd8ae2"
+    },
+    {
+      "role": "transitive_source_22d70892594ed9ed",
+      "path": "src/memcontam/baselines/__init__.py",
+      "sha256": "9f3c752ac8986a52ff62e5ca13a69c5bc0e3e5f966320d3e8b883260ed20579e"
+    },
+    {
+      "role": "transitive_source_c151751b145daa74",
+      "path": "src/memcontam/baselines/bot_read.py",
+      "sha256": "7b0e1c89bae854d721b6b63c8739471a2cd31fe76fb5db91591aed19f0d0796d"
+    },
+    {
+      "role": "transitive_source_ad7ff6262ea8d3c4",
+      "path": "src/memcontam/baselines/bot_runtime.py",
+      "sha256": "9d45003c4490c344e1b931182138cbfa0571532e467f22cc26bd0c90b6fdc8bc"
+    },
+    {
+      "role": "transitive_source_621eb5c515e9d5ec",
+      "path": "src/memcontam/baselines/bot_solve.py",
+      "sha256": "10998a332d030b2254e00604b20e63fc65b56c5a0e90068ae1ed1691d7607e8b"
+    },
+    {
+      "role": "transitive_source_0f2d921631d6d914",
+      "path": "src/memcontam/baselines/bot_style.py",
+      "sha256": "6946179c7f45f9b3065a43f6b515d7cc591d2bf2952ae9308031f43b21a56d97"
+    },
+    {
+      "role": "transitive_source_e68bba553742ea18",
+      "path": "src/memcontam/baselines/bot_write.py",
+      "sha256": "a163af90769b7a12604e272fccecf43d673dfda7adc6cd404bca909fc5ba7473"
+    },
+    {
+      "role": "transitive_source_5a3d9723c25d3b82",
+      "path": "src/memcontam/baselines/common.py",
+      "sha256": "321747c55e9868f65da981c8a807b426aea30c31700db323ba42d2270485fc93"
+    },
+    {
+      "role": "transitive_source_42145ba9fcf60989",
+      "path": "src/memcontam/baselines/contracts.py",
+      "sha256": "7d97d86f54107aa21b034a402768300719a8ef7581891f295a230bcd916e1531"
+    },
+    {
+      "role": "transitive_source_e94859c90e235699",
+      "path": "src/memcontam/baselines/dynamic_cheatsheet_optional.py",
+      "sha256": "b03d99ff77583acf55a5ce8a7797fe7b55cb7f34b7ca2289ff481ec9696456f0"
+    },
+    {
+      "role": "transitive_source_57e3cf2a7f2971c6",
+      "path": "src/memcontam/baselines/dynamic_cheatsheet_phase12.py",
+      "sha256": "a893ab9431a064431099818d94a18a2a1b1822d2dedc8d5dc45d9c3c964f3f95"
+    },
+    {
+      "role": "transitive_source_a5ab898b963f9a91",
+      "path": "src/memcontam/baselines/execution.py",
+      "sha256": "7f8bc8e0a97cef1cbcdbbfbb8617dcacbf85d0294c92a6a884c908ab8caff534"
+    },
+    {
+      "role": "transitive_source_9758d1d3d64b9f8b",
+      "path": "src/memcontam/baselines/expel_optional.py",
+      "sha256": "4b09f8ad973f861ba22a040d2e25a2ef25d6c1dcf78f763ab48ddb30f8b9eaa2"
+    },
+    {
+      "role": "transitive_source_8148ab78b1376315",
+      "path": "src/memcontam/baselines/full_history.py",
+      "sha256": "a59419c613db32342dd8edbf05f7e1c15c9d05c2c6e24c42a03b733e2873f373"
+    },
+    {
+      "role": "transitive_source_fc9fdcee4f1e9aa1",
+      "path": "src/memcontam/baselines/full_history_adapter.py",
+      "sha256": "68e79b446b30708bf974610ce9f848f41738f752b02f256ab94a1d4d6df657e9"
+    },
+    {
+      "role": "transitive_source_0ce597f1060adfc3",
+      "path": "src/memcontam/baselines/full_history_context.py",
+      "sha256": "150ec139901c618c2bf6d6875082fefe04fffd353d45189f3897197746b33515"
+    },
+    {
+      "role": "transitive_source_4b1be20bc54ee506",
+      "path": "src/memcontam/baselines/full_history_phase12.py",
+      "sha256": "3b587b7fb546af022196d728d627f65da5f31b0d2d8f35831495cf48635c2ec0"
+    },
+    {
+      "role": "transitive_source_0ffe3d1db1a073eb",
+      "path": "src/memcontam/baselines/no_memory.py",
+      "sha256": "1760766f3d254a4ac36d26a2b4bcec8e1fd577fb47a6f01b3b13762bd3890f94"
+    },
+    {
+      "role": "transitive_source_6a255d40aed4cbfa",
+      "path": "src/memcontam/baselines/no_memory_tool_adapter.py",
+      "sha256": "9a6d0abcc8dd1d52108c5d6a4ee4118dafc64699be937bfc95113199b9e8f9e0"
+    },
+    {
+      "role": "transitive_source_c1d1924a32cb75c0",
+      "path": "src/memcontam/baselines/prompt_budget.py",
+      "sha256": "87fefb5dbb42a469d26acbbf08e53048f8de58dc2506a97085ba87c7cf4ea713"
+    },
+    {
+      "role": "transitive_source_72a755b7703f5e3f",
+      "path": "src/memcontam/baselines/reflexion_adapter.py",
+      "sha256": "af0a0bcdb6e2119b6c823df05e7f4019e4d589874024db2d9502f54ac597bbd7"
+    },
+    {
+      "role": "transitive_source_8d39b54c503be9a1",
+      "path": "src/memcontam/baselines/reflexion_phase12.py",
+      "sha256": "1d3e0cf04e4c7fbd3a9661d803c7438e6d6651a68645b886f5c0af75e9b25073"
+    },
+    {
+      "role": "transitive_source_9f9564e303c8f954",
+      "path": "src/memcontam/baselines/reflexion_style.py",
+      "sha256": "57938bd9ef86bdf64f673142ab4c0fcdd5d58e7b06d234048a3375c68defdfe0"
+    },
+    {
+      "role": "transitive_source_a07adf3c1aa87027",
+      "path": "src/memcontam/baselines/retrieval_rag.py",
+      "sha256": "018a1c59978949e7f569e6919b6ca19cbb20e33c4b2f22dd69de11bb2cd8fcf8"
+    },
+    {
+      "role": "transitive_source_e3ef422848b28ed1",
+      "path": "src/memcontam/baselines/retrieval_rag_adapter.py",
+      "sha256": "485ba9b9966525b94f3a57f940337e424555e2fb9bea1e576bd6abd92a5f3262"
+    },
+    {
+      "role": "transitive_source_997b67147ceb4f43",
+      "path": "src/memcontam/baselines/retrieval_rag_phase12.py",
+      "sha256": "71cbdc1b35f689db6ca2082a95fe3685febcc492249d45c4c1beb90909f52323"
+    },
+    {
+      "role": "transitive_source_ba8ea4694a74eafa",
+      "path": "src/memcontam/behavior/__init__.py",
+      "sha256": "dac4846de234de15c9c31a504cba87c2b219993c483a09236e49bdb03ebbf8dd"
+    },
+    {
+      "role": "transitive_source_7561421fa6056f63",
+      "path": "src/memcontam/behavior/directional.py",
+      "sha256": "da9700e4a309274d7540d518095a80ea7b4fb586ff82692a3b46305561c4b7bf"
+    },
+    {
+      "role": "transitive_source_00ee54bc6d3f3855",
+      "path": "src/memcontam/behavior/invariance.py",
+      "sha256": "e841853dec9bc7619b56a32dfed02120ca0a6d4cfedaa59fa84051f12ef4c2f6"
+    },
+    {
+      "role": "transitive_source_e78c331249add882",
+      "path": "src/memcontam/behavior/mft.py",
+      "sha256": "8a3c11181e75bc070f5d82165fc23d50b6ce908cc5c774b90093adec3099b87e"
+    },
+    {
+      "role": "transitive_source_2519bdfe443a10d7",
+      "path": "src/memcontam/behavior/registry.py",
+      "sha256": "f1272adc23c2408662878ce3bc0e42628bd2de6df3f6ca663c72c5f2751e2d72"
+    },
+    {
+      "role": "transitive_source_c8f0e76090c6d70b",
+      "path": "src/memcontam/cli.py",
+      "sha256": "2a96c3b27d7ca06d7222325271145e56426979d5f124ad01e8b4573d577112cd"
+    },
+    {
+      "role": "transitive_source_00ebb480837f2150",
+      "path": "src/memcontam/clients/__init__.py",
+      "sha256": "d8b8621760b2fc388e62e5cd8141a48e1e59f39a9fa2d7ccbe1b1eef79f09567"
+    },
+    {
+      "role": "transitive_source_5b198f277b683766",
+      "path": "src/memcontam/clients/base.py",
+      "sha256": "e17f00806ff97d7b9e8c385931a483d6c7e8af6618a4d54c96d88dc63dfd7767"
+    },
+    {
+      "role": "transitive_source_702d52a8f4aea9ef",
+      "path": "src/memcontam/clients/config.py",
+      "sha256": "28b845319b5d2b212b782f418447880a6a9438ec493ea3dc56af406626564b1a"
+    },
+    {
+      "role": "transitive_source_82f4c2875228d3b6",
+      "path": "src/memcontam/clients/cost_guard.py",
+      "sha256": "2483260af0f176624331b86b7b4749f99b3708bb192e0bd4f436457b6fa51945"
+    },
+    {
+      "role": "transitive_source_d53e02811fefe4df",
+      "path": "src/memcontam/clients/factory.py",
+      "sha256": "bfdfc56fc58b3379726783c28693ec6e095d0ebb0761a2eefd45901021913e76"
+    },
+    {
+      "role": "transitive_source_57e8775ab36b48ad",
+      "path": "src/memcontam/clients/openai_compatible.py",
+      "sha256": "7fb7d512e32555aa9157b17847353965ab0f8b0b3bdae79733e131c0e0eff266"
+    },
+    {
+      "role": "transitive_source_267e2b468e2930b0",
+      "path": "src/memcontam/clients/provider_profile.py",
+      "sha256": "0ada3850535cce92cd57e62200627b34c46788622df4d804d34fa76ccb6923aa"
+    },
+    {
+      "role": "transitive_source_ab3d69cab03da7f9",
+      "path": "src/memcontam/clients/replay.py",
+      "sha256": "ce387c2dadbc197279fdb906d0b0f3e72a6d4cb14049d4c2b9b8e74b96cb67df"
+    },
+    {
+      "role": "transitive_source_7836e41e046481e9",
+      "path": "src/memcontam/config/phase12.py",
+      "sha256": "32d26732efb328b7fee3ac4441c03d359f9aa7087bc67cad5d4fda52d91b2096"
+    },
+    {
+      "role": "transitive_source_645ba445b73c8166",
+      "path": "src/memcontam/config/resolution.py",
+      "sha256": "deb4bbb941cb382ce5edbea05d9d7aae98e16c2e6839933537e7a98a26a25a65"
+    },
+    {
+      "role": "transitive_source_91b422555cdc4a0b",
+      "path": "src/memcontam/contamination/__init__.py",
+      "sha256": "9f3c752ac8986a52ff62e5ca13a69c5bc0e3e5f966320d3e8b883260ed20579e"
+    },
+    {
+      "role": "transitive_source_121278f9f4833eb8",
+      "path": "src/memcontam/contamination/catalog.py",
+      "sha256": "5b5b11a965d8e03e4d4fa646e5e6aa1aed5934c709de3408d0e392a423e37ec6"
+    },
+    {
+      "role": "transitive_source_9514f6f33d1d88da",
+      "path": "src/memcontam/contamination/injectors.py",
+      "sha256": "ddfeb3fe73658bf4389c65b6d2750f79adacad9a3d6f083f15321e29d5f89d02"
+    },
+    {
+      "role": "transitive_source_e14675035bf97987",
+      "path": "src/memcontam/contamination/phase12/__init__.py",
+      "sha256": "4b91e663ff41b332359be4664f6d150cdd77adb1fd1bacd91235f32b6d8e858e"
+    },
+    {
+      "role": "transitive_source_809c0f9e1010b9bc",
+      "path": "src/memcontam/contamination/phase12/certification.py",
+      "sha256": "b4f2adfaf3e834f2d6a52778092b23cd6846c61aaa2841c99408febe7a203233"
+    },
+    {
+      "role": "transitive_source_7a00edb807b9d38a",
+      "path": "src/memcontam/contamination/phase12/controls.py",
+      "sha256": "3f99203896e298d383d59ff27ec19d10450cfaefd24e55ad73cbca4e75c72e66"
+    },
+    {
+      "role": "transitive_source_90e5901ac3f24fa2",
+      "path": "src/memcontam/contamination/phase12/models.py",
+      "sha256": "a7a576cbfc787adb1e716e584c755fce03dfc3c8cac944596d8505de4f5dab90"
+    },
+    {
+      "role": "transitive_source_a7244605a4c6e7be",
+      "path": "src/memcontam/contamination/phase12/registry.py",
+      "sha256": "5113cfbb1d0be1c9f6d0a420ce7d7953116cfa72e4c523b6e815467d6949e7a0"
+    },
+    {
+      "role": "transitive_source_48f58f845ab63caf",
+      "path": "src/memcontam/contamination/phase12/renderers.py",
+      "sha256": "1a74cc986aca55f8165aa4a73f5ceb33fe02c9369f9a01a6a35bc93ac8f9670b"
+    },
+    {
+      "role": "transitive_source_4329eab880bc4265",
+      "path": "src/memcontam/evaluation/__init__.py",
+      "sha256": "9f3c752ac8986a52ff62e5ca13a69c5bc0e3e5f966320d3e8b883260ed20579e"
+    },
+    {
+      "role": "transitive_source_e2cfba53f13a3d6a",
+      "path": "src/memcontam/evaluation/aggregate.py",
+      "sha256": "5d727334aebb6f9e96af5bc347d3beb8b543a63ebb7c610239af79e4b896c3f8"
+    },
+    {
+      "role": "transitive_source_28d13e06b6d685a1",
+      "path": "src/memcontam/evaluation/bootstrap.py",
+      "sha256": "a8c9270a0fe2df45c998d50a27ada82805c1790e553cc8c75ad224cb7d32503a"
+    },
+    {
+      "role": "transitive_source_9e20c98142fb6ad3",
+      "path": "src/memcontam/evaluation/compatibility.py",
+      "sha256": "53bd6c5c50210ed4eb462f7490326c1b4b6fd340470f4f755c0b6f284687ea8a"
+    },
+    {
+      "role": "transitive_source_1af5dcc2b45f0cf2",
+      "path": "src/memcontam/evaluation/estimability.py",
+      "sha256": "8bd599550a82329637e6d0424ace863a6ba5a0ff717cc8ad11b01f22b54fe378"
+    },
+    {
+      "role": "transitive_source_a83e107426321bb2",
+      "path": "src/memcontam/evaluation/failure_classifier.py",
+      "sha256": "6c87e0e84460e6571c81c6cfbdc5f9be2d648c5f0429d744d61c5b75d74a2b0c"
+    },
+    {
+      "role": "transitive_source_3eaba014075bd7e3",
+      "path": "src/memcontam/evaluation/phase12_aggregate.py",
+      "sha256": "1222113281ba1541ccea4771bc249291cce4f05b51cdc0bf754eedc99d7257a5"
+    },
+    {
+      "role": "transitive_source_7415140a15e9641b",
+      "path": "src/memcontam/evaluation/phase12_observables.py",
+      "sha256": "7c0606b23554aa16b9417be25a840609e320bebee4850ef0f7af49fa7064f4c2"
+    },
+    {
+      "role": "transitive_source_338001a20d207091",
+      "path": "src/memcontam/evaluation/phase13_aggregate.py",
+      "sha256": "ffcadf3bca8349cf804799bdfaab235857b3fad7420f3a1305bb747aea7b7dd0"
+    },
+    {
+      "role": "transitive_source_d2c30251207f41dc",
+      "path": "src/memcontam/evaluation/phase13_observability.py",
+      "sha256": "f2ac943a1b998b7b950f73dbec140d27cb5dd15c818fbf271d6624dfd713b022"
+    },
+    {
+      "role": "transitive_source_348a94682ff8f892",
+      "path": "src/memcontam/evaluation/phase13_observability_lineage.py",
+      "sha256": "606a65d75d96602b52f0afa834a2ecd2298c644bba71924aa65a2965d79922c6"
+    },
+    {
+      "role": "transitive_source_82184d177983818a",
+      "path": "src/memcontam/evaluation/phase13_observability_models.py",
+      "sha256": "27c17088333d8e2aa3676b980ef0c47085ecc8c826369876d5d37ecd1d95b50c"
+    },
+    {
+      "role": "transitive_source_f677372e5a80b51b",
+      "path": "src/memcontam/evaluation/phase13_observability_registration.py",
+      "sha256": "5c24be5b0685fab403ce9bee8dac58747c6e5e6c739f792b69c4a3825f1a96af"
+    },
+    {
+      "role": "transitive_source_86202020df1f1410",
+      "path": "src/memcontam/evaluation/phase13_observability_sequence.py",
+      "sha256": "1417da9e1d87ea2aecf0570930829d32e03aacdabfd348ab7f4823dd0ab2b12e"
+    },
+    {
+      "role": "transitive_source_39c5132bac0be60a",
+      "path": "src/memcontam/evaluation/sequential.py",
+      "sha256": "657d9aabcf662916f89455ab87f39bd659868e4400f40954174f87fc3145d697"
+    },
+    {
+      "role": "transitive_source_472037527fef21f7",
+      "path": "src/memcontam/experiment/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "role": "transitive_source_cacf67e66ce5f198",
+      "path": "src/memcontam/experiment/phase12/__init__.py",
+      "sha256": "52ddbe90afbbffcafc127f59fb380eb77d149d533b94de943451e61f707dc21e"
+    },
+    {
+      "role": "transitive_source_fa0864b9c865d56d",
+      "path": "src/memcontam/experiment/phase12/branching.py",
+      "sha256": "aaff16fdfa56be452b168d4e41b37e876265c93736b4240c2047a24a0bbdf706"
+    },
+    {
+      "role": "transitive_source_9eb1d8650a1cc033",
+      "path": "src/memcontam/experiment/phase12/budget.py",
+      "sha256": "57d71cc890b74746f0def55ea7f48bf3cbd8ad2a330b4693670248290a0295af"
+    },
+    {
+      "role": "transitive_source_f88f872b0b19561e",
+      "path": "src/memcontam/experiment/phase12/checkpoint_selection.py",
+      "sha256": "b2464bf66a9e05915d59e26967f029bd6241404929cff7a7701e1fb468ecd826"
+    },
+    {
+      "role": "transitive_source_d98846c8278ddf25",
+      "path": "src/memcontam/experiment/phase12/checkpoint_store.py",
+      "sha256": "29d5a3f20f7e9780652db4233a9bd2ec3039b7dfbbd4423dfc6fda1fd21ac7af"
+    },
+    {
+      "role": "transitive_source_3d2921995768b67d",
+      "path": "src/memcontam/experiment/phase12/cli.py",
+      "sha256": "76cb01227b3a4e7d024ee0a7f5387a8eb3b523297fb698c31740815d8369f4ff"
+    },
+    {
+      "role": "transitive_source_45d32090122651c4",
+      "path": "src/memcontam/experiment/phase12/code_matrix.py",
+      "sha256": "2c2e3e8780e98150697558d1d57b92d4e19d9e67a26726f39a1b4fa5b312e573"
+    },
+    {
+      "role": "transitive_source_c5f7861f1f76570c",
+      "path": "src/memcontam/experiment/phase12/contracts.py",
+      "sha256": "6e325edd7c38f3340544dc03ffe773eb7092a9bc59c0e23906b1ef5073d3d694"
+    },
+    {
+      "role": "transitive_source_57e99e951ef7f184",
+      "path": "src/memcontam/experiment/phase12/eligibility.py",
+      "sha256": "00612c924581d06262c1b65b0d4291eb5344e877ce38cf31413b9b956685cd3b"
+    },
+    {
+      "role": "transitive_source_3322e2e6a94dc9e7",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/__init__.py",
+      "sha256": "6b7eab338992590be654740317db14412f4173ff89def6f1332720e29a73cc8e"
+    },
+    {
+      "role": "transitive_source_50cdd47c27103bb0",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/adapters/__init__.py",
+      "sha256": "2827f5d9dd1e48ba9d1223a68860ce32c9558e580d876774772d4fe5d1ce2432"
+    },
+    {
+      "role": "transitive_source_34067c8de40fc13c",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/adapters/base.py",
+      "sha256": "a90b3c74c6e741b42d9fe51d87612135cb0bbe0ef026949d219e9c251843ce5f"
+    },
+    {
+      "role": "transitive_source_19055aeb06da5894",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/adapters/bot_style.py",
+      "sha256": "b0e8d7511fb17abd5b99baa92d5e552d86a8ced39471dd752f3cb0f12ba6f278"
+    },
+    {
+      "role": "transitive_source_8e1d8477820e61e2",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/adapters/full_history.py",
+      "sha256": "3bba0f68a70518aa36d98ae728e4a722741792c0f3a252f588ec9664b15e7fe4"
+    },
+    {
+      "role": "transitive_source_f0417501a24403a6",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/adapters/rag_frozen.py",
+      "sha256": "f2645e22c93b638bd49ff505a8e1f1b91bf4a6340665437c272db2f143aa9925"
+    },
+    {
+      "role": "transitive_source_256057a410e96321",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/adapters/reflexion_style.py",
+      "sha256": "183c290549c9b1a75a5cd1e626d2cbfb4bb5793c7c76cfeafaaad7889381affe"
+    },
+    {
+      "role": "transitive_source_aba282c2efedecdf",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/archive.py",
+      "sha256": "11be06cb6ec422cb123b74629789ec3a2df4bfe06f6b4671363c731984128c22"
+    },
+    {
+      "role": "transitive_source_43a86d8d363b1c92",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/archive_authority.py",
+      "sha256": "4dab2bb90b971a111a42a74ee46dc7f7f30fbd7fe05872f990e6081a5fa897d1"
+    },
+    {
+      "role": "transitive_source_7f8620e36c9098ca",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/assessment.py",
+      "sha256": "0b77b23dbd716b675cdef1cfd69e1661cdd08444f263055ee44674f5173e37b4"
+    },
+    {
+      "role": "transitive_source_98b67e236bebf1fb",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/audit.py",
+      "sha256": "ed615ca1853491b25f696f9693e050579e41857388eaa6cab1be52999ba00b13"
+    },
+    {
+      "role": "transitive_source_1e2674e27d88a513",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/bct.py",
+      "sha256": "83a34952b2fc13b0c567e2b2c6564e17137496f533bc49bdebb3fcc05cf7b701"
+    },
+    {
+      "role": "transitive_source_0f486fa69b74d177",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/bct_archive.py",
+      "sha256": "2c0c7c6c21e4f6431df575e49ba7db2f8dccf5932c2d9c1ecd63937c3bae2096"
+    },
+    {
+      "role": "transitive_source_b7b03522bdc19407",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/bct_archive_evidence.py",
+      "sha256": "ef9c3eb4314ffe4ea05d3a572f7e49f29633b6bfb11b6ffcd3f7c43d5be69aaf"
+    },
+    {
+      "role": "transitive_source_3d843ec5ab20fb00",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/bct_archive_evidence_inputs.py",
+      "sha256": "44f52a287e7d502d9c289c420ac63a27c908db325d099edd108528181e55297c"
+    },
+    {
+      "role": "transitive_source_164dddbd79246037",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/bct_archive_ledger.py",
+      "sha256": "589a1eec6c85db7123ca676b7839c1e409424e0b5d3219a067b01b7f5cf88b0d"
+    },
+    {
+      "role": "transitive_source_d5647990609757e5",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/bct_archive_ledger_validation.py",
+      "sha256": "0d82ed1c148f0a83c46cf9baf8b89e0a4d703bbf19bd50133d437300744bf6c3"
+    },
+    {
+      "role": "transitive_source_c148fcc4f4ac3dc3",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/bct_archive_models.py",
+      "sha256": "a6c919d3c145dbaaa7475a55b1559474c946010b4c0ebd7f846026442b45b179"
+    },
+    {
+      "role": "transitive_source_1b349597efc4158a",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/bct_archive_records.py",
+      "sha256": "cd5c9f6f7f1f717c927295a74ffbcae6d2d4be0c5cedeae943d62181148f0bde"
+    },
+    {
+      "role": "transitive_source_5b540fde53d9a365",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/bct_archive_storage.py",
+      "sha256": "da38335e2d544f78ef82c05ea95362194b497ef039ace7d4240225c96ea44ef4"
+    },
+    {
+      "role": "transitive_source_254e47e30bc4a637",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/bct_live.py",
+      "sha256": "495b2c95660cba9d59ede287e95a9d6429969f80bee0673c81ea516044fb3931"
+    },
+    {
+      "role": "transitive_source_73ee3dd2f2210b68",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/bct_live_authorization.py",
+      "sha256": "3b370e23a4abed4eefee4fffca393a6a14046b0f364cf34bcf9941b0b8d036f6"
+    },
+    {
+      "role": "transitive_source_69281503c3689ba0",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/bct_live_cli.py",
+      "sha256": "2f8183ee29e233279da8443f2fbf5e57fb9f2e93072b8849f43257b18e608a9a"
+    },
+    {
+      "role": "transitive_source_c9e2824d1ff0cb5e",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/bct_live_impl.py",
+      "sha256": "05e992fc6ac0682dc6e697429d44d8ccacca38c98dd049cfd0e6349c2bdb5a4b"
+    },
+    {
+      "role": "transitive_source_83eb2b7ce4fcb66a",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/bct_live_preview.py",
+      "sha256": "fce170094ba469504ee9f884aaeb9a5e773500945553ad5838b219db808e0bff"
+    },
+    {
+      "role": "transitive_source_248876e7216f5de6",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/bct_waiting_evidence.py",
+      "sha256": "0b7cdf653948dfb31cd6e70923d84683fddee4205cd4b8ae8e257d75f097b285"
+    },
+    {
+      "role": "transitive_source_ce49e180921c7081",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/build_archive.py",
+      "sha256": "00e98ea1c1e8ef4dc14dd7bfe8f8cabfce669d4883180cc1ba1f6fb323d98eac"
+    },
+    {
+      "role": "transitive_source_bd7987ad23f68d96",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/build_archive_models.py",
+      "sha256": "648257678e91124cc16a37880226d51713b952aa8d5787aa84402ffff05bae5e"
+    },
+    {
+      "role": "transitive_source_e000f5205581b125",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/calibration_laws.py",
+      "sha256": "75a0225df4cc1edd2e2841298bb30e672cc2809625922493ce6b1565e03081f5"
+    },
+    {
+      "role": "transitive_source_3a7f715369dba7be",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/cli.py",
+      "sha256": "948b3b26269b5984ccbc07223a0b5b2ccc024148f8ffdac288b8d60db1e77815"
+    },
+    {
+      "role": "transitive_source_6ed9da5b825ae36b",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/code_prespec.py",
+      "sha256": "8e3416a2e072d41d925dcdeac8fbae23dd557d4dcefc575feebadca919ac13c8"
+    },
+    {
+      "role": "transitive_source_b2a9f43107ec0f0e",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/contracts.py",
+      "sha256": "9a64d71167a7a57ab3adcb3e34c6f68ddeb392e2266585798ea5b2c7e28f0252"
+    },
+    {
+      "role": "transitive_source_2cd0711279639a93",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/domain_schema.py",
+      "sha256": "8741f54df51e52b6b2721d20b9515ea6e909e59d51393d959a36dd863c3e4593"
+    },
+    {
+      "role": "transitive_source_c426b0a90549e1cc",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/evidence.py",
+      "sha256": "e0ade63151d578e6e2cf0b77d8a21cb53abceefe4fb7aee2d09c6dd03657320e"
+    },
+    {
+      "role": "transitive_source_90dbb1cc417dc93d",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/evidence_contract.py",
+      "sha256": "12e236bf4778633f321cd2d047924329269ced28315f3d6973297335018e453b"
+    },
+    {
+      "role": "transitive_source_e99904b8ed6b372a",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/evidence_reports.py",
+      "sha256": "672d3671c6324f2b0debf5bff6d2661a2f7204e94cdc9a025ab261744f1e828d"
+    },
+    {
+      "role": "transitive_source_b7d21a62631bf76d",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/executor.py",
+      "sha256": "c5f4b8843f18e3ac70e1c5e7eadd6008340149b4692489585e14bdbb2dfb984a"
+    },
+    {
+      "role": "transitive_source_166db90ded040b95",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/executor_identity.py",
+      "sha256": "07ee01718c9dab16c53f7cbf1a887aa424b9a7d5a794963a00bc208ff5cbd48a"
+    },
+    {
+      "role": "transitive_source_1335916f9882179c",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/executor_identity_types.py",
+      "sha256": "b7f7fe490194155acbc229d6067345c85c2ebcd4c8c3560aaf78b2fc73d21311"
+    },
+    {
+      "role": "transitive_source_eefb6385e5bb9d14",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/executor_identity_values.py",
+      "sha256": "5b4abcfe9f0b880c985db80490eddee5225932c93f65007c9818b694f856c7db"
+    },
+    {
+      "role": "transitive_source_ea560a3361902056",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/executor_policy.py",
+      "sha256": "5c8b3a5601d78eb92a0f55d58a7e66023c88c58a85a3e4239db6c3cc15628b0f"
+    },
+    {
+      "role": "transitive_source_f0b782ca2a379043",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/executor_source.py",
+      "sha256": "2b31f002e6a87dca1a5cc671fb78f166b58bea9d7bbcf62c9dfd5dbf4b273894"
+    },
+    {
+      "role": "transitive_source_21676cfe2d7ad778",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/executor_types.py",
+      "sha256": "c12b0f5c40ef794a6fb714092e5ca45797053dea870a072ea0e264821f25896b"
+    },
+    {
+      "role": "transitive_source_6978c463cb7686b7",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/final_verifier.py",
+      "sha256": "8f00f0df99f450f0be38403fbd091112b8fedf5c945ae588525b68a6d9ae68c3"
+    },
+    {
+      "role": "transitive_source_3e71d76535d50d4b",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/final_verifier_command_records.py",
+      "sha256": "8a805e07d3a72a763bf088cd32169108b6b0334a8668ca8aff45025652d15718"
+    },
+    {
+      "role": "transitive_source_54b6e3e8447a9dcc",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/final_verifier_integration.py",
+      "sha256": "72a2885dba524087df5d100dc803566f7c5edbb058ffb8afeb094eefd0e83959"
+    },
+    {
+      "role": "transitive_source_ec067772b835b29c",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/final_verifier_integration_support.py",
+      "sha256": "24daaa463a5df7bfe436c0edbbb85ec044f9deb6b2e9ef4e7f9d9965ac4ced78"
+    },
+    {
+      "role": "transitive_source_03d64c5b04e80d7c",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/final_verifier_plan.py",
+      "sha256": "bd54fd84c8f7544df9d14370ecc0f0f76c79abbdc7887c0c87d1a67489ee2a50"
+    },
+    {
+      "role": "transitive_source_305058c4fb35b884",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/final_verifier_plan_checks.py",
+      "sha256": "fc30cb4bb68efcbe02cfbfe9a1fa349963ee0f06c3d82dc2fdb1459c1c39e3e4"
+    },
+    {
+      "role": "transitive_source_2f56ee5414bacebb",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/final_verifier_plan_terminal_checks.py",
+      "sha256": "2be1f16f0cedb6576834a751f8682805b56dc838ceea72eb820c6e465276d9d4"
+    },
+    {
+      "role": "transitive_source_bb4657c3e73f8f07",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/final_verifier_provider_scan.py",
+      "sha256": "9c15a25c06c7fcbfd9d6c687c8cbc57f846a35cd639a6169d24f4acd4d5c8f8c"
+    },
+    {
+      "role": "transitive_source_a87b46faed8df0b2",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/final_verifier_quality.py",
+      "sha256": "3bf4bc4636fe5500da0454df97b4ae4e81bc3f04a0f9594754a51350716e0b53"
+    },
+    {
+      "role": "transitive_source_049591a7ce98ddf8",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/final_verifier_scope.py",
+      "sha256": "a28a1ef414bfd6e07624d53e84fbdae7c2625f441ca4935b69f03663f5831f10"
+    },
+    {
+      "role": "transitive_source_f93de0525f9b6c6f",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/final_verifier_terminal.py",
+      "sha256": "2a4a7ec9ce9eefadce61287733d76a3c9ca9af8ab071c44ff7ea516ede4f3c7a"
+    },
+    {
+      "role": "transitive_source_5b8b0b3703142f23",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/final_verifier_terminal_semantics.py",
+      "sha256": "596f6224b399b0bef3bac1976c5372349856796890e3ee84a2574de4b72cf05f"
+    },
+    {
+      "role": "transitive_source_93ac188b5eef0245",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/final_verifier_types.py",
+      "sha256": "c6aca9eb5805003389d6c24bd50655d8976b246e617e3255250edb0ad9a6399e"
+    },
+    {
+      "role": "transitive_source_cc9b3e04f1410cf7",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/freeze_a.py",
+      "sha256": "060c482806c574172afbfbf30f0a9de1217e6e8609760a0048f809aa9e9b85f6"
+    },
+    {
+      "role": "transitive_source_0e93e100cf33278d",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/mft.py",
+      "sha256": "9ade8f1bd22db4a6c37fa5652c219997003f5feadc08feecaa5163b8300531c6"
+    },
+    {
+      "role": "transitive_source_39464d58c7effc07",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/mft_safety.py",
+      "sha256": "fa34dedfdea9e5ece608f626a3f1a1e06f10b27fedc26f1cfc3db1aee4799c8b"
+    },
+    {
+      "role": "transitive_source_a923c2ad887ef4ec",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/mft_safety_assessment.py",
+      "sha256": "d5691c3be55472b6989098c5a1528e7db217a1a39dc880aabf3f1e3a8d1b1da0"
+    },
+    {
+      "role": "transitive_source_96fe8b526938a642",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/mft_safety_executor.py",
+      "sha256": "ac4e72013f19da5d281cd3a0f833ce6e378ccbabe131cfcf5987e537586018f7"
+    },
+    {
+      "role": "transitive_source_5866ad0caa1a7e24",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/mft_safety_provenance.py",
+      "sha256": "c95a730b0e74f381c0407d4856a6dd719e3b947467fbdfac9b328b0fdc64a421"
+    },
+    {
+      "role": "transitive_source_6fdd935876faee7f",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/mft_safety_types.py",
+      "sha256": "d20ecfb0b8774f826cb03c22c5aa99499e1a5d5c25f38c88bc7e83448092146e"
+    },
+    {
+      "role": "transitive_source_bdade70d5f6d1b73",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/mft_state.py",
+      "sha256": "44c7a3a04c6918ab875cb20e8b673f4a528fde5dbc6c7818f189904344c28ca8"
+    },
+    {
+      "role": "transitive_source_78dc5d6c21641e7b",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/mft_state_models.py",
+      "sha256": "adbe733543ce2fe7d345ed560c1e46eda44202122f0cb4c35157b56c29110110"
+    },
+    {
+      "role": "transitive_source_9fd6fb6ba390e966",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/mft_state_runtime.py",
+      "sha256": "99358f00f63ca7b43bb055140d8b26b877b913bab724d9dd34d59af582785ace"
+    },
+    {
+      "role": "transitive_source_fcdb74141baa7a2f",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/mft_state_runtime_gates.py",
+      "sha256": "ba38c2e744deb27765a93e7f3aef1ccd86ecdd0b85a2df9dc866089114860030"
+    },
+    {
+      "role": "transitive_source_a8448893f4ab802e",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/mft_state_scripted.py",
+      "sha256": "1834b5cbe640c2b964f7928ce0b188893a5f0c7460e277d265c15f1ed68b68a6"
+    },
+    {
+      "role": "transitive_source_5d7cae154a1e6646",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/mft_state_scripted_gates.py",
+      "sha256": "7e5fe5a2816d49b4fc2606d8ccd7cfe023f1bbed28380b2d4ed8f27130935833"
+    },
+    {
+      "role": "transitive_source_8f0fbf4a3e7cdc7a",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/native_execution.py",
+      "sha256": "68b1bc29012258d467ac61f08553cdf89b26d15534adb74499acd2ea32c13c02"
+    },
+    {
+      "role": "transitive_source_f456e97b9ab4c1c4",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/native_normalization.py",
+      "sha256": "8b745d497776e6ee6cd64ea941e99283c9bc2c3df3cf27803951cf6d3611bc27"
+    },
+    {
+      "role": "transitive_source_01f40fdfba55259a",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/native_storage_execution.py",
+      "sha256": "b98dde2330f2e7fa1766457a5ef838ab45ee4b51e7c41975ec92aba3732d060a"
+    },
+    {
+      "role": "transitive_source_4ce878d9870cd0f3",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/ordinary_authority.py",
+      "sha256": "ed5720a0fdee74b9bad8e74540caccb092cd88d91909da356993cabc944f1983"
+    },
+    {
+      "role": "transitive_source_823201db9e5c5ce9",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/ordinary_replay.py",
+      "sha256": "f1fd17e2ae4a4ef00c773e8b5d1b1af12b1e84d244f6a439b752e381d787ab06"
+    },
+    {
+      "role": "transitive_source_fb88cb1e3c22e3ec",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/pilot_b_readiness.py",
+      "sha256": "23fee4cd8afaba9395993981586b0f8c8c2dee22d3f961a20752a03673bf773e"
+    },
+    {
+      "role": "transitive_source_8ed030e25b8e9833",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/provenance.py",
+      "sha256": "6b85a68e55a88a0da5e9ca6fdae08670e04f566dbf3a058908b958dccf317f58"
+    },
+    {
+      "role": "transitive_source_fb8e7104479bdbf1",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/records.py",
+      "sha256": "0cda99af3944f5515202aaf14b24b565e0ff9e084e6b8758be807cf0fbcd5a21"
+    },
+    {
+      "role": "transitive_source_6138d01adf824c34",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/registry.py",
+      "sha256": "a290d5ca3bff48eb6c072769c7b8f4e45007ff874849d1916e845009a747b08b"
+    },
+    {
+      "role": "transitive_source_02dc56a402ea6f67",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/registry_calibration.py",
+      "sha256": "45bf2c00d9b19dc0b797a5bd2149bb27c4673aa4f0dc87bf27ec22b24bebd0cf"
+    },
+    {
+      "role": "transitive_source_75470417cfc92294",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/registry_common.py",
+      "sha256": "391d659b892bc11a83a03dd8860978a59cdcced1acb11d4fdec84c64163bb5ae"
+    },
+    {
+      "role": "transitive_source_eedb45bc294bd944",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/registry_manifests.py",
+      "sha256": "2c0db01d612a019cff54578927c8a6f1ada0e1d82b39cbc7b21bd30c37b8e7e5"
+    },
+    {
+      "role": "transitive_source_c11f60c6d7bff22c",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/registry_search.py",
+      "sha256": "477d3045a59850faba8d8bd58803d511046e267d216b4ef5b7e042d9a4d4c630"
+    },
+    {
+      "role": "transitive_source_343b54fb2c2460dd",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/rootless_local_acknowledgement.py",
+      "sha256": "4273851cef49efa0341991399813eb51d0c44a6bd6d15c46b7682d1de4b29362"
+    },
+    {
+      "role": "transitive_source_e2ade35b4f344c61",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/rootless_local_archive_validator.py",
+      "sha256": "ff5607f14efa4b3854f19accacd1d8e90e0f0a04329579b65db79be51e07a545"
+    },
+    {
+      "role": "transitive_source_644c21716129f288",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/rootless_local_authority.py",
+      "sha256": "23cd502fa996d83ea20d2d00c5d9bc26b2a49399c940cb2c822febfa7f41f1b1"
+    },
+    {
+      "role": "transitive_source_66144191c59fa67c",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/rootless_local_binding.py",
+      "sha256": "2b5ac490c9b30ec5ecf74fc1bc60c745eec3b5286e312795d7c102dcbc4ad5d8"
+    },
+    {
+      "role": "transitive_source_3e549b476fc69e9e",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/rootless_local_bootstrap_cli.py",
+      "sha256": "c21e26871bd8eb6efeefa4648430e102f2a12dce89f90fa9f1fa9777cbb8118b"
+    },
+    {
+      "role": "transitive_source_dd8be2b53e18e5b9",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/rootless_local_broker.py",
+      "sha256": "212495fd4dff7e62338d98c78698a79bc19d798f28c6dd4f1cd5c44d2ec1a685"
+    },
+    {
+      "role": "transitive_source_07381ce67e715097",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/rootless_local_closure.py",
+      "sha256": "7da46b008dcc41980afe9961887ca65f781d349c2a01079ce4456423bf84f99e"
+    },
+    {
+      "role": "transitive_source_001296d9e92695ad",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/rootless_local_compilation.py",
+      "sha256": "a7ffe3bfa022ff65f9b4f95618283a095037fb96fc65563486c317d8d0265f69"
+    },
+    {
+      "role": "transitive_source_80a9efaa8dd2fd7a",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/rootless_local_contract.py",
+      "sha256": "ec0425d5feab5d0192cfa11886d328d6ccd9e362d938d5e4a63034e204642785"
+    },
+    {
+      "role": "transitive_source_9994b4a22d6dc8dd",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/rootless_local_execution.py",
+      "sha256": "cb029f08bb2ac65412088f4d25e0c1d276021f2aa2fd7aa165e20a8974b7e69f"
+    },
+    {
+      "role": "transitive_source_7b426ecfc0b49ecb",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/rootless_local_firewall.py",
+      "sha256": "507c56924f96f50bde5318592bd834bd9773d49ae05e142dca2eec45a1af8ad0"
+    },
+    {
+      "role": "transitive_source_188cc1358969d342",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/rootless_local_ledger.py",
+      "sha256": "274dac625b3146dd8457a81006a46af16bc026c223506f48c612333f12b14d58"
+    },
+    {
+      "role": "transitive_source_cacb837753939f1a",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/rootless_local_models.py",
+      "sha256": "b406a4b0f375af80ab3d5409abd374232c24eedcf36429afc578a9d96966f415"
+    },
+    {
+      "role": "transitive_source_68ccfa08aa9ac6a3",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/rootless_local_native_capture.py",
+      "sha256": "b62195eecfd1cb096b43f822424242c1c55405bf05e5760e27eba20d132bc0e9"
+    },
+    {
+      "role": "transitive_source_6508f94712ff59cb",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/rootless_local_native_capture_support.py",
+      "sha256": "1bf19e2dc8e934056ffcf84370b48278f396ecdcbcf577614c59894b75a310ba"
+    },
+    {
+      "role": "transitive_source_41490976e565fe5f",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/rootless_local_native_storage_capture.py",
+      "sha256": "473e0b20811c54493130ec41e909cb2fc85eb009a8a1509119679c8828e48cc4"
+    },
+    {
+      "role": "transitive_source_056ad863d6d9c18f",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/rootless_local_operator.py",
+      "sha256": "6f4bea6ba73e7e0c6188e03c46c90b57fd2793290b76e9536a96726a68551c0b"
+    },
+    {
+      "role": "transitive_source_443b0718b1f4cb5b",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/rootless_local_post_bct.py",
+      "sha256": "3eca20965fb8ca53888d441f9708e9d313e41f341ceef37af0e666cd8ded7147"
+    },
+    {
+      "role": "transitive_source_422fdce57f74a272",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/rootless_local_pre_egress.py",
+      "sha256": "161defb10c2d0d08dfa2c55cea3875038b061cfeffad7e9e06e50c23f79c6d74"
+    },
+    {
+      "role": "transitive_source_4a277edb3b772fa0",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/rootless_local_protocol.py",
+      "sha256": "37fe885c6e55fb0ff91a059363913c1f0d15e528d00479f20b9670e245f30484"
+    },
+    {
+      "role": "transitive_source_2470718d40c188d5",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/rootless_local_runtime.py",
+      "sha256": "550e780a84c1e7c8844d87ca2945e3ce498c50a7ca4b53251992df0ee209c4ba"
+    },
+    {
+      "role": "transitive_source_95a60579d4a5d595",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/rootless_local_state.py",
+      "sha256": "a687713ca4baf4b5fce1df87aff668333e26771f04fa234152ad4e380195a587"
+    },
+    {
+      "role": "transitive_source_cc5d857e1d249a68",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/selection.py",
+      "sha256": "2c52c643b499deed686790a88eae21211ff13a40d6d36f572eb8e3255172693f"
+    },
+    {
+      "role": "transitive_source_e50fec399e0e8b4f",
+      "path": "src/memcontam/experiment/phase12/filter_challenge/validation_summary.py",
+      "sha256": "94d82678916b689c710c7e02db5df76670ca377d8a93c8229f7aae833c6abe47"
+    },
+    {
+      "role": "transitive_source_2e6f5746e75a29f0",
+      "path": "src/memcontam/experiment/phase12/filter_mft.py",
+      "sha256": "b08ee2e70640621d8060c41bb6a2d6f57e4da83aaac437b11a3b9266269c0bb5"
+    },
+    {
+      "role": "transitive_source_32912631b8832f9a",
+      "path": "src/memcontam/experiment/phase12/live_prefix.py",
+      "sha256": "bdbe4d73c05b75df15e1931aa3b4886608135e3ef8198a2e4fb5685cb70072b7"
+    },
+    {
+      "role": "transitive_source_a29c268ffcbd697c",
+      "path": "src/memcontam/experiment/phase12/live_suffix.py",
+      "sha256": "ce89b92f8d37f4bf8f2f24e87b9ee536271cfe456be2bee3d2e6a37226c791fa"
+    },
+    {
+      "role": "transitive_source_2c4ca7124645cfd4",
+      "path": "src/memcontam/experiment/phase12/maturity.py",
+      "sha256": "b7db4debd4af5a4041355fd92cca277d3dd0ede93da7d11524f101d42c0f833b"
+    },
+    {
+      "role": "transitive_source_1cc95148387668f5",
+      "path": "src/memcontam/experiment/phase12/native_state_facts.py",
+      "sha256": "bb2a8e318aa5923bbd6e6050fd85d6ad32fe6f585dac1560e26376eea7298d41"
+    },
+    {
+      "role": "transitive_source_9172b2c6425231a7",
+      "path": "src/memcontam/experiment/phase12/outcomes.py",
+      "sha256": "ec6982ec022604344378dc89399ca450c704cbfb3519b017c4e04b242d63a583"
+    },
+    {
+      "role": "transitive_source_623b4f416e0d583a",
+      "path": "src/memcontam/experiment/phase12/planner.py",
+      "sha256": "58687ca1b884afdece92b5e787b9e2c2bd87c9c421929a2282516dba6bd5b8c9"
+    },
+    {
+      "role": "transitive_source_0ce11111a3460cf4",
+      "path": "src/memcontam/experiment/phase12/prefix_runner.py",
+      "sha256": "d69016e22bdfd91056dd694c4180b6215feac336bc5d9357627ed597b6dcad0a"
+    },
+    {
+      "role": "transitive_source_ca1734870e47f5fb",
+      "path": "src/memcontam/experiment/phase12/seed_slots.py",
+      "sha256": "5f9e1ec19c75ae897b49ccc174c78796a6743bb5c49fd4c36fb813de9f44f52b"
+    },
+    {
+      "role": "transitive_source_8d1c88769575c0c1",
+      "path": "src/memcontam/experiment/phase12/suffix_runner.py",
+      "sha256": "a73474c1661c40894c6d3ecd044b7dc8de71af7accf33054fd51b1d8e686bdc6"
+    },
+    {
+      "role": "transitive_source_5d6c3e5ff0c3ca3f",
+      "path": "src/memcontam/experiment/phase12/timing.py",
+      "sha256": "9ddf1d6d7690b0a2d454a7220d77d9e4c1b54ba8660e099bf758e48266c03494"
+    },
+    {
+      "role": "transitive_source_63158721b016ee07",
+      "path": "src/memcontam/logging/__init__.py",
+      "sha256": "fc57fe4b7138c2d25b854dc6adb5e8ff7a099a186d93a4e28e7f04516cf33212"
+    },
+    {
+      "role": "transitive_source_37ccc4c60c5f871c",
+      "path": "src/memcontam/logging/audit_artifacts.py",
+      "sha256": "78c2b63d767226cfc153c3382d2ff66ac589872072099b2378463b870e3a93a0"
+    },
+    {
+      "role": "transitive_source_8557dbe5d2521afe",
+      "path": "src/memcontam/logging/provenance.py",
+      "sha256": "42707c5e9890e89287c8e77c0ca98bacd89bea140e59d6774f45c366f0c2a7e2"
+    },
+    {
+      "role": "transitive_source_939e0135a7187280",
+      "path": "src/memcontam/logging/schema_v3.py",
+      "sha256": "1a0c010ddc3b4d1bd218f4c81e19d96f1884f7ee29b430785e6a47d376b21d21"
+    },
+    {
+      "role": "transitive_source_e608fc4991e9dbb7",
+      "path": "src/memcontam/logging/validation.py",
+      "sha256": "eb6e729b8580fdfeb9450b554d815e203e340bcd018867074b8c0cbf1aa35810"
+    },
+    {
+      "role": "transitive_source_20e3e764193fb9eb",
+      "path": "src/memcontam/logging/writer.py",
+      "sha256": "5c2206fc323a4dd44a2fd0b4f99480a9214985a897bab31796748f4c873169e3"
+    },
+    {
+      "role": "transitive_source_e066a969ad48af43",
+      "path": "src/memcontam/logging/writer_v3.py",
+      "sha256": "e181c88f289f1eaaa37cd43ddd90c0e92d5bc6f5f9bc577fc9cc266429806b99"
+    },
+    {
+      "role": "transitive_source_b55c051d11d3bef3",
+      "path": "src/memcontam/main_registry.py",
+      "sha256": "776a3d8b51499d3c251bcec14c3f65bda3207fc259cad05f93e12b357b6e8f86"
+    },
+    {
+      "role": "transitive_source_37019222595d3854",
+      "path": "src/memcontam/manifests/__init__.py",
+      "sha256": "35b1b9b44e7a00e38e67bfb51bb7d0b1e9be3c215acc0568f7f5ff52f05afcf8"
+    },
+    {
+      "role": "transitive_source_89bc5dbc03a71290",
+      "path": "src/memcontam/manifests/aggregate_manifest.py",
+      "sha256": "aedf98b5c175c114b54663d7471fbe96e8434dc2da6eefbdc01443849aaf5344"
+    },
+    {
+      "role": "transitive_source_69c6adc2f85d282d",
+      "path": "src/memcontam/manifests/archive_validation.py",
+      "sha256": "542d64abe7fc24b3e874deaa4a70acac4e1b21a42d83affafb30742cc3cf0095"
+    },
+    {
+      "role": "transitive_source_c285b6a874dc4798",
+      "path": "src/memcontam/manifests/claim_scope.py",
+      "sha256": "fcdba77f541e5c723c1f36019743084e099cf7f54728844b4e4f88de83ec9073"
+    },
+    {
+      "role": "transitive_source_d54ab57fc8e38bb6",
+      "path": "src/memcontam/manifests/run_manifest.py",
+      "sha256": "5dc8c51443d2a13c37fe4efa83fd8aa93e42c6e9b6b62d3ad00081572770f08b"
+    },
+    {
+      "role": "transitive_source_71b9323f35914439",
+      "path": "src/memcontam/memory/__init__.py",
+      "sha256": "9f3c752ac8986a52ff62e5ca13a69c5bc0e3e5f966320d3e8b883260ed20579e"
+    },
+    {
+      "role": "transitive_source_f289e54de3d7ff0b",
+      "path": "src/memcontam/memory/admission.py",
+      "sha256": "f09f323075b7f1a3cc30100ffa2d987aadb1a55b74ba098362b27092cd5ad406"
+    },
+    {
+      "role": "transitive_source_2045b93bd747e3e9",
+      "path": "src/memcontam/memory/bot_buffer.py",
+      "sha256": "2e2797e7e58adec1758c405aa9c2c54fa9372e3bb3c24551223fc11b8375bf93"
+    },
+    {
+      "role": "transitive_source_7308323eea67a143",
+      "path": "src/memcontam/memory/cards.py",
+      "sha256": "0a64e14fb794893afd3443a0c741b5789c767bcd5d91e9e10e26d7e636eca4c8"
+    },
+    {
+      "role": "transitive_source_c8af4348fae1f1ec",
+      "path": "src/memcontam/memory/cards_v3.py",
+      "sha256": "d494a1e3cd2c1b823b0b9f29b60dfaefdec953a15fd424fd3738e6d4df007256"
+    },
+    {
+      "role": "transitive_source_a731b03cb7a538ae",
+      "path": "src/memcontam/memory/checkpoint_v3.py",
+      "sha256": "f8a4b300c2aa8d0d5286bc41916c42a738415d342bf52f6a0c5010700924f26f"
+    },
+    {
+      "role": "transitive_source_0805eb5c5efefddf",
+      "path": "src/memcontam/memory/checkpoints.py",
+      "sha256": "3622cbd54cfc720663e644aaed84291963fcbf554b939ee32bbd74b12c510bcc"
+    },
+    {
+      "role": "transitive_source_0e2a891458b84275",
+      "path": "src/memcontam/memory/contamination_contracts.py",
+      "sha256": "1028621d91d3bc0f3f767aa2e0d8605ff702843d62d5b26316d3e545c72456e2"
+    },
+    {
+      "role": "transitive_source_0114f07224685698",
+      "path": "src/memcontam/memory/corpus.py",
+      "sha256": "6350297a1ffb7046fe8cc57ad6fbfe3d12b7122f134ff905be93000daeb293cf"
+    },
+    {
+      "role": "transitive_source_97f709df9ee97672",
+      "path": "src/memcontam/memory/embedding_policy.py",
+      "sha256": "662fd49c495b400088837899fe42e27e78b472d3f3abb2b2b8fa963764250324"
+    },
+    {
+      "role": "transitive_source_d9529f01d6b6713b",
+      "path": "src/memcontam/memory/embeddings.py",
+      "sha256": "2f7516b95c69c50dd7c12f0d64b7b065544e2c5db7128004ae3cac0b5c812fb3"
+    },
+    {
+      "role": "transitive_source_4bb2840a46480ea6",
+      "path": "src/memcontam/memory/filtered_state.py",
+      "sha256": "3e96e9e3ad74c45eff87633912b19b2c9663b55ad630e66f24d5a015b3876fc6"
+    },
+    {
+      "role": "transitive_source_2946a5d9744ff828",
+      "path": "src/memcontam/memory/filters.py",
+      "sha256": "2bedd22f21a6b327a9f1e7599249c2ab194a964a7be7ea3b33a197a3f00d70be"
+    },
+    {
+      "role": "transitive_source_d0350143f1cd884c",
+      "path": "src/memcontam/memory/oracle_qa.py",
+      "sha256": "b0ae4c4619ebe7ef55fa2d0bdb3a85370d4a0b544a12b3ca4cef26d4c9ee6a8f"
+    },
+    {
+      "role": "transitive_source_e42ca0a478bac699",
+      "path": "src/memcontam/memory/provenance.py",
+      "sha256": "daa26d3cde7aefcad108bfb2096a19a51caf5568861e24e71752d7934d589c00"
+    },
+    {
+      "role": "transitive_source_8706e50502219185",
+      "path": "src/memcontam/memory/retrieval.py",
+      "sha256": "d9a66fb48964a72ed5d85a9a64e8fcb189150d8e426f1cd1c554683547969c17"
+    },
+    {
+      "role": "transitive_source_6155737d1324eb14",
+      "path": "src/memcontam/memory/run_state.py",
+      "sha256": "34cc672d885aa9cbc600419d140b356045a96bcd210681a94932d767f3c8a4a2"
+    },
+    {
+      "role": "transitive_source_7de4739fe6cc6178",
+      "path": "src/memcontam/memory/serializer_registry.py",
+      "sha256": "5485db84dfdbcb1d817cbaae21ddfa4973141425561ffb4304e580613da01622"
+    },
+    {
+      "role": "transitive_source_7dbfaa1cacc87237",
+      "path": "src/memcontam/memory/stores.py",
+      "sha256": "6b5bd8b9e0d4c31f314a80401482bda993eb3026f29af2ed1372c29b4f9ebb36"
+    },
+    {
+      "role": "transitive_source_8ed9dd5a98f8e1d4",
+      "path": "src/memcontam/memory/writer_registry.py",
+      "sha256": "5ba326636b0740bfb873b14c0a63a740eb573a529a8e679addf0303a0f730ab9"
+    },
+    {
+      "role": "transitive_source_085ee989e9fe6826",
+      "path": "src/memcontam/phase12_types.py",
+      "sha256": "8a9187cbf66f856f91a41a76974c6359219667a0b7b6b5e23fa08596d5288e7e"
+    },
+    {
+      "role": "transitive_source_75bd593e23cc91dc",
+      "path": "src/memcontam/rag/__init__.py",
+      "sha256": "8817ceb2f5caf01da2767ce9045c4387ce944365a99490d922828c899b041bcf"
+    },
+    {
+      "role": "transitive_source_670dfcb741aec54c",
+      "path": "src/memcontam/rag/affinity.py",
+      "sha256": "b22a021b8986ebf4013ed0015db9fabbeb5afc7fd27f18c37b2cb86c86fd8995"
+    },
+    {
+      "role": "transitive_source_53e614ee4b035b67",
+      "path": "src/memcontam/rag/branch_index.py",
+      "sha256": "44695aa7e59214ff2f85d7fa6558c40112b2f4cd63a843398580f11fe284605b"
+    },
+    {
+      "role": "transitive_source_e49da5cad349da68",
+      "path": "src/memcontam/rag/inv03_equivalence.py",
+      "sha256": "a4ceae967a7786dd8a6dc643f2254ca57ea937d8a1a6e2ad015d1037a06f7304"
+    },
+    {
+      "role": "transitive_source_87a51911a5ac7d28",
+      "path": "src/memcontam/rag/leakage.py",
+      "sha256": "535827c4762fe9ce2ef4631c667f79c8ca4318ee9c3a52cf3cc524c20896eace"
+    },
+    {
+      "role": "transitive_source_b4bf10e6ffc02d7b",
+      "path": "src/memcontam/rag/phase12_corpus.py",
+      "sha256": "83b759fa9c4f99e17d5eaa46c16faf596be926918881cbe3a84183864de06cdf"
+    },
+    {
+      "role": "transitive_source_8d783bcce2552fb3",
+      "path": "src/memcontam/rag/relevance.py",
+      "sha256": "e05a4ae9123a066ea752b5ec934513c2fee95094963a5f41ae06ab5d5cdf03f8"
+    },
+    {
+      "role": "transitive_source_fc668ae785439b18",
+      "path": "src/memcontam/readiness/__init__.py",
+      "sha256": "4f2a36ef89070448b5825e977d5ee7749c949c9fe4bb0039d73415915a76f2ab"
+    },
+    {
+      "role": "transitive_source_0873a63caa09ce7f",
+      "path": "src/memcontam/readiness/phase12_certificate.py",
+      "sha256": "b65fba8bd3cb992160f10a729a04e9b20bdca0327fd6439552fb63f74284a803"
+    },
+    {
+      "role": "transitive_source_2db83b89c4943169",
+      "path": "src/memcontam/readiness/phase12_replay.py",
+      "sha256": "cfec40d5b706d5477b90d98370011277fefeb5fe0c94467bc47c6561ac8923f8"
+    },
+    {
+      "role": "transitive_source_bc043fa87d81435d",
+      "path": "src/memcontam/readiness/phase13_authority.py",
+      "sha256": "8c2ff713f822cd9c92801e7dd60b61fc4591f3e3d561943e1b9b6b53cddfa082"
+    },
+    {
+      "role": "transitive_source_af30e9938e923ca0",
+      "path": "src/memcontam/readiness/phase13_authority_files.py",
+      "sha256": "40b2b5c431cd029911504dcff6bea9ae2efbb52eed89f73b357c4b277fdc1f2a"
+    },
+    {
+      "role": "transitive_source_41f047859efa4019",
+      "path": "src/memcontam/readiness/phase13_capacity_measurement.py",
+      "sha256": "24292c4e785c33b4d63809b5f4cd85f9ced7998b09b878f1a8aa3e6f85b364d8"
+    },
+    {
+      "role": "transitive_source_08718c563c4e4eec",
+      "path": "src/memcontam/readiness/phase13_capacity_realization.py",
+      "sha256": "693901cf5f66f0b91410bd8ae297dc96caac75e8a39646179e6086d344f69bd1"
+    },
+    {
+      "role": "transitive_source_40af76d4eab35825",
+      "path": "src/memcontam/readiness/phase13_clean_prefix.py",
+      "sha256": "a268c38a40b67ec4a0867d6d317f25c06ac64b735cc0bc55d204700a907679c7"
+    },
+    {
+      "role": "transitive_source_da4da17fd4bc804e",
+      "path": "src/memcontam/readiness/phase13_clean_prefix_archive.py",
+      "sha256": "ed27d25973c5d384c245a5a24f8d174f56f397ba9828ad0785f8f1640df1fdc6"
+    },
+    {
+      "role": "transitive_source_f93f06ea9740de3c",
+      "path": "src/memcontam/readiness/phase13_clean_prefix_authorization.py",
+      "sha256": "aae6c109e26f92092a18ba5de70a46b64e9e1774a5c968c31207e3a8494c13f1"
+    },
+    {
+      "role": "transitive_source_2c992a893a665e26",
+      "path": "src/memcontam/readiness/phase13_clean_prefix_context.py",
+      "sha256": "f66c1d5d9ba89e02cbc243d9b0d03ba0ae3a0956dfe8fdd71708450ee6f6b856"
+    },
+    {
+      "role": "transitive_source_2786e281c4886401",
+      "path": "src/memcontam/readiness/phase13_clean_prefix_metering.py",
+      "sha256": "73b792f1c83f050abccbd49d4da099d5f5c642b2f54240f5b66497c05a1e6755"
+    },
+    {
+      "role": "transitive_source_602734a48c314b02",
+      "path": "src/memcontam/readiness/phase13_clean_prefix_runtime.py",
+      "sha256": "aff600434c012d143b37ff1a1c8490d53193fe599ca7c0a458b658e14cd40f7f"
+    },
+    {
+      "role": "transitive_source_49a503ec690dbf94",
+      "path": "src/memcontam/readiness/phase13_cli.py",
+      "sha256": "3e323a4b7f5180d35c619a772ce5817bdd16578ba6bf09d59b957960d0fb031f"
+    },
+    {
+      "role": "transitive_source_6b31ec055a9ff3b7",
+      "path": "src/memcontam/readiness/phase13_core_bundle.py",
+      "sha256": "93204e6655a58967d35fc03018d3a794b84f7e49a183fb62f5fd5c630e0796de"
+    },
+    {
+      "role": "transitive_source_6b6e53c98313d63b",
+      "path": "src/memcontam/readiness/phase13_core_dataset_materialization.py",
+      "sha256": "5a854c06651253671a006a8b6972af5ecedcf5734e3bdb94930fa61a7a7ecf06"
+    },
+    {
+      "role": "transitive_source_02d21e8ef6fc8988",
+      "path": "src/memcontam/readiness/phase13_core_datasets.py",
+      "sha256": "03110bcb2c772fd1da26acfd1cf185b351526a22b1e56440520ab3021ebb0b38"
+    },
+    {
+      "role": "transitive_source_7bcda01b2300dd1b",
+      "path": "src/memcontam/readiness/phase13_cost_activation.py",
+      "sha256": "6cf926f7d300258fd8f36e386f12c1e4917893119b212672f45cc6444860e6a1"
+    },
+    {
+      "role": "transitive_source_b4d00308cdc61d9c",
+      "path": "src/memcontam/readiness/phase13_cost_policy.py",
+      "sha256": "581d3ce8348c5f80497c9b95519c99a0fc8c4d9f8f7f0628cb93e6e2fc2be34d"
+    },
+    {
+      "role": "transitive_source_4d4b3a2839089810",
+      "path": "src/memcontam/readiness/phase13_cost_policy_handoff.py",
+      "sha256": "07668f65a246644e85b082b1d991bd359cd04490ce37bc3f86bd49d60b8ef8f2"
+    },
+    {
+      "role": "transitive_source_7b2190e1601b8bfa",
+      "path": "src/memcontam/readiness/phase13_cost_policy_models.py",
+      "sha256": "64be139f8943832e2e9857efbc81e92cc66b4c0362f5dbe1eef1384f6d633504"
+    },
+    {
+      "role": "transitive_source_24df02930c8b95dc",
+      "path": "src/memcontam/readiness/phase13_execution_contract.py",
+      "sha256": "d49bcec27aa249d0c6e41b39a221e5ac53ef853cf7fcb86463411690794697fb"
+    },
+    {
+      "role": "transitive_source_aae3974b3a67943b",
+      "path": "src/memcontam/readiness/phase13_legacy_rag_audit.py",
+      "sha256": "b5496c576e7b9c6261dcde9b7b7aea22caa46b658cd4a1b96f48e2d5cf848878"
+    },
+    {
+      "role": "transitive_source_c0db94c0dd3bc10e",
+      "path": "src/memcontam/readiness/phase13_legacy_rag_bytes.py",
+      "sha256": "9b705ac6af277a3a0894121551d6dd7f54ecdaa22a29991fad6abd9dc24d202a"
+    },
+    {
+      "role": "transitive_source_b3fcf04c5ec3e82c",
+      "path": "src/memcontam/readiness/phase13_legacy_rag_calibration.py",
+      "sha256": "c145ab5c94988358404e32639f592c265ecaa0aef17a587716ad0fb259948177"
+    },
+    {
+      "role": "transitive_source_a07d5246b32ea643",
+      "path": "src/memcontam/readiness/phase13_legacy_rag_construction.py",
+      "sha256": "41c9047a84dac21b4f479b07a58f1392839ec570e6c3c4eadd7db78994e17511"
+    },
+    {
+      "role": "transitive_source_31bc00ecf5d0f978",
+      "path": "src/memcontam/readiness/phase13_legacy_rag_documents.py",
+      "sha256": "d8dbe0c0d4c812506b204ca05ac434afcc024211aae7a86e086fa59031d483e0"
+    },
+    {
+      "role": "transitive_source_dc2805411d5498d4",
+      "path": "src/memcontam/readiness/phase13_legacy_rag_errors.py",
+      "sha256": "ab46652f0cd6ce259a9ba7d463bcb42334ec76483e96425849dacefd0a526ee2"
+    },
+    {
+      "role": "transitive_source_ebe4121874c36091",
+      "path": "src/memcontam/readiness/phase13_legacy_rag_generators.py",
+      "sha256": "3b7b8c4a4d168383ec35ffaf73a6f7bdc78eac015ab174a982048a3f24bead8b"
+    },
+    {
+      "role": "transitive_source_10e1582292be0b04",
+      "path": "src/memcontam/readiness/phase13_legacy_rag_materialize.py",
+      "sha256": "941b9a09717cdbb3dc157202c31ae8d0724ed0d5de35c782af30032145be3f78"
+    },
+    {
+      "role": "transitive_source_9d18ad79ccbf4670",
+      "path": "src/memcontam/readiness/phase13_legacy_rag_meb_threshold.py",
+      "sha256": "8c475a057a191bfd4cce413fbe317f367d45f4a026dd98410950e8223a456e04"
+    },
+    {
+      "role": "transitive_source_2ae455e448a715ae",
+      "path": "src/memcontam/readiness/phase13_legacy_rag_models.py",
+      "sha256": "377470fc1140818bd5485f692a1031401b7712c7e5d081bb1bda96c5f25c9205"
+    },
+    {
+      "role": "transitive_source_d7a84b3057ed9293",
+      "path": "src/memcontam/readiness/phase13_legacy_rag_registry_validation.py",
+      "sha256": "9e443872bb477a2681c9f5851266483f148740242ad6bb9a3a7c4c4b590a2378"
+    },
+    {
+      "role": "transitive_source_14b46111ff523c45",
+      "path": "src/memcontam/readiness/phase13_legacy_rag_runtime.py",
+      "sha256": "eca2db56881bbb6ca10e86eb91c83b127b6ec266177bcfefffc193ad9924509d"
+    },
+    {
+      "role": "transitive_source_bd9f9446bfea2ab1",
+      "path": "src/memcontam/readiness/phase13_legacy_rag_semantics.py",
+      "sha256": "99d97dfa7cecf33ca4af8c13fdd3d0bec2e125ab9f59e814eb7b1ecf9f301125"
+    },
+    {
+      "role": "transitive_source_8cbf04d02dc0d153",
+      "path": "src/memcontam/readiness/phase13_legacy_rag_serialization.py",
+      "sha256": "7d728645e51c9b7345f2a98feaae343724c8229136761c9e193202e74add7dae"
+    },
+    {
+      "role": "transitive_source_18bf8252cfb3ae3e",
+      "path": "src/memcontam/readiness/phase13_legacy_rag_task_materialize.py",
+      "sha256": "14490730f737245a181ebdcf06cf44ea5de4434b296de5be9cf121dfeffd8834"
+    },
+    {
+      "role": "transitive_source_baca2455c166f84c",
+      "path": "src/memcontam/readiness/phase13_legacy_rag_validate.py",
+      "sha256": "d7cb206cf7ec31cb4f66299923ed4d271761b97b4db9224935eada0302f89c97"
+    },
+    {
+      "role": "transitive_source_a3dc17a305267dd8",
+      "path": "src/memcontam/readiness/phase13_legacy_rag_validation_checks.py",
+      "sha256": "cc99b34317e245ac0cd928be59551191c06393be16d93cd777194f2aef5bc079"
+    },
+    {
+      "role": "transitive_source_3265112ba779e0f5",
+      "path": "src/memcontam/readiness/phase13_main_checkpoint.py",
+      "sha256": "d39b4f27ad0e7260468601bd86e75f425bf33d0b22d72fe870607eda0613895f"
+    },
+    {
+      "role": "transitive_source_df805aede9efe466",
+      "path": "src/memcontam/readiness/phase13_main_execution_cli.py",
+      "sha256": "23463dc3e5ff04e0d8d227a1023e6b435f1b9b3f5614a30b961bd7bfd9674da5"
+    },
+    {
+      "role": "transitive_source_c4a07f1d1a5692ab",
+      "path": "src/memcontam/readiness/phase13_main_readiness.py",
+      "sha256": "695c7da42512149d42a65e09397b00277b7eb3f10f01e52701fa965d64179109"
+    },
+    {
+      "role": "transitive_source_f7142d25839dad15",
+      "path": "src/memcontam/readiness/phase13_main_readiness_authority.py",
+      "sha256": "1313b374b1647eb6d9d94c14271a9a6b6ac56c0a29a7c6b032147d86522de90a"
+    },
+    {
+      "role": "transitive_source_acef44a5e9f79e39",
+      "path": "src/memcontam/readiness/phase13_main_readiness_models.py",
+      "sha256": "5a9eef6631be8bb0b316df89c5727bb98e87450ef11ca095f10871aa6c25966a"
+    },
+    {
+      "role": "transitive_source_6cdfecaadf79d695",
+      "path": "src/memcontam/readiness/phase13_new_mcq_bge.py",
+      "sha256": "a35636469c24f0445c054dfcff3336449ccb1de866b0a9b135398c14452eac3e"
+    },
+    {
+      "role": "transitive_source_cef3f440942843c1",
+      "path": "src/memcontam/readiness/phase13_new_mcq_candidate.py",
+      "sha256": "547f063bbeee113268b9a63c080e8722ee89911d47d339cded91d8d83ad26754"
+    },
+    {
+      "role": "transitive_source_973199c07e0f5444",
+      "path": "src/memcontam/readiness/phase13_new_mcq_candidate_evidence_v2.py",
+      "sha256": "c96d6a86d0bf6c6ca2875f2822b00397525f70326998795d96faf537ecb3b67b"
+    },
+    {
+      "role": "transitive_source_398467dbe4832a2b",
+      "path": "src/memcontam/readiness/phase13_new_mcq_candidate_evidence_v2_builder.py",
+      "sha256": "3569aa6415228c3410a241f652eea8040d119007cccdb2d9ea47f4d7b739198c"
+    },
+    {
+      "role": "transitive_source_fa8b76e90fbf0758",
+      "path": "src/memcontam/readiness/phase13_new_mcq_candidate_evidence_v2_fallback.py",
+      "sha256": "18f53f31591b1416a8c3ade5c472648b7175bff48e32240662f2edd80782f590"
+    },
+    {
+      "role": "transitive_source_4b19672ebf542ccd",
+      "path": "src/memcontam/readiness/phase13_new_mcq_candidate_evidence_v2_fallback_models.py",
+      "sha256": "84a0c878aa9ba94e5f387a674594ce80e2b4a2c1d1a34e97225514564ee5602b"
+    },
+    {
+      "role": "transitive_source_f69d9bca393d8f73",
+      "path": "src/memcontam/readiness/phase13_new_mcq_candidate_evidence_v2_models.py",
+      "sha256": "3cf66a08c20eb938fc1de7ceb45e1ba58d286ad356e9608c72adcea2356fb7c8"
+    },
+    {
+      "role": "transitive_source_cea70887c3ef0b7e",
+      "path": "src/memcontam/readiness/phase13_new_mcq_candidate_evidence_v2_panel.py",
+      "sha256": "cabfb82293d58f3ede2c1e7b1b4a058529b277d186a652310e1760f1afa90132"
+    },
+    {
+      "role": "transitive_source_c33dceb0762433b0",
+      "path": "src/memcontam/readiness/phase13_new_mcq_leakage.py",
+      "sha256": "03caa73aebc501902d84d5ce81448234a8e248248a1864295ab2e1c670b1fdf4"
+    },
+    {
+      "role": "transitive_source_47919c4b71f6914c",
+      "path": "src/memcontam/readiness/phase13_new_mcq_leakage_io.py",
+      "sha256": "14d8b0782329807bde69a2050c3edf318651761143d478858084556a0eaf2ae1"
+    },
+    {
+      "role": "transitive_source_a98883796caaafff",
+      "path": "src/memcontam/readiness/phase13_new_mcq_leakage_metrics.py",
+      "sha256": "3fc554801d2dd18ce7c3c8c2c61f13c9fd28ffc128ae6d5a27d06526155e6bb4"
+    },
+    {
+      "role": "transitive_source_6884833d49a4bc33",
+      "path": "src/memcontam/readiness/phase13_new_mcq_leakage_models.py",
+      "sha256": "79156a28fc1fba2686e17aa5535e584984ff16490cddebf684b1f3b1f4b1154d"
+    },
+    {
+      "role": "transitive_source_1eee2474ce344cae",
+      "path": "src/memcontam/readiness/phase13_new_mcq_p0_4_evidence.py",
+      "sha256": "b1378f28e3033de90f6e6e1ef07c5a85b1fa2ac141040f4019d3aba08b356107"
+    },
+    {
+      "role": "transitive_source_970db1de31da3e95",
+      "path": "src/memcontam/readiness/phase13_new_mcq_phase1_freeze.py",
+      "sha256": "0cfc4fbdf26346081570c1adf6d15b249f389c8b27b90ba93260e0cf599657ed"
+    },
+    {
+      "role": "transitive_source_4416f0b1cb998105",
+      "path": "src/memcontam/readiness/phase13_new_mcq_phase1_models.py",
+      "sha256": "e76a5783751367bef0bb8b3814e5dba373de465fb0c268da8a07125e0f13c74a"
+    },
+    {
+      "role": "transitive_source_0e4ef04951fdfb33",
+      "path": "src/memcontam/readiness/phase13_new_mcq_phase1_sources.py",
+      "sha256": "4d42a2900ec171c4023933730ef4fa3957b39825efd6c7bd0244716019cf5e6d"
+    },
+    {
+      "role": "transitive_source_577682346929c323",
+      "path": "src/memcontam/readiness/phase13_new_mcq_rag.py",
+      "sha256": "1ead17ec1c8b09813cb6de0c24bb41d88b4e4654c570878e13081a6a5cb12192"
+    },
+    {
+      "role": "transitive_source_3ceeeb526ea79f42",
+      "path": "src/memcontam/readiness/phase13_new_mcq_rag_artifacts.py",
+      "sha256": "020eb26fa9f82024fc80dd95021d5366fe6365cc9be753a290c7b407f9dc5a43"
+    },
+    {
+      "role": "transitive_source_190aa1e4dad83a94",
+      "path": "src/memcontam/readiness/phase13_new_mcq_rag_authority.py",
+      "sha256": "4bc3169c5f3737739d8a715aa724ab55efc3c607ce266b6e3bb6f1f60724e33d"
+    },
+    {
+      "role": "transitive_source_58cc9d16a87ed3f9",
+      "path": "src/memcontam/readiness/phase13_new_mcq_rag_frozen.py",
+      "sha256": "47bb814a8608dd9e04404351cca2dc5be242de82c0bd355f4300cff515e5d5e4"
+    },
+    {
+      "role": "transitive_source_99bd2c7fc9e90054",
+      "path": "src/memcontam/readiness/phase13_new_mcq_rag_index_validation.py",
+      "sha256": "54a69c9a3db722f94bebb993d6a0fab0b6ac79447827e2212cad4cb0b53fa5cb"
+    },
+    {
+      "role": "transitive_source_19ddcc3ea3e671dc",
+      "path": "src/memcontam/readiness/phase13_new_mcq_rag_manifest.py",
+      "sha256": "3b7a855b9c9086fd5d7b12b39b411318cea733e11e977209a606f9fa0a66debb"
+    },
+    {
+      "role": "transitive_source_ba824b1668f7ae78",
+      "path": "src/memcontam/readiness/phase13_new_mcq_rag_materialize.py",
+      "sha256": "ae22334946e7e30f93de69ade39ff9b4e2dfd22516ed72fcb97c661812049683"
+    },
+    {
+      "role": "transitive_source_56e7e9e32ef4a603",
+      "path": "src/memcontam/readiness/phase13_new_mcq_rag_materialize_output.py",
+      "sha256": "69fb689db00b2d5e9de6886e970580ad701476c85ab4b3b314e0fc39f87573bf"
+    },
+    {
+      "role": "transitive_source_8e5ef9b558c7b618",
+      "path": "src/memcontam/readiness/phase13_observability_models.py",
+      "sha256": "5e36c513853f8bb89d7a78be269c25846f2f291eb64c9057a660b7e10bb71b6c"
+    },
+    {
+      "role": "transitive_source_95222ced2807243c",
+      "path": "src/memcontam/readiness/phase13_observability_validate.py",
+      "sha256": "483a0cbe3fec3da33608d82d614fd381ebfd8e5464aebc3c6fac29acf169f69e"
+    },
+    {
+      "role": "transitive_source_2980e4c7eb1a3f93",
+      "path": "src/memcontam/readiness/phase13_provenance.py",
+      "sha256": "12aac61ad613052186302a1d17753b82b6c2fcb1f1b3d8780bb3a0ff27594583"
+    },
+    {
+      "role": "transitive_source_f516daac5247bf65",
+      "path": "src/memcontam/readiness/phase13_readiness0.py",
+      "sha256": "af2ba43e67a66a6b7e344b5a569affa653c693a48f67bb0012d479f60c057ff4"
+    },
+    {
+      "role": "transitive_source_616bd62e21beec82",
+      "path": "src/memcontam/readiness/phase13_readiness0_budget.py",
+      "sha256": "ff71e4ba9d890c1694f4a842cadab579d35192f964f2ced3fdf03a136926288e"
+    },
+    {
+      "role": "transitive_source_29c8bfb1c1ff977f",
+      "path": "src/memcontam/readiness/phase13_readiness0_case_evidence.py",
+      "sha256": "99690505d6c284b2570eb14a58d2179f44970ed9c5a67a9a6e03ca7c48aed0d6"
+    },
+    {
+      "role": "transitive_source_d764dc1fee4a6eb4",
+      "path": "src/memcontam/readiness/phase13_readiness0_cli.py",
+      "sha256": "5485e4fa0400915a3c53251c8065e25229ba0efa97348c2a65a7595d405448b4"
+    },
+    {
+      "role": "transitive_source_e308661bae5d4916",
+      "path": "src/memcontam/readiness/phase13_readiness0_current_status.py",
+      "sha256": "168d698a826f300bb770a64354ee40659dded12dfdeebf77f67fc0f14b782d95"
+    },
+    {
+      "role": "transitive_source_0b3857a33cc5aa7c",
+      "path": "src/memcontam/readiness/phase13_readiness0_current_status_v2.py",
+      "sha256": "717da2d22d6a62340ffa1aa96d85d269de3892987302d1089a4c67f89be6e3a1"
+    },
+    {
+      "role": "transitive_source_08fc284b6d51f303",
+      "path": "src/memcontam/readiness/phase13_readiness0_evidence_models.py",
+      "sha256": "ed43516bdbba8963fa5dd99362724b6c1b5ac8e2ee2f5e7ff4d3dde332000a02"
+    },
+    {
+      "role": "transitive_source_92fc4638fabfa1e1",
+      "path": "src/memcontam/readiness/phase13_readiness0_evidence_store.py",
+      "sha256": "a96439e93824a304643f6ed7fe42d55f75d0a7e3d9e2b9c063ddd3ac5cea7091"
+    },
+    {
+      "role": "transitive_source_99f14a69ad881b25",
+      "path": "src/memcontam/readiness/phase13_readiness0_f1c.py",
+      "sha256": "556d1f830e87d9e5327030a069556b62ea4c2cf6c5417cd00e4ed88dd63a45f8"
+    },
+    {
+      "role": "transitive_source_e2b1b519043075e9",
+      "path": "src/memcontam/readiness/phase13_readiness0_f1c_build.py",
+      "sha256": "fb6c0feb0fb324132b2d3f418a5e7dcee714c42688c55149a2910f0c4f85f6ca"
+    },
+    {
+      "role": "transitive_source_5dd52dedbb7254c4",
+      "path": "src/memcontam/readiness/phase13_readiness0_f1c_contract.py",
+      "sha256": "1778c562685c6e12e455c79defc5748f447c436b5c2ed6b2e49df3bf154cd6ef"
+    },
+    {
+      "role": "transitive_source_9389384b3ff34de6",
+      "path": "src/memcontam/readiness/phase13_readiness0_f1c_models.py",
+      "sha256": "e6ae217d05e38e3f4f0888ae218860056a56c4652a22c48c23c14bdd0c9456e7"
+    },
+    {
+      "role": "transitive_source_b9a5fa168cd10db6",
+      "path": "src/memcontam/readiness/phase13_readiness0_f1c_report.py",
+      "sha256": "21e577df2c18f053a836ef70fb3e7b838d0317dca40e8d9ebc959b9b73df47dd"
+    },
+    {
+      "role": "transitive_source_6799b4885744b225",
+      "path": "src/memcontam/readiness/phase13_readiness0_f1c_validate.py",
+      "sha256": "432561af78d78999508ce518a643eb72cb17280721577ba7d880e07705a08746"
+    },
+    {
+      "role": "transitive_source_af1081bae0ee3999",
+      "path": "src/memcontam/readiness/phase13_readiness0_live.py",
+      "sha256": "c0e1b2e3295b04fd848adf3084483edbe543821b62072cec3b8de16af03c3db7"
+    },
+    {
+      "role": "transitive_source_1310f7efb51553eb",
+      "path": "src/memcontam/readiness/phase13_readiness0_live_models.py",
+      "sha256": "330d4d3e8a8e970cd54a2426d6711ac26d9aea500173b155ea0e756ce0024669"
+    },
+    {
+      "role": "transitive_source_04534fe0bceb3af9",
+      "path": "src/memcontam/readiness/phase13_readiness0_live_runtime.py",
+      "sha256": "ca4fbde0bc0cfc2a40e9415fb6be95645c37b9774443ff09b3150869f7f155f3"
+    },
+    {
+      "role": "transitive_source_2a09e68c6a1d4536",
+      "path": "src/memcontam/readiness/phase13_route_capacity.py",
+      "sha256": "6348364c62883c4099759556fb46c21e8d3069ae66285e45457bab87f171c74f"
+    },
+    {
+      "role": "transitive_source_a754d3ea115b186b",
+      "path": "src/memcontam/readiness/phase13_unicode_15_1.py",
+      "sha256": "b61ade0bbb5d1c01f4421856acd33ae6000836614ea191e04fb76f9cb79f886d"
+    },
+    {
+      "role": "transitive_source_4914ab8b095f53e6",
+      "path": "src/memcontam/readiness/pilot_a_invariants.py",
+      "sha256": "a8591a38098227619439d9596da40e2bcd5091bcc26706b91ef37a2427d04214"
+    },
+    {
+      "role": "transitive_source_202a681e741b0476",
+      "path": "src/memcontam/readiness/pilot_a_launch.py",
+      "sha256": "7c93f40e20badbfa7fc12b33e9c38bbbe86088999b71e3af0721868939d48185"
+    },
+    {
+      "role": "transitive_source_460db833e22fe269",
+      "path": "src/memcontam/readiness/pilot_a_preflight.py",
+      "sha256": "ebc045b1855ccf7786a15ff5b23effc990e7d824c89cf4a7d9c98d4fa9192b8b"
+    },
+    {
+      "role": "transitive_source_7d57cfcb8e540839",
+      "path": "src/memcontam/readiness/pilot_a_scientific.py",
+      "sha256": "012cc57e32ee42d83fa661f4dc56ca7f86ff75fd27f5ddcf5c7ce9c641ae4ff0"
+    },
+    {
+      "role": "transitive_source_458a6e6d0b51aab6",
+      "path": "src/memcontam/readiness/pilot_a_scientific_archive.py",
+      "sha256": "c4103ee6743682da40d8e551d1eadb01c91147c43b0b2d4a6559598f3a450a7f"
+    },
+    {
+      "role": "transitive_source_e31230b375cb8663",
+      "path": "src/memcontam/readiness/pilot_a_scientific_records.py",
+      "sha256": "86943fb051165119219f97fa07a5d2ab0b059f7e96debe07cef4e8dc93648029"
+    },
+    {
+      "role": "transitive_source_941e12acf85a6c60",
+      "path": "src/memcontam/readiness/retrieval_smoke.py",
+      "sha256": "8c816dbd2bcbde6334cc261dacd80fab1a9451fa1b363a73b1f6addf1f938f28"
+    },
+    {
+      "role": "transitive_source_d11d15cf3cd42dd9",
+      "path": "src/memcontam/readiness/scientific_admission.py",
+      "sha256": "31bbbc9e8b2e886e7d30322452c0cd583dd237c5748a317f9b67d264403fbf6a"
+    },
+    {
+      "role": "transitive_source_e90465eea5c48ed0",
+      "path": "src/memcontam/tasks/__init__.py",
+      "sha256": "9f3c752ac8986a52ff62e5ca13a69c5bc0e3e5f966320d3e8b883260ed20579e"
+    },
+    {
+      "role": "transitive_source_873ec9cda34893d5",
+      "path": "src/memcontam/tasks/base.py",
+      "sha256": "65ae25ae51c2ff64067f8985b2a1795ddd4554ee2744c3a9360ad2414f12dd75"
+    },
+    {
+      "role": "transitive_source_59fbd5de40264589",
+      "path": "src/memcontam/tasks/dispatch.py",
+      "sha256": "bdcc5e716dab08e343aa912c210d8f8567aa19db8a8d368717a4639bdc3fea8a"
+    },
+    {
+      "role": "transitive_source_99c0a5f99ce98f4f",
+      "path": "src/memcontam/tasks/game24.py",
+      "sha256": "35a951cdec837e1debc60fef01a4526ff93de4ce4bcb14c086cd04752d7aa63d"
+    },
+    {
+      "role": "transitive_source_ad14dc805ad6fbff",
+      "path": "src/memcontam/tasks/math_equation_balancer.py",
+      "sha256": "8a730b93d8d78311e348b8baefe107b3b79da76f9cc0101e98a405f852f187d9"
+    },
+    {
+      "role": "transitive_source_603aded9ebbe65a0",
+      "path": "src/memcontam/tasks/multiple_choice.py",
+      "sha256": "7908a8d4a03c9f7ae4eb2aac9dc1bc3b66d3b32bd406370e58e28673e34cfcba"
+    },
+    {
+      "role": "transitive_source_7466ef1abb64ac72",
+      "path": "src/memcontam/tasks/word_sorting.py",
+      "sha256": "b2f0854a007a4158fa87f79952a119cb7a00df003b663f027a7e4b8792b2fbf9"
+    },
+    {
+      "role": "transitive_source_a2cfb6ec31b87c7e",
+      "path": "src/memcontam/tools/__init__.py",
+      "sha256": "fc30cbbde2c5a451eae38651e9ea60eb4dfba0ad90e726a472b740de41d1a327"
+    },
+    {
+      "role": "transitive_source_183f8c6bb6461979",
+      "path": "src/memcontam/tools/base.py",
+      "sha256": "6105229b2fb069d4636abce4fc8e047a32f56e017fc878354a1074cab1293be2"
+    },
+    {
+      "role": "transitive_source_e6fa57620037252c",
+      "path": "src/memcontam/tools/execution_loop.py",
+      "sha256": "c5607adcdb8b82168a727f7dbcd5315aae37509ea75ac01c4075fc5b45945e08"
+    },
+    {
+      "role": "transitive_source_b35a815fd7f74493",
+      "path": "src/memcontam/tools/policy.py",
+      "sha256": "71a138943af69bf6eb5d956175f7b8860658e0f9afa2a8a81f8bff8b2a4cff9c"
+    },
+    {
+      "role": "transitive_source_9bfee55ef862c795",
+      "path": "src/memcontam/tools/python_sandbox.py",
+      "sha256": "3b22c305a66026acf015ed1c7ef34b5c88f32058fc196b31c04bdbc0c3e92495"
+    },
+    {
+      "role": "transitive_source_4d71aaf2fbcece53",
+      "path": "src/memcontam/tools/subprocess_test_double.py",
+      "sha256": "1a75fc52ea776d53ca26121333583e157ec5cb0c2070511aa84633868f523aae"
+    },
+    {
+      "role": "transitive_source_1a86a9f1e99c59a7",
+      "path": "src/memcontam/verifiers/__init__.py",
+      "sha256": "9f3c752ac8986a52ff62e5ca13a69c5bc0e3e5f966320d3e8b883260ed20579e"
+    },
+    {
+      "role": "transitive_source_a4690bd3eae9cb52",
+      "path": "src/memcontam/verifiers/game24.py",
+      "sha256": "ae343911d957d763ce2e43742362e557afa0415c841f9be8c7299f0929778d3e"
+    },
+    {
+      "role": "transitive_source_1ffadd3925d83e0b",
+      "path": "src/memcontam/verifiers/math_equation_balancer.py",
+      "sha256": "1225789314c153528ba7284e108fc9c8e1e93114345cb1458af332ccb380bfca"
+    },
+    {
+      "role": "transitive_source_6c44a1113a3b4f02",
+      "path": "src/memcontam/verifiers/word_sorting.py",
+      "sha256": "f18f71ac5d139600269c79c7700511afbeea63d92688720c84169f450bff184c"
+    }
+  ],
+  "dispatch": {
+    "realization_id": "phase13-seed-major-global-dispatch-v1",
+    "task_order": [
+      "game24",
+      "math_equation_balancer",
+      "word_sorting",
+      "mmlu_pro_engineering",
+      "mmlu_pro_physics"
+    ],
+    "concrete_seed_ids": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
+    "expanded_dispatch_sha256": "cc2ab015dc75d8980f81cbbbbdeba796b76b869cd0ea7fd68bfd41117bcbce8c"
+  },
+  "arm_order": {
+    "realization_id": "phase13-four-sequence-cyclic-counterbalance-v1",
+    "sequences": [
+      {
+        "sequence_index": 0,
+        "arms": [
+          "clean",
+          "correct",
+          "irrelevant",
+          "contam"
+        ]
+      },
+      {
+        "sequence_index": 1,
+        "arms": [
+          "correct",
+          "irrelevant",
+          "contam",
+          "clean"
+        ]
+      },
+      {
+        "sequence_index": 2,
+        "arms": [
+          "irrelevant",
+          "contam",
+          "clean",
+          "correct"
+        ]
+      },
+      {
+        "sequence_index": 3,
+        "arms": [
+          "contam",
+          "clean",
+          "correct",
+          "irrelevant"
+        ]
+      }
+    ],
+    "seed_sequence_indices": [
+      0,
+      1,
+      2,
+      3,
+      0,
+      1,
+      2,
+      3,
+      0,
+      1
+    ],
+    "realization_sha256": "6010ac4391511485ca01b581c26c6fe939f8eaa8a9b0ec36c6e125b6b6aaae97"
+  },
+  "active_cells": {
+    "tasks": [
+      "game24",
+      "math_equation_balancer",
+      "word_sorting",
+      "mmlu_pro_engineering",
+      "mmlu_pro_physics"
+    ],
+    "memory_baselines": [
+      "fh_bounded",
+      "rag_frozen",
+      "bot_style",
+      "reflexion_style",
+      "dc_rs"
+    ],
+    "arms": [
+      "clean",
+      "correct",
+      "irrelevant",
+      "contam"
+    ],
+    "included_task_baseline_pairs": [
+      [
+        "game24",
+        "fh_bounded"
+      ],
+      [
+        "game24",
+        "rag_frozen"
+      ],
+      [
+        "game24",
+        "bot_style"
+      ],
+      [
+        "game24",
+        "reflexion_style"
+      ],
+      [
+        "game24",
+        "dc_rs"
+      ],
+      [
+        "math_equation_balancer",
+        "fh_bounded"
+      ],
+      [
+        "math_equation_balancer",
+        "rag_frozen"
+      ],
+      [
+        "math_equation_balancer",
+        "bot_style"
+      ],
+      [
+        "math_equation_balancer",
+        "reflexion_style"
+      ],
+      [
+        "math_equation_balancer",
+        "dc_rs"
+      ],
+      [
+        "word_sorting",
+        "fh_bounded"
+      ],
+      [
+        "word_sorting",
+        "rag_frozen"
+      ],
+      [
+        "word_sorting",
+        "bot_style"
+      ],
+      [
+        "word_sorting",
+        "reflexion_style"
+      ],
+      [
+        "word_sorting",
+        "dc_rs"
+      ],
+      [
+        "mmlu_pro_engineering",
+        "fh_bounded"
+      ],
+      [
+        "mmlu_pro_engineering",
+        "bot_style"
+      ],
+      [
+        "mmlu_pro_engineering",
+        "reflexion_style"
+      ],
+      [
+        "mmlu_pro_engineering",
+        "dc_rs"
+      ],
+      [
+        "mmlu_pro_physics",
+        "fh_bounded"
+      ],
+      [
+        "mmlu_pro_physics",
+        "bot_style"
+      ],
+      [
+        "mmlu_pro_physics",
+        "reflexion_style"
+      ],
+      [
+        "mmlu_pro_physics",
+        "dc_rs"
+      ]
+    ],
+    "nomem_tasks": [
+      "game24",
+      "math_equation_balancer",
+      "word_sorting",
+      "mmlu_pro_engineering",
+      "mmlu_pro_physics"
+    ],
+    "nomem_policy": "singleton_per_task_seed",
+    "memory_cell_count": 92,
+    "nomem_cell_count": 5,
+    "attempted_trajectory_count": 970
+  },
+  "H_run": 50,
+  "H_primary": 50,
+  "primary_analysis_window_id": "core_prefix_50",
+  "capacity_law_id": "luna_common_visible_memory_capacity_v1",
+  "capacity_unit": "registered_serialized_tokens",
+  "B_mem_tokens": 8192,
+  "L_DC_tokens": 8192,
+  "level2_registry_status": "MATERIALIZED",
+  "level2_registry_sha256": "94f7f65e0aae22fe63942688b680e9ec2332d2584a3abbde510ffa328268bec9",
+  "runtime": {
+    "provider_id": "openai",
+    "api": "OpenAI Responses API",
+    "model": "gpt-5.6-luna",
+    "service_tier": "default",
+    "reasoning_effort": "none",
+    "reasoning_context": "current_turn",
+    "previous_response_id": null,
+    "store": false,
+    "tools": [],
+    "timeout_seconds": 180,
+    "request_contract_id": "phase13_openai_luna_provider_contract_v1",
+    "session_contract_id": "independent_per_trial_and_arm",
+    "execution_envelope_registry_id": "CORE_EXECUTION_ENVELOPE_REGISTRY_V2",
+    "transport_contract_id": "CORE_TRANSPORT_ATTEMPT_CONTRACT_V2",
+    "terminal_failure_contract_id": "CORE_TERMINAL_TECHNICAL_MISSINGNESS_V1",
+    "maximum_transport_attempts": 1,
+    "retries_after_initial_attempt": 0
+  },
+  "observability": {
+    "packet_id": "OBSERVABILITY_REGISTRATION_PACKET_V1",
+    "packet_sha256": "b2f9d7b5cced3b7bd4f33272b952d9a2270696a5348121608d13876bce02e454",
+    "failure_classifier_registry_id": "OBSERVABILITY_REGISTRATION_PACKET_V1.failure_classifier",
+    "failure_classifier_status": "PACKET_BOUND_REGISTERED",
+    "recurrence_lookback_h": 10,
+    "exposure_conditioning": "CURRENT_Z_T_EQUALS_1_PRIOR_MATCH_NEED_NOT_BE_EXPOSED",
+    "post_eviction_rule": "EXACT_ROOT_PRESENT_EXPLICITLY_REMOVED_ABSENT_AFTER_NEXT_ORDINARY_ROW_FIRST_RISK",
+    "retention_rule": "FIRST_CONTINUOUS_FINITE_WINDOW_EPISODE_NO_GAP_BRIDGING",
+    "censoring_rule": "RIGHT_CENSORED_AT_REGISTERED_OR_FIXTURE_ENDPOINT",
+    "u_t_status": "NOT_REGISTERED_FOR_CURRENT_MAIN",
+    "production_reconstruction_binding_id": "phase13-production-observability-reconstruction-binding-v1",
+    "production_reconstruction_binding_sha256": "85912ba378d01f61b30cca446e23c5c1f2334226ca6c8633ce6dc2e7563fb3c3"
+  },
+  "cost_guard": {
+    "cost_envelope_id": "COST_ENVELOPE_V2",
+    "cost_envelope_sha256": "6de377752cd80e45147a8b47aa83828f2921363b564c44004ac90650dac65cf2",
+    "semantic_calls": 108930,
+    "total_budget_ceiling_krw": 500000,
+    "reserve_krw": 50000,
+    "core_authorization_gate_krw": 450000,
+    "cmax_main_krw": 444256,
+    "margin_krw": 5744
+  },
+  "execution_control": {
+    "runner_id": "phase13-main-a-runner-v1",
+    "runner_code_sha256": "88f55a4ad2d14de2385d042732aa990d9e6f889b2459ddeb8dc60b7c9784850b",
+    "ledger_schema_id": "phase13-main-a-ledger-v1",
+    "unit_identity_law_id": "phase13-main-a-disjoint-unit-id-v1",
+    "nomem_realization_law_id": "singleton_per_task_seed",
+    "dispatch_contract_id": "phase13-main-a-at-most-once-no-replay-v1",
+    "planned_pause_contract_id": "phase13-main-a-pre-intent-tranche-pause-v1",
+    "resume_contract_id": "phase13-main-a-validated-resume-v1",
+    "inflight_reconciliation_contract_id": "phase13-main-a-evidence-only-reconcile-v1",
+    "quota_terminal_contract_id": "CORE_TERMINAL_TECHNICAL_MISSINGNESS_V1"
+  },
+  "measured_main_a_trajectory_count": 0,
+  "package_hash": "fbda25808fa045bea4d71744f90cc98f893ac38efc4c39350da74c6f317c3a8b",
+  "corrected_run_id": "phase13-main-a-corrected-20260903-v2",
+  "repository_commit": "d1ac6c84236ec63c367775d24aa953176d321ce0",
+  "repository_tree_sha256": "7317a69c818847c05a01613c183ac21e24e32326fd95dfc485888c3257a87303"
+}

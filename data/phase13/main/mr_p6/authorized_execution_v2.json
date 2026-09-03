@@ -1,0 +1,16 @@
+{
+  "schema_version": "phase13_main_authorization_v2",
+  "authorization_id": "phase13-main-a-corrected-authorized-execution-v2",
+  "status": "AUTHORIZED_EXECUTION",
+  "execution_package_id": "phase13-main-a-corrected-execution-freeze-v2",
+  "execution_package_path": "data/phase13/main/mr_p5/execution_package_v2.json",
+  "execution_package_sha256": "acdcfe03a944f1875e9e0988d01cb708f70e93659f096b8bc72105a321db683f",
+  "execution_package_hash": "fbda25808fa045bea4d71744f90cc98f893ac38efc4c39350da74c6f317c3a8b",
+  "mr_p4_status": "CLOSED",
+  "mr_p5_status": "FROZEN",
+  "mr_p6_status": "PASS",
+  "main_a_status": "NOT_STARTED",
+  "measured_main_a_trajectory_count": 0,
+  "corrected_run_id": "phase13-main-a-corrected-20260903-v2",
+  "authorization_hash": "a94701b578aa729329a6f723fe7d1c338e0c9b52d4ce7055c77137117caeccfd"
+}

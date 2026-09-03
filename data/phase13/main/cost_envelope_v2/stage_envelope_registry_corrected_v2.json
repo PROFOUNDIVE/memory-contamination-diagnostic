@@ -1,0 +1,30 @@
+{
+  "schema_version": "phase13_stage_envelope_registry_v1",
+  "registry_id": "CORE_EXECUTION_ENVELOPE_REGISTRY_V2",
+  "authority_sha256": "4dec48f105c8d4730706d1d99d05bb14bab96a8e643811db1ebdd26e612590d5",
+  "activation_status": "PENDING_CONTROLLED_EXTERNAL_AUTHORITY_WRITE",
+  "policy_classification": "PROSPECTIVE_EXECUTION_POLICY_CHANGE_EXPLICITLY_APPROVED",
+  "request_compiler_id": "phase13_runtime_registry_method_stage_v1",
+  "serializer_id": "role_content_blank_line_v1",
+  "tokenizer_id": "tiktoken_o200k_base",
+  "counting_implementation": "src/memcontam/baselines/prompt_budget.py:count_prompt_tokens",
+  "capacity": {
+    "writer_max_output_tokens": 8192,
+    "B_DC_feasible": 8192,
+    "B_mem_tokens": 8192,
+    "L_DC_tokens": 8192
+  },
+  "stages": [
+    {"semantic_stage_id": "full_history_generate", "authority_stage_id": "FH_generation", "suffix_calls": 10000, "prefix_calls": 50, "calls": 10050, "maximum_input_tokens": 9330, "maximum_output_tokens": 512},
+    {"semantic_stage_id": "rag_generate", "authority_stage_id": "RAG_generation", "suffix_calls": 6000, "prefix_calls": 30, "calls": 6030, "maximum_input_tokens": 344, "maximum_output_tokens": 512},
+    {"semantic_stage_id": "bot_problem_distill", "authority_stage_id": "BoT_problem_distillation", "suffix_calls": 10000, "prefix_calls": 50, "calls": 10050, "maximum_input_tokens": 1177, "maximum_output_tokens": 384},
+    {"semantic_stage_id": "bot_instantiate_solve", "authority_stage_id": "BoT_solve", "suffix_calls": 10000, "prefix_calls": 50, "calls": 10050, "maximum_input_tokens": 1949, "maximum_output_tokens": 512},
+    {"semantic_stage_id": "bot_thought_distill", "authority_stage_id": "BoT_thought_distillation", "suffix_calls": 10000, "prefix_calls": 50, "calls": 10050, "maximum_input_tokens": 2545, "maximum_output_tokens": 384},
+    {"semantic_stage_id": "reflexion_generate", "authority_stage_id": "Reflexion_actor_generation", "suffix_calls": 20000, "prefix_calls": 50, "calls": 20050, "maximum_input_tokens": 2282, "maximum_output_tokens": 512},
+    {"semantic_stage_id": "reflexion_reflect", "authority_stage_id": "Reflexion_reflection", "suffix_calls": 20000, "prefix_calls": 50, "calls": 20050, "maximum_input_tokens": 3349, "maximum_output_tokens": 384},
+    {"semantic_stage_id": "dc_rs_generate", "authority_stage_id": "DC_RS_generation", "suffix_calls": 10000, "prefix_calls": 50, "calls": 10050, "maximum_input_tokens": 9212, "maximum_output_tokens": 512},
+    {"semantic_stage_id": "dc_rs_synthesize", "authority_stage_id": "DC_RS_writer_synthesis", "suffix_calls": 10000, "prefix_calls": 50, "calls": 10050, "maximum_input_tokens": 13521, "maximum_output_tokens": 8192},
+    {"semantic_stage_id": "no_memory_generate", "authority_stage_id": "NoMem_generation", "suffix_calls": 2500, "prefix_calls": 0, "calls": 2500, "maximum_input_tokens": 1160, "maximum_output_tokens": 512}
+  ],
+  "registry_hash": "58e1ebda33a63fba4cb5289d21531298a7803a765b3525214d45700bc993cc22"
+}

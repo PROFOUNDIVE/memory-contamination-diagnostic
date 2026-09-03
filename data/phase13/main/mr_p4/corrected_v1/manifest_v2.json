@@ -1,0 +1,449 @@
+{
+  "schema_version": "phase13_mr_p4_local_closure_manifest_corrected_v2",
+  "status": "MR_P4_CLOSED",
+  "artifacts": {
+    "track1": {
+      "path": "data/phase13/main/track1_authority_state_sync_checkpoint_v1.json",
+      "sha256": "5c234069bfd73b86e45d75c8a330d4900a3253e47751b3a17cd34cc238c04bc0"
+    },
+    "package_selection": {
+      "path": "data/phase13/main/post_cutoff_package_selection_v2.json",
+      "sha256": "2efa745c72045ba84e7c3070424b76a9c65d87a02ae601a90ac367517d6890c9"
+    },
+    "capacity": {
+      "path": "data/phase13/common_capacity_corrected_v2.json",
+      "sha256": "8b4690b895117ea6ed05d9f98d91720b284f9c075c566d6d01dc63b577dd59ae"
+    },
+    "legacy_rag_seal": {
+      "path": "data/phase13/rag/legacy_seal_v1.json",
+      "sha256": "00a5ebc22b81945e12d69e53bd3e5174fed6ade14d4b93539f4e8da3c7796fc3"
+    },
+    "observability_manifest": {
+      "path": "data/phase13/observability/manifest_v1.json",
+      "sha256": "e5736593651570430e54db2a7213bcdfc0f900bb56de86de802917811bc5d051"
+    },
+    "observability_packet": {
+      "path": "data/phase13/observability/registration_packet_v1.json",
+      "sha256": "b2f9d7b5cced3b7bd4f33272b952d9a2270696a5348121608d13876bce02e454"
+    },
+    "observability_fixture": {
+      "path": "data/phase13/observability/fixture_v1.json",
+      "sha256": "e3f472e24c3c95b378067ad780e56b72228c5f45ab11c6ca833667245f52bb5b"
+    },
+    "provider_contract": {
+      "path": "data/phase13/openai_luna_provider_contract_v1.json",
+      "sha256": "7fa5f400d6193ec64229597c0f6f2b193f9613b636d4bfb69c46e831a92bff33"
+    },
+    "openai_client": {
+      "path": "src/memcontam/clients/openai_responses.py",
+      "sha256": "bb83936fdc4534f7588061dd6b436083ab60400cd1cee2ace0d033aeded4f73b"
+    },
+    "ordinary_runtime": {
+      "path": "src/memcontam/experiment/phase13_ordinary_runtime.py",
+      "sha256": "05492b3ff486e101536243597e2d5b07a00d984dbbcdd49152905f45c847859c"
+    },
+    "production_observability_adapter": {
+      "path": "src/memcontam/readiness/phase13_production_observability.py",
+      "sha256": "c0bc7d9be1539629f96d50789b8b3f7980559c9eb374c7efe0bf70eb8762a63e"
+    },
+    "production_runtime_join": {
+      "path": "src/memcontam/readiness/phase13_production_runtime_join.py",
+      "sha256": "172ed9a2f060f38e67acfd45ed76f491f083955be40c04af3ee32b4b916633a5"
+    },
+    "production_runtime_evidence": {
+      "path": "src/memcontam/readiness/phase13_production_runtime_evidence.py",
+      "sha256": "d23c7b17656d6b017ebfe7386c7e6060452ebb3583517d3b8aec01dfbf89dd2d"
+    },
+    "production_runtime_memory": {
+      "path": "src/memcontam/readiness/phase13_production_runtime_memory.py",
+      "sha256": "6cdab986a3e8f58f7bc98b9ef8ce88939a3834a6cc5a65f91bd4d891bc97c9fc"
+    },
+    "production_runtime_models": {
+      "path": "src/memcontam/readiness/phase13_production_runtime_models.py",
+      "sha256": "f09038ad7ae2c83d6b424df54dbaa16d22ebebc6ae904da76de398a740b8d52c"
+    },
+    "runtime_registry": {
+      "path": "src/memcontam/experiment/phase12/runtime_registry.py",
+      "sha256": "ea3dd96e2c6f67b0b3e0c397d2072000f4b141a6a29340b81577a677032f128e"
+    },
+    "recording_client": {
+      "path": "src/memcontam/clients/recording.py",
+      "sha256": "6e551a3e6631c8beeb4ee416434ced4708a163de9b20a10e1a66f765e1a5f202"
+    },
+    "logging_schema": {
+      "path": "src/memcontam/logging/schema.py",
+      "sha256": "842cd854f060bc5e3b793efc56604b729287193646d64906c7f55a160dbda26a"
+    },
+    "provider_profile": {
+      "path": "src/memcontam/clients/provider_profile.py",
+      "sha256": "0ada3850535cce92cd57e62200627b34c46788622df4d804d34fa76ccb6923aa"
+    },
+    "cost_policy": {
+      "path": "src/memcontam/readiness/phase13_cost_policy.py",
+      "sha256": "581d3ce8348c5f80497c9b95519c99a0fc8c4d9f8f7f0628cb93e6e2fc2be34d"
+    },
+    "cost_policy_models": {
+      "path": "src/memcontam/readiness/phase13_cost_policy_models.py",
+      "sha256": "64be139f8943832e2e9857efbc81e92cc66b4c0362f5dbe1eef1384f6d633504"
+    },
+    "cost_policy_handoff": {
+      "path": "src/memcontam/readiness/phase13_cost_policy_handoff.py",
+      "sha256": "07668f65a246644e85b082b1d991bd359cd04490ce37bc3f86bd49d60b8ef8f2"
+    },
+    "live_branch": {
+      "path": "src/memcontam/experiment/phase12/live_branch.py",
+      "sha256": "bbf2c882df2bccece6fe55d9ef1848a554f1df1e85bfc02d5e092b7c31985b99"
+    },
+    "main_readiness_validator": {
+      "path": "src/memcontam/readiness/phase13_main_readiness.py",
+      "sha256": "695c7da42512149d42a65e09397b00277b7eb3f10f01e52701fa965d64179109"
+    },
+    "main_readiness_authority": {
+      "path": "src/memcontam/readiness/phase13_main_readiness_authority.py",
+      "sha256": "1313b374b1647eb6d9d94c14271a9a6b6ac56c0a29a7c6b032147d86522de90a"
+    },
+    "main_readiness_models": {
+      "path": "src/memcontam/readiness/phase13_main_readiness_models.py",
+      "sha256": "5a9eef6631be8bb0b316df89c5727bb98e87450ef11ca095f10871aa6c25966a"
+    },
+    "task_seed_orders": {
+      "path": "data/phase13/main/mr_p4/task_seed_orders_v1.json",
+      "sha256": "4ec3a6c04deb9ff475b59beaf2fd9a3d73fab1215ffb0ddb3c9d7efa8fdab448"
+    },
+    "common_checkpoint_registry": {
+      "path": "data/phase13/main/mr_p4/main_a_common_checkpoint_registry_v1.json",
+      "sha256": "ec26757928ee3e9883aab23f6e7b416e71159b5e6b740e63effee6b8eb58a64b"
+    },
+    "main_checkpoint_validator": {
+      "path": "src/memcontam/readiness/phase13_main_checkpoint.py",
+      "sha256": "d39b4f27ad0e7260468601bd86e75f425bf33d0b22d72fe870607eda0613895f"
+    },
+    "activated_cost_policy": {
+      "path": "data/phase13/main/cost_envelope_v2/activated_policy_corrected_v2.json",
+      "sha256": "9a7ecbd7abf3d30fc05f1bab376154cb94551c133504151b9a39f17bb74967ee"
+    },
+    "cost_activation_validator": {
+      "path": "src/memcontam/readiness/phase13_cost_activation.py",
+      "sha256": "6cf926f7d300258fd8f36e386f12c1e4917893119b212672f45cc6444860e6a1"
+    },
+    "readiness0_request": {
+      "path": "data/phase13/main/mr_p4/readiness0_request_v1.json",
+      "sha256": "5d885853d6e99f5e0c7bbab21ed210dad8dcc8206ac019cf68857b91ca0d74d5"
+    },
+    "readiness0_validator": {
+      "path": "src/memcontam/readiness/phase13_readiness0.py",
+      "sha256": "af2ba43e67a66a6b7e344b5a569affa653c693a48f67bb0012d479f60c057ff4"
+    },
+    "readiness0_live_request": {
+      "path": "data/phase13/main/mr_p4/readiness0_live_request_v1.json",
+      "sha256": "bd71ed741471a1c9a38e1e465b369223638544e35fbb8ca362a320f562fbe187"
+    },
+    "readiness0_live_authorization": {
+      "path": "data/phase13/main/mr_p4/readiness0_live_authorization_v1.json",
+      "sha256": "42f07d8b866955bc9464af3ac501f586e2b06a80c99e8d0ed1012e6f8e4c2a81"
+    },
+    "readiness0_f1c_registry": {
+      "path": "data/phase13/main/mr_p4/readiness0_f1c_registry_v1.json",
+      "sha256": "76fe787f3d84306742844b66a4b82ba6d90d44569dd62b24273c422ceb2b7518"
+    },
+    "readiness0_f1c_report": {
+      "path": "data/phase13/main/mr_p4/readiness0_f1c_report_v1.json",
+      "sha256": "80bb8054e4c4f1510fcda7bbdb306cd4e0690ac72cb27dce09171baf13ae74c0"
+    },
+    "readiness0_live_implementation_manifest": {
+      "path": "data/phase13/main/mr_p4/readiness0_live_implementation_manifest_v1.json",
+      "sha256": "7059bdaaf010e0aee95e603698795301e720132449df56f94cfa317b14d0aab2"
+    },
+    "readiness0_window_proof": {
+      "path": "data/phase13/main/mr_p4/readiness0_window_proof_v1.json",
+      "sha256": "99decc17225dcf6f87b60de71ab6d38729a01c032ffd90ba0397b191c6e0a191"
+    },
+    "readiness0_current_status": {
+      "path": "data/phase13/main/mr_p4/readiness0_current_status_v2.json",
+      "sha256": "61da6fe242d38163ead930e5ef2b8912fa5f847aa76e455f1d1c6f5dc6dfcde6"
+    },
+    "readiness0_live_evidence_manifest": {
+      "path": "data/phase13/main/mr_p4/readiness0_live_evidence_v1/evidence_manifest.json",
+      "sha256": "ab3f361d6684d0015c02377e03041304d6e3ed1048d8ede6686c0eacf1a855ec"
+    },
+    "readiness0_live_evidence_cases": {
+      "path": "data/phase13/main/mr_p4/readiness0_live_evidence_v1/cases.jsonl",
+      "sha256": "0cb8c3b1910d0db67ad3aac6f2c91b574013c58e0d1c432ad25e88a1a2762656"
+    },
+    "readiness0_live_models": {
+      "path": "src/memcontam/readiness/phase13_readiness0_live_models.py",
+      "sha256": "330d4d3e8a8e970cd54a2426d6711ac26d9aea500173b155ea0e756ce0024669"
+    },
+    "readiness0_current_status_validator": {
+      "path": "src/memcontam/readiness/phase13_readiness0_current_status_v2.py",
+      "sha256": "717da2d22d6a62340ffa1aa96d85d269de3892987302d1089a4c67f89be6e3a1"
+    },
+    "common_capacity_status_corrected_v2": {
+      "path": "data/phase13/common_capacity_status_corrected_v2.json",
+      "sha256": "34c2eb19069a14654d2ea7ac49b8b9be8d5b2300dd2ea4caaccee3fb7ddc998f"
+    },
+    "stage_envelope_registry_corrected_v2": {
+      "path": "data/phase13/main/cost_envelope_v2/stage_envelope_registry_corrected_v2.json",
+      "sha256": "715e063a6bb230ce2fdbc015e0e3d53ddc88bb1746f527bc8728eeea53d9e51f"
+    },
+    "cost_proof_corrected_v2": {
+      "path": "data/phase13/main/cost_envelope_v2/cost_proof_corrected_v2.json",
+      "sha256": "aa0e9833cc87a6904b6ff9a67382808c642c5b803e6ba450b673cccdee766403"
+    },
+    "candidate_manifest_corrected_v2": {
+      "path": "data/phase13/main/cost_envelope_v2/candidate_manifest_corrected_v2.json",
+      "sha256": "435f4c8d67d8db8ad99021b2dfac0463d9668beb65b6a1351d23f9410666ec14"
+    },
+    "corrected_prompt_answer_payload_contract_v1": {
+      "path": "data/phase13/main/mr_p4/corrected_v1/answer_payload_contract_v1.json",
+      "sha256": "99d5f490c0a97c49e486ef843e2e5946003e9259817a8b0fb24168b9c58b8083"
+    },
+    "corrected_prompt_common_task_spec_contract_v1": {
+      "path": "data/phase13/main/mr_p4/corrected_v1/common_task_spec_contract_v1.json",
+      "sha256": "66d2afecda6c449df8bcacc12ffd3ba99e8a105881efaa5d0bc51119e1c7afcd"
+    },
+    "corrected_prompt_game24_task_prompt_v1": {
+      "path": "data/phase13/main/mr_p4/corrected_v1/game24_task_prompt_v1.txt",
+      "sha256": "138197fa4321a120a67a213ea7e4c700eaa312d599a0ff709908666c7b13c504"
+    },
+    "corrected_prompt_meb_task_prompt_v1": {
+      "path": "data/phase13/main/mr_p4/corrected_v1/meb_task_prompt_v1.txt",
+      "sha256": "e3088a1331da1e1c27bcbc1988204a3653a32b190a4d827a0df7cc56fdad7030"
+    },
+    "corrected_prompt_mmlu_task_prompt_v1": {
+      "path": "data/phase13/main/mr_p4/corrected_v1/mmlu_task_prompt_v1.txt",
+      "sha256": "fab13cc228e2a32611b7a951287083ce1a861b3a341a5a58cb1c3f02e2354a08"
+    },
+    "corrected_prompt_provider_free_conformance_v2": {
+      "path": "data/phase13/main/mr_p4/corrected_v1/provider_free_conformance_v2.json",
+      "sha256": "5b00267687aba5bfa5ce54dcf61a6f192d01fb4547a241fdaa863d59fef32ff0"
+    },
+    "corrected_prompt_word_sorting_task_prompt_v1": {
+      "path": "data/phase13/main/mr_p4/corrected_v1/word_sorting_task_prompt_v1.txt",
+      "sha256": "6656718573b4c1d11df36f4050444ab56f5c9544d2f0655a489d4a4ca36eafb9"
+    }
+  },
+  "execution_templates": {
+    "tasks": [
+      "game24",
+      "math_equation_balancer",
+      "word_sorting",
+      "mmlu_pro_engineering",
+      "mmlu_pro_physics"
+    ],
+    "memory_baselines": [
+      "fh_bounded",
+      "rag_frozen",
+      "bot_style",
+      "reflexion_style",
+      "dc_rs"
+    ],
+    "arms": [
+      "clean",
+      "correct",
+      "irrelevant",
+      "contam"
+    ],
+    "included_task_baseline_pairs": [
+      [
+        "game24",
+        "fh_bounded"
+      ],
+      [
+        "game24",
+        "rag_frozen"
+      ],
+      [
+        "game24",
+        "bot_style"
+      ],
+      [
+        "game24",
+        "reflexion_style"
+      ],
+      [
+        "game24",
+        "dc_rs"
+      ],
+      [
+        "math_equation_balancer",
+        "fh_bounded"
+      ],
+      [
+        "math_equation_balancer",
+        "rag_frozen"
+      ],
+      [
+        "math_equation_balancer",
+        "bot_style"
+      ],
+      [
+        "math_equation_balancer",
+        "reflexion_style"
+      ],
+      [
+        "math_equation_balancer",
+        "dc_rs"
+      ],
+      [
+        "word_sorting",
+        "fh_bounded"
+      ],
+      [
+        "word_sorting",
+        "rag_frozen"
+      ],
+      [
+        "word_sorting",
+        "bot_style"
+      ],
+      [
+        "word_sorting",
+        "reflexion_style"
+      ],
+      [
+        "word_sorting",
+        "dc_rs"
+      ],
+      [
+        "mmlu_pro_engineering",
+        "fh_bounded"
+      ],
+      [
+        "mmlu_pro_engineering",
+        "bot_style"
+      ],
+      [
+        "mmlu_pro_engineering",
+        "reflexion_style"
+      ],
+      [
+        "mmlu_pro_engineering",
+        "dc_rs"
+      ],
+      [
+        "mmlu_pro_physics",
+        "fh_bounded"
+      ],
+      [
+        "mmlu_pro_physics",
+        "bot_style"
+      ],
+      [
+        "mmlu_pro_physics",
+        "reflexion_style"
+      ],
+      [
+        "mmlu_pro_physics",
+        "dc_rs"
+      ]
+    ],
+    "nomem_tasks": [
+      "game24",
+      "math_equation_balancer",
+      "word_sorting",
+      "mmlu_pro_engineering",
+      "mmlu_pro_physics"
+    ],
+    "abstract_seed_slots_per_task": 10,
+    "concrete_seed_registry_status": "CONCRETE_MAIN_SEED_REGISTRY_FROZEN",
+    "H_run": 50,
+    "H_primary": 50,
+    "primary_analysis_window_id": "core_prefix_50",
+    "tool_mode": "text_only",
+    "call_ceilings": {
+      "fh_bounded": {
+        "nominal": 1,
+        "maximum": 1
+      },
+      "rag_frozen": {
+        "nominal": 1,
+        "maximum": 1
+      },
+      "bot_style": {
+        "nominal": 3,
+        "maximum": 3
+      },
+      "reflexion_style": {
+        "nominal": 1,
+        "maximum": 4
+      },
+      "dc_rs": {
+        "nominal": 2,
+        "maximum": 2
+      },
+      "nomem": {
+        "nominal": 1,
+        "maximum": 1
+      }
+    }
+  },
+  "level2_interactions": {
+    "anchor": "fh_bounded",
+    "contrast": "difference_of_clean_minus_contam",
+    "support": "task_local_pairwise_common_structural_support",
+    "multiplicity": "task_local_holm_fwer",
+    "alpha": 0.05,
+    "comparators_by_task": {
+      "game24": [
+        "rag_frozen",
+        "bot_style",
+        "reflexion_style",
+        "dc_rs"
+      ],
+      "math_equation_balancer": [
+        "rag_frozen",
+        "bot_style",
+        "reflexion_style",
+        "dc_rs"
+      ],
+      "word_sorting": [
+        "rag_frozen",
+        "bot_style",
+        "reflexion_style",
+        "dc_rs"
+      ],
+      "mmlu_pro_engineering": [
+        "bot_style",
+        "reflexion_style",
+        "dc_rs"
+      ],
+      "mmlu_pro_physics": [
+        "bot_style",
+        "reflexion_style",
+        "dc_rs"
+      ]
+    }
+  },
+  "provider_runtime_contract": {
+    "api": "OpenAI Responses API",
+    "model": "gpt-5.6-luna",
+    "service_tier": "default",
+    "reasoning_mode": "standard",
+    "reasoning_effort": "none",
+    "reasoning_context": "current_turn",
+    "previous_response_id": null,
+    "store": false,
+    "tools": [],
+    "timeout_seconds": 180,
+    "retries_after_initial_attempt": 0,
+    "semantic_invalid_generic_retry": false,
+    "session_isolation": "independent_per_trial_and_arm"
+  },
+  "gates": {
+    "synthetic_observability_conformance_status": "PASS",
+    "provider_session_retry_resource_contract_status": "PASS",
+    "static_readiness0_status": "PASS",
+    "tau_star_status": "PASS",
+    "cost_feasibility_status": "PASS",
+    "live_api_status": "PASS"
+  },
+  "u_t_status": "NOT_REGISTERED_FOR_CURRENT_MAIN",
+  "mr_p4_closure_claimed": true,
+  "mr_p5_status": "NOT_STARTED",
+  "mr_p6_status": "NOT_AUTHORIZED",
+  "main_execution_authorized": false,
+  "main_a_measured_scientific_execution_count": 0,
+  "closure_hash": "261b984fcf646f062b51adf540a9bb062d79824538c388971410098d50ce60cc",
+  "corrected_run_id": "phase13-main-a-corrected-20260903-v2"
+}

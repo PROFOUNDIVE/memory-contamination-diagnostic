@@ -1,0 +1,10 @@
+{
+  "schema_version": "phase13_corrected_answer_payload_contract_v1",
+  "game24": "one_arithmetic_expression",
+  "math_equation_balancer": "one_complete_operator_filled_equation",
+  "word_sorting": "one_complete_sorted_token_sequence",
+  "mmlu_pro_engineering": "one_uppercase_displayed_option_label",
+  "mmlu_pro_physics": "one_uppercase_displayed_option_label",
+  "outer_envelope_policy": "preserve_registered_baseline_native_envelope",
+  "semantic_payload_baseline_invariant": true
+}
