@@ -74,8 +74,8 @@ def test_approved_cost_policy_package_reconstructs_exact_bound() -> None:
     assert report.total_budget_ceiling_krw == 500_000
     assert report.reserve_fraction == "0.10"
     assert report.core_authorization_gate_krw == 450_000
-    assert report.cmax_main_krw == 444_126
-    assert report.margin_krw == 5_874
+    assert report.cmax_main_krw == 444_256
+    assert report.margin_krw == 5_744
     assert report.writer_cap == 8192
     assert report.common_capacity_tokens == 8192
     assert report.maximum_transport_attempts == 1
@@ -100,7 +100,7 @@ def test_cost_policy_module_main_emits_validation_report(
     policy.main()
 
     report = json.loads(capsys.readouterr().out)
-    assert report["cmax_main_krw"] == 444_126
+    assert report["cmax_main_krw"] == 444_256
     assert report["activation_status"] == "PENDING_CONTROLLED_EXTERNAL_AUTHORITY_WRITE"
 
 
@@ -151,7 +151,7 @@ def test_cost_policy_binds_stage_caps_and_single_transport_attempt() -> None:
             "_phase13_maximum_input_tokens": 1177,
             "_phase13_execution_envelope_id": "CORE_EXECUTION_ENVELOPE_REGISTRY_V2",
             "_phase13_execution_envelope_sha256": (
-                "41cd7e7310a961d0856e2020b05a3ae455811fb0660455b4c7dfbcb0a9aafd93"
+                "58e1ebda33a63fba4cb5289d21531298a7803a765b3525214d45700bc993cc22"
             ),
             "_phase13_maximum_transport_attempts": 1,
             "_phase13_failure_contract_id": "CORE_TRANSPORT_ATTEMPT_CONTRACT_V2",
@@ -203,7 +203,7 @@ def test_cost_policy_validator_rejects_tampered_cost_proof(tmp_path: Path) -> No
     package = tmp_path / "data/phase13/main/cost_envelope_v2"
     package.parent.mkdir(parents=True)
     shutil.copytree(ROOT / "data/phase13/main/cost_envelope_v2", package)
-    proof_path = package / "cost_proof_v1.json"
+    proof_path = package / "cost_proof_corrected_v2.json"
     proof = json.loads(proof_path.read_text(encoding="utf-8"))
     proof["cmax_main_krw"] = 442_129
     proof_path.write_text(json.dumps(proof, indent=2) + "\n", encoding="utf-8")
@@ -219,7 +219,7 @@ def test_cost_policy_validator_rejects_self_consistent_noncanonical_path(
     package = _copy_complete_policy_fixture(tmp_path)
     alternate = tmp_path / "alternate_stage_registry.json"
     shutil.copyfile(package / "stage_envelope_registry_v1.json", alternate)
-    manifest_path = package / "candidate_manifest_v1.json"
+    manifest_path = package / "candidate_manifest_corrected_v2.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["artifacts"]["stage_envelope_registry"]["path"] = alternate.name
     manifest["manifest_hash"] = _canonical_hash(manifest, "manifest_hash")
@@ -234,9 +234,9 @@ def test_cost_policy_validator_rejects_self_consistent_noncanonical_stage(
 ) -> None:
     policy = _policy_module()
     package = _copy_complete_policy_fixture(tmp_path)
-    registry_path = package / "stage_envelope_registry_v1.json"
-    proof_path = package / "cost_proof_v1.json"
-    manifest_path = package / "candidate_manifest_v1.json"
+    registry_path = package / "stage_envelope_registry_corrected_v2.json"
+    proof_path = package / "cost_proof_corrected_v2.json"
+    manifest_path = package / "candidate_manifest_corrected_v2.json"
     registry = json.loads(registry_path.read_text(encoding="utf-8"))
     proof = json.loads(proof_path.read_text(encoding="utf-8"))
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -266,7 +266,7 @@ def test_cost_policy_validator_rejects_self_consistent_unsafe_handoff(
     policy = _policy_module()
     package = _copy_complete_policy_fixture(tmp_path)
     handoff_path = package / "controlled_external_write_v1.json"
-    manifest_path = package / "candidate_manifest_v1.json"
+    manifest_path = package / "candidate_manifest_corrected_v2.json"
     handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     handoff["post_write_stop_conditions"]["main_execution_permitted"] = True

@@ -25,15 +25,15 @@ from memcontam.readiness.phase13_cost_policy_handoff import ControlledExternalWr
 
 
 PACKAGE = Path("data/phase13/main/cost_envelope_v2")
-MANIFEST = PACKAGE / "candidate_manifest_v1.json"
+MANIFEST = PACKAGE / "candidate_manifest_corrected_v2.json"
 INPUT_KRW_PER_TOKEN = Decimal("0.0004")
 OUTPUT_KRW_PER_TOKEN = Decimal("0.00192")
 ModelT = TypeVar("ModelT", bound=BaseModel)
 CANONICAL_ARTIFACT_PATHS: Final = {
     "corrected_cost_envelope": PACKAGE / "corrected_cost_envelope_v2.txt",
-    "stage_envelope_registry": PACKAGE / "stage_envelope_registry_v1.json",
+    "stage_envelope_registry": PACKAGE / "stage_envelope_registry_corrected_v2.json",
     "retry_failure_contract": PACKAGE / "retry_failure_contract_v1.json",
-    "cost_proof": PACKAGE / "cost_proof_v1.json",
+    "cost_proof": PACKAGE / "cost_proof_corrected_v2.json",
     "controlled_external_write": PACKAGE / "controlled_external_write_v1.json",
     "residual_authority_patch": PACKAGE / "post_cutoff_addendum_residual_v1.patch",
 }
@@ -47,7 +47,7 @@ CANONICAL_SOURCE_HASHES: Final = {
 }
 CANONICAL_STAGES: Final = (
     ("full_history_generate", "FH_generation", 10000, 50, 10050, 9330, 512),
-    ("rag_generate", "RAG_generation", 6000, 30, 6030, 290, 512),
+    ("rag_generate", "RAG_generation", 6000, 30, 6030, 344, 512),
     ("bot_problem_distill", "BoT_problem_distillation", 10000, 50, 10050, 1177, 384),
     ("bot_instantiate_solve", "BoT_solve", 10000, 50, 10050, 1949, 512),
     ("bot_thought_distill", "BoT_thought_distillation", 10000, 50, 10050, 2545, 384),

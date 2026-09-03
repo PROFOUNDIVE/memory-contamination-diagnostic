@@ -154,8 +154,8 @@ class CostProof(_FrozenModel):
     budget: Budget
     rounding: Literal["ceil_each_stage_input_and_output_krw_component_then_sum"]
     stage_costs: tuple[StageCost, ...]
-    cmax_main_krw: Literal[444126]
-    margin_to_core_gate_krw: Literal[5874]
+    cmax_main_krw: int = Field(gt=0, lt=450000)
+    margin_to_core_gate_krw: int = Field(gt=0)
     proof_hash: Sha256
 
 
