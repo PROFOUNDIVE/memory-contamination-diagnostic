@@ -11,7 +11,7 @@ from memcontam.logging.schema import VerifierResult
 from memcontam.memory.bot_buffer import BotBufferIdentity
 from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
-from memcontam.tasks.dispatch import canonical_task_json
+from memcontam.tasks.dispatch import canonical_task_json, render_common_task_spec
 
 
 def _task() -> TaskInstance:
@@ -261,7 +261,7 @@ def test_thought_distillation_prompt_omits_verifier_data() -> None:
     thought_prompt = outcome.method_calls[-1].messages[1]["content"]
     assert outcome.status == "succeeded"
     assert verifier_calls == ["24"]
-    assert canonical_task_json(task) in thought_prompt
+    assert render_common_task_spec(task) in thought_prompt
     assert '"entry_id":"template-1"' in thought_prompt
     assert "TASK_VERIFIER_GOLD" not in thought_prompt
     assert "VERIFIER_PARSED_ANSWER" not in thought_prompt

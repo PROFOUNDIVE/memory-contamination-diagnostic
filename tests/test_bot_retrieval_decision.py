@@ -12,7 +12,7 @@ from memcontam.clients.replay import ReplayClient
 from memcontam.memory.bot_buffer import BotBufferIdentity
 from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
-from memcontam.tasks.dispatch import canonical_task_json
+from memcontam.tasks.dispatch import canonical_task_json, render_common_task_spec
 
 
 def _problem():
@@ -146,7 +146,7 @@ def test_miss_prompt_renders_all_coarse_structures_and_requires_a_selection() ->
     assert source_spans == []
 
 
-def test_bot_v2_prompts_render_the_canonical_task_contract() -> None:
+def test_bot_v2_prompts_render_the_common_task_specification() -> None:
     bot_read = importlib.import_module("memcontam.baselines.bot_read")
     bot_solve = importlib.import_module("memcontam.baselines.bot_solve")
     task = TaskInstance(
@@ -169,9 +169,9 @@ def test_bot_v2_prompts_render_the_canonical_task_contract() -> None:
         bot_read.BoTRetrievalDecision("empty_buffer", None, None, 0.7),
     )
 
-    canonical_task = canonical_task_json(task)
-    assert canonical_task in messages[-1]["content"]
-    assert canonical_task in solve_prompt
+    task_spec = render_common_task_spec(task)
+    assert task_spec in messages[-1]["content"]
+    assert task_spec in solve_prompt
     assert str(task.input) not in messages[-1]["content"]
     assert str(task.input) not in solve_prompt
 

@@ -14,7 +14,7 @@ from memcontam.baselines.contracts import NonEmptyStr
 from memcontam.logging.provenance import PromptSourcePart, build_prompt_with_sources
 from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
-from memcontam.tasks.dispatch import canonical_task_json
+from memcontam.tasks.dispatch import render_model_visible_task
 
 
 BOT_SOLVE_PROMPT_VERSION = "bot_solve_json_v2"
@@ -54,7 +54,7 @@ def render_bot_solve_prompt(
             'selected_structure, solution_trace, final_answer. final_answer must be "final: <answer>".'
         )
     )
-    suffix = f"\n\nTask input:\n{canonical_task_json(task)}\n\n" + result_contract
+    suffix = f"\n\n{render_model_visible_task(task)}\n\n" + result_contract
     entry = retrieval_decision.matched_entry
     if retrieval_decision.decision == "matched" and isinstance(entry, MemoryEntry):
         selected = "Set selected_structure to retrieved-template.\n\n"

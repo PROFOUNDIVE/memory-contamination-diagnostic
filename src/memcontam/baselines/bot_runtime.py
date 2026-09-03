@@ -40,7 +40,7 @@ from memcontam.memory.bot_buffer import (
 from memcontam.memory.embeddings import EmbeddingProvider
 from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
-from memcontam.tasks.dispatch import canonical_task_json
+from memcontam.tasks.dispatch import render_model_visible_task
 from memcontam.tools.base import (
     ToolExecutionError,
     ToolInfrastructureError,
@@ -299,7 +299,7 @@ class BotRuntime:
             )
         try:
             payload = distill_thought_template(
-                canonical_task=canonical_task_json(task),
+                canonical_task=render_model_visible_task(task),
                 distilled_problem=distilled,
                 retrieval_decision=retrieval_decision,
                 selected_structure=solve_result.selected_structure,

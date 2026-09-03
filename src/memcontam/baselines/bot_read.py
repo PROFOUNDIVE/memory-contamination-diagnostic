@@ -10,7 +10,7 @@ from memcontam.baselines.contracts import NonEmptyStr
 from memcontam.memory.embeddings import EmbeddingProvider, normalized_dot_top_k
 from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
-from memcontam.tasks.dispatch import canonical_task_json
+from memcontam.tasks.dispatch import render_model_visible_task
 
 
 CoarseStructure = Literal["prompt-based", "procedure-based", "programming-based"]
@@ -65,7 +65,7 @@ def distill_problem(
             {"role": "system", "content": "You are an expert information distillation assistant."},
             {
                 "role": "user",
-                "content": f"{_DISTILL_INSTRUCTIONS}\n\nUser input:\n{canonical_task_json(task)}",
+                "content": f"{_DISTILL_INSTRUCTIONS}\n\n{render_model_visible_task(task)}",
             },
         ],
         model,
