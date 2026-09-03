@@ -22,7 +22,7 @@ from memcontam.memory.embeddings import EmbeddingProvider
 from memcontam.memory.retrieval import DenseIndex
 from memcontam.memory.stores import MemoryEntry, MemoryState
 from memcontam.tasks.base import TaskInstance
-from memcontam.tasks.dispatch import canonical_task_json
+from memcontam.tasks.dispatch import canonical_task_json, render_model_visible_task
 
 
 class RetrievalRagAdapter:
@@ -297,7 +297,7 @@ def _messages(
             parts.append("\n\n")
         parts.append(PromptSourcePart(document.text, entries_by_id[records[index].document_id]))
     parts.extend(
-        ["\n\nCurrent task:\n", canonical_task_json(task), f"\n\n{FINAL_ANSWER_INSTRUCTION}"]
+        ["\n\n", render_model_visible_task(task), f"\n\n{FINAL_ANSWER_INSTRUCTION}"]
     )
     content, spans = build_prompt_with_sources(parts, message_index=1)
     return [

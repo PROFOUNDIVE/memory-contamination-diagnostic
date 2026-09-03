@@ -30,7 +30,7 @@ from memcontam.experiment.phase12.filter_challenge.provenance import (
     finalize_failed_answer_call,
 )
 from memcontam.tasks.base import TaskInstance
-from memcontam.tasks.dispatch import canonical_task_json
+from memcontam.tasks.dispatch import canonical_task_json, render_model_visible_task
 
 
 class FullHistoryAdapter:
@@ -178,7 +178,7 @@ def _messages(
         parts.append(PromptSourcePart(record.content, record))
     if decision.records:
         parts.append("\n\n")
-    parts.append(f"TASK:\n{canonical_task_json(task)}\n\n{FINAL_ANSWER_INSTRUCTION}")
+    parts.append(f"{render_model_visible_task(task)}\n\n{FINAL_ANSWER_INSTRUCTION}")
     content, spans = build_prompt_with_sources(parts, message_index=0, entries=decision.records)
     return [{"role": "user", "content": content}], spans, decision.records, decision.telemetry()
 
