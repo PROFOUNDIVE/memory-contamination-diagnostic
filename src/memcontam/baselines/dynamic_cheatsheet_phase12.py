@@ -24,7 +24,11 @@ from memcontam.memory.filtered_state import (
 )
 from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
-from memcontam.tasks.dispatch import canonical_core_task_json, canonical_task_json
+from memcontam.tasks.dispatch import (
+    canonical_core_task_json,
+    canonical_task_json,
+    render_model_visible_task,
+)
 from memcontam.tools.base import (
     ToolExecutionError,
     ToolExecutor,
@@ -261,11 +265,14 @@ class DcRsPhase12Adapter:
         archive_by_id = {entry.entry_id: entry for entry in active_archive}
         retrieved_archive = [archive_by_id[record.document_id] for record in retrieved_records]
         core_dc_rs = _baseline_id(trial) == "dc_rs"
+        model_visible_task = (
+            render_model_visible_task(trial.task) if core_dc_rs else canonical_task
+        )
         recorder = MethodCallRecorder(trial.client)
         call_config = {**dict(trial.config), "sample_id": trial.task.sample_id}
         if core_dc_rs:
             curation_message, curation_spans, source_aliases = core_synthesis_message(
-                canonical_task,
+                model_visible_task,
                 None if prior_strategy is None else _strategy_memory(prior_strategy),
                 retrieved_archive,
             )
@@ -345,7 +352,7 @@ class DcRsPhase12Adapter:
             else legacy_dc._dc_rs_generation_message
         )
         generation_message, generation_spans = generation_builder(
-            canonical_task,
+            model_visible_task,
             strategy_content,
             recorder.get_records()[-1].call_id,
             curation_spans,

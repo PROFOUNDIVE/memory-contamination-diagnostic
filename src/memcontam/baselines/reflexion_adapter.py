@@ -34,7 +34,7 @@ from memcontam.experiment.phase12.filter_challenge.provenance import (
     finalize_failed_answer_call,
 )
 from memcontam.tasks.base import TaskInstance
-from memcontam.tasks.dispatch import canonical_task_json
+from memcontam.tasks.dispatch import render_model_visible_task
 
 
 @dataclass
@@ -342,7 +342,7 @@ def _generation_messages(
             parts.append(PromptSourcePart(_render_reflection(entry), entry))
     else:
         parts.append("(none)")
-    parts.append(f"\n\nCurrent task:\n{canonical_task_json(task)}")
+    parts.append(f"\n\n{render_model_visible_task(task)}")
     content, spans = build_prompt_with_sources(parts, message_index=1)
     return [
         {
@@ -375,7 +375,7 @@ def _reflection_messages(
     else:
         parts.append("(none)")
     trajectory_prefix = (
-        f"\n\nCurrent task:\n{canonical_task_json(task)}\n\nFailed actor response:\n"
+        f"\n\n{render_model_visible_task(task)}\n\nFailed actor response:\n"
     )
     suffix = f"\n\nParsed answer:\n{parsed_answer}\n\nFailure class:\nincorrect_answer"
     parts.append(trajectory_prefix)
