@@ -39,8 +39,12 @@ def production_archive_from_ordinary(
 
     if run.model != "gpt-5.6-luna":
         raise ProductionRuntimeJoinError("PRODUCTION_PROVIDER_MODEL_REQUIRED")
-    if run.branch is None:
+    if run.baseline != "nomem" and run.branch is None:
         raise ProductionRuntimeJoinError("PRODUCTION_CHECKPOINT_REQUIRED")
+    if run.baseline == "nomem" and run.branch is not None:
+        raise ProductionRuntimeJoinError("PRODUCTION_NOMEM_CHECKPOINT_FORBIDDEN")
+    if identity.scientific_result is not True:
+        raise ProductionRuntimeJoinError("PRODUCTION_SCIENTIFIC_RESULT_REQUIRED")
     if run.trajectory_seed is None or run.trajectory_seed != identity.trajectory_seed:
         raise ProductionRuntimeJoinError("PRODUCTION_TRAJECTORY_SEED_MISMATCH")
     ordered_sample_ids_sha256 = hashlib.sha256(
@@ -60,8 +64,12 @@ def production_archive_from_ordinary(
         )
     ):
         raise ProductionRuntimeJoinError("PRODUCTION_RESULT_IDENTITY_MISMATCH")
-    checkpoint_index = run.branch.checkpoint.state.native_state.get("checkpoint_index")
-    if type(checkpoint_index) is not int or checkpoint_index < 0:
+    checkpoint_index = (
+        None
+        if run.branch is None
+        else run.branch.checkpoint.state.native_state.get("checkpoint_index")
+    )
+    if run.branch is not None and (type(checkpoint_index) is not int or checkpoint_index < 0):
         raise ProductionRuntimeJoinError("PRODUCTION_CHECKPOINT_INDEX_REQUIRED")
     request = ProviderRequestRecord(
         api="OpenAI Responses API",
@@ -84,6 +92,10 @@ def production_archive_from_ordinary(
             scientific_result=identity.scientific_result,
             ordered_sample_ids_sha256=identity.ordered_sample_ids_sha256,
             request=request,
+            parsed_answer=trial.outcome.parsed_answer,
+            method_calls=tuple(
+                call for call in trial.outcome.method_calls if isinstance(call, MethodCall)
+            ),
             terminal_method_call=(
                 None
                 if trial.outcome.status == "succeeded"
@@ -108,7 +120,7 @@ def production_archive_from_ordinary(
         )
     )
     return ProductionObservabilityArchive(
-        schema_version="phase13_production_observability_archive_v1",
+        schema_version="phase13_production_observability_archive_v2",
         registration_packet_sha256=identity.registration_packet_sha256,
         u_t_status="NOT_REGISTERED_FOR_CURRENT_MAIN",
         records=records,

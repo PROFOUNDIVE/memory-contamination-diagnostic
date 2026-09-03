@@ -18,10 +18,13 @@ from memcontam.logging.schema_v3 import (
     ContextEvent,
     MemoryArmExecutionKey,
     MemoryBranchTrialLog,
+    NoMemExecutionKey,
+    NoMemTrialLog,
     RetrievalEvent,
 )
 from memcontam.readiness.phase13_production_runtime_memory import production_memory_events
 from memcontam.readiness.phase13_production_runtime_models import (
+    ProductionNoMemTrialEvidence,
     ProductionOrdinaryRunIdentity,
     ProductionRuntimeJoinError,
 )
@@ -62,11 +65,12 @@ def build_production_trial_evidence(
     identity: ProductionOrdinaryRunIdentity,
     sample_id: str,
     suffix_order: int,
-    checkpoint_index: int,
-) -> Phase13TrialEvidence:
-    assert run.branch is not None
+    checkpoint_index: int | None,
+) -> Phase13TrialEvidence | ProductionNoMemTrialEvidence:
     if run.baseline == "nomem":
-        raise ProductionRuntimeJoinError("PRODUCTION_MEMORY_BASELINE_REQUIRED")
+        return _build_nomem_trial_evidence(run, result, identity, sample_id, suffix_order)
+    if run.branch is None or checkpoint_index is None:
+        raise ProductionRuntimeJoinError("PRODUCTION_CHECKPOINT_REQUIRED")
     current_trial_id = trial_id(run, sample_id, suffix_order)
     absolute_index = checkpoint_index + suffix_order
     before = _entries(result.outcome.memory_before)
@@ -171,6 +175,50 @@ def build_production_trial_evidence(
         removed_entry_ids=removed_ids,
         memory_events=memory_events,
         lineage=lineage,
+    )
+
+
+def _build_nomem_trial_evidence(
+    run: ProspectiveOrdinaryRun,
+    result: RuntimeTrialResult,
+    identity: ProductionOrdinaryRunIdentity,
+    sample_id: str,
+    suffix_order: int,
+) -> ProductionNoMemTrialEvidence:
+    current_trial_id = trial_id(run, sample_id, suffix_order)
+    succeeded = result.outcome.status == "succeeded"
+    return ProductionNoMemTrialEvidence(
+        evidence_scope="production_runtime",
+        task=run.task_name,
+        baseline="nomem",
+        trajectory_seed=identity.trajectory_seed,
+        concrete_seed_id=identity.concrete_seed_id,
+        analysis_window_id=identity.analysis_window_id,
+        trial_id=current_trial_id,
+        order_key=suffix_order,
+        trial=NoMemTrialLog(
+            absolute_trial_index=suffix_order,
+            event_time=suffix_order - 1,
+            parse_status="parsed" if result.outcome.parsed_answer else "unparsed",
+            execution_status="completed" if succeeded else "failed",
+            failure_class=result.outcome.error_type,
+            analysis_inclusion="included" if succeeded else "excluded",
+            inclusion_reason=(
+                "production_runtime_join" if succeeded else "terminal_technical_missingness"
+            ),
+            context_event_id_or_none=None,
+            retrieval_event_ids=[],
+            tool_event_ids=[],
+            auxiliary_context_inclusion_or_none=None,
+            operational_attribution_or_none=None,
+            trial_kind="nomem_singleton",
+            execution_key=NoMemExecutionKey(kind="nomem_singleton", key="*"),
+        ),
+        verified_outcome=(
+            None
+            if not succeeded
+            else (1 if result.outcome.verifier_result is True else 0)
+        ),
     )
 
 
