@@ -14,7 +14,7 @@ from memcontam.clients.recording import MethodCallRecorder
 from memcontam.logging.schema import VerifierResult
 from memcontam.memory.stores import MemoryState
 from memcontam.tasks.base import TaskInstance
-from memcontam.tasks.dispatch import canonical_task_json
+from memcontam.tasks.dispatch import render_model_visible_task
 
 
 class NoMemoryPolicy:
@@ -28,7 +28,7 @@ class NoMemoryPolicy:
             },
             {
                 "role": "user",
-                "content": f"Task family:\n{task.task_name}\n\nCurrent task:\n{canonical_task_json(task)}",
+                "content": render_model_visible_task(task),
             },
         ]
 

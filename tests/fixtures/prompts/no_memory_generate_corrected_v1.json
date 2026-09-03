@@ -1,0 +1,1 @@
+{"stage":"no_memory_generate","messages":[{"role":"system","content":"Solve the task. Use no persistent memory. Return exactly one non-empty terminal line: final: <answer>."},{"role":"user","content":"{{task_spec}}"}]}

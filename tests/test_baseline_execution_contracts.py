@@ -35,7 +35,7 @@ def test_no_memory_prompt_matches_the_committed_prompt_fixture() -> None:
     from memcontam.baselines.no_memory import NoMemoryPolicy
     from memcontam.memory.stores import MemoryState
     from memcontam.tasks.base import TaskInstance
-    from memcontam.tasks.dispatch import canonical_task_json
+    from memcontam.tasks.dispatch import render_common_task_spec
 
     task = TaskInstance(
         sample_id="sample-1",
@@ -43,13 +43,13 @@ def test_no_memory_prompt_matches_the_committed_prompt_fixture() -> None:
         input={"numbers": [1, 3, 4, 6], "target": 24},
     )
     assert_prompt_bytes(
-        Path(__file__).parent / "fixtures" / "prompts" / "no_memory_generate.json",
+        Path(__file__).parent
+        / "fixtures"
+        / "prompts"
+        / "no_memory_generate_corrected_v1.json",
         stage="no_memory_generate",
         messages=NoMemoryPolicy().build_prompt(task, MemoryState()),
-        replacements={
-            "{{task_family}}": task.task_name,
-            "{{task_canonical}}": canonical_task_json(task),
-        },
+        replacements={"{{task_spec}}": render_common_task_spec(task)},
     )
 
 
@@ -79,7 +79,9 @@ def test_reflexion_policy_build_prompt_delegates_to_the_adapter_renderer() -> No
     from memcontam.memory.stores import MemoryEntry, MemoryState
     from memcontam.tasks.base import TaskInstance
 
-    task = TaskInstance(sample_id="sample-1", task_name="game24", input={})
+    task = TaskInstance(
+        sample_id="sample-1", task_name="game24", input={"numbers": [1, 3, 4, 6]}
+    )
     reflection = MemoryEntry(
         entry_id="reflection-1",
         content="Reflection: verify arithmetic.",
