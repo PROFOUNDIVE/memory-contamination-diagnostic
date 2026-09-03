@@ -36,7 +36,7 @@ _SUFFIX_STAGES = {
 }
 _STAGE_ENVELOPES = {
     "full_history_generate": (9330, 512, 37507, 9880),
-    "rag_generate": (290, 512, 700, 5928),
+    "rag_generate": (344, 512, 830, 5928),
     "bot_problem_distill": (1177, 384, 4732, 7410),
     "bot_instantiate_solve": (1949, 512, 7835, 9880),
     "bot_thought_distill": (2545, 384, 10231, 7410),
@@ -202,14 +202,15 @@ def _attribute_projected_cost(
     for item in objects:
         projected = 0
         for stage, count in _stages(item):
-            input_tokens, output_tokens, _, _ = _STAGE_ENVELOPES[stage]
+            _, _, input_krw, output_krw = _STAGE_ENVELOPES[stage]
+            stage_krw = input_krw + output_krw
             for _ in range(count):
                 positions[stage] += 1
                 position = positions[stage]
-                projected += _ceil_fraction(position * input_tokens, 2500)
-                projected -= _ceil_fraction((position - 1) * input_tokens, 2500)
-                projected += _ceil_fraction(position * output_tokens * 24, 12500)
-                projected -= _ceil_fraction((position - 1) * output_tokens * 24, 12500)
+                projected += _ceil_fraction(position * stage_krw, stage_counts[stage])
+                projected -= _ceil_fraction(
+                    (position - 1) * stage_krw, stage_counts[stage]
+                )
         attributed.append(replace(item, projected_cost_krw=projected))
     component_totals = {
         stage: (

@@ -22,8 +22,8 @@ def _candidate_package() -> MainExecutionFreeze:
     payload = json.loads(P5.read_text(encoding="utf-8"))
     payload["cost_guard"].update(
         semantic_calls=108930,
-        cmax_main_krw=444126,
-        margin_krw=5874,
+        cmax_main_krw=444256,
+        margin_krw=5744,
     )
     payload["runtime"]["tools"] = ()
     return MainExecutionFreeze.model_validate(payload)
@@ -63,8 +63,8 @@ def test_nomem_has_no_prefix_and_projection_telescopes_to_frozen_total() -> None
 
     assert all(unit.prefix_unit_id is None for unit in nomem)
     assert all(unit.projected_cost_krw > 0 for unit in units)
-    assert sum(unit.projected_cost_krw for unit in units) == 444126
-    assert units[52].projected_cost_krw == 4
+    assert sum(unit.projected_cost_krw for unit in units) == 444256
+    assert units[52].projected_cost_krw == 5
 
 
 def test_production_order_and_projection_are_deterministic() -> None:
