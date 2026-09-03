@@ -13,9 +13,10 @@ from memcontam.baselines.dynamic_cheatsheet_phase12 import (
 )
 from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
+from memcontam.tasks.dispatch import render_common_task_spec
 
 
-STATUS_PATH = Path("data/phase13/common_capacity_status_v1.json")
+STATUS_PATH = Path("data/phase13/common_capacity_status_corrected_v2.json")
 
 
 def test_source_aliases_are_bounded_reversible_and_collision_safe() -> None:
@@ -135,7 +136,7 @@ def test_approved_token_contract_binds_complete_common_capacity() -> None:
 
 def test_capacity_parser_rejects_tampered_materialized_value() -> None:
     module = importlib.import_module("memcontam.readiness.phase13_capacity_realization")
-    artifact = Path("data/phase13/common_capacity_v1.json")
+    artifact = Path("data/phase13/common_capacity_corrected_v2.json")
     payload = json.loads(artifact.read_text(encoding="utf-8"))
 
     record = module.parse_common_capacity(artifact.read_bytes())
@@ -152,19 +153,19 @@ def test_capacity_reserves_are_rebuilt_from_frozen_registries() -> None:
     reserves = module.derive_capacity_reserves(Path("."))
 
     assert reserves.per_task_R_FH == {
-        "game24": 4149,
-        "math_equation_balancer": 4163,
-        "word_sorting": 4215,
-        "mmlu_pro_engineering": 5234,
-        "mmlu_pro_physics": 4875,
-        "gpqa_diamond": 7029,
+        "game24": 4207,
+        "math_equation_balancer": 4253,
+        "word_sorting": 4309,
+        "mmlu_pro_engineering": 5112,
+        "mmlu_pro_physics": 4781,
+        "gpqa_diamond": 7027,
     }
     assert reserves.per_task_I_DC_writer == {
-        "game24": 33032,
-        "math_equation_balancer": 33085,
-        "word_sorting": 33286,
-        "mmlu_pro_engineering": 36561,
-        "mmlu_pro_physics": 34972,
+        "game24": 33272,
+        "math_equation_balancer": 33453,
+        "word_sorting": 33670,
+        "mmlu_pro_engineering": 36611,
+        "mmlu_pro_physics": 35068,
         "gpqa_diamond": 37905,
     }
 
@@ -173,7 +174,7 @@ def test_capacity_validator_rejects_self_consistent_but_underived_reserves(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     module = importlib.import_module("memcontam.readiness.phase13_capacity_realization")
-    artifact = Path("data/phase13/common_capacity_v1.json")
+    artifact = Path("data/phase13/common_capacity_corrected_v2.json")
     record = module.parse_common_capacity(artifact.read_bytes())
     tampered = record.model_copy(
         update={"per_task_R_FH": {**record.per_task_R_FH, "game24": 4151}}
@@ -196,11 +197,11 @@ def test_dc_writer_reserve_uses_complete_strategy_and_distinct_prior_rows(
         )
         for index in range(1, 6)
     )
-    seen: list[tuple[MemoryEntry, tuple[MemoryEntry, ...]]] = []
+    seen: list[tuple[str, MemoryEntry, tuple[MemoryEntry, ...]]] = []
 
-    def capture(_canonical, prior, pairs):
+    def capture(canonical, prior, pairs):
         assert prior is not None
-        seen.append((prior, tuple(pairs)))
+        seen.append((canonical, prior, tuple(pairs)))
         aliases = SourceAliasTable.from_source_ids(tuple(pair.entry_id for pair in pairs))
         return {"role": "user", "content": "writer"}, [], aliases
 
@@ -208,10 +209,16 @@ def test_dc_writer_reserve_uses_complete_strategy_and_distinct_prior_rows(
 
     assert module._dc_writer_reserve("game24", tasks) > 0
     assert seen
-    assert all(prior.content.startswith("<cheatsheet>") for prior, _pairs in seen)
+    assert [canonical for canonical, _prior, _pairs in seen] == [
+        render_common_task_spec(task) for task in tasks
+    ]
+    assert all(prior.content.startswith("<cheatsheet>") for _canonical, prior, _pairs in seen)
     assert all(
         module.count_text_tokens(prior.content, module.TOKEN_ENCODING)
         == module.COMMON_VISIBLE_MEMORY_TOKENS
-        for prior, _pairs in seen
+        for _canonical, prior, _pairs in seen
     )
-    assert all(len({pair.content for pair in pairs}) == 3 for _prior, pairs in seen)
+    assert all(
+        len({pair.content for pair in pairs}) == 3
+        for _canonical, _prior, pairs in seen
+    )

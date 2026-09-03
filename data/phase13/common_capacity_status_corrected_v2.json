@@ -1,0 +1,94 @@
+{
+  "schema_version": "phase13_common_capacity_status_v2",
+  "status": "COMPLETE",
+  "reason": "COMMON_CAPACITY_MATERIALIZED",
+  "authority": {
+    "decision_packet": "2026-09-03_Phase13_MainA_Corrective_Scientific_Decision_Authority.md",
+    "decision_packet_sha256": "c74fa77540fdbf4ab37cd1c646dc1e720717ca36607ac9c2bd753eb1f38f0dc4",
+    "approved_decisions": ["SD-01:A", "SD-02-G24:A", "SD-02-MEB:A", "SD-02-WS:A", "SD-03:A", "SD-04:A", "SD-05:A"]
+  },
+  "runtime_contract": {
+    "provider": "OpenAI",
+    "endpoint": "Responses API",
+    "requested_model_id": "gpt-5.6-luna",
+    "dated_provider_snapshot": "not_exposed",
+    "freeze_timestamp_utc": "2026-09-03T00:00:00Z",
+    "context_window_tokens": 1050000,
+    "provider_max_output_tokens": 128000,
+    "answer_max_output_tokens": 4096,
+    "writer_max_output_tokens": 8192,
+    "service_tier_decision_code": 3,
+    "service_tier_provider_literal": "default",
+    "reasoning_effort": "none",
+    "reasoning_context": "current_turn",
+    "store": false,
+    "tools": "none"
+  },
+  "token_contract": {
+    "contract_id": "phase13_registered_token_accounting_v1",
+    "capacity_unit": "registered_serialized_tokens",
+    "encoding": "o200k_base",
+    "tokenizer_implementation": "tiktoken",
+    "tiktoken_version": "0.13.0",
+    "requirements_lock_sha256": "c644c8f5f9517461f2545e49e3f5f4907c83ad6340d639b54e7bbac15f126465",
+    "per_message_serialization": "role + LF + content",
+    "message_separator": "LF + LF",
+    "line_endings": "LF",
+    "unicode_normalization": "none",
+    "special_token_handling": "disallowed_special=()",
+    "fixed_prompt_overhead_tokens": 0,
+    "registered_safety_margin_tokens": 0,
+    "provider_token_equivalence_claimed": false,
+    "counting_implementation_sha256": "87fefb5dbb42a469d26acbbf08e53048f8de58dc2506a97085ba87c7cf4ea713"
+  },
+  "source_alias_contract": {
+    "contract_id": "dc_rs_visible_source_alias_v1",
+    "visible_format": "srcNN",
+    "maximum_aliases_per_call": 99,
+    "maximum_visible_alias_tokens": 2,
+    "ordering": "retrieval_order_one_based",
+    "resolution": "per_call_alias_table_to_exact_archive_entry_id",
+    "collision_policy": "duplicate_source_ids_unknown_aliases_and_duplicate_aliases_fail_closed",
+    "canonical_provenance_preserved": true,
+    "runtime_bound": true,
+    "implementation_sha256": "a893ab9431a064431099818d94a18a2a1b1822d2dedc8d5dc45d9c3c964f3f95"
+  },
+  "production_builder_hashes": {
+    "measurement_implementation_sha256": "a6e895dcc9599e19889066da1647f92f41f021435af8ca0311d17f68641166a1",
+    "dc_rs_runtime_builder_sha256": "66274d3056457e5dd0c6e84c3df5a5f8bbf2380404bea59000928478c831723f",
+    "dc_rs_prompt_builder_sha256": "a893ab9431a064431099818d94a18a2a1b1822d2dedc8d5dc45d9c3c964f3f95",
+    "ordinary_runtime_builder_sha256": "05492b3ff486e101536243597e2d5b07a00d984dbbcdd49152905f45c847859c"
+  },
+  "runtime_implementation": {
+    "openai_sdk_version": "2.46.0",
+    "httpx_version": "0.28.1",
+    "httpcore_version": "1.0.9",
+    "pydantic_version": "2.13.4",
+    "client_implementation_sha256": "bb83936fdc4534f7588061dd6b436083ab60400cd1cee2ace0d033aeded4f73b"
+  },
+  "provider_contract_artifact": {
+    "path": "data/phase13/openai_luna_provider_contract_v1.json",
+    "sha256": "7fa5f400d6193ec64229597c0f6f2b193f9613b636d4bfb69c46e831a92bff33"
+  },
+  "registered_writer_io_contract": {
+    "registered_persisted_raw_answer_ceiling": 8192,
+    "capacity_unit": "registered_serialized_tokens",
+    "overflow_policy": "fail_closed_without_persistent_archive_admission",
+    "writer_response_grammar": "exactly_one_complete_whole_cheatsheet_serialization_v1",
+    "F_DC_out_tokens": 0
+  },
+  "capacity_artifact": {
+    "path": "data/phase13/common_capacity_corrected_v2.json",
+    "sha256": "8b4690b895117ea6ed05d9f98d91720b284f9c075c566d6d01dc63b577dd59ae"
+  },
+  "validator": {
+    "path": "src/memcontam/readiness/phase13_capacity_realization.py",
+    "sha256": "693901cf5f66f0b91410bd8ae297dc96caac75e8a39646179e6086d344f69bd1"
+  },
+  "completion": {
+    "capacity_record_materialized": true,
+    "runtime_bound": true,
+    "remaining_prerequisites": [],
+    "next_required_action": null
+  }
+}

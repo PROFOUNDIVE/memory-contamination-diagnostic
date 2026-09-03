@@ -78,7 +78,10 @@ class BuilderHashes(_FrozenModel):
 
 
 class CommonCapacityMaterialization(_FrozenModel):
-    schema_version: Literal["phase13_common_capacity_v1"]
+    schema_version: Literal[
+        "phase13_common_capacity_v1",
+        "phase13_common_capacity_v2",
+    ]
     status: Literal["MATERIALIZED"]
     materialized_at_utc: str
     capacity_law_id: Literal["luna_common_visible_memory_capacity_v1"]
@@ -150,7 +153,7 @@ def parse_common_capacity(raw_json: bytes | str) -> CommonCapacityMaterializatio
 def validated_common_capacity_tokens() -> int:
     repository_root = Path(__file__).resolve().parents[3]
     return validate_common_capacity_artifact(
-        repository_root / "data/phase13/common_capacity_v1.json",
+        repository_root / "data/phase13/common_capacity_corrected_v2.json",
         repository_root,
     ).B_mem_tokens
 

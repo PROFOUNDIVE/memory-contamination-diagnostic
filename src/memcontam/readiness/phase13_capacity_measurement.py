@@ -16,7 +16,7 @@ from memcontam.main_registry import Game24MainRow, MebMainRow, WordSortingMainRo
 from memcontam.memory.stores import MemoryEntry
 from memcontam.readiness.phase13_route_capacity import COMMON_VISIBLE_MEMORY_TOKENS
 from memcontam.tasks.base import TaskInstance
-from memcontam.tasks.dispatch import canonical_core_task_json, canonical_task_json
+from memcontam.tasks.dispatch import canonical_core_task_json, render_common_task_spec
 
 TaskName = Literal[
     "game24",
@@ -200,12 +200,19 @@ def _dc_writer_reserve(task_name: TaskName, tasks: Sequence[TaskInstance]) -> in
         content=_complete_cheatsheet(COMMON_VISIBLE_MEMORY_TOKENS),
         memory_type="strategy",
     )
-    canonical_tasks = tuple(
-        canonical_core_task_json(task)
-        if task_name in CORE_TASKS
-        else canonical_task_json(task)
-        for task in tasks
-    )
+    match task_name:
+        case (
+            "game24"
+            | "math_equation_balancer"
+            | "word_sorting"
+            | "mmlu_pro_engineering"
+            | "mmlu_pro_physics"
+        ):
+            canonical_tasks = tuple(render_common_task_spec(task) for task in tasks)
+        case "gpqa_diamond":
+            canonical_tasks = tuple(canonical_core_task_json(task) for task in tasks)
+        case unreachable:
+            assert_never(unreachable)
     largest_first = sorted(
         range(len(canonical_tasks)),
         key=lambda index: count_text_tokens(canonical_tasks[index], TOKEN_ENCODING),
