@@ -217,10 +217,9 @@ class ProductionMainRuntime:
             production_identity=identity,
         )
         result = execute_prospective_ordinary(run)
-        if branch is not None:
-            archive = production_archive_from_ordinary(run, result, identity)
-            validate_production_archive(archive, self._packet, identity.registration_packet_sha256)
-        return dispatch_output(unit, result.trials, identity)
+        archive = production_archive_from_ordinary(run, result, identity)
+        validate_production_archive(archive, self._packet, identity.registration_packet_sha256)
+        return dispatch_output(unit, result.trials, identity, archive)
 
     def _context(
         self,

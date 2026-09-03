@@ -119,6 +119,10 @@ def run_pending(
         except DispatchTechnicalFailure as failure:
             ledger.persist_terminal_missing(unit.unit_id, failure)
             return _report(ledger, attempted + 1)
+        except ValueError as error:
+            if isinstance(getattr(error, "code", None), str):
+                raise
+            raise MainRunError("MAIN_RUN_POST_INTENT_RUNTIME_FAILURE") from error
         ledger.persist_completed(unit.unit_id, completed)
         attempted += 1
         status = ledger.status()

@@ -15,7 +15,10 @@ from memcontam.logging.schema import MethodCall
 from memcontam.readiness.phase13_cost_policy import load_cost_policy_bundle
 from memcontam.readiness.phase13_main_production import ProductionObject
 from memcontam.readiness.phase13_main_runner_models import InFlightEvidence
-from memcontam.readiness.phase13_production_observability import ProviderRequestRecord
+from memcontam.readiness.phase13_production_observability import (
+    ProductionObservabilityArchive,
+    ProviderRequestRecord,
+)
 from memcontam.readiness.phase13_readiness0_evidence_models import (
     ProviderAuthorityContract,
     ProviderRequestContract,
@@ -43,6 +46,7 @@ class MainRuntimeEvidence(_FrozenModel):
     observability_registration_packet_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     verifier_result: bool | None = None
     request: ProviderRequestRecord
+    production_observability_archive: ProductionObservabilityArchive | None = None
 
     @model_validator(mode="after")
     def _observability_identity(self) -> MainRuntimeEvidence:

@@ -13,12 +13,15 @@ from memcontam.readiness.phase13_core_bundle import CoreTask
 from memcontam.readiness.phase13_legacy_rag_models import FeasibleTaskName
 from memcontam.readiness.phase13_main_live_dispatch import MainUnitDispatchOutput
 from memcontam.readiness.phase13_main_production import ProductionObject
-from memcontam.readiness.phase13_production_observability import ProviderRequestRecord
+from memcontam.readiness.phase13_production_observability import (
+    ProductionObservabilityArchive,
+    ProviderRequestRecord,
+)
 from memcontam.readiness.phase13_production_runtime_models import ProductionOrdinaryRunIdentity
 from memcontam.tasks.base import TaskInstance
 from memcontam.tasks.multiple_choice import verify_answer
 from memcontam.verifiers.game24 import verify_expression
-from memcontam.verifiers.math_equation_balancer import verify_rhs_completion_answer
+from memcontam.verifiers.math_equation_balancer import verify_answer as verify_equation
 from memcontam.verifiers.word_sorting import verify_words
 
 
@@ -61,9 +64,7 @@ def verifier(task: OrdinaryTask) -> Callable[[str, TaskInstance], bool | Verifie
                 answer, seen.input["numbers"], seen.verifier_spec["target"]
             ).is_correct
         case "math_equation_balancer":
-            return lambda answer, seen: verify_rhs_completion_answer(
-                answer, seen.verifier_spec
-            ).is_correct
+            return lambda answer, seen: verify_equation(answer, seen).is_correct
         case "word_sorting":
             return lambda answer, seen: verify_words(
                 answer.split(), seen.verifier_spec["sorted_words"]
@@ -92,7 +93,7 @@ def production_identity(unit: ProductionObject) -> ProductionOrdinaryRunIdentity
         concrete_seed_id=str(unit.seed),
         ordered_sample_ids_sha256=ordered_sample_ids_sha256,
         registration_packet_sha256=registration_packet_sha256,
-        scientific_result=False,
+        scientific_result=unit.kind != "CLEAN_PREFIX",
         checkpoint_registry_sha256=checkpoint_registry_sha256,
     )
 
@@ -101,6 +102,7 @@ def dispatch_output(
     unit: ProductionObject,
     trials: Sequence[RuntimeTrialResult],
     identity: ProductionOrdinaryRunIdentity,
+    archive: ProductionObservabilityArchive | None = None,
 ) -> MainUnitDispatchOutput:
     calls = tuple(
         _reconcile_decoding(call)
@@ -139,6 +141,9 @@ def dispatch_output(
                 retries_after_initial_attempt=0,
                 semantic_invalid_generic_retry=False,
             ).model_dump(mode="json"),
+            "production_observability_archive": (
+                None if archive is None else archive.model_dump(mode="json")
+            ),
         },
         provider_calls=calls,
         realized_cost_krw=realized,
