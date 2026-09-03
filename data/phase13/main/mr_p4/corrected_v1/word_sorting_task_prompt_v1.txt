@@ -1,0 +1,13 @@
+Task family: WordSorting
+
+Words: {words}
+
+Sort the supplied word tokens in ascending lexicographic order.
+Compare the supplied token text case-sensitively from left to right.
+Keep punctuation as part of each token; do not remove or ignore it.
+At the first differing character, the lexically earlier character comes first.
+If one token is a strict prefix of another, place the shorter token first.
+Preserve exactly the supplied token multiset and preserve each token's spelling.
+Return the complete sorted token sequence with exactly one ASCII space between adjacent tokens and no leading or trailing whitespace.
+
+Answer payload: the sorted token sequence only.

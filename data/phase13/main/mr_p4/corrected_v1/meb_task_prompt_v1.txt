@@ -1,0 +1,14 @@
+Task family: MathEquationBalancer
+
+Equation template: {operator_slot_equation}
+
+Replace every question-mark (?) operator slot with exactly one of +, -, *, / so that the complete equation is true.
+Keep every operand in exactly the supplied order.
+Do not delete, duplicate, replace, or reorder an operand.
+Do not add parentheses or another operation.
+Evaluate multiplication and division before addition and subtraction, with left-to-right evaluation within each precedence level.
+Use exact arithmetic.
+Return the complete filled equation, including the equality sign and the supplied right-hand target.
+Do not return only the numeric target.
+
+Answer payload: the complete operator-filled equation only.

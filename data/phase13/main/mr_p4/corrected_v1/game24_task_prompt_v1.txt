@@ -1,0 +1,13 @@
+Task family: Game24
+
+Numbers: {numbers}
+Target: 24
+
+Construct one arithmetic expression whose value is exactly 24.
+Use each supplied number occurrence exactly once.
+Use only addition (+), subtraction (-), multiplication (*), division (/), and parentheses.
+Do not concatenate numbers.
+Do not use exponentiation, factorials, or any newly introduced numeric constant.
+Non-integer rational intermediate values are allowed.
+
+Answer payload: the arithmetic expression only.

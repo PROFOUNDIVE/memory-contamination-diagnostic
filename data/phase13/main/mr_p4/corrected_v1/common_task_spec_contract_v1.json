@@ -1,0 +1,54 @@
+{
+  "schema_version": "phase13_common_task_spec_contract_v1",
+  "status": "MATERIALIZED",
+  "encoding": "UTF-8",
+  "newline_convention": "LF",
+  "model_visible_terminal_newline": false,
+  "field_order_policy": "literal_template_order",
+  "prompt_provenance_policy": "BENCHMARK_FIRST_AUTHORITY_COMPLETED_BASELINE_NATIVE_LAYERED_V1",
+  "approved_decisions": {
+    "SD-01": "A",
+    "SD-02-G24": "A",
+    "SD-02-MEB": "A",
+    "SD-02-WS": "A",
+    "SD-03": "A",
+    "SD-04": "A",
+    "SD-05": "A"
+  },
+  "authority_bindings": {
+    "corrective_scientific_decision_authority_sha256": "c74fa77540fdbf4ab37cd1c646dc1e720717ca36607ac9c2bd753eb1f38f0dc4",
+    "post_audit_decision_packet_sha256": "11ef3ede11391f4216304a6d65b439643052aeb2d622d709c8bf64248b5f5bf8"
+  },
+  "dynamic_placeholder_binding_law": {
+    "numbers": "compact_json_array_preserve_public_occurrence_order_and_multiplicity",
+    "operator_slot_equation": "exact_public_input_string",
+    "words": "compact_utf8_json_array_preserve_public_token_order_and_spelling",
+    "task_family": "registered_mmlu_stratum_literal",
+    "question": "exact_public_question_string",
+    "displayed_option_i": "fixed_display_order_then_ascii_uppercase_position_label"
+  },
+  "templates": {
+    "GAME24_TASK_SPEC_V1": {
+      "path": "data/phase13/main/mr_p4/corrected_v1/game24_task_prompt_v1.txt",
+      "sha256": "138197fa4321a120a67a213ea7e4c700eaa312d599a0ff709908666c7b13c504"
+    },
+    "MEB_TASK_SPEC_V1": {
+      "path": "data/phase13/main/mr_p4/corrected_v1/meb_task_prompt_v1.txt",
+      "sha256": "e3088a1331da1e1c27bcbc1988204a3653a32b190a4d827a0df7cc56fdad7030"
+    },
+    "WORDSORT_TASK_SPEC_V1": {
+      "path": "data/phase13/main/mr_p4/corrected_v1/word_sorting_task_prompt_v1.txt",
+      "sha256": "6656718573b4c1d11df36f4050444ab56f5c9544d2f0655a489d4a4ca36eafb9"
+    },
+    "MMLU_TASK_SPEC_V1": {
+      "path": "data/phase13/main/mr_p4/corrected_v1/mmlu_task_prompt_v1.txt",
+      "sha256": "fab13cc228e2a32611b7a951287083ce1a861b3a341a5a58cb1c3f02e2354a08"
+    }
+  },
+  "answer_payload_contract": {
+    "path": "data/phase13/main/mr_p4/corrected_v1/answer_payload_contract_v1.json",
+    "sha256": "99d5f490c0a97c49e486ef843e2e5946003e9259817a8b0fb24168b9c58b8083"
+  },
+  "hidden_information_excluded": true,
+  "retrieval_task_serialization_unchanged": true
+}

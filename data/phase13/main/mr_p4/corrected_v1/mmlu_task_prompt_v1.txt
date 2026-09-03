@@ -1,0 +1,13 @@
+Task family: {task_family}
+
+Question:
+{question}
+
+Displayed options:
+A. {displayed_option_0}
+B. {displayed_option_1}
+C. {displayed_option_2}
+...
+
+Choose exactly one displayed option.
+Answer payload: one uppercase displayed option label only.
