@@ -49,22 +49,12 @@ def test_authority_compatible_meb_verifier_covers_fixed_answer_classes(
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="A-02 expected current defect: production dispatch uses the historical RHS verifier",
-)
 def test_production_meb_dispatch_accepts_alternative_valid_operator_assignment() -> None:
     task = _task("2 ? 2 ? 2 = 2", "2 + 2 - 2 = 2", 2)
 
     assert verifier("math_equation_balancer")("2 * 2 - 2 = 2", task) is True
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="A-02 expected current defect: production dispatch accepts the bare target value",
-)
 def test_production_meb_dispatch_rejects_bare_numeric_target() -> None:
     task = _task("2 ? 3 ? 4 = 14", "2 + 3 * 4 = 14", 14)
 

@@ -41,7 +41,7 @@ class _PostIntentFailingBackend:
         raise _PostIntentFailure("provider-free post-intent runtime failure")
 
 
-def test_post_intent_value_error_is_currently_collapsed_to_preflight_identity(
+def test_post_intent_value_error_preserves_runtime_failure_identity(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -118,4 +118,4 @@ def test_post_intent_value_error_is_currently_collapsed_to_preflight_identity(
 
     assert ledger.status().in_flight_count == 1
     assert ledger.in_flight_context(unit.unit_id).unit_id == unit.unit_id
-    assert raised.value.code == "MAIN_LIVE_PREFLIGHT_INVALID"
+    assert raised.value.code == "MAIN_RUN_POST_INTENT_RUNTIME_FAILURE"

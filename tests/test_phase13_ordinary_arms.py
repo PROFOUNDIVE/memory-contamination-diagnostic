@@ -22,6 +22,7 @@ from memcontam.experiment import phase13_ordinary_runtime as ordinary_runtime
 from memcontam.evaluation.phase13_observability_registration import (
     ObservabilityRegistrationPacket,
 )
+from memcontam.evaluation.phase13_observability_models import Phase13TrialEvidence
 from memcontam.experiment.phase12.filter_challenge.mft_state_models import JsonValue
 from memcontam.memory.checkpoint_v3 import NativeState, serialize_checkpoint
 from memcontam.readiness.phase13_production_observability import validate_production_archive
@@ -150,14 +151,15 @@ def test_production_archive_reconstructs_an_ordinary_contamination_trial(
         native_state={**snapshot.native_state, "checkpoint_index": 0},
         schema_version=snapshot.schema_version,
     )
-    branch = build_live_reduced_main_branches(
+    branches = build_live_reduced_main_branches(
         prefix=serialize_checkpoint(checkpoint),
         context=context,
         candidate_registry=load_candidate_registry(
             Path("data/phase12/registries/candidate_registry_v1.json")
         ),
         registry=PHASE13_CORE_BASELINE_REGISTRY,
-    ).arms["contam"]
+    )
+    branch = branches.arms["contam"]
     run = ProspectiveOrdinaryRun(
         task_name="game24",
         baseline="fh_bounded",
@@ -177,6 +179,30 @@ def test_production_archive_reconstructs_an_ordinary_contamination_trial(
     packet = ObservabilityRegistrationPacket.model_validate_json(packet_raw)
     packet_sha256 = hashlib.sha256(packet_raw).hexdigest()
 
+    clean_run = replace(
+        run,
+        arm="clean",
+        branch=branches.arms["clean"],
+        run_id="ordinary-production-clean",
+    )
+    clean_result = execute_prospective_ordinary(clean_run)
+    clean_archive = production_archive_from_ordinary(
+        clean_run,
+        clean_result,
+        ProductionOrdinaryRunIdentity(
+            execution_template_id="game24:fh_bounded:clean",
+            trajectory_seed=1,
+            concrete_seed_id="1",
+            ordered_sample_ids_sha256=hashlib.sha256(
+                json.dumps(clean_result.sample_ids, separators=(",", ":")).encode()
+            ).hexdigest(),
+            registration_packet_sha256=packet_sha256,
+            scientific_result=True,
+        ),
+    )
+
+    assert validate_production_archive(clean_archive, packet, packet_sha256).status == "PASS"
+
     with pytest.raises(
         ProductionRuntimeJoinError,
         match="PRODUCTION_TRAJECTORY_SEED_MISMATCH",
@@ -192,7 +218,7 @@ def test_production_archive_reconstructs_an_ordinary_contamination_trial(
                     json.dumps(result.sample_ids, separators=(",", ":")).encode()
                 ).hexdigest(),
                 registration_packet_sha256=packet_sha256,
-                scientific_result=False,
+                scientific_result=True,
             ),
         )
 
@@ -206,7 +232,7 @@ def test_production_archive_reconstructs_an_ordinary_contamination_trial(
                 concrete_seed_id="1",
                 ordered_sample_ids_sha256="0" * 64,
                 registration_packet_sha256=packet_sha256,
-                scientific_result=False,
+                scientific_result=True,
             ),
         )
 
@@ -221,19 +247,23 @@ def test_production_archive_reconstructs_an_ordinary_contamination_trial(
                 json.dumps(result.sample_ids, separators=(",", ":")).encode()
             ).hexdigest(),
             registration_packet_sha256=packet_sha256,
-            scientific_result=False,
+            scientific_result=True,
         ),
     )
     report = validate_production_archive(archive, packet, packet_sha256)
 
     assert report.status == "PASS"
     assert report.record_count == 1
-    assert archive.records[0].evidence.evidence_scope == "production_runtime"
-    assert archive.records[0].evidence.target_set.target_entry_ids == (
+    assert archive.records[0].scientific_result is True
+    assert archive.records[0].parsed_answer == result.trials[0].outcome.parsed_answer
+    evidence = archive.records[0].evidence
+    assert isinstance(evidence, Phase13TrialEvidence)
+    assert evidence.evidence_scope == "production_runtime"
+    assert evidence.target_set.target_entry_ids == (
         branch.injected_root_id,
     )
     assert archive.records[0].request.retries_after_initial_attempt == 0
-    assert len(archive.records[0].evidence.memory_events) == 1
+    assert len(evidence.memory_events) == 1
 
     suffix = tuple(
         task.model_copy(update={"sample_id": f"game24:production-terminal:{index}"})
@@ -266,7 +296,7 @@ def test_production_archive_reconstructs_an_ordinary_contamination_trial(
                 json.dumps(terminal_result.sample_ids, separators=(",", ":")).encode()
             ).hexdigest(),
             registration_packet_sha256=packet_sha256,
-            scientific_result=False,
+            scientific_result=True,
         ),
     )
     terminal_report = validate_production_archive(terminal_archive, packet, packet_sha256)
@@ -325,7 +355,7 @@ def test_production_archive_reconstructs_an_ordinary_contamination_trial(
                 json.dumps(zero_dispatch_result.sample_ids, separators=(",", ":")).encode()
             ).hexdigest(),
             registration_packet_sha256=packet_sha256,
-            scientific_result=False,
+            scientific_result=True,
         ),
     )
     zero_dispatch = zero_dispatch_archive.records[-1].terminal_provider_evidence
