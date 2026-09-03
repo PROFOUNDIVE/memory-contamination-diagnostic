@@ -13,15 +13,15 @@ from memcontam.readiness.phase13_cost_activation import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ARTIFACT = ROOT / "data/phase13/main/cost_envelope_v2/activated_policy_v1.json"
+ARTIFACT = ROOT / "data/phase13/main/cost_envelope_v2/activated_policy_corrected_v2.json"
 
 
 def test_current_authority_activates_the_deterministic_cost_bound() -> None:
     report = validate_activated_cost_policy(ROOT)
 
     assert report.status == "PASS"
-    assert report.cmax_main_krw == 444_126
-    assert report.margin_to_core_gate_krw == 5_874
+    assert report.cmax_main_krw == 444_256
+    assert report.margin_to_core_gate_krw == 5_744
     assert report.main_execution_authorized is False
     assert report.main_a_measured_scientific_execution_count == 0
 

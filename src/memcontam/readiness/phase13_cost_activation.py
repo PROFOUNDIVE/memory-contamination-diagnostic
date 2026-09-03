@@ -14,7 +14,7 @@ from memcontam.readiness.phase13_execution_contract import CORE_MAIN_REGISTRY
 
 
 Sha256 = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
-ACTIVATION_PATH = Path("data/phase13/main/cost_envelope_v2/activated_policy_v1.json")
+ACTIVATION_PATH = Path("data/phase13/main/cost_envelope_v2/activated_policy_corrected_v2.json")
 
 
 class Phase13CostActivationError(ValueError):
@@ -34,7 +34,9 @@ class AuthorityIdentity(_FrozenModel):
 
 
 class CandidateIdentity(_FrozenModel):
-    path: Literal["data/phase13/main/cost_envelope_v2/candidate_manifest_v1.json"]
+    path: Literal[
+        "data/phase13/main/cost_envelope_v2/candidate_manifest_corrected_v2.json"
+    ]
     sha256: Sha256
     provenance_status: Literal["PRESERVED_HISTORICAL_CONTROLLED_HANDOFF"]
 
@@ -44,9 +46,9 @@ class ActivatedCostPolicy(_FrozenModel):
     status: Literal["PASS"]
     authority: AuthorityIdentity
     candidate: CandidateIdentity
-    cmax_main_krw: Literal[444126]
+    cmax_main_krw: Literal[444256]
     core_authorization_gate_krw: Literal[450000]
-    margin_to_core_gate_krw: Literal[5874]
+    margin_to_core_gate_krw: Literal[5744]
     main_execution_authorized: Literal[False]
     main_a_measured_scientific_execution_count: Literal[0]
     activation_hash: Sha256
