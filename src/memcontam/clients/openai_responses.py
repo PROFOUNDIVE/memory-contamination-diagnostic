@@ -15,6 +15,9 @@ from memcontam.clients.base import LLMResponse
 from memcontam.clients.config import ProviderConfig
 from memcontam.clients.cost_guard import CostGuard
 from memcontam.readiness.phase13_readiness0_budget import BudgetedResponses, ResponsesResource
+from memcontam.readiness.phase13_v3_request import (
+    CompiledProviderRequestV3, PackageBindingV3, STAGES, compile_request_bytes,
+)
 
 
 class LiveCallNotAuthorized(RuntimeError):
@@ -37,12 +40,14 @@ class OpenAIResponsesClient:
         cost_guard: CostGuard | None = None,
         maximum_provider_calls: int | None = None,
         sleep: Callable[[float], None] = time.sleep,
+        v3_binding: PackageBindingV3 | None = None,
     ) -> None:
         if config.provider != "openai_responses":
             raise ValueError("OpenAIResponsesClient requires provider=openai_responses")
         self._config = config
         self._allow_live_calls = allow_live_calls
         self._sleep = sleep
+        self._v3_binding = v3_binding
         self.cost_guard = cost_guard or CostGuard(
             input_per_million_usd=config.input_per_million_usd,
             cached_input_per_million_usd=config.cached_input_per_million_usd,
@@ -86,15 +91,21 @@ class OpenAIResponsesClient:
             "service_tier": self._config.service_tier,
             "store": self._config.store,
         }
+        compiled_v3 = config.get("_phase13_compiled_v3")
+        bound_v3 = isinstance(compiled_v3, CompiledProviderRequestV3) and (
+            self._v3_binding is not None and compiled_v3.binding == self._v3_binding
+        )
+        if compiled_v3 is not None and not bound_v3:
+            raise LunaContractError("LUNA_RUNTIME_CONTRACT_MISMATCH")
         registered_cost_policy = False
         if model == "gpt-5.6-luna":
-            registered_cost_policy = (
+            registered_cost_policy = bound_v3 or (
                 config.get("_phase13_execution_envelope_id")
                 == "CORE_EXECUTION_ENVELOPE_REGISTRY_V2"
             )
             if (
                 self._config.timeout_seconds != 180
-                or self._config.retries_after_initial_attempt != 2
+                or self._config.retries_after_initial_attempt != (0 if bound_v3 else 2)
                 or self._config.service_tier != "default"
                 or self._config.store
                 or "previous_response_id" in config
@@ -119,6 +130,9 @@ class OpenAIResponsesClient:
             seed_parameter_sent = True
         request_contract = _request_contract(request, messages)
         authority_contract = _authority_contract(config, max_output_tokens)
+        if bound_v3:
+            assert isinstance(compiled_v3, CompiledProviderRequestV3)
+            request = json.loads(compiled_v3.request_bytes)
 
         start = time.perf_counter()
         attempts = 0
@@ -127,23 +141,28 @@ class OpenAIResponsesClient:
         )
         while True:
             attempts += 1
+            if bound_v3:
+                config["_phase13_before_request"]()
             try:
                 response = self._responses.create(**cast(Any, request))
                 break
-            except Exception as error:
-                if not _is_retryable(error) or attempts > retries_after_initial_attempt:
-                    setattr(error, "provider_attempts_count", attempts)
-                    setattr(error, "provider_latency_ms", int((time.perf_counter() - start) * 1000))
-                    setattr(error, "provider_request_contract", request_contract)
-                    setattr(error, "provider_authority_contract", authority_contract)
-                    setattr(error, "provider_service_tier", self._config.service_tier)
+            except Exception as transport_error:
+                if not _is_retryable(transport_error) or attempts > retries_after_initial_attempt:
+                    setattr(transport_error, "provider_attempts_count", attempts)
+                    setattr(transport_error, "provider_latency_ms", int((time.perf_counter() - start) * 1000))
+                    setattr(transport_error, "provider_request_contract", request_contract)
+                    setattr(transport_error, "provider_authority_contract", authority_contract)
+                    setattr(transport_error, "provider_service_tier", self._config.service_tier)
                     raise
                 self._sleep(self._config.retry_delays_seconds[attempts - 1])
 
         latency_ms = int((time.perf_counter() - start) * 1000)
         usage = _usage_dict(getattr(response, "usage", None))
         token_usage = _token_usage(usage)
-        cost_usd = self.cost_guard.record_usage(usage)
+        cost_usd = (
+            None if bound_v3 and not {"prompt_tokens", "completion_tokens"} <= token_usage.keys()
+            else self.cost_guard.record_usage(usage)
+        )
         authoritative_cost = getattr(response, "cost_usd", None)
         if not isinstance(authoritative_cost, (int, float)) or isinstance(
             authoritative_cost, bool
@@ -198,6 +217,30 @@ class OpenAIResponsesClient:
             },
             token_usage=token_usage,
             latency_ms=latency_ms,
+        )
+
+    def send_compiled_v3(
+        self, compiled: CompiledProviderRequestV3, before_request: Callable[[], None],
+    ) -> LLMResponse:
+        if (
+            self._v3_binding is None or compiled.binding != self._v3_binding
+            or compiled.request_bytes != compile_request_bytes(compiled.key, compiled.material)
+            or type(compiled.token_count) is not int or compiled.token_count < 0
+            or compiled.token_count > STAGES[compiled.key.stage][0]
+        ):
+            raise LunaContractError("LUNA_RUNTIME_CONTRACT_MISMATCH")
+        return self.chat(
+            [message.model_dump() for message in compiled.material.messages], "gpt-5.6-luna", {
+                "temperature": compiled.material.temperature, "top_p": compiled.material.top_p,
+                "max_output_tokens": STAGES[compiled.key.stage][1],
+                "_phase13_maximum_transport_attempts": 1,
+                "_phase13_execution_envelope_id": "CORE_EXECUTION_ENVELOPE_REGISTRY_V3",
+                "_phase13_execution_envelope_sha256": "f97e30aa81d71a76a3023792314de606073d9d9215cc612927e69050688269ee",
+                "_phase13_maximum_input_tokens": STAGES[compiled.key.stage][0],
+                "_phase13_terminal_failure_contract_id": "CORE_TERMINAL_TECHNICAL_MISSINGNESS_V1",
+                "_phase13_terminal_failure_contract_sha256": "9bbcdd9dd1686af034f7c0d2114ac86d5837a07de0cc6ba8fef7940bbc822b75",
+                "_phase13_compiled_v3": compiled, "_phase13_before_request": before_request,
+            },
         )
 
     def _assert_live_call_authorized(self) -> None:

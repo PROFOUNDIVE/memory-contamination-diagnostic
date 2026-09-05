@@ -42,6 +42,7 @@ from .phase13_main_new_mcq_runtime import (
     load_new_mcq_runtime_registry,
 )
 from memcontam.readiness.phase13_main_production import ProductionObject
+from memcontam.readiness.phase13_main_request_dispatch import DeferredMainClient
 from memcontam.readiness.phase13_main_production_backend import (
     OrdinaryRuntimeRequest,
     PrefixRuntimeOutput,
@@ -71,7 +72,7 @@ class ProductionMainRuntime:
         self._core = repository_root / "data/phase13/core/materialized"
         self._cache = cache_root
         self._embedder_instance: BgeM3EmbeddingProvider | None = None
-        self._client: LLMClient = client or OpenAIResponsesClient(
+        self._client: LLMClient = client or DeferredMainClient(lambda: OpenAIResponsesClient(
             ProviderConfig(
                 provider="openai_responses",
                 api_key_env="OPENAI_API_KEY",
@@ -87,7 +88,7 @@ class ProductionMainRuntime:
                 output_per_million_usd=1.20,
             ),
             allow_live_calls=True,
-        )
+        ))
         self._checkpoint_registry = CommonCheckpointRegistry.model_validate_json(
             (repository_root / "data/phase13/main/mr_p4/main_a_common_checkpoint_registry_v1.json")
             .read_bytes()
