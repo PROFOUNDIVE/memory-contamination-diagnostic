@@ -22,6 +22,7 @@ class ClosureReport:
     local_import_closure_count: int
     omitted_local_import_count: int
     omitted_local_imports: tuple[str, ...]
+    authoritative: bool = False
 
 
 def _package_initializers(source_root: Path, parts: tuple[str, ...]) -> tuple[Path, ...]:
@@ -106,7 +107,7 @@ def _report(repository_root: Path, package_relative: Path) -> ClosureReport:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Compare an AST-derived approximation of Main-A local imports with MR-P5 bindings."
+        description="Non-authoritative diagnostic: compare conservative AST-derived Main-A local imports with MR-P5 bindings."
     )
     parser.add_argument("--repository-root", type=Path, required=True)
     parser.add_argument(
