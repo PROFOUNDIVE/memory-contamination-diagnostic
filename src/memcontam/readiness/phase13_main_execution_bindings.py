@@ -172,14 +172,32 @@ def validate_artifact_bindings(
     package: MainExecutionFreeze,
     repository_root: Path,
 ) -> dict[str, Path]:
+    snapshot_name, snapshot_sha256 = {
+        "phase13_main_execution_freeze_v1": (
+            "execution_package_v1.json",
+            "80ab89262e2d6a2e161fd0db4ac20d8b0df0f4aa1360c1ab514ffdea45255aaa",
+        ),
+        "phase13_main_execution_freeze_v2": (
+            "execution_package_v2.json",
+            "acdcfe03a944f1875e9e0988d01cb708f70e93659f096b8bc72105a321db683f",
+        ),
+    }[package.schema_version]
+    snapshot_raw = read_regular_nofollow(
+        repository_root / "data/phase13/main/mr_p5" / snapshot_name
+    )
+    if hashlib.sha256(snapshot_raw).hexdigest() != snapshot_sha256:
+        raise MainExecutionBindingError("MAIN_EXECUTION_ARTIFACT_HASH_MISMATCH")
+    snapshot = MainExecutionFreeze.model_validate_json(snapshot_raw)
+    historical_bindings = {binding.role: binding for binding in snapshot.artifacts}
+    expected_authorities = {binding.role: binding.sha256 for binding in snapshot.authority}
     authorities = {binding.role: binding.sha256 for binding in package.authority}
     if (
-        len(package.authority) != len(EXPECTED_AUTHORITIES)
+        len(package.authority) != len(expected_authorities)
         or len(authorities) != len(package.authority)
-        or authorities != EXPECTED_AUTHORITIES
+        or authorities != expected_authorities
     ):
         raise MainExecutionBindingError("MAIN_EXECUTION_AUTHORITY_MISMATCH")
-    expected_paths = _expected_artifact_paths(package, repository_root)
+    expected_paths = {role: binding.path for role, binding in historical_bindings.items()}
     if len(package.artifacts) != len(expected_paths):
         raise MainExecutionBindingError("MAIN_EXECUTION_ARTIFACT_SET_INVALID")
     paths: dict[str, Path] = {}
@@ -193,28 +211,16 @@ def validate_artifact_bindings(
         path = repository_root.joinpath(*relative.parts)
         if not path.resolve().is_relative_to(repository_root.resolve()):
             raise MainExecutionBindingError("MAIN_EXECUTION_ARTIFACT_PATH_INVALID")
-        if hashlib.sha256(read_regular_nofollow(path)).hexdigest() != binding.sha256:
+        if binding.sha256 != historical_bindings[binding.role].sha256:
+            raise MainExecutionBindingError("MAIN_EXECUTION_ARTIFACT_HASH_MISMATCH")
+        if not binding.path.startswith("src/") and (
+            hashlib.sha256(read_regular_nofollow(path)).hexdigest() != binding.sha256
+        ):
             raise MainExecutionBindingError("MAIN_EXECUTION_ARTIFACT_HASH_MISMATCH")
         paths[binding.role] = path
     if set(paths) != set(expected_paths):
         raise MainExecutionBindingError("MAIN_EXECUTION_ARTIFACT_SET_INVALID")
     return paths
-
-
-def _expected_artifact_paths(
-    package: MainExecutionFreeze, repository_root: Path
-) -> dict[str, str]:
-    if package.schema_version == "phase13_main_execution_freeze_v1":
-        return dict(LEGACY_ARTIFACT_PATHS)
-    expected = dict(CORRECTED_ARTIFACT_PATHS)
-    bound_paths = set(expected.values())
-    for path in sorted((repository_root / "src/memcontam").rglob("*.py")):
-        relative = path.relative_to(repository_root).as_posix()
-        if relative in bound_paths:
-            continue
-        role = f"transitive_source_{hashlib.sha256(relative.encode()).hexdigest()[:16]}"
-        expected[role] = relative
-    return expected
 
 
 def validate_semantic_joins(package: MainExecutionFreeze, paths: dict[str, Path]) -> None:

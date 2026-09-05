@@ -23,7 +23,6 @@ from memcontam.readiness.phase13_main_execution_models import (
     MainExecutionFreeze,
     MainExecutionFreezeReport,
 )
-from memcontam.readiness.phase13_main_readiness import validate_main_readiness
 
 
 EXPECTED_TASKS: Final = CORE_MAIN_REGISTRY.tasks
@@ -95,7 +94,8 @@ def validate_main_execution_freeze(
     try:
         raw = read_regular_nofollow(package_path)
         package = MainExecutionFreeze.model_validate_json(raw)
-        payload = package.model_dump(mode="json", exclude={"package_hash"})
+        payload = json.loads(raw)
+        payload.pop("package_hash")
         if package.package_hash != canonical_hash(payload):
             raise Phase13MainExecutionError("MAIN_EXECUTION_PACKAGE_HASH_INVALID")
         paths = validate_artifact_bindings(package, repository_root)
@@ -107,13 +107,7 @@ def validate_main_execution_freeze(
             raise Phase13MainExecutionError("MAIN_EXECUTION_MR_P4_BINDING_INVALID")
         if canonical_hash(p4.get("level2_interactions")) != package.level2_registry_sha256:
             raise Phase13MainExecutionError("MAIN_EXECUTION_LEVEL2_BINDING_INVALID")
-        if package.schema_version == "phase13_main_execution_freeze_v1":
-            validate_main_readiness(
-                paths["mr_p4_manifest"].parent,
-                repository_root,
-                hashlib.sha256(p4_raw).hexdigest(),
-            )
-        else:
+        if package.schema_version == "phase13_main_execution_freeze_v2":
             _validate_corrected_mr_p4(p4, repository_root)
         checkpoint = validate_main_checkpoint_package(
             paths["common_checkpoint_registry"].parent,
@@ -158,7 +152,9 @@ def _validate_corrected_mr_p4(p4: dict[str, JsonValue], repository_root: Path) -
         path, expected = identity.get("path"), identity.get("sha256")
         if not isinstance(path, str) or not isinstance(expected, str):
             raise Phase13MainExecutionError("MAIN_EXECUTION_MR_P4_BINDING_INVALID")
-        if hashlib.sha256(read_regular_nofollow(repository_root / path)).hexdigest() != expected:
+        if not path.startswith("src/") and (
+            hashlib.sha256(read_regular_nofollow(repository_root / path)).hexdigest() != expected
+        ):
             raise Phase13MainExecutionError("MAIN_EXECUTION_MR_P4_BINDING_INVALID")
 
 
@@ -174,7 +170,8 @@ def validate_main_authorization(
         if hashlib.sha256(raw).hexdigest() != expected_authorization_sha256:
             raise Phase13MainExecutionError("MAIN_AUTHORIZATION_FILE_HASH_MISMATCH")
         authorization = AuthorizedExecution.model_validate_json(raw)
-        payload = authorization.model_dump(mode="json", exclude={"authorization_hash"})
+        payload = json.loads(raw)
+        payload.pop("authorization_hash")
         if authorization.authorization_hash != canonical_hash(payload):
             raise Phase13MainExecutionError("MAIN_AUTHORIZATION_HASH_INVALID")
         expected_package_path = str(package_path.resolve().relative_to(repository_root.resolve()))

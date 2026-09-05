@@ -1,18 +1,16 @@
 from __future__ import annotations
 
-import hashlib
-import json
 import sqlite3
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
+import memcontam.readiness.phase13_cost_policy as cost_policy
+import memcontam.readiness.phase13_main_live_evidence as evidence_module
+import memcontam.readiness.phase13_main_runner_models as runner_models
 import memcontam.readiness.phase13_main_runner_store as store_module
-from memcontam.logging.schema import MethodCall
-from memcontam.readiness.phase13_main_execution_models import MainExecutionFreeze
 from memcontam.readiness.phase13_main_live_dispatch import (
-    MainUnitDispatchOutput,
     persist_reconciliation_evidence,
     persist_unit_dispatch,
 )
@@ -23,149 +21,54 @@ from memcontam.readiness.phase13_main_runner import (
     MainRunBinding,
     MainRunError,
     MainRunLedger,
-    enumerate_execution_units,
 )
+from memcontam.readiness.phase13_main_production import ProductionObject
+
+from .phase13_v3_fixtures import HistoricalEvidencePolicy, SyntheticFixture
+from .phase13_v3_fixtures import prefix_output as _prefix_output
 
 
 ROOT = Path(__file__).resolve().parents[1]
-P5 = ROOT / "data/phase13/main/mr_p5/execution_package_v1.json"
 
 
-def _units():
-    package = MainExecutionFreeze.model_validate_json(P5.read_bytes())
-    return enumerate_execution_units(package, ROOT)
+def _units() -> tuple[ProductionObject, ...]:
+    return SyntheticFixture().units()
 
 
 def _binding() -> MainRunBinding:
-    return MainRunBinding(
-        "phase13-main-a-execution-freeze-v1",
-        "1" * 64,
-        "2" * 64,
-        "phase13-main-a-authorized-execution-v1",
-        "3" * 64,
-        "4" * 64,
-        "5" * 64,
-    )
+    return SyntheticFixture().binding()
 
 
 def _ledger(tmp_path: Path) -> MainRunLedger:
     return MainRunLedger.create(tmp_path / "main-run.sqlite3", _binding(), _units())
 
 
-def _prefix_output(unit, *, cost_usd: float = 0.01) -> MainUnitDispatchOutput:
-    messages = [{"role": "user", "content": "frozen request"}]
-    return MainUnitDispatchOutput(
-        evidence={
-            "evidence_kind": "CLEAN_PREFIX",
-            "prefix_unit_id": unit.unit_id,
-            "checkpoint": {
-                "schema_version": "phase13_main_prefix_checkpoint_v1",
-                "baseline": unit.memory_baseline,
-                "checkpoint_id": "checkpoint-1",
-                "checkpoint_identity_sha256": "b" * 64,
-                "canonical_sha256": "c" * 64,
-                "canonical_state_utf8": "{}",
-            },
-            "runtime_evidence": {
-                "unit_id": unit.unit_id,
-                "task": unit.task,
-                "seed": unit.seed,
-                "memory_baseline": unit.memory_baseline,
-                "arm": unit.arm,
-                "production_identity": {
-                    "execution_template_id": "game24|fh_bounded|prefix",
-                    "trajectory_seed": unit.seed,
-                    "concrete_seed_id": str(unit.seed),
-                    "ordered_sample_ids_sha256": unit.ordered_sample_ids_sha256,
-                    "registration_packet_sha256": unit.registration_packet_sha256,
-                    "scientific_result": False,
-                    "checkpoint_registry_sha256": unit.checkpoint_registry_sha256,
-                },
-                "observability_registration_packet_sha256": unit.registration_packet_sha256,
-                "request": {
-                    "api": "OpenAI Responses API",
-                    "model": "gpt-5.6-luna",
-                    "service_tier": "default",
-                    "reasoning_mode": "standard",
-                    "reasoning_effort": "none",
-                    "reasoning_context": "current_turn",
-                    "previous_response_id": None,
-                    "store": False,
-                    "timeout_seconds": 180,
-                    "retries_after_initial_attempt": 0,
-                    "semantic_invalid_generic_retry": False,
-                },
-            },
-        },
-        provider_calls=(
-            MethodCall(
-                call_id="prefix-call",
-                stage="full_history_generate",
-                messages=messages,
-                raw_response="offline",
-                model="gpt-5.6-luna",
-                temperature=0.0,
-                top_p=1.0,
-                token_usage={"prompt_tokens": 3, "completion_tokens": 2},
-                transport_attempts=1,
-                provider_status="completed",
-                provider_response_status="completed",
-                provider_response_id="response-prefix-call",
-                provider_usage={"input_tokens": 3, "output_tokens": 2},
-                provider_service_tier="default",
-                provider_returned_model="gpt-5.6-luna",
-                provider_request_contract={
-                    "model": "gpt-5.6-luna",
-                    "input_sha256": hashlib.sha256(
-                        json.dumps(
-                            messages,
-                            sort_keys=True,
-                            separators=(",", ":"),
-                            ensure_ascii=False,
-                        ).encode()
-                    ).hexdigest(),
-                    "temperature": 0.0,
-                    "top_p": 1.0,
-                    "reasoning": {
-                        "mode": "standard",
-                        "effort": "none",
-                        "context": "current_turn",
-                    },
-                    "previous_response_id": None,
-                    "service_tier": "default",
-                    "store": False,
-                    "tools": [],
-                    "max_output_tokens": 512,
-                },
-                provider_authority_contract={
-                    "maximum_input_tokens": 9330,
-                    "maximum_output_tokens": 512,
-                    "execution_envelope_id": "CORE_EXECUTION_ENVELOPE_REGISTRY_V2",
-                    "execution_envelope_sha256": (
-                        "41cd7e7310a961d0856e2020b05a3ae455811fb0660455b4c7dfbcb0a9aafd93"
-                    ),
-                    "failure_contract_id": "CORE_TRANSPORT_ATTEMPT_CONTRACT_V2",
-                    "failure_contract_sha256": (
-                        "1ee66fcb795f97d483c2ef976133ee61dbd5108c9dae851c2c2786ff496d788f"
-                    ),
-                    "terminal_failure_contract_id": (
-                        "CORE_TERMINAL_TECHNICAL_MISSINGNESS_V1"
-                    ),
-                    "terminal_failure_contract_sha256": (
-                        "9bbcdd9dd1686af034f7c0d2114ac86d5837a07de0cc6ba8fef7940bbc822b75"
-                    ),
-                    "rate_card_sha256": (
-                        "50975b67dce4c59ba9267c3234a873076137ded5078aa3e8b5c9a2fad4ff3e06"
-                    ),
-                },
-                provider_cost_usd=cost_usd,
-                authoritative_provider_cost_usd=cost_usd,
-                derived_cost_usd=cost_usd,
-                provider_cost_source="AUTHORITATIVE_PROVIDER",
-            ),
-        ),
-        realized_cost_krw=int(cost_usd * 1600),
-    )
+@pytest.fixture(autouse=True)
+def reject_repository_artifact_reads(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    read_bytes = Path.read_bytes
+    read_text = Path.read_text
+
+    def guarded_bytes(path: Path) -> bytes:
+        assert not path.absolute().is_relative_to(ROOT) or path.is_relative_to(tmp_path), path
+        return read_bytes(path)
+
+    def guarded_text(path: Path, encoding: str | None = None, errors: str | None = None) -> str:
+        assert not path.absolute().is_relative_to(ROOT) or path.is_relative_to(tmp_path), path
+        return read_text(path, encoding=encoding, errors=errors)
+
+    def denied_descriptor_read(path: Path) -> bytes:
+        raise AssertionError(f"repository artifact read: {path}")
+
+    def synthetic_policy(_root: Path) -> HistoricalEvidencePolicy:
+        return HistoricalEvidencePolicy()
+
+    monkeypatch.setattr(Path, "read_bytes", guarded_bytes)
+    monkeypatch.setattr(Path, "read_text", guarded_text)
+    monkeypatch.setattr(runner_models, "read_regular_nofollow", denied_descriptor_read)
+    monkeypatch.setattr(cost_policy, "read_regular_nofollow", denied_descriptor_read)
+    monkeypatch.setattr(evidence_module, "load_cost_policy_bundle", synthetic_policy)
 
 
 def _tamper(path: Path, action: str) -> None:
@@ -353,3 +256,24 @@ def test_crash_during_creation_never_publishes_partial_ledger(
         MainRunLedger.create(path, _binding(), _units())
 
     assert not path.exists()
+
+
+def test_synthetic_fixture_rejects_mixed_authority_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture = SyntheticFixture()
+    mixed = replace(fixture.authorization, authority_sha256="0" * 64)
+    create = MainRunLedger.create
+    creations: list[Path] = []
+
+    def record_create(
+        path: Path, binding: MainRunBinding, units: tuple[ProductionObject, ...],
+    ) -> MainRunLedger:
+        creations.append(path)
+        return create(path, binding, units)
+
+    monkeypatch.setattr(MainRunLedger, "create", record_create)
+    with pytest.raises(MainRunError, match="^MAIN_AUTHORITY_BINDING_MISMATCH$"):
+        rejected = replace(fixture, authorization=mixed)
+        MainRunLedger.create(tmp_path / "rejected.sqlite3", rejected.binding(), rejected.units())
+    assert creations == []
