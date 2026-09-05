@@ -13,6 +13,8 @@ from memcontam.baselines.prompt_budget import count_prompt_tokens
 from memcontam.clients.base import LLMClient, LLMResponse
 from memcontam.readiness.phase13_v3_cost_actual import reconcile_actual
 from memcontam.readiness.phase13_v3_cost_models import CostError, ProviderCostEvidence
+from .phase13_v3_cost_binding import LiveCosts, TableKey
+from .phase13_v3_cost_models import digest
 from memcontam.readiness.phase13_v3_terminal_ledger import TerminalLedgerV3
 from memcontam.readiness.phase13_v3_terminal_models import TerminalEvidenceError
 from .phase13_v3_request import (
@@ -194,6 +196,23 @@ class ProductionRequestDispatcherV3:
             os.close(descriptor)
 
 
+class CostBoundRequestDispatcherV3:
+    def __init__(self, dispatcher: ProductionRequestDispatcherV3,
+                 costs: LiveCosts, package_hash: str) -> None:
+        if (digest(costs.package), costs.package.package_hash) != (
+            dispatcher.binding.package_sha256, package_hash,
+        ):
+            raise CostError("MAIN_COST_PROOF_MISMATCH")
+        self._dispatcher, self._costs, self._package_hash = dispatcher, costs, package_hash
+
+    def dispatch(self, key: RequestKeyV3, compile_material: Callable[[], RequestMaterialV3],
+                 parse_result: Callable[[LLMResponse], ResultT]) -> ResultT:
+        self._costs.projected(self._package_hash, TableKey(
+            proof_hash=self._costs.package.cost_proof_hash, unit_id=key.parent_id,
+        ))
+        return self._dispatcher.dispatch(key, compile_material, parse_result)
+
+
 def _response_cost(response: LLMResponse | None) -> ProviderCostEvidence:
     if response is None:
         return ProviderCostEvidence()
@@ -201,7 +220,7 @@ def _response_cost(response: LLMResponse | None) -> ProviderCostEvidence:
     monetary = response.raw.get("authoritative_provider_cost_usd")
     return ProviderCostEvidence.model_validate({
         "monetary_cost": None if monetary is None else str(monetary),
-        "currency": None if monetary is None else "USD",
+        "currency": response.raw.get("currency"),
         "usage": None if usage is None else {
         "input_tokens": usage["input_tokens"], "output_tokens": usage["output_tokens"],
         "cached_input_tokens": usage.get("input_tokens_details", {}).get("cached_tokens", 0),
@@ -218,4 +237,4 @@ def _realized(cost: ProviderCostEvidence) -> int | None:
 
 
 __all__ = ["DispatchTechnicalFailureV3", "PackageBindingV3", "ParentTrajectoryV3",
-           "ProductionRequestDispatcherV3", "RequestKeyV3", "RequestMaterialV3"]
+           "ProductionRequestDispatcherV3", "CostBoundRequestDispatcherV3", "RequestKeyV3", "RequestMaterialV3"]

@@ -7,6 +7,7 @@ from dataclasses import dataclass, replace
 from typing import Literal
 
 from memcontam.readiness.phase13_main_execution_models import MainExecutionFreeze
+from .phase13_v3_cost_binding import attribute_v3_projected_cost as attribute_v3_projected_cost
 
 
 UNIT_IDENTITY_LAW_ID = "phase13-main-a-disjoint-unit-id-v1"
@@ -264,6 +265,7 @@ __all__ = [
     "UNIT_IDENTITY_LAW_ID",
     "UnitKind",
     "build_production_objects",
+    "attribute_v3_projected_cost",
     "prefix_stage_call_counts",
     "units_sha256",
 ]
