@@ -55,6 +55,8 @@ from memcontam.tasks.base import TaskInstance
 from memcontam.tasks.game24 import build_instance as build_game24
 from memcontam.tasks.math_equation_balancer import build_instance as build_equation
 from memcontam.tasks.word_sorting import build_instance as build_word_sorting
+from .phase13_main_preloaded_resources import PreloadedMainResources
+from .phase13_main_request_client import MainRequestClientV3, native_state_bytes
 
 
 _CORE_TASKS: Final = frozenset({"mmlu_pro_engineering", "mmlu_pro_physics"})
@@ -67,11 +69,17 @@ class ProductionMainRuntime:
         cache_root: Path,
         *,
         client: LLMClient | None = None,
+        resources: PreloadedMainResources | None = None,
     ) -> None:
         self._root = repository_root
         self._core = repository_root / "data/phase13/core/materialized"
         self._cache = cache_root
         self._embedder_instance: BgeM3EmbeddingProvider | None = None
+        self._resources = resources
+        if resources is not None:
+            if client is None:
+                raise MainLiveRuntimeError("MAIN_AUTHORIZATION_BINDING_MISMATCH")
+            resources.selected.preflight(repository_root)
         self._client: LLMClient = client or DeferredMainClient(lambda: OpenAIResponsesClient(
             ProviderConfig(
                 provider="openai_responses",
@@ -89,6 +97,12 @@ class ProductionMainRuntime:
             ),
             allow_live_calls=True,
         ))
+        if resources is not None:
+            self._checkpoint_registry = resources.checkpoint_registry
+            self._packet = resources.packet
+            self._candidate_registry = resources.candidate_registry
+            self._new_mcq_registry = resources.new_mcq_registry
+            return
         self._checkpoint_registry = CommonCheckpointRegistry.model_validate_json(
             (repository_root / "data/phase13/main/mr_p4/main_a_common_checkpoint_registry_v1.json")
             .read_bytes()
@@ -103,6 +117,8 @@ class ProductionMainRuntime:
         self._new_mcq_registry = load_new_mcq_runtime_registry(repository_root)
 
     def preflight(self, units: tuple[ProductionObject, ...]) -> None:
+        if self._resources is not None:
+            self._resources.selected.preflight(self._root)
         checked: set[tuple[str, str]] = set()
         for unit in units:
             if unit.kind != "CLEAN_PREFIX" or unit.memory_baseline is None:
@@ -131,7 +147,9 @@ class ProductionMainRuntime:
         task = self._tasks(unit.task, unit.seed, prefix=True)[0]
         context = self._prefix_context(unit, task)
         entry = PHASE13_CORE_BASELINE_REGISTRY[unit.memory_baseline]
-        result = entry.execute_trial(context, entry.initial_state(context))
+        state = entry.initial_state(context)
+        result = (self._client.trial(lambda: entry.execute_trial(context, state), lambda: native_state_bytes(entry.serialize_state, state))
+                  if isinstance(self._client, MainRequestClientV3) else entry.execute_trial(context, state))
         if unit.memory_baseline == "reflexion_style" and result.outcome.status != "succeeded":
             raise MainLiveRuntimeError("MAIN_PREFIX_EXECUTION_FAILED")
         snapshot = entry.serialize_state(result.state)
@@ -145,7 +163,8 @@ class ProductionMainRuntime:
                 snapshot.schema_version,
             )
         )
-        return PrefixRuntimeOutput(checkpoint, dispatch_output(unit, (result,), production_identity(unit)))
+        return PrefixRuntimeOutput(checkpoint, dispatch_output(unit, (result,), production_identity(unit),
+            realized_cost_krw=self._client.realized_cost_krw() if isinstance(self._client, MainRequestClientV3) else None))
 
     def _prefix_context(
         self,
@@ -209,18 +228,21 @@ class ProductionMainRuntime:
             decoding={"temperature": 0.0, "top_p": 1.0},
             arm=request.arm,
             branch=branch,
-            tasks=() if unit.task in _CORE_TASKS else tasks,
-            core_bundle=self._core if unit.task in _CORE_TASKS else None,
+            tasks=(self._resources.tasks(unit.task) if self._resources is not None and unit.task in _CORE_TASKS
+                   else (() if unit.task in _CORE_TASKS else tasks)),
+            core_bundle=self._core if unit.task in _CORE_TASKS and self._resources is None else None,
             trajectory_seed=unit.seed,
-            embedding_provider=self._embedder(),
+            embedding_provider=None if self._resources is not None and unit.memory_baseline is None else self._embedder(),
             baseline_configs=self._configs(),
-            initial_states=self._initial_states(unit.task),
+            initial_states={} if self._resources is not None and unit.memory_baseline is None else self._initial_states(unit.task),
             production_identity=identity,
+            validated_resources=None if self._resources is None else self._resources.ordinary(self._client),
         )
         result = execute_prospective_ordinary(run)
         archive = production_archive_from_ordinary(run, result, identity)
         validate_production_archive(archive, self._packet, identity.registration_packet_sha256)
-        return dispatch_output(unit, result.trials, identity, archive)
+        return dispatch_output(unit, result.trials, identity, archive,
+            realized_cost_krw=self._client.realized_cost_krw() if isinstance(self._client, MainRequestClientV3) else None)
 
     def _context(
         self,
@@ -234,7 +256,7 @@ class ProductionMainRuntime:
         identity = run_id or f"main-a-{unit.unit_id}"
         return Game24RuntimeContext(
             task=task,
-            client=bind_cost_policy_client(self._client, self._root),
+            client=self._client if self._resources is not None else bind_cost_policy_client(self._client, self._root),
             model="gpt-5.6-luna",
             verifier=verifier(task_name(unit.task)),
             decoding={
@@ -257,7 +279,9 @@ class ProductionMainRuntime:
     def _tasks(self, task: str, seed: int, *, prefix: bool) -> tuple[TaskInstance, ...]:
         seed_row = self._checkpoint_registry.tasks[task].seeds[seed]
         sample_ids = seed_row.clean_prefix_sample_ids if prefix else seed_row.suffix_sample_ids
-        if task in _CORE_TASKS:
+        if self._resources is not None:
+            rows = self._resources.tasks(task)
+        elif task in _CORE_TASKS:
             rows = load_core_task(self._core, core_task_name(task))
         else:
             path = self._root / f"data/phase13/main/{task}_main_v1.jsonl"
@@ -275,9 +299,8 @@ class ProductionMainRuntime:
             "bot_style": BoTStateV3(entries=[], clean_competitor_ids=())
         }
         if task not in _CORE_TASKS:
-            seal = json.loads(
-                (self._root / "data/phase13/rag/legacy_seal_v1.json").read_text()
-            )
+            seal = json.loads(self._resources.selected.resource("legacy_rag_seal")) if self._resources is not None else json.loads(
+                (self._root / "data/phase13/rag/legacy_seal_v1.json").read_text())
             states["rag_frozen"] = load_legacy_rag_state(
                 LegacyRagRuntimeRequest(
                     self._root / "data/phase13/rag/legacy",
@@ -286,6 +309,7 @@ class ProductionMainRuntime:
                     "clean",
                     self._embedder(),
                     seal["manifest_sha256"],
+                    validated_bundles=None if self._resources is None else self._resources.legacy_bundles(task),
                 )
             ).state
         return states

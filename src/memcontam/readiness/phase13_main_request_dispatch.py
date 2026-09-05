@@ -97,7 +97,7 @@ class ProductionRequestDispatcherV3:
             return self._dispatch(key, compile_material, parse_result)
 
     def _dispatch(self, key: RequestKeyV3, compile_material: Callable[[], RequestMaterialV3],
-                  parse_result: Callable[[LLMResponse], ResultT]) -> ResultT:
+                  parse_result: Callable[[LLMResponse], ResultT], *, defer_completion: bool = False) -> ResultT:
         if key.parent_id in self.terminal_parents:
             raise DispatchTechnicalFailureV3("MAIN_TRAJECTORY_TERMINAL", key.parent_id, None)
         if key.parent_id not in {parent.parent_id for parent in self.parents}:
@@ -166,12 +166,35 @@ class ProductionRequestDispatcherV3:
             })
             raise DispatchTechnicalFailureV3("MAIN_ATTEMPTED_PROVIDER_FAILURE", key.parent_id, realized,
                 evidence_sha256=self.ledger.state(key.dispatch_id).event_hash) from error
-        self._append(key, "COMPLETED", {
-            "transport_attempts": 1, "cost": cost.model_dump(mode="json"),
-            "realized_cost_krw": realized,
-            "result_hash": hashlib.sha256(response.content.encode()).hexdigest(),
-        })
+        if not defer_completion:
+            self._append(key, "COMPLETED", {
+                "transport_attempts": 1, "cost": cost.model_dump(mode="json"),
+                "realized_cost_krw": realized,
+                "result_hash": hashlib.sha256(response.content.encode()).hexdigest(),
+            })
         return result
+
+    def receive(self, key: RequestKeyV3, compile_material: Callable[[], RequestMaterialV3]) -> LLMResponse:
+        with request_lock(self.ledger):
+            return self._dispatch(key, compile_material, lambda response: response, defer_completion=True)
+
+    def acknowledge(self, key: RequestKeyV3, response: LLMResponse, *, semantic_success: bool) -> None:
+        with request_lock(self.ledger):
+            cost = _response_cost(response)
+            realized = _realized(cost)
+            fields: dict[str, JsonValue] = {
+                "transport_attempts": 1, "cost": cost.model_dump(mode="json"), "realized_cost_krw": realized,
+            }
+            if semantic_success and realized is not None:
+                self._append(key, "COMPLETED", {**fields, "result_hash": hashlib.sha256(response.content.encode()).hexdigest()})
+                return
+            raw = json.dumps({"response": response.content, "semantic_success": semantic_success}, sort_keys=True).encode()
+            self._publish_bytes(key, "observation", raw)
+            self._append(key, "ATTEMPTED_PROVIDER_FAILURE", {**fields,
+                "failure_code": "MAIN_SEMANTIC_RESULT_UNAVAILABLE",
+                "observation_hash": hashlib.sha256(raw).hexdigest()})
+            raise DispatchTechnicalFailureV3("MAIN_ATTEMPTED_PROVIDER_FAILURE", key.parent_id, realized,
+                evidence_sha256=self.ledger.state(key.dispatch_id).event_hash)
 
     def _append(self, key: RequestKeyV3, kind: str, extra: dict[str, JsonValue] | None = None) -> None:
         state = self.ledger.state(key.dispatch_id)
@@ -196,6 +219,9 @@ class ProductionRequestDispatcherV3:
         self._publish_bytes(compiled.key, "compiled", raw)
 
     def _publish_bytes(self, key: RequestKeyV3, role: str, raw: bytes) -> None:
+        if self.ledger.guard is not None:
+            self.ledger.guard.publish_record(f"{key.dispatch_id}.{role}.json", raw)
+            return
         path = self.ledger.path.parent / f"{key.dispatch_id}.{role}.json"
         with NamedTemporaryFile(dir=path.parent) as temporary:
             temporary.write(raw)

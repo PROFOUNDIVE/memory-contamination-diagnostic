@@ -30,6 +30,7 @@ class LegacyRagRuntimeRequest:
     expected_manifest_sha256: str
     allow_test_embedder: bool = False
     allow_test_package: bool = False
+    validated_bundles: tuple[CorpusBundle, IndexBundle] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,12 +40,13 @@ class LoadedLegacyRagState:
 
 
 def load_legacy_rag_state(request: LegacyRagRuntimeRequest) -> LoadedLegacyRagState:
-    validate_legacy_rag_package(
-        request.package_root,
-        request.repository_root,
-        request.expected_manifest_sha256,
-        allow_test_package=request.allow_test_package,
-    )
+    if request.validated_bundles is None:
+        validate_legacy_rag_package(
+            request.package_root,
+            request.repository_root,
+            request.expected_manifest_sha256,
+            allow_test_package=request.allow_test_package,
+        )
     metadata = request.embedder.metadata
     if (
         metadata.get("model_id") != BgeM3EmbeddingProvider.MODEL_ID
@@ -56,12 +58,15 @@ def load_legacy_rag_state(request: LegacyRagRuntimeRequest) -> LoadedLegacyRagSt
         )
     ):
         raise LegacyRagValidationError("LEGACY_RAG_RUNTIME_IDENTITY_INVALID")
-    corpus_bundle = CorpusBundle.model_validate_json(
-        (request.package_root / request.task / "corpus.json").read_bytes()
-    )
-    index_bundle = IndexBundle.model_validate_json(
-        (request.package_root / request.task / "indices.json").read_bytes()
-    )
+    if request.validated_bundles is None:
+        corpus_bundle = CorpusBundle.model_validate_json(
+            (request.package_root / request.task / "corpus.json").read_bytes()
+        )
+        index_bundle = IndexBundle.model_validate_json(
+            (request.package_root / request.task / "indices.json").read_bytes()
+        )
+    else:
+        corpus_bundle, index_bundle = request.validated_bundles
     runtime_identity = EmbeddingRuntimeIdentity.model_validate(metadata)
     if runtime_identity != index_bundle.embedding_runtime:
         raise LegacyRagValidationError("LEGACY_RAG_RUNTIME_IDENTITY_INVALID")

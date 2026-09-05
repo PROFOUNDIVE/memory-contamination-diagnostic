@@ -33,6 +33,8 @@ class FileBinding(FrozenModel):
 class ValidatedResource:
     binding: FileBinding
     raw: bytes
+    signature: tuple[int, ...] = ()
+    descriptor: int | None = None
 
 
 FIXED_GOVERNED: Final = (
@@ -78,7 +80,7 @@ def _signature(info: os.stat_result) -> tuple[int, ...]:
             info.st_mtime_ns, info.st_ctime_ns)
 
 
-def _read_stable(directory: int, filename: str, stack: ExitStack) -> bytes:
+def _read_stable(directory: int, filename: str, stack: ExitStack) -> tuple[bytes, int]:
     descriptor = os.open(filename, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
     stack.callback(os.close, descriptor)
     before = os.fstat(descriptor)
@@ -94,14 +96,17 @@ def _read_stable(directory: int, filename: str, stack: ExitStack) -> bytes:
     after = os.fstat(descriptor)
     if reads[0] != reads[1] or len(reads[0]) != before.st_size or _signature(before) != _signature(after):
         raise ClosureError("MAIN_PATH_UNSAFE")
-    return reads[0]
+    return reads[0], descriptor
 
 
-def read_files(root: Path, paths: tuple[str, ...], governed: bool = False) -> tuple[ValidatedResource, ...]:
+def read_files(root: Path, paths: tuple[str, ...], governed: bool = False,
+               *, lease: ExitStack | None = None) -> tuple[ValidatedResource, ...]:
     """Keep ancestor descriptors pinned; reject namespace/content changes before return."""
     names = normalized_paths(paths)
     try:
-        with authority_directory(root) as root_fd, ExitStack() as stack:
+        with ExitStack() as owned:
+            stack = owned if lease is None else lease
+            root_fd = stack.enter_context(authority_directory(root))
             directories = {"": root_fd}
             observations: list[tuple[int, str, tuple[int, ...]]] = []
 
@@ -144,10 +149,11 @@ def read_files(root: Path, paths: tuple[str, ...], governed: bool = False) -> tu
                 parent, _, filename = name.rpartition("/")
                 parent_fd = directory(parent)
                 before = os.stat(filename, dir_fd=parent_fd, follow_symlinks=False)
-                raw = _read_stable(parent_fd, filename, stack)
+                raw, descriptor = _read_stable(parent_fd, filename, stack)
                 observations.append((parent_fd, filename, _signature(before)))
                 resources.append(ValidatedResource(
                     FileBinding(path=name, size=len(raw), sha256=hashlib.sha256(raw).hexdigest()), raw,
+                    _signature(before), None if lease is None else descriptor,
                 ))
             for parent_fd, name, expected in observations:
                 if _signature(os.stat(name, dir_fd=parent_fd, follow_symlinks=False)) != expected:

@@ -1,25 +1,11 @@
 from __future__ import annotations
 
-import hashlib
-import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TypeVar
 
-from pydantic import ValidationError
-
-from memcontam.readiness.phase13_authority_files import AuthorityFileError, read_regular_nofollow
-from memcontam.readiness.phase13_main_execution import (
-    Phase13MainExecutionError,
-    validate_main_authorization,
-)
-from memcontam.readiness.phase13_main_execution_models import MainExecutionFreeze
-from memcontam.readiness.phase13_main_live_contract import (
-    MainLiveContractError,
-    load_main_live_contract,
-    validate_main_live_contract,
-)
+from .phase13_main_v3_runner import V3MainRun, V3RunStatus
 from memcontam.readiness.phase13_main_runner_ledger import MainRunLedger
 from .phase13_main_request_dispatch import DispatchTechnicalFailureV3, ProductionRequestDispatcherV3
 from .phase13_main_live_runtime_support import pending_request_keys_v3
@@ -69,54 +55,54 @@ class MainRunRequest:
     expected_authorization_sha256: str
     run_root: Path
     run_id: str
+    authority_root: Path | None = None
+    expected_authorization_sha256_file: Path | None = None
 
 
-def prepare_main_run(request: MainRunRequest) -> MainRunLedger:
-    package, binding = _validated_inputs(request)
-    return MainRunLedger.create(
-        _ledger_path(request),
-        binding,
-        enumerate_execution_units(package, request.repository_root),
-    )
+def prepare_main_run(request: MainRunRequest) -> V3MainRun:
+    return _open_v3(request, create=True)
 
 
-def open_main_run(request: MainRunRequest) -> MainRunLedger:
-    package, binding = _validated_inputs(request)
-    return MainRunLedger.open(
-        _ledger_path(request),
-        binding,
-        enumerate_execution_units(package, request.repository_root),
-    )
+def open_main_run(request: MainRunRequest) -> V3MainRun:
+    return _open_v3(request, create=False)
+
+
+def _open_v3(request: MainRunRequest, *, create: bool) -> V3MainRun:
+    from .phase13_v3_entrypoint import SelectedExecutionV3, SelectionRequest, select_execution
+    selected = select_execution(SelectionRequest(request.repository_root, request.package_path,
+        request.authorization_path, request.authority_root, request.expected_authorization_sha256_file,
+        request.run_id, request.expected_authorization_sha256 or None), "run" if create else "resume")
+    if not isinstance(selected, SelectedExecutionV3):
+        raise MainRunError("MAIN_PACKAGE_VERSION_UNSUPPORTED")
+    return V3MainRun.open(selected, request.run_root / request.run_id, create=create)
 
 
 def run_main(
     request: MainRunRequest,
-    dispatch: Dispatch,
     *,
+    cache_root: Path,
     tranche_ceiling_krw: int,
     max_units: int | None = None,
-) -> MainRunReport:
-    return run_pending(
-        prepare_main_run(request),
-        dispatch,
-        tranche_ceiling_krw=tranche_ceiling_krw,
-        max_units=max_units,
-    )
+) -> V3RunStatus:
+    run = prepare_main_run(request)
+    try:
+        return run.execute(cache_root, tranche_ceiling_krw=tranche_ceiling_krw, max_units=max_units)
+    finally:
+        run.close()
 
 
 def resume_main(
     request: MainRunRequest,
-    dispatch: Dispatch,
     *,
+    cache_root: Path,
     tranche_ceiling_krw: int,
     max_units: int | None = None,
-) -> MainRunReport:
-    return run_pending(
-        open_main_run(request),
-        dispatch,
-        tranche_ceiling_krw=tranche_ceiling_krw,
-        max_units=max_units,
-    )
+) -> V3RunStatus:
+    run = open_main_run(request)
+    try:
+        return run.execute(cache_root, tranche_ceiling_krw=tranche_ceiling_krw, max_units=max_units)
+    finally:
+        run.close()
 
 
 def run_pending(
@@ -163,49 +149,6 @@ def _report(ledger: MainRunLedger, attempted: int) -> MainRunReport:
         status.completed_count,
         status.terminal_technical_missing_count,
     )
-
-
-def _validated_inputs(
-    request: MainRunRequest,
-) -> tuple[MainExecutionFreeze, MainRunBinding]:
-    _ledger_path(request)
-    try:
-        authorization = validate_main_authorization(
-            request.repository_root,
-            request.package_path,
-            request.authorization_path,
-            request.expected_authorization_sha256,
-        )
-        package_raw = read_regular_nofollow(request.package_path)
-        if hashlib.sha256(package_raw).hexdigest() != authorization.execution_package_sha256:
-            raise MainRunError("MAIN_RUN_PACKAGE_BYTES_CHANGED")
-        package = MainExecutionFreeze.model_validate_json(package_raw)
-        contract = load_main_live_contract(
-            request.repository_root / "data/phase13/main/main_live_contract_v1.json"
-        )
-        validate_main_live_contract(contract, package)
-    except Phase13MainExecutionError as error:
-        raise MainRunError(error.code) from error
-    except MainRunError:
-        raise
-    except (AuthorityFileError, MainLiveContractError, OSError, ValidationError) as error:
-        raise MainRunError("MAIN_RUN_INPUT_INVALID") from error
-    return package, MainRunBinding(
-        package.package_id,
-        authorization.execution_package_sha256,
-        package.package_hash,
-        authorization.authorization_id,
-        authorization.authorization_sha256,
-        authorization.authorization_hash,
-        package.execution_control.runner_code_sha256,
-        package.cost_guard.core_authorization_gate_krw,
-    )
-
-
-def _ledger_path(request: MainRunRequest) -> Path:
-    if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", request.run_id) is None:
-        raise MainRunError("MAIN_RUN_ID_INVALID")
-    return request.run_root / request.run_id / "main-run-v1.sqlite3"
 
 
 __all__ = [

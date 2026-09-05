@@ -32,6 +32,8 @@ from memcontam.readiness.phase13_core_datasets import (
 from memcontam.readiness.phase13_execution_contract import CORE_MAIN_REGISTRY
 from memcontam.readiness.phase13_production_runtime_models import ProductionOrdinaryRunIdentity
 from memcontam.tasks.base import TaskInstance
+from memcontam.readiness.phase13_validated_ordinary_resources import ValidatedOrdinaryResources
+from memcontam.readiness.phase13_main_request_client import native_state_bytes
 
 _validated_common_capacity_tokens = capacity_realization.validated_common_capacity_tokens
 
@@ -127,32 +129,43 @@ class ProspectiveOrdinaryRun:
     initial_states: Mapping[str, Any] = field(default_factory=dict)
     allow_test_client: bool = False
     production_identity: ProductionOrdinaryRunIdentity | None = None
+    validated_resources: ValidatedOrdinaryResources | None = None
+    _task_bytes: tuple[bytes, ...] = field(default=(), init=False, repr=False)
 
     def __post_init__(self) -> None:
+        if self.validated_resources is not None:
+            object.__setattr__(self, "_task_bytes", tuple(task.model_dump_json().encode() for task in self.tasks))
         if self.task_name not in ORDINARY_TASKS:
             raise ProspectiveOrdinaryError("ORDINARY_TASK_REQUIRED")
         if self.baseline not in PROSPECTIVE_BASELINES:
             raise ProspectiveOrdinaryError("ORDINARY_BASELINE_REQUIRED")
         if not self.run_id or not self.model:
             raise ProspectiveOrdinaryError("ORDINARY_RUNTIME_IDENTITY_REQUIRED")
-        binding_error = model_client_binding_error(
+        binding_error = (model_client_binding_error(
             self.model,
             self.client,
             self.allow_test_client,
-        ) or request_binding_error(
+        ) if self.validated_resources is None else None) or request_binding_error(
             self.decoding.get("service_tier", "default"),
             self.decoding.get("max_output_tokens", 512),
         )
         if binding_error is not None:
             raise ProspectiveOrdinaryError(binding_error)
-        if self.model == "gpt-5.6-luna":
+        if self.validated_resources is not None and (
+            self.core_bundle is not None or not self.tasks
+            or self.client is not self.validated_resources.execution_client
+            or self.production_identity is None or type(self.trajectory_seed) is not int
+        ):
+            raise ProspectiveOrdinaryError("MAIN_AUTHORIZATION_BINDING_MISMATCH")
+        if self.model == "gpt-5.6-luna" and self.validated_resources is None:
             try:
                 validate_activated_cost_policy(REPOSITORY_ROOT)
             except Phase13CostActivationError as error:
                 raise ProspectiveOrdinaryError(error.code) from error
         contract_error = capacity_contract_error(
             self.baseline_configs,
-            _validated_common_capacity_tokens(),
+            (self.validated_resources.common_capacity_tokens
+             if self.validated_resources is not None else _validated_common_capacity_tokens()),
         )
         if contract_error is not None:
             raise ProspectiveOrdinaryError(contract_error)
@@ -167,7 +180,7 @@ class ProspectiveOrdinaryRun:
         ):
             raise ProspectiveOrdinaryError("ORDINARY_BRANCH_IDENTITY_MISMATCH")
         is_core = self.task_name in CORE_TASKS
-        if is_core and (
+        if is_core and self.validated_resources is None and (
             self.core_bundle is None
             or type(self.trajectory_seed) is not int
             or self.tasks
@@ -201,7 +214,9 @@ def execute_prospective_ordinary(run: ProspectiveOrdinaryRun) -> ProspectiveOrdi
     state = entry.initial_state(contexts[0]) if run.branch is None else deepcopy(run.branch.state)
     results: list[RuntimeTrialResult] = []
     for context in contexts:
-        result = entry.execute_trial(context, state)
+        request_client = None if run.validated_resources is None else run.validated_resources.request_client
+        result = (entry.execute_trial(context, state) if request_client is None else request_client.trial(
+            lambda: entry.execute_trial(context, state), lambda: native_state_bytes(entry.serialize_state, state)))
         _write(context.writer_callbacks, result)
         results.append(result)
         state = result.state
@@ -237,7 +252,9 @@ def _validate_live_dispatch_identity(
 ) -> None:
     from memcontam.clients.openai_responses import OpenAIResponsesClient
 
-    if run.model != "gpt-5.6-luna" or not isinstance(run.client, OpenAIResponsesClient):
+    if run.validated_resources is None and (
+        run.model != "gpt-5.6-luna" or not isinstance(run.client, OpenAIResponsesClient)
+    ):
         return
     identity = run.production_identity
     if identity is None or run.trajectory_seed != identity.trajectory_seed:
@@ -248,14 +265,21 @@ def _validate_live_dispatch_identity(
     )
 
     try:
-        expected = production_identity_from_checkpoint(
-            REPOSITORY_ROOT / "data/phase13/main/mr_p4",
-            REPOSITORY_ROOT,
-            task=run.task_name,
-            trajectory_seed=identity.trajectory_seed,
-            execution_template_id=identity.execution_template_id,
-            registration_packet_sha256=identity.registration_packet_sha256,
-        )
+        if run.validated_resources is None:
+            expected = production_identity_from_checkpoint(
+                REPOSITORY_ROOT / "data/phase13/main/mr_p4",
+                REPOSITORY_ROOT,
+                task=run.task_name,
+                trajectory_seed=identity.trajectory_seed,
+                execution_template_id=identity.execution_template_id,
+                registration_packet_sha256=identity.registration_packet_sha256,
+            )
+        else:
+            seed = run.validated_resources.checkpoint_registry.tasks[run.task_name].seeds[identity.trajectory_seed]
+            expected = identity.model_copy(update={
+                "checkpoint_registry_sha256": run.validated_resources.checkpoint_sha256,
+                "ordered_sample_ids_sha256": seed.suffix_sample_ids_sha256,
+            })
     except Phase13MainCheckpointError as error:
         raise ProspectiveOrdinaryError(error.code) from error
     if (
@@ -272,11 +296,15 @@ def _validate_live_dispatch_identity(
 
 def _ordered_tasks(run: ProspectiveOrdinaryRun) -> tuple[TaskInstance, ...]:
     if run.task_name not in CORE_TASKS:
-        return run.tasks
-    assert run.core_bundle is not None
+        return (run.tasks if run.validated_resources is None
+                else tuple(TaskInstance.model_validate_json(raw) for raw in run._task_bytes))
     assert run.trajectory_seed is not None
-    validate_core_datasets(run.core_bundle, trajectory_seed=run.trajectory_seed)
-    rows = load_core_task(run.core_bundle, _core_task(run.task_name))
+    if run.validated_resources is None:
+        assert run.core_bundle is not None
+        validate_core_datasets(run.core_bundle, trajectory_seed=run.trajectory_seed)
+        rows = load_core_task(run.core_bundle, _core_task(run.task_name))
+    else:
+        rows = tuple(TaskInstance.model_validate_json(raw) for raw in run._task_bytes)
     ordered = paired_trajectory_order(rows, trajectory_seed=run.trajectory_seed)
     if run.model != "gpt-5.6-luna":
         return ordered
@@ -309,7 +337,8 @@ def _context(
 ) -> ProspectiveOrdinaryContext:
     return ProspectiveOrdinaryContext(
         task=task,
-        client=bind_cost_policy_client(run.client, REPOSITORY_ROOT),
+        client=(run.validated_resources.execution_client if run.validated_resources is not None
+                else bind_cost_policy_client(run.client, REPOSITORY_ROOT)),
         model=run.model,
         verifier=run.verifier,
         decoding={**run.decoding, "max_output_tokens": 512, "service_tier": "default"},
@@ -328,7 +357,8 @@ def _context(
         embedding_provider=run.embedding_provider,
         baseline_configs=bind_capacity_configs(
             run.baseline_configs,
-            _validated_common_capacity_tokens(),
+            (run.validated_resources.common_capacity_tokens if run.validated_resources is not None
+             else _validated_common_capacity_tokens()),
         ),
         initial_states=run.initial_states,
     )

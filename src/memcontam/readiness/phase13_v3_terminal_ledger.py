@@ -13,6 +13,8 @@ from typing import assert_never
 from pydantic import JsonValue
 
 from .phase13_v3_cost_actual import reconcile_actual
+from .phase13_v3_entrypoint_paths import PrivateLedger
+from .phase13_authority_files import read_regular_nofollow
 from .phase13_v3_cost_models import ProviderCostEvidence, canonical_bytes, digest
 from .phase13_v3_terminal_models import (
     AmbiguousAttemptV3, EvidenceState, EventV3, LedgerBindingV3,
@@ -34,6 +36,31 @@ class TerminalLedgerV3:
 
     path: Path
     binding: LedgerBindingV3
+    guard: PrivateLedger | None = None
+
+    @contextmanager
+    def connection(self) -> Iterator[sqlite3.Connection]:
+        manager = connection_to(self.path) if self.guard is None else self.guard.connect()
+        with manager as connection:
+            yield connection
+
+    @classmethod
+    def create_guarded(cls, guard: PrivateLedger, binding: Mapping[str, JsonValue]) -> TerminalLedgerV3:
+        parsed = LedgerBindingV3.model_validate_json(json.dumps(dict(binding)))
+        ledger = cls(guard.directory / guard.path.name, parsed, guard)
+        with ledger.connection() as connection:
+            connection.execute("CREATE TABLE metadata (raw BLOB NOT NULL)")
+            connection.execute("CREATE TABLE events (sequence INTEGER PRIMARY KEY, raw BLOB NOT NULL, event_hash TEXT NOT NULL)")
+            connection.execute("INSERT INTO metadata VALUES (?)", (canonical_bytes(parsed),))
+        ledger._sync()
+        return ledger
+
+    @classmethod
+    def open_guarded(cls, guard: PrivateLedger, binding: LedgerBindingV3) -> TerminalLedgerV3:
+        ledger = cls(guard.directory / guard.path.name, binding, guard)
+        with ledger.connection() as connection:
+            ledger._replay(connection)
+        return ledger
 
     @classmethod
     def create(cls, path: Path, binding: Mapping[str, JsonValue]) -> TerminalLedgerV3:
@@ -58,23 +85,31 @@ class TerminalLedgerV3:
         return ledger
 
     def rows(self) -> tuple[bytes, ...]:
-        with connection_to(self.path) as connection:
+        with self.connection() as connection:
             self._replay(connection)
             return tuple(bytes(row[0]) for row in connection.execute("SELECT raw FROM events ORDER BY sequence"))
 
     def state(self, unit_id: str) -> EvidenceState:
-        with connection_to(self.path) as connection:
+        with self.connection() as connection:
             states = self._replay(connection)
         try:
             return states[unit_id]
         except KeyError as error:
             raise TerminalEvidenceError() from error
 
+    def states(self) -> dict[str, EvidenceState]:
+        with self.connection() as connection:
+            return self._replay(connection)
+
+    def read_record(self, name: str) -> bytes:
+        return read_regular_nofollow(self.path.parent / name) if self.guard is None else self.guard.read_record(name)
+
     def append(self, supplied: Mapping[str, JsonValue]) -> None:
         event = parse_event(json.dumps(dict(supplied), allow_nan=False).encode())
         raw = canonical_bytes(event)
-        with connection_to(self.path) as connection:
-            connection.execute("BEGIN IMMEDIATE")
+        with self.connection() as connection:
+            if not connection.in_transaction:
+                connection.execute("BEGIN IMMEDIATE")
             states = self._replay(connection)
             if event.unit_id not in states:
                 raise TerminalEvidenceError()
@@ -151,6 +186,9 @@ class TerminalLedgerV3:
                 assert_never(unreachable)
 
     def _sync(self) -> None:
+        if self.guard is not None:
+            self.guard.sync()
+            return
         with self.path.open("rb") as database:
             os.fsync(database.fileno())
         descriptor = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY)

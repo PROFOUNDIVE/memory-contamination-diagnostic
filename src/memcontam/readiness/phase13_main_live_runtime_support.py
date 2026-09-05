@@ -114,6 +114,7 @@ def dispatch_output(
     trials: Sequence[RuntimeTrialResult],
     identity: ProductionOrdinaryRunIdentity,
     archive: ProductionObservabilityArchive | None = None,
+    *, realized_cost_krw: int | None = None,
 ) -> MainUnitDispatchOutput:
     calls = tuple(
         _reconcile_decoding(call)
@@ -121,7 +122,7 @@ def dispatch_output(
         for call in trial.outcome.method_calls
         if isinstance(call, MethodCall)
     )
-    realized = sum(
+    realized = realized_cost_krw if realized_cost_krw is not None else sum(
         int(
             (Decimal(str(call.provider_cost_usd)) * 1600).to_integral_value(
                 rounding=ROUND_CEILING

@@ -1,0 +1,82 @@
+from __future__ import annotations
+
+from dataclasses import replace
+import hashlib
+import json
+from pathlib import Path
+
+import pytest
+
+from memcontam.readiness.phase13_authority_files import load_authority_v3
+from memcontam.readiness.phase13_main_checkpoint import CommonCheckpointRegistry
+from memcontam.readiness.phase13_main_production import ProductionObject
+from memcontam.readiness.phase13_main_resource_contract import RESOURCE_PATHS
+from memcontam.readiness.phase13_v3_authority_models import V3Identity
+from memcontam.readiness.phase13_v3_cost import activate_policy, build_witness, freeze_base
+from memcontam.readiness.phase13_v3_cost_binding import MRP4Costs, bind_package_costs
+from memcontam.readiness.phase13_v3_cost_models import CostUnit, FinalOrder, PrefreezeBindings, StageOccurrences, canonical_bytes, digest
+from memcontam.readiness.phase13_v3_entrypoint import SelectionRequest
+from memcontam.readiness.phase13_v3_entrypoint_models import ExecutionResourceV3, MainAuthorizationV3, MainExecutionPackageV3, MainLiveContractV3
+from memcontam.readiness.phase13_v3_resource_files import read_files
+from memcontam.readiness.phase13_v3_runtime_identity import ROOT, freeze_runtime_identity
+
+
+AUTHORITY = Path("/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts")
+
+
+@pytest.fixture(scope="session")
+def entrypoint_bytes():
+    authority = load_authority_v3(AUTHORITY)
+    identity = freeze_runtime_identity()
+    resources = {row.binding.path: row.raw for row in read_files(ROOT, tuple(
+        path for role, path in RESOURCE_PATHS.items() if role not in {"activated_policy", "base_inputs", "cost_witness"}))}
+    unit_id = hashlib.sha256(json.dumps(["phase13-main-a-disjoint-unit-id-v1", "NO_MEMORY_SINGLETON",
+        0, "game24", None, "NOT_APPLICABLE"], separators=(",", ":")).encode()).hexdigest()
+    base = freeze_base(activate_policy(authority), PrefreezeBindings(**{
+        name: hashlib.sha256(name.encode()).hexdigest() for name in PrefreezeBindings.model_fields
+    }), (CostUnit(unit_id=unit_id, stages=(StageOccurrences(stage_id="NoMem_generation", calls=50),)),))
+    phase4 = MRP4Costs(policy=base.policy, base=base, witness=build_witness(base))
+    for role, model in (("activated_policy", base.policy), ("base_inputs", base), ("cost_witness", phase4.witness)):
+        resources[RESOURCE_PATHS[role]] = canonical_bytes(model)
+    checkpoint_raw = resources[RESOURCE_PATHS["common_checkpoint_registry"]]
+    checkpoint = CommonCheckpointRegistry.model_validate_json(checkpoint_raw)
+    unit = ProductionObject(0, unit_id, "NO_MEMORY_SINGLETON", 0, "game24", None,
+        "NOT_APPLICABLE", None, 0, "game24|nomem", checkpoint.tasks["game24"].seeds[0].suffix_sample_ids_sha256,
+        hashlib.sha256(resources[RESOURCE_PATHS["observability_packet"]]).hexdigest(), hashlib.sha256(checkpoint_raw).hexdigest())
+    package = MainExecutionPackageV3(schema_version="phase13_main_execution_freeze_v3", identity=V3Identity(),
+        status="FROZEN", authority=authority, runtime_identity=identity, measured_main_a_trajectory_count=0,
+        resources=tuple(ExecutionResourceV3(role=role, path=path, size=len(resources[path]),
+            sha256=hashlib.sha256(resources[path]).hexdigest()) for role, path in RESOURCE_PATHS.items()),
+        production=(unit,), final_order=FinalOrder(unit_ids=(unit_id,), runtime_hash=digest(identity),
+            request_hash="c" * 64, tokenizer_hash="d" * 64))
+    first = bind_package_costs(package, phase4)
+    unit = replace(unit, projected_cost_krw=first.resources.proof.projected_krw[0].projected_krw)
+    bound = bind_package_costs(package.model_copy(update={"production": (unit,)}), phase4)
+    contract = MainLiveContractV3(schema_version="phase13_main_live_contract_v3", identity=V3Identity(),
+        package_core_hash=bound.package.package_core_hash, cost_proof_hash=bound.package.cost_proof_hash,
+        projected_krw=((unit_id, unit.projected_cost_krw),), contract_hash="0" * 64)
+    contract = contract.model_copy(update={"contract_hash": digest(contract, "contract_hash")})
+    package = bound.package.model_copy(update={"live_contract_hash": contract.contract_hash})
+    package = package.model_copy(update={"package_hash": digest(package, "package_hash")})
+    resources["data/phase13/main/cost_envelope_v3/complete_inputs_v3.json"] = canonical_bytes(bound.resources.complete)
+    resources["data/phase13/main/cost_envelope_v3/cost_proof_v3.json"] = canonical_bytes(bound.resources.proof)
+    resources["data/phase13/main/main_live_contract_v3.json"] = canonical_bytes(contract)
+    resources["package.json"] = canonical_bytes(package)
+    authorization = MainAuthorizationV3(schema_version="phase13_main_authorization_v3", identity=V3Identity(),
+        authorization_id=V3Identity().authorization_id, status="AUTHORIZED_EXECUTION", execution_package_id=V3Identity().package_id,
+        execution_package_path="package.json", execution_package_sha256=digest(package), execution_package_hash=package.package_hash,
+        authorization_hash="0" * 64, main_a_status="NOT_STARTED", measured_main_a_trajectory_count=0)
+    authorization = authorization.model_copy(update={"authorization_hash": digest(authorization, "authorization_hash")})
+    resources["authorization.json"] = canonical_bytes(authorization)
+    resources["authorization.sha256"] = (digest(authorization) + "\n").encode()
+    return resources
+
+
+@pytest.fixture
+def entrypoint_fixture(tmp_path, entrypoint_bytes):
+    for path, raw in entrypoint_bytes.items():
+        target = tmp_path / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(raw)
+    return SelectionRequest(tmp_path, tmp_path / "package.json", tmp_path / "authorization.json",
+        AUTHORITY, tmp_path / "authorization.sha256", V3Identity().run_id)

@@ -250,6 +250,7 @@ def test_production_prefix_binds_baseline_specific_arm_free_condition(
     )
     runtime = ProductionMainRuntime.__new__(ProductionMainRuntime)
     runtime._root = ROOT
+    runtime._resources = None
     monkeypatch.setattr(runtime, "_client", ReplayClient(), raising=False)
     monkeypatch.setattr(runtime, "_tasks", lambda *_args, **_kwargs: (task,))
     monkeypatch.setattr(runtime, "_embedder", lambda: None)
