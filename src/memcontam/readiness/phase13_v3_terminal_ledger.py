@@ -13,7 +13,7 @@ from typing import assert_never
 from pydantic import JsonValue
 
 from .phase13_v3_cost_actual import reconcile_actual
-from .phase13_v3_cost_models import canonical_bytes, digest
+from .phase13_v3_cost_models import ProviderCostEvidence, canonical_bytes, digest
 from .phase13_v3_terminal_models import (
     AmbiguousAttemptV3, EvidenceState, EventV3, LedgerBindingV3,
     NoRequestV3, OverflowV3, TerminalEvidenceError, advance, parse_event,
@@ -107,6 +107,18 @@ class TerminalLedgerV3:
                 assert_never(unreachable)
         self.append(event.model_dump(mode="json"))
 
+    def reconcile_cost(self, unit_id: str, supplied: Mapping[str, JsonValue], proof_hash: str) -> None:
+        cost = ProviderCostEvidence.model_validate_json(json.dumps(dict(supplied)))
+        realized = reconcile_actual(cost).realized_krw
+        state = self.state(unit_id)
+        self.append({
+            "schema_version": "phase13_main_reconciliation_v3", "kind": "COST_RECONCILED",
+            "unit_id": unit_id, "revision": state.revision + 1, "previous_hash": state.event_hash,
+            "compiled": None if state.compiled is None else state.compiled.model_dump(mode="json"),
+            "transport_attempts": 1, "cost": cost.model_dump(mode="json"),
+            "realized_cost_krw": realized, "proof_hash": proof_hash,
+        })
+
     def _replay(self, connection: sqlite3.Connection) -> dict[str, EvidenceState]:
         metadata = connection.execute("SELECT raw FROM metadata").fetchall()
         if metadata != [(canonical_bytes(self.binding),)]:
@@ -133,7 +145,7 @@ class TerminalLedgerV3:
                                       "ATTEMPT_STARTED", "INPUT_ENVELOPE_OVERFLOW")
                        for state in states.values()):
                     raise TerminalEvidenceError()
-            case "REQUEST_COMPILED" | "ATTEMPT_STARTED" | "INPUT_ENVELOPE_OVERFLOW" | "TERMINAL_TECHNICAL_MISSING" | "NO_REQUEST" | "COMPLETED" | "ATTEMPTED_PROVIDER_FAILURE" | "AMBIGUOUS_ATTEMPT":
+            case "REQUEST_COMPILED" | "ATTEMPT_STARTED" | "INPUT_ENVELOPE_OVERFLOW" | "TERMINAL_TECHNICAL_MISSING" | "NO_REQUEST" | "COMPLETED" | "ATTEMPTED_PROVIDER_FAILURE" | "AMBIGUOUS_ATTEMPT" | "COST_RECONCILED":
                 return
             case unreachable:
                 assert_never(unreachable)

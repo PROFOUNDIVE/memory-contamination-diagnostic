@@ -119,9 +119,21 @@ class AmbiguousAttemptV3(AttemptedEvidence):
     proof_hash: Sha256
 
 
+class CostReconciledV3(AttemptedEvidence):
+    schema_version: Literal["phase13_main_reconciliation_v3"]
+    kind: Literal["COST_RECONCILED"]
+    proof_hash: Sha256
+
+    @model_validator(mode="after")
+    def known_cost(self) -> Self:
+        if self.realized_cost_krw is None:
+            raise TerminalEvidenceError("MAIN_TERMINAL_COST_UNKNOWN")
+        return self
+
+
 EventV3 = Annotated[
     DispatchIntentV3 | RequestCompiledV3 | AttemptStartedV3 | OverflowV3 | CompletedV3
-    | ProviderFailureV3 | NoRequestV3 | AmbiguousAttemptV3, Field(discriminator="kind"),
+    | ProviderFailureV3 | NoRequestV3 | AmbiguousAttemptV3 | CostReconciledV3, Field(discriminator="kind"),
 ]
 EVENT_ADAPTER: Final[TypeAdapter[EventV3]] = TypeAdapter(EventV3)
 StateKind = Literal[
@@ -172,6 +184,18 @@ def advance(state: EvidenceState, event: EventV3) -> EvidenceState:
             allowed, target = ("DISPATCH_INTENT_PERSISTED", "REQUEST_COMPILED"), "PENDING"
         case CompletedV3() | ProviderFailureV3() | AmbiguousAttemptV3():
             allowed, target, cost = ("ATTEMPT_STARTED",), event.kind, event.cost
+        case CostReconciledV3():
+            allowed = ("COMPLETED", "ATTEMPTED_PROVIDER_FAILURE", "AMBIGUOUS_ATTEMPT")
+            target, cost = state.kind, event.cost
+            if state.attempted_cost is None:
+                raise TerminalEvidenceError()
+            try:
+                reconcile_actual(state.attempted_cost)
+            except CostError as error:
+                if error.code != "MAIN_TERMINAL_COST_UNKNOWN":
+                    raise
+            else:
+                raise TerminalEvidenceError()
         case unreachable:
             assert_never(unreachable)
     if state.kind not in allowed:
@@ -180,7 +204,7 @@ def advance(state: EvidenceState, event: EventV3) -> EvidenceState:
         case RequestCompiledV3():
             if state.compiled is not None and event.compiled != state.compiled:
                 raise TerminalEvidenceError()
-        case DispatchIntentV3() | AttemptStartedV3() | OverflowV3() | NoRequestV3() | CompletedV3() | ProviderFailureV3() | AmbiguousAttemptV3():
+        case DispatchIntentV3() | AttemptStartedV3() | OverflowV3() | NoRequestV3() | CompletedV3() | ProviderFailureV3() | AmbiguousAttemptV3() | CostReconciledV3():
             if event.compiled != state.compiled:
                 raise TerminalEvidenceError()
         case unreachable:

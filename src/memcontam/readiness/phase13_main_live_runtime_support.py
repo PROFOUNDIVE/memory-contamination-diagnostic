@@ -13,6 +13,8 @@ from memcontam.readiness.phase13_core_bundle import CoreTask
 from memcontam.readiness.phase13_legacy_rag_models import FeasibleTaskName
 from memcontam.readiness.phase13_main_live_dispatch import MainUnitDispatchOutput
 from memcontam.readiness.phase13_main_production import ProductionObject
+from .phase13_main_request_dispatch import ProductionRequestDispatcherV3
+from .phase13_v3_request import RequestKeyV3
 from memcontam.readiness.phase13_production_observability import (
     ProductionObservabilityArchive,
     ProviderRequestRecord,
@@ -31,9 +33,18 @@ class MainLiveRuntimeError(ValueError):
         super().__init__(code)
 
 
-_TASK_ADAPTER: Final = TypeAdapter(OrdinaryTask)
-_CORE_TASK_ADAPTER: Final = TypeAdapter(CoreTask)
-_LEGACY_TASK_ADAPTER: Final = TypeAdapter(FeasibleTaskName)
+_TASK_ADAPTER: Final[TypeAdapter[OrdinaryTask]] = TypeAdapter(OrdinaryTask)
+_CORE_TASK_ADAPTER: Final[TypeAdapter[CoreTask]] = TypeAdapter(CoreTask)
+_LEGACY_TASK_ADAPTER: Final[TypeAdapter[FeasibleTaskName]] = TypeAdapter(FeasibleTaskName)
+
+
+def pending_request_keys_v3(
+    dispatcher: ProductionRequestDispatcherV3, keys: tuple[RequestKeyV3, ...],
+) -> tuple[RequestKeyV3, ...]:
+    dispatcher.recover()
+    failed = dispatcher.terminal_parents
+    return tuple(key for key in keys if key.parent_id not in failed
+                 and dispatcher.ledger.state(key.dispatch_id).kind == "PENDING")
 
 
 def task_name(task: str) -> OrdinaryTask:
@@ -175,6 +186,7 @@ __all__ = [
     "dispatch_output",
     "legacy_task_name",
     "production_identity",
+    "pending_request_keys_v3",
     "task_name",
     "verifier",
 ]

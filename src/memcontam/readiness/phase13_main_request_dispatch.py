@@ -11,6 +11,10 @@ from pydantic import JsonValue
 
 from memcontam.baselines.prompt_budget import count_prompt_tokens
 from memcontam.clients.base import LLMClient, LLMResponse
+from memcontam.readiness.phase13_authority_files import read_regular_nofollow
+from memcontam.readiness.phase13_main_request_recovery import (
+    RequestIdentityReceiptV3, recover_requests, request_lock, terminal_parents,
+)
 from memcontam.readiness.phase13_v3_cost_actual import reconcile_actual
 from memcontam.readiness.phase13_v3_cost_models import CostError, ProviderCostEvidence
 from .phase13_v3_cost_binding import LiveCosts, TableKey
@@ -43,8 +47,10 @@ class DeferredMainClient:
 
 
 class DispatchTechnicalFailureV3(RuntimeError):
-    def __init__(self, code: str, parent_id: str, realized_cost_krw: int | None) -> None:
+    def __init__(self, code: str, parent_id: str, realized_cost_krw: int | None,
+                 *, evidence_sha256: str | None = None) -> None:
         self.code, self.parent_id, self.realized_cost_krw = code, parent_id, realized_cost_krw
+        self.evidence_sha256 = evidence_sha256
         super().__init__(code)
 
 
@@ -70,22 +76,35 @@ class ProductionRequestDispatcherV3:
             raise TerminalEvidenceError("MAIN_AUTHORIZATION_BINDING_MISMATCH")
         self.ledger, self.binding, self.parents = ledger, binding, parents
         self._factory = provider_factory
-        self._terminal: set[str] = set()
+        terminal_parents(ledger, binding, parents)
         self._compiled: dict[str, CompiledProviderRequestV3] = {}
 
     @property
     def terminal_parents(self) -> frozenset[str]:
-        return frozenset(self._terminal)
+        return terminal_parents(self.ledger, self.binding, self.parents)
+
+    def recover(self) -> None:
+        with request_lock(self.ledger):
+            terminal_parents(self.ledger, self.binding, self.parents)
+            recover_requests(self.ledger)
 
     def compiled_request(self, key: RequestKeyV3) -> CompiledProviderRequestV3:
         return self._compiled[key.dispatch_id]
 
     def dispatch(self, key: RequestKeyV3, compile_material: Callable[[], RequestMaterialV3],
                  parse_result: Callable[[LLMResponse], ResultT]) -> ResultT:
-        if key.parent_id in self._terminal:
+        with request_lock(self.ledger):
+            return self._dispatch(key, compile_material, parse_result)
+
+    def _dispatch(self, key: RequestKeyV3, compile_material: Callable[[], RequestMaterialV3],
+                  parse_result: Callable[[LLMResponse], ResultT]) -> ResultT:
+        if key.parent_id in self.terminal_parents:
             raise DispatchTechnicalFailureV3("MAIN_TRAJECTORY_TERMINAL", key.parent_id, None)
         if key.parent_id not in {parent.parent_id for parent in self.parents}:
             raise TerminalEvidenceError()
+        self.ledger.state(key.dispatch_id)
+        receipt = RequestIdentityReceiptV3(binding=self.binding, parents=self.parents, key=key)
+        self._publish_bytes(key, "identity", receipt.model_dump_json().encode() + b"\n")
         self._append(key, "DISPATCH_INTENT")
         material = compile_material()
         request_bytes = compile_request_bytes(key, material)
@@ -98,8 +117,8 @@ class ProductionRequestDispatcherV3:
             for kind in ("INPUT_ENVELOPE_OVERFLOW", "TERMINAL_TECHNICAL_MISSING"):
                 self._append(key, kind, {"failure_code": "MAIN_INPUT_ENVELOPE_EXCEEDED",
                                         "transport_attempts": 0, "realized_cost_krw": 0})
-            self._terminalize(key)
-            raise DispatchTechnicalFailureV3("MAIN_INPUT_ENVELOPE_EXCEEDED", key.parent_id, 0)
+            raise DispatchTechnicalFailureV3("MAIN_INPUT_ENVELOPE_EXCEEDED", key.parent_id, 0,
+                evidence_sha256=self.ledger.state(key.dispatch_id).event_hash)
         provider = self._factory(self.binding)
         response: LLMResponse | None = None
         cost = ProviderCostEvidence()
@@ -145,8 +164,8 @@ class ProductionRequestDispatcherV3:
                 "failure_code": str(getattr(error, "code", type(error).__name__)),
                 "observation_hash": hashlib.sha256(observation).hexdigest(),
             })
-            self._terminalize(key)
-            raise DispatchTechnicalFailureV3("MAIN_ATTEMPTED_PROVIDER_FAILURE", key.parent_id, realized) from error
+            raise DispatchTechnicalFailureV3("MAIN_ATTEMPTED_PROVIDER_FAILURE", key.parent_id, realized,
+                evidence_sha256=self.ledger.state(key.dispatch_id).event_hash) from error
         self._append(key, "COMPLETED", {
             "transport_attempts": 1, "cost": cost.model_dump(mode="json"),
             "realized_cost_krw": realized,
@@ -154,20 +173,14 @@ class ProductionRequestDispatcherV3:
         })
         return result
 
-    def _terminalize(self, key: RequestKeyV3) -> None:
-        self._terminal.add(key.parent_id)
-        parent = next(parent for parent in self.parents if parent.parent_id == key.parent_id)
-        if parent.kind == "CLEAN_PREFIX":
-            self._terminal.update(parent.parent_id for parent in self.parents
-                                  if parent.prefix_parent_id == key.parent_id)
-
     def _append(self, key: RequestKeyV3, kind: str, extra: dict[str, JsonValue] | None = None) -> None:
         state = self.ledger.state(key.dispatch_id)
         compiled = self._compiled.get(key.dispatch_id)
+        evidence = compiled.evidence if kind == "REQUEST_COMPILED" and compiled is not None else state.compiled
         self.ledger.append({
             "schema_version": "phase13_main_dispatch_evidence_v3", "unit_id": key.dispatch_id,
             "revision": state.revision + 1, "previous_hash": state.event_hash, "kind": kind,
-            "compiled": None if compiled is None else compiled.evidence.model_dump(mode="json"),
+            "compiled": None if evidence is None else evidence.model_dump(mode="json"),
             **(extra or {}),
         })
 
@@ -188,7 +201,11 @@ class ProductionRequestDispatcherV3:
             temporary.write(raw)
             temporary.flush()
             os.fsync(temporary.fileno())
-            os.link(temporary.name, path)
+            try:
+                os.link(temporary.name, path)
+            except FileExistsError:
+                if read_regular_nofollow(path) != raw:
+                    raise TerminalEvidenceError() from None
         descriptor = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
         try:
             os.fsync(descriptor)

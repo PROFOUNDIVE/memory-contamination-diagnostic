@@ -5,6 +5,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypeVar
 
 from pydantic import ValidationError
 
@@ -20,6 +21,10 @@ from memcontam.readiness.phase13_main_live_contract import (
     validate_main_live_contract,
 )
 from memcontam.readiness.phase13_main_runner_ledger import MainRunLedger
+from .phase13_main_request_dispatch import DispatchTechnicalFailureV3, ProductionRequestDispatcherV3
+from .phase13_main_live_runtime_support import pending_request_keys_v3
+from .phase13_v3_request import RequestKeyV3
+from .phase13_main_request_recovery import require_known_costs
 from memcontam.readiness.phase13_main_runner_models import (
     DispatchCompleted,
     DispatchTechnicalFailure,
@@ -33,6 +38,27 @@ from memcontam.readiness.phase13_main_runner_models import (
 
 
 Dispatch = Callable[[ExecutionUnit], DispatchCompleted]
+RequestResult = TypeVar("RequestResult")
+
+
+def run_pending_requests_v3(
+    dispatcher: ProductionRequestDispatcherV3,
+    keys: tuple[RequestKeyV3, ...],
+    execute: Callable[[RequestKeyV3], RequestResult],
+) -> tuple[str, ...]:
+    completed: list[str] = []
+    for key in pending_request_keys_v3(dispatcher, keys):
+        if key.parent_id in dispatcher.terminal_parents:
+            continue
+        require_known_costs(dispatcher.ledger)
+        try:
+            execute(key)
+        except DispatchTechnicalFailureV3:
+            continue
+        if dispatcher.ledger.state(key.dispatch_id).kind != "COMPLETED":
+            raise MainRunError("MAIN_RUN_COMPLETION_EVIDENCE_INVALID")
+        completed.append(key.dispatch_id)
+    return tuple(completed)
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,4 +222,5 @@ __all__ = [
     "resume_main",
     "run_main",
     "run_pending",
+    "run_pending_requests_v3",
 ]
