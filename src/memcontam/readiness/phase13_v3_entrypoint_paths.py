@@ -1,19 +1,18 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
-from contextlib import ExitStack, closing, contextmanager
-from dataclasses import dataclass
 import os
-from pathlib import Path
 import re
 import sqlite3
 import stat
+from collections.abc import Iterator
+from contextlib import ExitStack, closing, contextmanager
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Final
 from uuid import uuid4
 
 from .phase13_authority_files import AuthorityFileError, authority_directory, read_authority_at
 from .phase13_v3_resource_files import ValidatedResource, _signature, read_files
-
 
 LEDGER_FILENAME: Final = "main_run_ledger_v3.sqlite3"
 

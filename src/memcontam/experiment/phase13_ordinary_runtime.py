@@ -5,6 +5,7 @@ import json
 from collections.abc import Callable, Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 from typing import Any, Literal, TypeAlias, assert_never
 
@@ -16,24 +17,27 @@ from memcontam.experiment.phase12.runtime_registry import (
     PHASE13_CORE_BASELINE_REGISTRY,
     RuntimeTrialResult,
 )
-from memcontam.readiness.phase13_route_capacity import bind_capacity_configs, capacity_contract_error
-from memcontam.readiness.phase13_core_bundle import CoreTask
-from memcontam.readiness.phase13_cost_activation import (
-    Phase13CostActivationError,
-    validate_activated_cost_policy,
-)
-from memcontam.readiness.phase13_cost_policy import bind_cost_policy_client
 from memcontam.readiness import phase13_capacity_realization as capacity_realization
+from memcontam.readiness.phase13_core_bundle import CoreTask
 from memcontam.readiness.phase13_core_datasets import (
     load_core_task,
     paired_trajectory_order,
     validate_core_datasets,
 )
+from memcontam.readiness.phase13_cost_activation import (
+    Phase13CostActivationError,
+    validate_activated_cost_policy,
+)
+from memcontam.readiness.phase13_cost_policy import bind_cost_policy_client
 from memcontam.readiness.phase13_execution_contract import CORE_MAIN_REGISTRY
-from memcontam.readiness.phase13_production_runtime_models import ProductionOrdinaryRunIdentity
-from memcontam.tasks.base import TaskInstance
-from memcontam.readiness.phase13_validated_ordinary_resources import ValidatedOrdinaryResources
 from memcontam.readiness.phase13_main_request_client import native_state_bytes
+from memcontam.readiness.phase13_production_runtime_models import ProductionOrdinaryRunIdentity
+from memcontam.readiness.phase13_route_capacity import (
+    bind_capacity_configs,
+    capacity_contract_error,
+)
+from memcontam.readiness.phase13_validated_ordinary_resources import ValidatedOrdinaryResources
+from memcontam.tasks.base import TaskInstance
 
 _validated_common_capacity_tokens = capacity_realization.validated_common_capacity_tokens
 
@@ -216,7 +220,8 @@ def execute_prospective_ordinary(run: ProspectiveOrdinaryRun) -> ProspectiveOrdi
     for context in contexts:
         request_client = None if run.validated_resources is None else run.validated_resources.request_client
         result = (entry.execute_trial(context, state) if request_client is None else request_client.trial(
-            lambda: entry.execute_trial(context, state), lambda: native_state_bytes(entry.serialize_state, state)))
+            partial(entry.execute_trial, context, state),
+            partial(native_state_bytes, entry.serialize_state, state)))
         _write(context.writer_callbacks, result)
         results.append(result)
         state = result.state
@@ -387,6 +392,6 @@ __all__ = [
     "ProspectiveOrdinaryError",
     "ProspectiveOrdinaryResult",
     "ProspectiveOrdinaryRun",
-    "execute_readiness0_trial",
     "execute_prospective_ordinary",
+    "execute_readiness0_trial",
 ]

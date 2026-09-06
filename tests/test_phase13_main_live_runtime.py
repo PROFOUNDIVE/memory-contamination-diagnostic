@@ -22,13 +22,15 @@ from memcontam.readiness.phase13_main_live_dispatch import (
     DurableMainDispatch,
     summarize_telemetry,
 )
-from memcontam.readiness.phase13_main_live_runtime import MainLiveRuntimeError, ProductionMainRuntime
+from memcontam.readiness.phase13_main_live_runtime import (
+    MainLiveRuntimeError,
+    ProductionMainRuntime,
+)
 from memcontam.readiness.phase13_main_new_mcq_runtime import (
     build_new_mcq_live_branches,
     load_new_mcq_runtime_registry,
     new_mcq_native_entries,
 )
-from memcontam.readiness.phase13_new_mcq_rag_models import InterventionRegistry
 from memcontam.readiness.phase13_main_production import ProductionObject
 from memcontam.readiness.phase13_main_production_backend import MainProductionBackend
 from memcontam.readiness.phase13_main_runner import (
@@ -37,8 +39,8 @@ from memcontam.readiness.phase13_main_runner import (
     enumerate_execution_units,
     run_pending,
 )
+from memcontam.readiness.phase13_new_mcq_rag_models import InterventionRegistry
 from memcontam.tasks.base import TaskInstance
-
 
 ROOT = Path(__file__).resolve().parents[1]
 CACHE_ROOT = Path.home() / ".cache/huggingface/hub"
@@ -224,8 +226,13 @@ def test_production_prefix_binds_baseline_specific_arm_free_condition(
         verifier_spec={"target": 24},
     )
     state = NativeState(baseline, (), {})
+
+    def capture_context(context: Game24RuntimeContext) -> NativeState:
+        contexts.append(context)
+        return state
+
     entry = RuntimeEntry(
-        initial_state=lambda context: contexts.append(context) or state,
+        initial_state=capture_context,
         execute_trial=lambda _context, seen: RuntimeTrialResult(
             BaselineExecutionOutcome("succeeded"), seen
         ),
@@ -422,7 +429,7 @@ def test_new_mcq_live_branch_injects_selected_h2_carrier() -> None:
 
     assert tuple(branches.arms) == ("clean", "correct", "irrelevant", "contam")
     assert branches.arms["clean"].root_count == 0
-    assert all(branches.arms[arm].root_count == 1 for arm in ("correct", "irrelevant", "contam"))
+    assert all(branch.root_count == 1 for arm, branch in branches.arms.items() if arm != "clean")
     assert {
         event.candidate_triplet_id
         for event in branches.events

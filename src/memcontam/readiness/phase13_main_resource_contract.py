@@ -1,20 +1,20 @@
 from __future__ import annotations
 
-from dataclasses import asdict
 import hashlib
 import json
+from dataclasses import asdict
 from typing import Final
 
 from memcontam.rag.phase12_corpus import CleanCorpus, build_branch_corpora
-from .phase13_main_checkpoint import TaskSeedOrders, _expected_registry, _canonical_hash
-from .phase13_main_production import _execution_template_id
-from .phase13_core_datasets import CANONICAL_CORE_ARTIFACT_SHA256
-from .phase13_main_preloaded_resources import PreloadedMainResources
-from .phase13_legacy_rag_models import PackageManifest, SerializedDocument
-from .phase13_legacy_rag_validation_checks import IndexCheckSource, validate_indices
-from .phase13_legacy_rag_serialization import hash_json
-from .phase13_v3_entrypoint import EntrypointError, SelectedExecutionV3
 
+from .phase13_core_datasets import CANONICAL_CORE_ARTIFACT_SHA256
+from .phase13_legacy_rag_models import PackageManifest, SerializedDocument
+from .phase13_legacy_rag_serialization import hash_json
+from .phase13_legacy_rag_validation_checks import IndexCheckSource, validate_indices
+from .phase13_main_checkpoint import TaskSeedOrders, _canonical_hash, _expected_registry
+from .phase13_main_preloaded_resources import PreloadedMainResources
+from .phase13_main_production import _execution_template_id
+from .phase13_v3_entrypoint import EntrypointError, SelectedExecutionV3
 
 TASKS: Final = ("game24", "math_equation_balancer", "word_sorting", "mmlu_pro_engineering", "mmlu_pro_physics")
 LEGACY: Final = TASKS[:3]

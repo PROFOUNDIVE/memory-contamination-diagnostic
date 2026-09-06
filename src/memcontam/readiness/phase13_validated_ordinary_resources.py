@@ -3,9 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from memcontam.clients.base import LLMClient
+
 from .phase13_main_checkpoint import CommonCheckpointRegistry
-from .phase13_v3_cost_binding import LiveCosts
 from .phase13_main_request_client import MainRequestClientV3
+from .phase13_v3_cost_binding import LiveCosts
 
 
 @dataclass(frozen=True, slots=True)

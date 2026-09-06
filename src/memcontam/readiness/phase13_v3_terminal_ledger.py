@@ -12,13 +12,20 @@ from typing import assert_never
 
 from pydantic import JsonValue
 
-from .phase13_v3_cost_actual import reconcile_actual
-from .phase13_v3_entrypoint_paths import PrivateLedger
 from .phase13_authority_files import read_regular_nofollow
+from .phase13_v3_cost_actual import reconcile_actual
 from .phase13_v3_cost_models import ProviderCostEvidence, canonical_bytes, digest
+from .phase13_v3_entrypoint_paths import PrivateLedger
 from .phase13_v3_terminal_models import (
-    AmbiguousAttemptV3, EvidenceState, EventV3, LedgerBindingV3,
-    NoRequestV3, OverflowV3, TerminalEvidenceError, advance, parse_event,
+    AmbiguousAttemptV3,
+    EventV3,
+    EvidenceState,
+    LedgerBindingV3,
+    NoRequestV3,
+    OverflowV3,
+    TerminalEvidenceError,
+    advance,
+    parse_event,
 )
 
 

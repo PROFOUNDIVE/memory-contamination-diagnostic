@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import replace
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -14,8 +14,18 @@ from memcontam.readiness.phase13_core_datasets import paired_trajectory_order
 from memcontam.readiness.phase13_main_checkpoint import CommonCheckpointRegistry
 from memcontam.readiness.phase13_production_runtime_models import ProductionOrdinaryRunIdentity
 from memcontam.readiness.phase13_v3_cost import activate_policy, build_witness, freeze_base
-from memcontam.readiness.phase13_v3_cost_binding import CostBoundPackageV3, LiveCosts, MRP4Costs, bind_package_costs
-from memcontam.readiness.phase13_v3_cost_models import CostUnit, FinalOrder, PrefreezeBindings, StageOccurrences
+from memcontam.readiness.phase13_v3_cost_binding import (
+    CostBoundPackageV3,
+    LiveCosts,
+    MRP4Costs,
+    bind_package_costs,
+)
+from memcontam.readiness.phase13_v3_cost_models import (
+    CostUnit,
+    FinalOrder,
+    PrefreezeBindings,
+    StageOccurrences,
+)
 from memcontam.tasks.base import TaskInstance
 
 

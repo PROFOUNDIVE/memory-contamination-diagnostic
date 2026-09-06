@@ -1,16 +1,30 @@
 from __future__ import annotations
 
-import pytest
 import threading
+from typing import Never
+
+import pytest
+from pydantic import JsonValue
 
 from memcontam.baselines.contracts import BaselineExecutionOutcome
 from memcontam.clients.base import LLMResponse
 from memcontam.experiment.phase12.runtime_registry import NOMEM_SINGLETON, RuntimeTrialResult
 from memcontam.readiness.phase13_main_request_client import MainRequestClientV3
-from memcontam.readiness.phase13_main_request_dispatch import ProductionRequestDispatcherV3
+from memcontam.readiness.phase13_main_request_dispatch import (
+    DispatchTechnicalFailureV3,
+    ProductionRequestDispatcherV3,
+)
+from memcontam.readiness.phase13_v3_entrypoint import EntrypointError
 from memcontam.readiness.phase13_v3_entrypoint_paths import private_ledger
-from memcontam.readiness.phase13_v3_request import PackageBindingV3, ParentTrajectoryV3, RequestKeyV3
+from memcontam.readiness.phase13_v3_request import (
+    PackageBindingV3,
+    ParentTrajectoryV3,
+    RequestKeyV3,
+)
 from memcontam.readiness.phase13_v3_terminal_ledger import TerminalLedgerV3
+from memcontam.readiness.phase13_v3_terminal_models import TerminalEvidenceError
+
+ClientFixture = tuple[MainRequestClientV3, TerminalLedgerV3, tuple[RequestKeyV3, ...], dict[str, int]]
 
 
 @pytest.fixture
@@ -112,3 +126,146 @@ def test_guarded_request_lock_serializes_threads(client_fixture):
     thread.join(2)
     assert entered.is_set()
     assert not thread.is_alive()
+
+
+@pytest.mark.parametrize("error_type", [ValueError, RuntimeError, OSError, TypeError, KeyError])
+@pytest.mark.parametrize("recovered", [False, True])
+def test_uncoded_native_failure_maps_after_durable_intent(
+    client_fixture: ClientFixture, error_type: type[Exception], recovered: bool,
+) -> None:
+    client, ledger, keys, counts = client_fixture
+    failure = error_type("native serialization failed")
+    intent_rows: tuple[bytes, ...] = ()
+
+    def fail() -> Never:
+        nonlocal intent_rows
+        assert ledger.state(keys[0].dispatch_id).kind == "DISPATCH_INTENT_PERSISTED"
+        intent_rows = ledger.rows()
+        raise failure
+
+    def execute() -> RuntimeTrialResult:
+        call(client)
+        return RuntimeTrialResult(BaselineExecutionOutcome("succeeded"), NOMEM_SINGLETON)
+
+    if recovered:
+        with pytest.raises(error_type):
+            client.dispatcher.receive(keys[0], fail)
+        client.dispatcher.recover()
+        assert ledger.state(keys[0].dispatch_id).kind == "PENDING"
+
+    with pytest.raises(TerminalEvidenceError) as raised:
+        client.trial(execute, fail)
+
+    assert raised.value.code == "MAIN_RUN_POST_INTENT_RUNTIME_FAILURE"
+    assert raised.value.__cause__ is failure
+    assert ledger.rows() == intent_rows
+    assert ledger.state(keys[0].dispatch_id).kind == "DISPATCH_INTENT_PERSISTED"
+    assert counts == {"constructor": 0, "requests": 0}
+
+
+@pytest.mark.parametrize("failure", [
+    EntrypointError("MAIN_PATH_UNSAFE"),
+    TerminalEvidenceError("MAIN_NATIVE_STATE_UNAVAILABLE"),
+    DispatchTechnicalFailureV3("MAIN_ATTEMPTED_PROVIDER_FAILURE", "a" * 64, None),
+    KeyboardInterrupt(), SystemExit(17),
+])
+def test_coded_and_process_control_failures_preserve_identity_after_intent(
+    client_fixture: ClientFixture, failure: BaseException,
+) -> None:
+    client, ledger, keys, counts = client_fixture
+    intent_rows: tuple[bytes, ...] = ()
+
+    def fail() -> Never:
+        nonlocal intent_rows
+        intent_rows = ledger.rows()
+        raise failure
+
+    def execute() -> RuntimeTrialResult:
+        call(client)
+        return RuntimeTrialResult(BaselineExecutionOutcome("succeeded"), NOMEM_SINGLETON)
+
+    with pytest.raises(type(failure)) as raised:
+        client.trial(execute, fail)
+
+    assert raised.value is failure
+    assert ledger.rows() == intent_rows
+    assert ledger.state(keys[0].dispatch_id).kind == "DISPATCH_INTENT_PERSISTED"
+    assert counts == {"constructor": 0, "requests": 0}
+
+
+@pytest.mark.parametrize("failure", [ValueError("preflight"), EntrypointError("MAIN_PATH_UNSAFE")])
+def test_preflight_failure_preserves_identity_without_intent(
+    client_fixture: ClientFixture, failure: ValueError,
+) -> None:
+    client, ledger, _keys, counts = client_fixture
+
+    def fail() -> Never:
+        raise failure
+
+    client.preflight = fail
+
+    def execute() -> RuntimeTrialResult:
+        call(client)
+        return RuntimeTrialResult(BaselineExecutionOutcome("succeeded"), NOMEM_SINGLETON)
+
+    with pytest.raises(type(failure)) as raised:
+        client.trial(execute, lambda: b"immutable native bytes")
+
+    assert raised.value is failure
+    assert ledger.rows() == ()
+    assert counts == {"constructor": 0, "requests": 0}
+
+
+def test_identity_publication_failure_is_not_post_intent(
+    client_fixture: ClientFixture, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, ledger, _keys, counts = client_fixture
+    failure = OSError("identity publication failed")
+
+    def fail(_key: RequestKeyV3, _role: str, _raw: bytes) -> Never:
+        raise failure
+
+    monkeypatch.setattr(client.dispatcher, "_publish_bytes", fail)
+
+    def execute() -> RuntimeTrialResult:
+        call(client)
+        return RuntimeTrialResult(BaselineExecutionOutcome("succeeded"), NOMEM_SINGLETON)
+
+    with pytest.raises(OSError) as raised:
+        client.trial(execute, lambda: b"immutable native bytes")
+
+    assert raised.value is failure
+    assert ledger.rows() == ()
+    assert counts == {"constructor": 0, "requests": 0}
+
+
+@pytest.mark.parametrize("point", ["REQUEST_COMPILED", "ATTEMPT_STARTED"])
+def test_uncoded_marker_failure_preserves_in_flight_evidence(
+    client_fixture: ClientFixture, monkeypatch: pytest.MonkeyPatch, point: str,
+) -> None:
+    client, ledger, keys, counts = client_fixture
+    append = client.dispatcher._append
+    failure = OSError("marker acknowledgement failed")
+    persisted_rows: tuple[bytes, ...] = ()
+
+    def fail(key: RequestKeyV3, kind: str, extra: dict[str, JsonValue] | None = None) -> None:
+        nonlocal persisted_rows
+        append(key, kind, extra)
+        if kind == point:
+            persisted_rows = ledger.rows()
+            raise failure
+
+    monkeypatch.setattr(client.dispatcher, "_append", fail)
+
+    def execute() -> RuntimeTrialResult:
+        call(client)
+        return RuntimeTrialResult(BaselineExecutionOutcome("succeeded"), NOMEM_SINGLETON)
+
+    with pytest.raises(TerminalEvidenceError) as raised:
+        client.trial(execute, lambda: b"immutable native bytes")
+
+    assert raised.value.code == "MAIN_RUN_POST_INTENT_RUNTIME_FAILURE"
+    assert raised.value.__cause__ is failure
+    assert ledger.rows() == persisted_rows
+    assert ledger.state(keys[0].dispatch_id).kind == point
+    assert counts == {"constructor": int(point == "ATTEMPT_STARTED"), "requests": 0}

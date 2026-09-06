@@ -3,13 +3,12 @@ from __future__ import annotations
 import hashlib
 import importlib
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import pytest
 
 from .test_phase13_v3_entrypoint_integration import deny_external as deny_external
-
 
 ROOT = Path(__file__).resolve().parents[1]
 

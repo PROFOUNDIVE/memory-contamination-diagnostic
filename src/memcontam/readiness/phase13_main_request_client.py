@@ -8,11 +8,11 @@ from pydantic import TypeAdapter
 from memcontam.clients.base import LLMResponse
 from memcontam.experiment.phase12.runtime_registry import NoMemRuntimeState, RuntimeTrialResult
 from memcontam.memory.checkpoint_v3 import NativeState, serialize_checkpoint
+
 from .phase13_main_request_dispatch import DispatchTechnicalFailureV3, ProductionRequestDispatcherV3
+from .phase13_v3_cost_actual import reconcile_actual
 from .phase13_v3_request import MessageV3, RequestKeyV3, RequestMaterialV3, Stage
 from .phase13_v3_terminal_models import TerminalEvidenceError
-from .phase13_v3_cost_actual import reconcile_actual
-
 
 StateT = TypeVar("StateT")
 _STAGE: TypeAdapter[Stage] = TypeAdapter(Stage)
@@ -97,9 +97,18 @@ class MainRequestClientV3:
         key = RequestKeyV3(parent_id=self.parent_id, stage=stage, ordinal=ordinal)
         self._ordinals[stage] = ordinal + 1
         native = self._native
-        response = self.dispatcher.receive(key, lambda: RequestMaterialV3(
-            messages=tuple(MessageV3.model_validate(message) for message in messages),
-            native_state=native(), temperature=config.get("temperature", 0.0), top_p=config.get("top_p", 1.0),
-        ))
+        try:
+            response = self.dispatcher.receive(key, lambda: RequestMaterialV3(
+                messages=tuple(MessageV3.model_validate(message) for message in messages),
+                native_state=native(), temperature=config.get("temperature", 0.0), top_p=config.get("top_p", 1.0),
+            ))
+        except (ValueError, RuntimeError, OSError, TypeError, KeyError) as error:
+            if isinstance(getattr(error, "code", None), str):
+                raise
+            if self.dispatcher.ledger.state(key.dispatch_id).kind in {
+                "DISPATCH_INTENT_PERSISTED", "REQUEST_COMPILED", "ATTEMPT_STARTED",
+            }:
+                raise TerminalEvidenceError("MAIN_RUN_POST_INTENT_RUNTIME_FAILURE") from error
+            raise
         self._pending = key, response
         return response

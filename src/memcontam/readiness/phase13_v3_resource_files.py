@@ -1,17 +1,18 @@
 from __future__ import annotations
 
-from contextlib import ExitStack
-from dataclasses import dataclass
 import hashlib
 import os
-from pathlib import Path
 import stat
+from contextlib import ExitStack
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Final, Literal
 
 from pydantic import Field
 
 from memcontam.readiness.phase13_authority_files import (
-    AuthorityFileError, authority_directory,
+    AuthorityFileError,
+    authority_directory,
 )
 from memcontam.readiness.phase13_cost_policy_models import Sha256
 from memcontam.readiness.phase13_v3_authority_models import FrozenModel

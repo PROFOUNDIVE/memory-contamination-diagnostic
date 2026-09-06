@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from contextlib import ExitStack
 import json
+from contextlib import ExitStack
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
@@ -14,11 +14,25 @@ from .phase13_main_execution_models import MainAuthorizationReport
 from .phase13_v3_authority_models import V3Identity
 from .phase13_v3_cost_binding import CostResourcesV3, LiveCosts, MRP4Costs
 from .phase13_v3_cost_models import (
-    ActivatedPolicyV3, BaseCostInputsV3, CompleteCostInputsV3, CostProofV3,
-    CostWitnessV3, canonical_bytes, digest,
+    ActivatedPolicyV3,
+    BaseCostInputsV3,
+    CompleteCostInputsV3,
+    CostProofV3,
+    CostWitnessV3,
+    canonical_bytes,
+    digest,
 )
-from .phase13_v3_entrypoint_models import ExecutionResourceV3, MainAuthorizationV3, MainExecutionPackageV3, MainLiveContractV3
-from .phase13_v3_entrypoint_paths import parse_authorization_digest, relative_path, verify_resource_namespace
+from .phase13_v3_entrypoint_models import (
+    ExecutionResourceV3,
+    MainAuthorizationV3,
+    MainExecutionPackageV3,
+    MainLiveContractV3,
+)
+from .phase13_v3_entrypoint_paths import (
+    parse_authorization_digest,
+    relative_path,
+    verify_resource_namespace,
+)
 from .phase13_v3_resource_files import ValidatedResource, read_files
 from .phase13_v3_runtime_identity import validate_runtime_identity
 

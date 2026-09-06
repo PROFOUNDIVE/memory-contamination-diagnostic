@@ -11,7 +11,12 @@ from memcontam.clients.base import LLMClient
 from memcontam.clients.config import ProviderConfig
 from memcontam.clients.openai_responses import OpenAIResponsesClient
 from memcontam.contamination.phase12.registry import load_candidate_registry
-from memcontam.experiment.phase12.game24_runner import Branch, Game24RuntimeContext, RuntimeIdentities
+from memcontam.evaluation.phase13_observability_registration import ObservabilityRegistrationPacket
+from memcontam.experiment.phase12.game24_runner import (
+    Branch,
+    Game24RuntimeContext,
+    RuntimeIdentities,
+)
 from memcontam.experiment.phase12.live_branch import build_live_reduced_main_branches
 from memcontam.experiment.phase12.runtime_registry import PHASE13_CORE_BASELINE_REGISTRY
 from memcontam.experiment.phase13_ordinary_runtime import (
@@ -37,17 +42,12 @@ from memcontam.readiness.phase13_main_live_runtime_support import (
     task_name,
     verifier,
 )
-from .phase13_main_new_mcq_runtime import (
-    build_new_mcq_live_branches,
-    load_new_mcq_runtime_registry,
-)
 from memcontam.readiness.phase13_main_production import ProductionObject
-from memcontam.readiness.phase13_main_request_dispatch import DeferredMainClient
 from memcontam.readiness.phase13_main_production_backend import (
     OrdinaryRuntimeRequest,
     PrefixRuntimeOutput,
 )
-from memcontam.evaluation.phase13_observability_registration import ObservabilityRegistrationPacket
+from memcontam.readiness.phase13_main_request_dispatch import DeferredMainClient
 from memcontam.readiness.phase13_production_observability import validate_production_archive
 from memcontam.readiness.phase13_production_runtime_join import production_archive_from_ordinary
 from memcontam.readiness.phase13_route_capacity import bind_capacity_configs
@@ -55,9 +55,13 @@ from memcontam.tasks.base import TaskInstance
 from memcontam.tasks.game24 import build_instance as build_game24
 from memcontam.tasks.math_equation_balancer import build_instance as build_equation
 from memcontam.tasks.word_sorting import build_instance as build_word_sorting
+
+from .phase13_main_new_mcq_runtime import (
+    build_new_mcq_live_branches,
+    load_new_mcq_runtime_registry,
+)
 from .phase13_main_preloaded_resources import PreloadedMainResources
 from .phase13_main_request_client import MainRequestClientV3, native_state_bytes
-
 
 _CORE_TASKS: Final = frozenset({"mmlu_pro_engineering", "mmlu_pro_physics"})
 

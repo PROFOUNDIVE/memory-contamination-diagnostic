@@ -13,19 +13,28 @@ from memcontam.baselines.prompt_budget import count_prompt_tokens
 from memcontam.clients.base import LLMClient, LLMResponse
 from memcontam.readiness.phase13_authority_files import read_regular_nofollow
 from memcontam.readiness.phase13_main_request_recovery import (
-    RequestIdentityReceiptV3, recover_requests, request_lock, terminal_parents,
+    RequestIdentityReceiptV3,
+    recover_requests,
+    request_lock,
+    terminal_parents,
 )
 from memcontam.readiness.phase13_v3_cost_actual import reconcile_actual
 from memcontam.readiness.phase13_v3_cost_models import CostError, ProviderCostEvidence
-from .phase13_v3_cost_binding import LiveCosts, TableKey
-from .phase13_v3_cost_models import digest
 from memcontam.readiness.phase13_v3_terminal_ledger import TerminalLedgerV3
 from memcontam.readiness.phase13_v3_terminal_models import TerminalEvidenceError
-from .phase13_v3_request import (
-    STAGES, CompiledProviderRequestV3, PackageBindingV3, ParentTrajectoryV3,
-    RequestKeyV3, RequestMaterialV3, compile_request_bytes, input_bytes,
-)
 
+from .phase13_v3_cost_binding import LiveCosts, TableKey
+from .phase13_v3_cost_models import digest
+from .phase13_v3_request import (
+    STAGES,
+    CompiledProviderRequestV3,
+    PackageBindingV3,
+    ParentTrajectoryV3,
+    RequestKeyV3,
+    RequestMaterialV3,
+    compile_request_bytes,
+    input_bytes,
+)
 
 ResultT = TypeVar("ResultT")
 
@@ -279,5 +288,12 @@ def _realized(cost: ProviderCostEvidence) -> int | None:
         return None
 
 
-__all__ = ["DispatchTechnicalFailureV3", "PackageBindingV3", "ParentTrajectoryV3",
-           "ProductionRequestDispatcherV3", "CostBoundRequestDispatcherV3", "RequestKeyV3", "RequestMaterialV3"]
+__all__ = [
+    "CostBoundRequestDispatcherV3",
+    "DispatchTechnicalFailureV3",
+    "PackageBindingV3",
+    "ParentTrajectoryV3",
+    "ProductionRequestDispatcherV3",
+    "RequestKeyV3",
+    "RequestMaterialV3",
+]

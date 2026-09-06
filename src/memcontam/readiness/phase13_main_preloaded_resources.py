@@ -1,23 +1,28 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
 import json
+from dataclasses import dataclass
 
 from memcontam.clients.base import LLMClient
 from memcontam.contamination.phase12.models import CandidateRegistry
-from memcontam.contamination.phase12.registry import _parse_triplet, _reject_selection_markers, _validate_registry
+from memcontam.contamination.phase12.registry import (
+    _parse_triplet,
+    _reject_selection_markers,
+    _validate_registry,
+)
 from memcontam.evaluation.phase13_observability_registration import ObservabilityRegistrationPacket
 from memcontam.tasks.base import TaskInstance
 from memcontam.tasks.game24 import build_instance as game24
 from memcontam.tasks.math_equation_balancer import build_instance as equation
 from memcontam.tasks.word_sorting import build_instance as words
-from .phase13_main_checkpoint import CommonCheckpointRegistry
+
 from .phase13_legacy_rag_models import CorpusBundle, IndexBundle
+from .phase13_main_checkpoint import CommonCheckpointRegistry
+from .phase13_main_request_client import MainRequestClientV3
 from .phase13_new_mcq_rag_models import AuthoritySelection, InterventionRegistry
 from .phase13_v3_entrypoint import EntrypointError, SelectedExecutionV3
 from .phase13_validated_ordinary_resources import ValidatedOrdinaryResources
-from .phase13_main_request_client import MainRequestClientV3
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,14 +30,12 @@ class PreloadedMainResources:
     selected: SelectedExecutionV3
 
     def __post_init__(self) -> None:
-        self.checkpoint_registry
-        self.packet
-        self.candidate_registry
-        self.new_mcq_registry
-        for task in self.checkpoint_registry.tasks:
+        registry = self.checkpoint_registry
+        _ = self.packet, self.candidate_registry, self.new_mcq_registry
+        for task in registry.tasks:
             rows = self.tasks(task)
             by_id = {row.sample_id: row for row in rows}
-            for seed in self.checkpoint_registry.tasks[task].seeds:
+            for seed in registry.tasks[task].seeds:
                 order = sorted(by_id, key=lambda sample: hashlib.sha256(
                     f"sha256_task_seed_v1\0{task}\0{seed.seed}\0{sample}".encode()).digest())
                 if (tuple(order[:seed.tau_star - 1]) != seed.clean_prefix_sample_ids

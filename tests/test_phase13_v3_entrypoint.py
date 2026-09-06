@@ -6,16 +6,10 @@ import os
 from contextlib import ExitStack
 
 import pytest
-from .test_phase13_v3_entrypoint_fixture import entrypoint_bytes as entrypoint_bytes, entrypoint_fixture as entrypoint_fixture
-from .test_phase13_v3_entrypoint_integration import (
-    deny_external as deny_external,
-    test_exact_v3_cli_validate_is_provider_free as test_exact_v3_cli_validate_is_provider_free,
-    test_validate_denies_all_outbound_sockets_and_never_loads_credentials as test_validate_denies_all_outbound_sockets_and_never_loads_credentials,
-    test_both_active_runner_apis_reject_old_identity as test_both_active_runner_apis_reject_old_identity,
-    test_valid_v3_guarded_run_and_resume_without_calls as test_valid_v3_guarded_run_and_resume_without_calls,
-    test_v3_execution_uses_guarded_requests_and_real_ordinary_runtime as test_v3_execution_uses_guarded_requests_and_real_ordinary_runtime,
-    test_proof_bytes_must_be_canonical_not_just_semantically_equal as test_proof_bytes_must_be_canonical_not_just_semantically_equal,
-)
+
+from .test_phase13_v3_entrypoint_fixture import entrypoint_bytes as entrypoint_bytes
+from .test_phase13_v3_entrypoint_fixture import entrypoint_fixture as entrypoint_fixture
+from .test_phase13_v3_entrypoint_integration import deny_external as deny_external
 
 
 def test_v3_entrypoint_safety_contracts_exist():
@@ -111,7 +105,7 @@ def test_runtime_distribution_drift_fails_before_provider(identity_api, monkeypa
     for changed, _expected in current.versions:
         with monkeypatch.context() as scoped:
             scoped.setattr(identity_api.metadata, "version",
-                          lambda name: "0.0.0" if name == changed else version(name))
+                          lambda name, changed=changed: "0.0.0" if name == changed else version(name))
             with pytest.raises(ValueError, match="MAIN_RUNTIME_IDENTITY_DRIFT"):
                 identity_api.validate_runtime_identity(current)
 
@@ -256,3 +250,16 @@ def test_all_active_commands_reject_old_run_id_before_provider_construction(tmp_
     )
     with pytest.raises(ValueError, match="MAIN_CORRECTED_RUN_ID_MISMATCH"):
         api.select_execution(request, command)
+
+
+def test_validate_denies_all_outbound_sockets_and_never_loads_credentials(entrypoint_fixture, deny_external):
+    from memcontam.readiness.phase13_v3_entrypoint import SelectedExecutionV3, select_execution
+
+    selected = select_execution(entrypoint_fixture, "validate")
+    assert isinstance(selected, SelectedExecutionV3)
+    descriptors = tuple(row.descriptor for row in selected.resources)
+    selected.close()
+    for descriptor in descriptors:
+        assert descriptor is not None
+        with pytest.raises(OSError):
+            os.fstat(descriptor)

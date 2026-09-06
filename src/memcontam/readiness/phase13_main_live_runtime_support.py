@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from decimal import Decimal, ROUND_CEILING
+from decimal import ROUND_CEILING, Decimal
 from typing import Final, assert_never
 
 from pydantic import TypeAdapter, ValidationError
@@ -13,8 +13,6 @@ from memcontam.readiness.phase13_core_bundle import CoreTask
 from memcontam.readiness.phase13_legacy_rag_models import FeasibleTaskName
 from memcontam.readiness.phase13_main_live_dispatch import MainUnitDispatchOutput
 from memcontam.readiness.phase13_main_production import ProductionObject
-from .phase13_main_request_dispatch import ProductionRequestDispatcherV3
-from .phase13_v3_request import RequestKeyV3
 from memcontam.readiness.phase13_production_observability import (
     ProductionObservabilityArchive,
     ProviderRequestRecord,
@@ -25,6 +23,9 @@ from memcontam.tasks.multiple_choice import verify_answer
 from memcontam.verifiers.game24 import verify_expression
 from memcontam.verifiers.math_equation_balancer import verify_answer as verify_equation
 from memcontam.verifiers.word_sorting import verify_words
+
+from .phase13_main_request_dispatch import ProductionRequestDispatcherV3
+from .phase13_v3_request import RequestKeyV3
 
 
 class MainLiveRuntimeError(ValueError):
@@ -186,8 +187,8 @@ __all__ = [
     "core_task_name",
     "dispatch_output",
     "legacy_task_name",
-    "production_identity",
     "pending_request_keys_v3",
+    "production_identity",
     "task_name",
     "verifier",
 ]

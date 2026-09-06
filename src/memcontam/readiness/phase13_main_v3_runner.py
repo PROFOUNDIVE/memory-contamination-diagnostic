@@ -1,26 +1,31 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Callable
 from contextlib import ExitStack
 from dataclasses import dataclass
-import hashlib
-import json
 from pathlib import Path
 
 from memcontam.memory.checkpoint_v3 import NativeState, Phase12Checkpoint, serialize_checkpoint
+
 from .phase13_main_preloaded_resources import PreloadedMainResources
 from .phase13_main_production import ProductionObject
 from .phase13_main_production_backend import OrdinaryRuntimeRequest, _memory_baseline, _ordinary_arm
 from .phase13_main_request_client import MainRequestClientV3
-from .phase13_main_request_dispatch import CompiledProvider, DispatchTechnicalFailureV3, ProductionRequestDispatcherV3, production_provider
+from .phase13_main_request_dispatch import (
+    CompiledProvider,
+    DispatchTechnicalFailureV3,
+    ProductionRequestDispatcherV3,
+    production_provider,
+)
 from .phase13_main_request_recovery import require_known_costs
+from .phase13_v3_cost_actual import reconcile_actual
 from .phase13_v3_entrypoint import EntrypointError, SelectedExecutionV3
 from .phase13_v3_entrypoint_paths import PrivateLedger, private_ledger
 from .phase13_v3_request import PackageBindingV3, ParentTrajectoryV3, RequestKeyV3, Stage
 from .phase13_v3_terminal_ledger import TerminalLedgerV3
 from .phase13_v3_terminal_models import LedgerBindingV3
-from .phase13_v3_cost_actual import reconcile_actual
-
 
 STAGE_NAMES: dict[str, Stage] = dict(zip(("FH_generation", "RAG_generation", "BoT_problem_distillation", "BoT_solve",
     "BoT_thought_distillation", "Reflexion_actor_generation", "Reflexion_reflection", "DC_RS_generation",

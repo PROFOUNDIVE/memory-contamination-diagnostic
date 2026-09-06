@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+import hashlib
 import importlib
 import json
-import sys
 import os
 import socket
-import hashlib
+import sys
 from dataclasses import replace
 
 import pytest
+
 from memcontam.readiness.phase13_v3_entrypoint import SelectedExecutionV3
-from .test_phase13_v3_entrypoint_fixture import entrypoint_bytes as entrypoint_bytes, entrypoint_fixture as entrypoint_fixture
+
+from .test_phase13_v3_entrypoint_fixture import entrypoint_bytes as entrypoint_bytes
+from .test_phase13_v3_entrypoint_fixture import entrypoint_fixture as entrypoint_fixture
 
 
 @pytest.fixture
@@ -97,22 +100,13 @@ def test_exact_v3_cli_validate_is_provider_free(entrypoint_fixture, monkeypatch,
     assert json.loads(capsys.readouterr().out)["status"] == "READY_NO_CALLS"
 
 
-def test_validate_denies_all_outbound_sockets_and_never_loads_credentials(entrypoint_fixture, deny_external):
-    from memcontam.readiness.phase13_v3_entrypoint import select_execution
-
-    selected = select_execution(entrypoint_fixture, "validate")
-    assert isinstance(selected, SelectedExecutionV3)
-    descriptors = tuple(row.descriptor for row in selected.resources)
-    selected.close()
-    for descriptor in descriptors:
-        assert descriptor is not None
-        with pytest.raises(OSError):
-            os.fstat(descriptor)
-
-
 @pytest.mark.parametrize("command", ["run", "resume"])
 def test_both_active_runner_apis_reject_old_identity(entrypoint_fixture, command, deny_external):
-    from memcontam.readiness.phase13_main_runner import MainRunRequest, open_main_run, prepare_main_run
+    from memcontam.readiness.phase13_main_runner import (
+        MainRunRequest,
+        open_main_run,
+        prepare_main_run,
+    )
 
     request = entrypoint_fixture
     active = MainRunRequest(request.repository_root, request.package_path, request.authorization_path, "",
@@ -122,8 +116,8 @@ def test_both_active_runner_apis_reject_old_identity(entrypoint_fixture, command
 
 
 def test_valid_v3_guarded_run_and_resume_without_calls(entrypoint_fixture, deny_external):
-    from memcontam.readiness.phase13_v3_entrypoint import select_execution
     from memcontam.readiness.phase13_main_v3_runner import V3MainRun
+    from memcontam.readiness.phase13_v3_entrypoint import select_execution
 
     directory = entrypoint_fixture.repository_root / "fixture-ledger"
     selected = select_execution(entrypoint_fixture, "run")
@@ -172,10 +166,10 @@ def test_v3_requires_explicit_authority_and_sidecar(entrypoint_fixture, deny_ext
 
 
 def test_v3_execution_uses_guarded_requests_and_real_ordinary_runtime(entrypoint_fixture, deny_external, monkeypatch):
+    import memcontam.readiness.phase13_main_request_dispatch as dispatch
     from memcontam.clients.base import LLMResponse
     from memcontam.readiness.phase13_main_v3_runner import V3MainRun
     from memcontam.readiness.phase13_v3_entrypoint import select_execution
-    import memcontam.readiness.phase13_main_request_dispatch as dispatch
 
     monkeypatch.setattr(dispatch, "count_prompt_tokens", lambda *_: 1)
     calls = []

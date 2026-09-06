@@ -1,92 +1,43 @@
 from __future__ import annotations
 
 import sys
-from pathlib import Path
+from collections.abc import Callable
+from typing import TypeVar
 
 import pytest
 
+from memcontam.experiment import phase13_ordinary_runtime
 from memcontam.readiness import phase13_main_live_cli
-from memcontam.readiness.phase13_main_production import ProductionObject
-from memcontam.readiness.phase13_main_runner import MainRunBinding, MainRunLedger
+from memcontam.readiness.phase13_main_v3_runner import V3MainRun
+from memcontam.readiness.phase13_v3_entrypoint import (
+    SelectedExecutionV3,
+    SelectionRequest,
+    select_execution,
+)
+from memcontam.readiness.phase13_v3_request import RequestKeyV3
 
+from .test_phase13_v3_entrypoint_fixture import entrypoint_bytes as entrypoint_bytes
+from .test_phase13_v3_entrypoint_fixture import entrypoint_fixture as entrypoint_fixture
+from .test_phase13_v3_entrypoint_integration import deny_external as deny_external
 
-ROOT = Path(__file__).resolve().parents[1]
-P5 = ROOT / "data/phase13/main/mr_p5/execution_package_v1.json"
-P6 = ROOT / "data/phase13/main/mr_p6/authorized_execution_v1.json"
-
-
-class _ProviderFreeRuntime:
-    def __init__(self, *_args, **_kwargs) -> None:
-        pass
-
-    def preflight(self, _units) -> None:
-        pass
-
-    def execute_prefix(self, _unit) -> None:
-        raise AssertionError("provider-free test replaces the production backend")
-
-    def execute_ordinary(self, _request) -> None:
-        raise AssertionError("provider-free test replaces the production backend")
+StateT = TypeVar("StateT")
 
 
 class _PostIntentFailure(ValueError):
     pass
 
 
-class _PostIntentFailingBackend:
-    def __init__(self, *_args, **_kwargs) -> None:
-        pass
-
-    def __call__(self, _unit) -> None:
-        raise _PostIntentFailure("provider-free post-intent runtime failure")
+def _fail_native_state(_serialize: Callable[[StateT], StateT], _state: StateT) -> bytes:
+    raise _PostIntentFailure("provider-free post-intent runtime failure")
 
 
+@pytest.mark.usefixtures("deny_external")
 def test_post_intent_value_error_preserves_runtime_failure_identity(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
+    entrypoint_fixture: SelectionRequest,
 ) -> None:
-    unit = ProductionObject(
-        sequence=0,
-        unit_id="1" * 64,
-        kind="NO_MEMORY_SINGLETON",
-        seed=0,
-        task="provider-free-g01",
-        memory_baseline=None,
-        arm="NOT_APPLICABLE",
-        prefix_unit_id=None,
-        projected_cost_krw=0,
-    )
-    ledger = MainRunLedger.create(
-        tmp_path / "main-run-v1.sqlite3",
-        MainRunBinding(
-            package_id="provider-free-g01",
-            package_sha256="2" * 64,
-            package_hash="3" * 64,
-            authorization_id="provider-free-g01",
-            authorization_sha256="4" * 64,
-            authorization_hash="5" * 64,
-            runner_sha256="6" * 64,
-        ),
-        (unit,),
-    )
-
-    monkeypatch.setattr(phase13_main_live_cli, "ProductionMainRuntime", _ProviderFreeRuntime)
-    monkeypatch.setattr(phase13_main_live_cli, "MainProductionBackend", _PostIntentFailingBackend)
-    monkeypatch.setattr(
-        phase13_main_live_cli,
-        "DurableMainDispatch",
-        lambda _root, backend: backend,
-    )
-    monkeypatch.setattr(
-        phase13_main_live_cli,
-        "build_production_objects",
-        lambda _package: (unit,),
-    )
-    monkeypatch.setattr(
-        phase13_main_live_cli,
-        "prepare_main_run",
-        lambda _request: ledger,
-    )
+    request = entrypoint_fixture
+    monkeypatch.setattr(phase13_ordinary_runtime, "native_state_bytes", _fail_native_state)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -94,19 +45,23 @@ def test_post_intent_value_error_preserves_runtime_failure_identity(
             "phase13-main-a-live",
             "run",
             "--repository-root",
-            str(ROOT),
+            str(request.repository_root),
             "--package",
-            str(P5),
+            str(request.package_path),
             "--authorization",
-            str(P6),
-            "--expected-authorization-sha256",
-            "0" * 64,
+            str(request.authorization_path),
+            "--authority-root",
+            str(request.authority_root),
+            "--expected-authorization-sha256-file",
+            str(request.expected_authorization_sha256_file),
             "--run-root",
-            str(tmp_path),
+            str(request.repository_root),
             "--run-id",
-            "provider-free-g01",
+            str(request.run_id),
+            "--cache-root",
+            str(request.repository_root / "cache"),
             "--tranche-ceiling-krw",
-            "1",
+            "450000",
             "--max-units",
             "1",
             "--allow-live-calls",
@@ -116,6 +71,20 @@ def test_post_intent_value_error_preserves_runtime_failure_identity(
     with pytest.raises(SystemExit) as raised:
         phase13_main_live_cli.main()
 
-    assert ledger.status().in_flight_count == 1
-    assert ledger.in_flight_context(unit.unit_id).unit_id == unit.unit_id
+    selected = select_execution(request, "run")
+    assert isinstance(selected, SelectedExecutionV3)
+    run = V3MainRun.open(selected, request.repository_root / str(request.run_id), create=False)
+    try:
+        unit = selected.package.production[0]
+        key = RequestKeyV3(parent_id=unit.unit_id, stage="no_memory_generate", ordinal=0)
+        states = run.ledger.states()
+        assert sum(state.kind == "DISPATCH_INTENT_PERSISTED" for state in states.values()) == 1
+        assert states[key.dispatch_id].kind == "DISPATCH_INTENT_PERSISTED"
+        assert states[key.dispatch_id].revision == 1
+        assert len(run.ledger.rows()) == 1
+        assert run.status().pending_count == 1
+        assert run.status().completed_count == 0
+        assert run.status().provider_calls_issued == 0
+    finally:
+        run.close()
     assert raised.value.code == "MAIN_RUN_POST_INTENT_RUNTIME_FAILURE"

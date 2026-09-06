@@ -7,8 +7,8 @@ from contextlib import ExitStack, contextmanager
 from typing import assert_never
 
 from .phase13_v3_authority_models import FrozenModel
-from .phase13_v3_request import STAGES, PackageBindingV3, ParentTrajectoryV3, RequestKeyV3
 from .phase13_v3_cost_actual import reconcile_actual
+from .phase13_v3_request import STAGES, PackageBindingV3, ParentTrajectoryV3, RequestKeyV3
 from .phase13_v3_terminal_ledger import TerminalLedgerV3
 from .phase13_v3_terminal_models import TerminalEvidenceError
 
