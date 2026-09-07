@@ -14,7 +14,7 @@ def test_rejects_unmarked_final_answer_without_mutating_memory() -> None:
 
     memory = MemoryState()
     outcome = NoMemoryAdapter().execute(
-        TaskInstance(sample_id="sample-1", task_name="game24", input={}),
+        TaskInstance(sample_id="sample-1", task_name="game24", input={"numbers": [1, 3, 4, 6]}),
         memory,
         client=Client(),
         model="replay",

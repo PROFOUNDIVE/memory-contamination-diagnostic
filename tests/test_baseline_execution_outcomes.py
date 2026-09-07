@@ -112,7 +112,7 @@ def test_no_memory_adapter_fails_closed_on_empty_output_and_keeps_memory_read_on
 
     memory = MemoryState()
     outcome = NoMemoryAdapter().execute(
-        TaskInstance(sample_id="sample-1", task_name="game24", input={}),
+        TaskInstance(sample_id="sample-1", task_name="game24", input={"numbers": [1, 3, 4, 6]}),
         memory,
         client=Client(),
         model="replay",
@@ -177,7 +177,7 @@ def test_reflexion_terminal_incorrect_answer_remains_a_success_after_reflection(
     from memcontam.tasks.base import TaskInstance
 
     outcome = ReflexionAdapter().execute(
-        TaskInstance(sample_id="sample-1", task_name="game24", input={}),
+        TaskInstance(sample_id="sample-1", task_name="game24", input={"numbers": [1, 3, 4, 6]}),
         ReflexionState(),
         client=ReplayClient(
             responses_by_sample={
