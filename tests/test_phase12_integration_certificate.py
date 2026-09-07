@@ -23,6 +23,15 @@ def _certificate_module():
     return importlib.import_module("memcontam.readiness.phase12_certificate")
 
 
+@pytest.fixture(autouse=True)
+def relocated_f1c_document(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(
+        _certificate_module()._F1C_SOURCE_PATHS,
+        "cache_setup_doc_blob_sha",
+        "docs/historical/bge-m3-cache-setup.md",
+    )
+
+
 def _bfv2() -> FidelityCertificate:
     payload = json.loads((FIXTURE_ROOT / "FX-P12I-001.json").read_text(encoding="utf-8"))
     return FidelityCertificate(
