@@ -129,8 +129,16 @@ def _parse(model_type: type[ModelT], raw: bytes) -> ModelT:
 
 
 @lru_cache(maxsize=None)
-def load_cost_policy_bundle(root: Path) -> CostPolicyBundle:
-    manifest_raw = _read(root, MANIFEST)
+def load_cost_policy_bundle(root: Path, *, historical: bool = False) -> CostPolicyBundle:
+    manifest_path = PACKAGE / "candidate_manifest_v1.json" if historical else MANIFEST
+    artifact_paths = CANONICAL_ARTIFACT_PATHS
+    if historical:
+        artifact_paths = {
+            **artifact_paths,
+            "stage_envelope_registry": PACKAGE / "stage_envelope_registry_v1.json",
+            "cost_proof": PACKAGE / "cost_proof_v1.json",
+        }
+    manifest_raw = _read(root, manifest_path)
     manifest = _parse(CandidateManifest, manifest_raw)
     if _canonical_hash(manifest, "manifest_hash") != manifest.manifest_hash:
         raise Phase13CostPolicyError("MANIFEST_HASH_MISMATCH")
@@ -146,7 +154,7 @@ def load_cost_policy_bundle(root: Path) -> CostPolicyBundle:
         raise Phase13CostPolicyError("COST_POLICY_ARTIFACT_SET_MISMATCH")
     if any(
         manifest.artifacts[role].path != str(path)
-        for role, path in CANONICAL_ARTIFACT_PATHS.items()
+        for role, path in artifact_paths.items()
     ) or {
         role: source.filename
         for role, source in manifest.controlled_external_write_sources.items()
@@ -174,11 +182,11 @@ def load_cost_policy_bundle(root: Path) -> CostPolicyBundle:
     if loaded["residual_authority_patch"] != CANONICAL_RESIDUAL_PATCH:
         raise Phase13CostPolicyError("CONTROLLED_HANDOFF_MISMATCH")
     bundle = CostPolicyBundle(manifest, registry, retry, proof)
-    _validate_bundle(bundle, root)
+    _validate_bundle(bundle, root, historical=historical)
     return bundle
 
 
-def _validate_bundle(bundle: CostPolicyBundle, root: Path) -> None:
+def _validate_bundle(bundle: CostPolicyBundle, root: Path, *, historical: bool = False) -> None:
     registry, retry, proof = bundle.registry, bundle.retry, bundle.proof
     if _canonical_hash(registry, "registry_hash") != registry.registry_hash:
         raise Phase13CostPolicyError("STAGE_ENVELOPE_HASH_MISMATCH")
@@ -220,7 +228,11 @@ def _validate_bundle(bundle: CostPolicyBundle, root: Path) -> None:
         )
         for stage in registry.stages
     )
-    if observed_stages != CANONICAL_STAGES:
+    expected_stages = tuple(
+        (*row[:5], 290, row[6]) if historical and row[0] == "rag_generate" else row
+        for row in CANONICAL_STAGES
+    )
+    if observed_stages != expected_stages:
         raise Phase13CostPolicyError("CANONICAL_STAGE_MISMATCH")
     if len(stages) != 10 or set(stages) != set(costs):
         raise Phase13CostPolicyError("STAGE_REGISTRY_MISMATCH")
@@ -336,8 +348,10 @@ class CostPolicyClient:
         return self._stages[stage_id]
 
 
-def bind_cost_policy_client(client: LLMClient, root: Path) -> CostPolicyClient:
-    return CostPolicyClient(client, load_cost_policy_bundle(root))
+def bind_cost_policy_client(
+    client: LLMClient, root: Path, *, historical: bool = False,
+) -> CostPolicyClient:
+    return CostPolicyClient(client, load_cost_policy_bundle(root, historical=historical))
 
 
 def main() -> None:
