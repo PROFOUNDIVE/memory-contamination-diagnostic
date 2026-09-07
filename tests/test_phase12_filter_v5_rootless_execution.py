@@ -2,11 +2,33 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
+from collections.abc import Iterator
 from dataclasses import replace
 from pathlib import Path
+from typing import assert_never
 
 import anyio
 import pytest
+from pydantic import TypeAdapter
+
+from memcontam.tasks.base import TaskInstance
+from memcontam.experiment.phase12.filter_challenge.registry_calibration import ScheduledCall
+from memcontam.experiment.phase12.filter_challenge import (
+    rootless_local_native_capture as native_capture,
+    rootless_local_native_capture_support as native_support,
+    rootless_local_native_storage_capture as native_storage,
+    rootless_local_broker as native_broker,
+    ordinary_authority as native_ordinary,
+    rootless_local_bootstrap_cli as native_bootstrap,
+)
+from memcontam.experiment.phase12.filter_challenge.ordinary_replay import JsonValue as OrdinaryJsonValue
+from .test_phase12_filter_v5_freeze_a import (
+    CONFIG as NATIVE_CONFIG,
+    SOURCE_UNIVERSE as NATIVE_SOURCE_UNIVERSE,
+    authority_native_ordinary_tasks as authority_native_ordinary_tasks,
+)
+from memcontam.experiment.phase12.filter_challenge.freeze_a import build_freeze_a
 
 from memcontam.experiment.phase12.filter_challenge.registry_calibration import BASELINES
 from memcontam.experiment.phase12.filter_challenge.rootless_local_contract import (
@@ -36,6 +58,66 @@ from memcontam.experiment.phase12.filter_challenge.rootless_local_execution impo
 ROOT = Path(__file__).resolve().parents[1]
 PROBES = ROOT / "data/phase12/filter_v5_bct_v1/probe_construction_manifest_v1.json"
 PROFILE = "local_rootless_non_authoritative"
+
+
+@pytest.fixture(autouse=True)
+def authority_native_capture_tasks(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, authority_native_ordinary_tasks: None,
+) -> Iterator[None]:
+    original = native_support.task_fixture
+    original_specs = native_broker._load_probe_specs
+    original_ordinary = native_ordinary.validate_ordinary_authority
+
+    def native_task(call: ScheduledCall) -> tuple[TaskInstance, str]:
+        task, answer = original(call)
+        match call.task:
+            case "game24" | "word_sorting":
+                return task, answer
+            case "math_equation_balancer":
+                numbers = TypeAdapter(list[int]).validate_python(task.input["numbers"], strict=True)
+                target = TypeAdapter(int).validate_python(task.input["target"], strict=True)
+                template = " ? ".join(str(number) for number in numbers) + f" = {target}"
+                complete = f"{answer} = {target}"
+                return task.model_copy(update={
+                    "input": {"input": template},
+                    "verifier_spec": {"target": complete, "target_value": target},
+                }), complete
+            case unreachable:
+                assert_never(unreachable)
+
+    def native_specs(repository: Path) -> dict[str, tuple[str, dict[str, JsonValue]]]:
+        rows = original_specs(repository)
+        for probe_id, (task_name, certificate) in tuple(rows.items()):
+            if task_name == "math_equation_balancer":
+                target = TypeAdapter(int).validate_python(certificate["target"], strict=True)
+                expression = TypeAdapter(str).validate_python(certificate["expression"], strict=True)
+                rows[probe_id] = (task_name, {
+                    **certificate, "target": f"{expression} = {target}", "target_value": target,
+                })
+        return rows
+
+    def synthetic_ordinary_repository(repository: Path) -> Path:
+        synthetic = tmp_path / "synthetic-native-ordinary-repository"
+        base = synthetic / "data/phase12/filter_v5_bct_v1"
+        if not base.exists():
+            build_freeze_a(NATIVE_CONFIG, NATIVE_SOURCE_UNIVERSE, base)
+            registry = synthetic / "data/phase12/registries/candidate_registry_v1.json"
+            registry.parent.mkdir(parents=True)
+            shutil.copyfile(repository / "data/phase12/registries/candidate_registry_v1.json", registry)
+        return synthetic
+
+    def synthetic_ordinary_authority(repository: Path) -> tuple[dict[str, OrdinaryJsonValue], ...]:
+        return original_ordinary(synthetic_ordinary_repository(repository))
+
+    for module in (native_support, native_capture, native_storage):
+        monkeypatch.setattr(module, "task_fixture", native_task)
+    monkeypatch.setattr(native_broker, "_load_probe_specs", native_specs)
+    monkeypatch.setattr(native_ordinary, "validate_ordinary_authority", synthetic_ordinary_authority)
+    monkeypatch.setattr(native_bootstrap, "validate_ordinary_authority", synthetic_ordinary_authority)
+    monkeypatch.setattr(native_support, "_ROOT", synthetic_ordinary_repository(ROOT))
+    native_capture._capture_native_messages.cache_clear()
+    yield
+    native_capture._capture_native_messages.cache_clear()
 
 
 def _probes() -> dict[str, tuple[str, ...]]:

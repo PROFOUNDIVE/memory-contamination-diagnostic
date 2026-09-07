@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 
 import pytest
+from .test_phase12_filter_v5_rootless_execution import authority_native_capture_tasks as authority_native_capture_tasks
+from .test_phase12_filter_v5_freeze_a import authority_native_ordinary_tasks as authority_native_ordinary_tasks
 
 from memcontam.experiment.phase12.filter_challenge import (
     rootless_local_bootstrap_cli as rootless_local_manifests,

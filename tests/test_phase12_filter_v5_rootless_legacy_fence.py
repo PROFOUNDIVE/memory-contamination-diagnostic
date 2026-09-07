@@ -13,11 +13,13 @@ from types import ModuleType
 from typing import TypedDict
 
 import pytest
+from .test_phase12_externalized_provenance import legacy_registry
 
 
 ROOT = Path(__file__).resolve().parents[1]
 TRUSTED_INPUT_ROOT = ROOT
 IGNORED_INPUT_ROOT = ROOT
+SYNTHETIC_INPUTS = False
 MATERIALIZER = ROOT / "scripts" / "materialize_phase12_filter_v5_rootless_inputs.py"
 SETUP = ROOT / "scripts" / "setup_phase12_filter_v5_rootless_t1_inputs.py"
 GIT_VALIDATOR = ROOT / "scripts" / "validate_phase12_filter_v5_rootless_git_context.py"
@@ -119,6 +121,47 @@ def _manifest_bytes() -> bytes:
     )
 
 
+@pytest.fixture
+def synthetic_legacy_sources(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    registry = legacy_registry()
+    source_root = tmp_path / "synthetic-detached-legacy-inputs"
+    raw_by_path = {
+        relative: f"Synthetic test-only legacy input: {relative}\n".encode()
+        for relative in SETUP_INPUTS
+    }
+    for relative, raw in raw_by_path.items():
+        target = source_root / relative
+        target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        target.write_bytes(raw)
+        target.chmod(0o600)
+    observed = {row.path: row.sha256 for row in registry.records}
+    for relative, raw in raw_by_path.items():
+        assert sha256(raw).hexdigest() != observed.get(relative)
+    module = sys.modules[__name__]
+    monkeypatch.setattr(module, "INPUTS", tuple(
+        (role, destination, len(raw_by_path[destination]), sha256(raw_by_path[destination]).hexdigest())
+        for role, destination, _, _ in INPUTS
+    ))
+    monkeypatch.setattr(module, "SETUP_INPUTS", {
+        relative: (len(raw), sha256(raw).hexdigest()) for relative, raw in raw_by_path.items()
+    })
+    monkeypatch.setattr(module, "TRUSTED_INPUT_ROOT", source_root)
+    monkeypatch.setattr(module, "IGNORED_INPUT_ROOT", source_root)
+    monkeypatch.setattr(module, "SYNTHETIC_INPUTS", True)
+
+
+def _synthetic_pins(module: ModuleType, path: Path) -> None:
+    if SYNTHETIC_INPUTS:
+        rows = (
+            tuple(module.InputPin(role, Path(destination), size, digest)
+                  for role, destination, size, digest in INPUTS)
+            if path == MATERIALIZER else
+            tuple(module.InputPin(Path(relative), size, digest)
+                  for relative, (size, digest) in SETUP_INPUTS.items())
+        )
+        setattr(module, "INPUT_PINS", rows)
+
+
 def _load_materializer() -> ModuleType:
     assert MATERIALIZER.is_file(), "T1 materializer is required"
     specification = importlib.util.spec_from_file_location("rootless_legacy_fence", MATERIALIZER)
@@ -126,6 +169,7 @@ def _load_materializer() -> ModuleType:
     module = importlib.util.module_from_spec(specification)
     sys.modules[specification.name] = module
     specification.loader.exec_module(module)
+    _synthetic_pins(module, MATERIALIZER)
     return module
 
 
@@ -135,10 +179,31 @@ def _load_script(path: Path, name: str) -> ModuleType:
     module = importlib.util.module_from_spec(specification)
     sys.modules[specification.name] = module
     specification.loader.exec_module(module)
+    if path == SETUP:
+        _synthetic_pins(module, path)
     return module
 
 
 def _run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+    if SYNTHETIC_INPUTS and command[0] == sys.executable:
+        for script in (MATERIALIZER, SETUP):
+            if str(script) in command:
+                position = command.index(str(script))
+                rows = (list(INPUTS) if script == MATERIALIZER else
+                        [(relative, size, digest) for relative, (size, digest) in SETUP_INPUTS.items()])
+                bootstrap = (
+                    "import importlib.util,json,sys;from pathlib import Path;"
+                    "script=sys.argv.pop(1);rows=json.loads(sys.argv.pop(1));"
+                    "spec=importlib.util.spec_from_file_location('synthetic_legacy_tool',script);"
+                    "module=importlib.util.module_from_spec(spec);sys.modules[spec.name]=module;"
+                    "spec.loader.exec_module(module);"
+                    "module.INPUT_PINS=tuple(module.InputPin(row[0],Path(row[1]),*row[2:]) "
+                    "if len(row)==4 else module.InputPin(Path(row[0]),*row[1:]) for row in rows);"
+                    "sys.argv[0]=script;raise SystemExit(module.main())"
+                )
+                command = [command[0], *command[1:position], "-c", bootstrap,
+                           str(script), json.dumps(rows), *command[position + 1:]]
+                break
     return subprocess.run(command, cwd=cwd, capture_output=True, check=False, text=True)
 
 
@@ -180,6 +245,10 @@ def _make_clean_fixture(tmp_path: Path) -> Path:
         fixture,
     )
     assert committed.returncode in {0, 1}, committed.stderr
+    if SYNTHETIC_INPUTS:
+        committed = _run(["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                          "commit", "--quiet", "-m", "Synthetic detached-input contract"], fixture)
+        assert committed.returncode == 0, committed.stderr
     clean = _run(["git", "status", "--porcelain=v1"], fixture)
     assert clean.returncode == 0 and clean.stdout == "", clean.stderr
     return fixture
@@ -294,6 +363,7 @@ def test_manifest_and_descriptor_have_exact_canonical_bytes() -> None:
     ).encode("ascii")
 
 
+@pytest.mark.usefixtures("synthetic_legacy_sources")
 def test_materializer_creates_only_verified_destinations_once(tmp_path: Path) -> None:
     # Given: a clean descendant of the trusted base and detached 0600 historical sources.
     fixture = _make_clean_fixture(tmp_path)
@@ -327,6 +397,7 @@ def test_materializer_creates_only_verified_destinations_once(tmp_path: Path) ->
         "historical-post-descriptor",
     ),
 )
+@pytest.mark.usefixtures("synthetic_legacy_sources")
 def test_materializer_cli_rejects_every_relative_input_path(
     tmp_path: Path, relative_argument: str
 ) -> None:
@@ -427,6 +498,7 @@ def test_materializer_argparse_rejects_raw_noncanonical_path_before_path_constru
     "malformed_form",
     ("dot", "dotdot", "repeated-separator", "trailing-separator", "double-leading-separator"),
 )
+@pytest.mark.usefixtures("synthetic_legacy_sources")
 def test_materializer_subprocess_rejects_raw_noncanonical_repo_root(
     tmp_path: Path, malformed_form: str
 ) -> None:
@@ -524,6 +596,7 @@ def test_materializer_rejects_noncanonical_absolute_path() -> None:
         module._absolute(Path("/tmp/rootless-segment/../rootless-input"))
 
 
+@pytest.mark.usefixtures("synthetic_legacy_sources")
 def test_materializer_rejects_unsafe_source_and_base_blob_drift_before_writes(tmp_path: Path) -> None:
     # Given: a clean fixture with an unsafe external source.
     fixture = _make_clean_fixture(tmp_path)
@@ -622,6 +695,7 @@ def test_review_metadata_requires_closed_grammar_but_discloses_same_uid_forgeabi
         module.validate_reviewed_plan(plan, descriptor, metadata)
 
 
+@pytest.mark.usefixtures("synthetic_legacy_sources")
 def test_manifest_and_gitignore_reject_drift_without_hiding_rootless_evidence(tmp_path: Path) -> None:
     # Given: a materialized fixture and its exact manifest descriptor.
     module = _load_materializer()
@@ -657,6 +731,7 @@ def test_manifest_and_gitignore_reject_drift_without_hiding_rootless_evidence(tm
         assert _run(["git", "check-ignore", "-q", "--no-index", "--", visible_path], ROOT).returncode == 1
 
 
+@pytest.mark.usefixtures("synthetic_legacy_sources")
 def test_materializer_rejects_dirty_worktree_and_symlinked_materialization(tmp_path: Path) -> None:
     # Given: a clean fixture with detached historical inputs.
     module = _load_materializer()
@@ -936,6 +1011,7 @@ def test_manifest_descriptor_rejects_filename_spacing_lf_and_hash_drift(
         module._verify_manifest(fixture)
 
 
+@pytest.mark.usefixtures("synthetic_legacy_sources")
 def test_materializer_preflights_every_destination_before_first_write(tmp_path: Path) -> None:
     fixture = _make_clean_fixture(tmp_path)
     sources = _external_sources(tmp_path)
@@ -953,6 +1029,7 @@ def test_materializer_preflights_every_destination_before_first_write(tmp_path: 
 
 
 @pytest.mark.parametrize("attack", ("missing", "symlink", "hardlink", "mode", "mismatch"))
+@pytest.mark.usefixtures("synthetic_legacy_sources")
 def test_materializer_rejects_every_unsafe_source_class_before_writes(
     tmp_path: Path, attack: str
 ) -> None:
@@ -992,6 +1069,7 @@ def test_materializer_rejects_non_current_uid_source() -> None:
 
 
 @pytest.mark.parametrize("attack", ("hardlink", "mode"))
+@pytest.mark.usefixtures("synthetic_legacy_sources")
 def test_legacy_fence_rejects_unsafe_materialized_destination(
     tmp_path: Path, attack: str
 ) -> None:
@@ -1030,6 +1108,7 @@ def test_setup_uses_only_descriptor_reads_for_authority_paths() -> None:
     assert calls.isdisjoint(forbidden)
 
 
+@pytest.mark.usefixtures("synthetic_legacy_sources")
 def test_setup_reads_open_descriptor_when_source_name_is_swapped(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1109,6 +1188,7 @@ def _setup_roots(tmp_path: Path) -> tuple[Path, Path]:
     return repository, source
 
 
+@pytest.mark.usefixtures("synthetic_legacy_sources")
 def test_setup_materializes_fixed_private_inputs_and_is_idempotent(tmp_path: Path) -> None:
     setup = _load_script(SETUP, "rootless_t1_setup_success")
     repository, source = _setup_roots(tmp_path)
@@ -1264,6 +1344,7 @@ def test_setup_fsyncs_each_parent_after_mkdir_before_descending(
 
 
 @pytest.mark.parametrize("attack", ("missing", "symlink", "hardlink", "mode", "mismatch", "ancestor"))
+@pytest.mark.usefixtures("synthetic_legacy_sources")
 def test_setup_rejects_every_unsafe_source_before_destination_writes(
     tmp_path: Path, attack: str
 ) -> None:
@@ -1294,6 +1375,7 @@ def test_setup_rejects_every_unsafe_source_before_destination_writes(
 
 
 @pytest.mark.parametrize("attack", ("symlink", "hardlink", "mode", "mismatch"))
+@pytest.mark.usefixtures("synthetic_legacy_sources")
 def test_setup_rejects_unsafe_existing_destination_without_overwrite(
     tmp_path: Path, attack: str
 ) -> None:

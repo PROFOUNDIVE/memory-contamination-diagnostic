@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 import anyio
+from .test_phase12_filter_v5_rootless_execution import authority_native_capture_tasks as authority_native_capture_tasks
+from .test_phase12_filter_v5_freeze_a import authority_native_ordinary_tasks as authority_native_ordinary_tasks
 
 from memcontam.experiment.phase12.filter_challenge.rootless_local_binding import (
     build_fake_stage_binding,
@@ -127,7 +129,7 @@ def _answers(compilation: StageCompilation) -> dict[str, str]:
                 "wrong"
                 if slot.side == "challenge"
                 and slot.candidate_class in {"certified_false", "ordinary_false"}
-                else str(certificate["target"])
+                else f"{certificate['expression']} = {certificate['target']}"
             )
         else:
             words = certificate["correct_order"]

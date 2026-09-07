@@ -9,6 +9,9 @@ from pathlib import Path
 from typing import assert_never
 
 import pytest
+from memcontam.experiment.phase12.filter_challenge import rootless_local_broker as broker_module
+from .test_phase12_filter_v5_rootless_execution import authority_native_capture_tasks as authority_native_capture_tasks
+from .test_phase12_filter_v5_freeze_a import authority_native_ordinary_tasks as authority_native_ordinary_tasks
 
 from memcontam.experiment.phase12.filter_challenge import rootless_local_bootstrap_cli
 from memcontam.experiment.phase12.filter_challenge.rootless_local_binding import (
@@ -101,7 +104,7 @@ def _answers(compilation: StageCompilation) -> dict[str, str]:
                         answers[slot.slot_id] = (
                             "wrong" if slot.side == "challenge"
                             and slot.candidate_class in {"certified_false", "ordinary_false"}
-                            else str(certificate["target"])
+                            else f"{certificate['expression']} = {certificate['target']}"
                         )
                     case "word_sorting":
                         words = certificate["correct_order"]
@@ -201,10 +204,12 @@ def test_fresh_task7_cli_rehearsal_reaches_review_required_without_provider_egre
         )
         transport = _Task7Transport(_answers(compilation))
         transports.append(transport)
-        return FakeBroker(
+        broker = FakeBroker(
             binding, transport, root, seed, acquire_runtime_lock(root / "runtime.lock"),
             "live", repository,
         )
+        broker.probe_specs = broker_module._load_probe_specs(repository)
+        return broker
 
     monkeypatch.setattr(rootless_local_bootstrap_cli, "build_live_broker", fake_live_broker)
 
