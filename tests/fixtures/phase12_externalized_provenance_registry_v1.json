@@ -1,0 +1,70 @@
+{
+  "schema_version": "phase12_externalized_provenance_registry_v1",
+  "authority": false,
+  "scientific_input": false,
+  "runtime_input": false,
+  "replacement_bytes": false,
+  "superseding_current_gate": "phase13-main-a-corrected-authorized-execution-v3",
+  "records": [
+    {
+      "path": "References/Theoretical Artifacts/AGENTS.md",
+      "size_bytes": 10499,
+      "sha256": "362f3ba6c51dec7ebfd61b68a9c908e64ef84858e93f796bf5de6b40fb70cd46",
+      "role": "legacy_phase12_provenance_only",
+      "availability": "externalized_exact_revision_unavailable",
+      "current_authorization_member": false,
+      "surviving_copy_path": null,
+      "replacement_path": null
+    },
+    {
+      "path": ".sisyphus/plans/BASELINE-FIDELITY-V2_source-contract_remediation.md",
+      "size_bytes": null,
+      "sha256": "5a5afe7f0d5fa171ff9d0b279fdd5875ee6885e718043cdfff3e59c449428e0f",
+      "role": "legacy_phase12_provenance_only",
+      "availability": "externalized_exact_revision_unavailable",
+      "current_authorization_member": false,
+      "surviving_copy_path": null,
+      "replacement_path": null
+    },
+    {
+      "path": ".omo/approvals/phase12-post-filter-v5-calibration-readiness.plan.sha256",
+      "size_bytes": 65,
+      "sha256": "7b878988972b5bc3c1a2ba24785b978cc26b973e1e44e8059ff8d3133227842e",
+      "role": "legacy_phase12_provenance_only",
+      "availability": "externalized_exact_revision_unavailable",
+      "current_authorization_member": false,
+      "surviving_copy_path": null,
+      "replacement_path": null
+    },
+    {
+      "path": ".omo/plans/phase12-filter-v5-screening-bct-execution.md",
+      "size_bytes": 144691,
+      "sha256": "9270d31770eb97e732602cfe85a250111208afeae293b0a20ab618baadb43317",
+      "role": "legacy_phase12_provenance_only",
+      "availability": "externalized_exact_revision_unavailable",
+      "current_authorization_member": false,
+      "surviving_copy_path": null,
+      "replacement_path": null
+    },
+    {
+      "path": ".omo/approvals/phase12-filter-v5-screening-bct-execution.plan.sha256",
+      "size_bytes": 65,
+      "sha256": "92c6d30f026a10f47067e5467c0e9e0abc35b653385f4f08ad7d301838e06160",
+      "role": "legacy_phase12_provenance_only",
+      "availability": "externalized_exact_revision_unavailable",
+      "current_authorization_member": false,
+      "surviving_copy_path": null,
+      "replacement_path": null
+    },
+    {
+      "path": ".omo/evidence/phase12-post-filter-v5-calibration-readiness/task-3-screening-stage-result.json",
+      "size_bytes": 246,
+      "sha256": "583d1bd5a579af84b00ded45e67b66f491940237c4e708027d9da827b4bbb8f7",
+      "role": "legacy_phase12_provenance_only",
+      "availability": "externalized_exact_revision_unavailable",
+      "current_authorization_member": false,
+      "surviving_copy_path": null,
+      "replacement_path": null
+    }
+  ]
+}

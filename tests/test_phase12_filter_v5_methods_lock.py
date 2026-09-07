@@ -6,19 +6,28 @@ import sys
 from pathlib import Path
 
 import yaml
+import pytest
+from .test_phase12_externalized_provenance import synthetic_legacy_methods_inputs
 
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "validate_phase12_filter_v5_methods_lock.py"
-DOCUMENT = ROOT / "docs" / "phase12-filter-v5-bct-methods-lock.md"
+DOCUMENT = ROOT / "docs" / "historical" / "phase12-filter-v5-bct-methods-lock.md"
 CONFIG = ROOT / "configs" / "phase12" / "filter_v5_bct_calibration.yaml"
 PLAN = ROOT / ".omo" / "plans" / "phase12-post-filter-v5-calibration-readiness.md"
+
+
+@pytest.fixture(autouse=True)
+def synthetic_methods_prerequisites(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    plan, _, config = synthetic_legacy_methods_inputs(tmp_path / "synthetic-methods", CONFIG)
+    monkeypatch.setattr(sys.modules[__name__], "PLAN", plan)
+    monkeypatch.setattr(sys.modules[__name__], "CONFIG", config)
 
 
 def _run(document: Path, config: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
-            sys.executable,
+            "bash", "-c", 'source .omo/evidence/phase13_shell_contract.sh; phase13_python "$@"', "--",
             str(SCRIPT),
             "--document",
             str(document),

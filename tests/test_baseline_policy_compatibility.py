@@ -14,7 +14,7 @@ from memcontam.baselines.contracts import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-V2_AUTHORITY = ROOT / "docs" / "baseline-fidelity-v2.md"
+V2_AUTHORITY = ROOT / "docs" / "historical" / "baseline-fidelity-v2.md"
 V2_CONFIGS = {
     "structural": ROOT / "configs" / "baseline_fidelity_v2_structural_replay.yaml",
     "source_contract": ROOT / "configs" / "baseline_fidelity_v2_source_contract_replay.yaml",
