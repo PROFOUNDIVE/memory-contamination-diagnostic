@@ -8,6 +8,7 @@ from .phase13_v3_authority_models import AuthoritySnapshotV3, FrozenModel, V3Ide
 from .phase13_v3_cost_binding import CostBoundPackageV3
 from .phase13_v3_resource_files import FileBinding
 from .phase13_v3_runtime_identity import RuntimeIdentityV3
+from .phase13_v3_source_closure import GovernedInventory, ResourceClosure
 
 
 class ExecutionResourceV3(FileBinding):
@@ -23,6 +24,9 @@ class MainExecutionPackageV3(CostBoundPackageV3):
     resources: tuple[ExecutionResourceV3, ...]
     production: tuple[ProductionObject, ...]
     measured_main_a_trajectory_count: Literal[0]
+    governed_source: GovernedInventory | None = None
+    mr_p4_closure: FileBinding | None = None
+    generated_closure: ResourceClosure | None = None
 
 
 class MainAuthorizationV3(FrozenModel):
