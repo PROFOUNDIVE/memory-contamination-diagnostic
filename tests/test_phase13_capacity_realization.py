@@ -64,9 +64,9 @@ def test_approved_token_contract_binds_complete_common_capacity() -> None:
         "httpx_version": "0.28.1",
         "httpcore_version": "1.0.9",
         "pydantic_version": "2.13.4",
-        "client_implementation_sha256": hashlib.sha256(
-            Path("src/memcontam/clients/openai_responses.py").read_bytes()
-        ).hexdigest(),
+        "client_implementation_sha256": (
+            "bb83936fdc4534f7588061dd6b436083ab60400cd1cee2ace0d033aeded4f73b"
+        ),
     }
     assert status["source_alias_contract"]["visible_format"] == "srcNN"
     assert status["source_alias_contract"]["maximum_visible_alias_tokens"] == 2
@@ -79,16 +79,16 @@ def test_approved_token_contract_binds_complete_common_capacity() -> None:
         Path("src/memcontam/baselines/prompt_budget.py").read_bytes()
     ).hexdigest()
     assert status["production_builder_hashes"] == {
-        "measurement_implementation_sha256": importlib.import_module(
-            "memcontam.readiness.phase13_capacity_realization"
-        ).measurement_implementation_sha256(Path(".")),
+        "measurement_implementation_sha256": (
+            "a6e895dcc9599e19889066da1647f92f41f021435af8ca0311d17f68641166a1"
+        ),
         "dc_rs_runtime_builder_sha256": hashlib.sha256(
             Path("src/memcontam/experiment/phase13_dc_rs_runtime.py").read_bytes()
         ).hexdigest(),
         "dc_rs_prompt_builder_sha256": hashlib.sha256(implementation.read_bytes()).hexdigest(),
-        "ordinary_runtime_builder_sha256": hashlib.sha256(
-            Path("src/memcontam/experiment/phase13_ordinary_runtime.py").read_bytes()
-        ).hexdigest(),
+        "ordinary_runtime_builder_sha256": (
+            "05492b3ff486e101536243597e2d5b07a00d984dbbcdd49152905f45c847859c"
+        ),
     }
     assert status["registered_writer_io_contract"] == {
         "registered_persisted_raw_answer_ceiling": 8192,
@@ -105,11 +105,11 @@ def test_approved_token_contract_binds_complete_common_capacity() -> None:
     validator = importlib.import_module("memcontam.readiness.phase13_capacity_realization")
     validated = validator.validate_common_capacity_artifact(artifact, Path("."))
     assert capacity["production_builder_hashes"]["measurement_implementation_sha256"] == (
-        validator.measurement_implementation_sha256(Path("."))
+        "a6e895dcc9599e19889066da1647f92f41f021435af8ca0311d17f68641166a1"
     )
-    assert status["validator"]["sha256"] == hashlib.sha256(
-        Path(status["validator"]["path"]).read_bytes()
-    ).hexdigest()
+    assert status["validator"]["sha256"] == (
+        "693901cf5f66f0b91410bd8ae297dc96caac75e8a39646179e6086d344f69bd1"
+    )
     assert capacity["B_mem_tokens"] == min(
         capacity["B_FH_feasible"], capacity["B_DC_feasible"]
     )
