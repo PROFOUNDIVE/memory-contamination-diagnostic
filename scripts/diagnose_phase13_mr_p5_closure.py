@@ -88,9 +88,14 @@ def _report(repository_root: Path, package_relative: Path) -> ClosureReport:
     source_root = repository_root / "src"
     package_path = repository_root / package_relative
     package = json.loads(package_path.read_text(encoding="utf-8"))
+    rows = (
+        package["governed_source"]["rows"]
+        if package.get("schema_version") == "phase13_main_execution_freeze_v3"
+        else package["artifacts"]
+    )
     bound = {
         repository_root / row["path"]
-        for row in package["artifacts"]
+        for row in rows
         if row["path"].endswith(".py")
     }
     entrypoint = repository_root / "src/memcontam/readiness/phase13_main_live_cli.py"

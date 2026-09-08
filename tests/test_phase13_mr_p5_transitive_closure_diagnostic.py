@@ -5,6 +5,8 @@ from pathlib import Path
 import subprocess
 import sys
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 DIAGNOSTIC = ROOT / "scripts/diagnose_phase13_mr_p5_closure.py"
@@ -100,3 +102,33 @@ def test_mr_p5_diagnostic_accepts_a_separately_versioned_package(tmp_path: Path)
 
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout)["omitted_local_import_count"] == 0
+
+
+@pytest.mark.parametrize("include_entrypoint", (True, False))
+def test_mr_p5_diagnostic_uses_v3_governed_inventory(tmp_path: Path, include_entrypoint: bool) -> None:
+    entrypoint = "src/memcontam/readiness/phase13_main_live_cli.py"
+    files = ("src/memcontam/__init__.py", "src/memcontam/readiness/__init__.py", entrypoint)
+    for relative in files:
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("", encoding="utf-8")
+    governed_paths = files if include_entrypoint else files[:-1]
+    package = tmp_path / "package_v3.json"
+    package.write_text(json.dumps({
+        "schema_version": "phase13_main_execution_freeze_v3",
+        "governed_source": {"rows": [
+            *({"path": path} for path in governed_paths),
+            {"path": "pyproject.toml"},
+            {"path": "scripts/not_imported.py"},
+        ]},
+        "generated_closure": {"rows": [{"path": entrypoint}]},
+        "resources": [{"path": entrypoint}],
+    }), encoding="utf-8")
+
+    result = _run("--package", "package_v3.json", "--require-closed", repository_root=tmp_path)
+
+    assert result.returncode == int(not include_entrypoint), result.stderr
+    report = json.loads(result.stdout)
+    assert report["bound_python_path_count"] == len(governed_paths) + 1
+    assert report["omitted_local_imports"] == ([] if include_entrypoint else [entrypoint])
+    assert report["authoritative"] is False
