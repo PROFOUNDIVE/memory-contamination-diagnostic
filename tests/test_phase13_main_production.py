@@ -15,7 +15,7 @@ from memcontam.readiness.phase13_main_runner_models import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-P5 = ROOT / "data/phase13/main/mr_p5/execution_package_v1.json"
+P5 = ROOT / "data/phase13/main/mr_p5/execution_package_v2.json"
 
 
 def _candidate_package() -> MainExecutionFreeze:

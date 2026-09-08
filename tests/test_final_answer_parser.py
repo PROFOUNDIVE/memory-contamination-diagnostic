@@ -16,7 +16,7 @@ def test_reflexion_accepts_the_shared_terminal_final_answer_form() -> None:
     from memcontam.tasks.base import TaskInstance
 
     outcome = ReflexionAdapter().execute(
-        TaskInstance(sample_id="sample-1", task_name="game24", input={}),
+        TaskInstance(sample_id="sample-1", task_name="game24", input={"numbers": [1, 3, 4, 6]}),
         ReflexionState(),
         client=ReplayClient(responses=["Work through the arithmetic.\nFINAL: 24\n"]),
         model="replay",
@@ -41,7 +41,7 @@ def test_reflexion_rejects_the_shared_invalid_final_answer_forms(response: str) 
 
     state = ReflexionState()
     outcome = ReflexionAdapter().execute(
-        TaskInstance(sample_id="sample-1", task_name="game24", input={}),
+        TaskInstance(sample_id="sample-1", task_name="game24", input={"numbers": [1, 3, 4, 6]}),
         state,
         client=ReplayClient(responses=[response]),
         model="replay",
@@ -82,7 +82,7 @@ def test_no_memory_keeps_invalid_final_answer_failure_disposition() -> None:
             return LLMResponse(content="24", raw={}, token_usage={}, latency_ms=0)
 
     outcome = NoMemoryAdapter().execute(
-        TaskInstance(sample_id="sample-1", task_name="game24", input={}),
+        TaskInstance(sample_id="sample-1", task_name="game24", input={"numbers": [1, 3, 4, 6]}),
         MemoryState(),
         client=Client(),
         model="replay",
@@ -104,7 +104,7 @@ def test_rag_keeps_invalid_final_answer_failure_disposition() -> None:
             return LLMResponse(content="24", raw={}, token_usage={}, latency_ms=0)
 
     outcome = RetrievalRagAdapter().execute(
-        TaskInstance(sample_id="sample-1", task_name="game24", input={}),
+        TaskInstance(sample_id="sample-1", task_name="game24", input={"numbers": [1, 3, 4, 6]}),
         MemoryState(),
         client=Client(),
         model="replay",

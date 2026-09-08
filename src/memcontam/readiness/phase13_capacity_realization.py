@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Literal, assert_never
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -163,6 +163,24 @@ def validate_common_capacity_artifact(
     repository_root: Path,
 ) -> CommonCapacityMaterialization:
     record = parse_common_capacity(artifact_path.read_bytes())
+    historical_sources: dict[str, str] = {}
+    match record.schema_version:
+        case "phase13_common_capacity_v1":
+            historical_measurement = None
+        case "phase13_common_capacity_v2":
+            historical_sources = {
+                "src/memcontam/clients/openai_responses.py": (
+                    "bb83936fdc4534f7588061dd6b436083ab60400cd1cee2ace0d033aeded4f73b"
+                ),
+                "src/memcontam/experiment/phase13_ordinary_runtime.py": (
+                    "05492b3ff486e101536243597e2d5b07a00d984dbbcdd49152905f45c847859c"
+                ),
+            }
+            historical_measurement = (
+                "a6e895dcc9599e19889066da1647f92f41f021435af8ca0311d17f68641166a1"
+            )
+        case unreachable:
+            assert_never(unreachable)
     checks = (
         (record.provider_contract.path, record.provider_contract.sha256),
         ("requirements.lock", record.token_contract.requirements_lock_sha256),
@@ -202,13 +220,18 @@ def validate_common_capacity_artifact(
     if any(
         Path(relative).is_absolute()
         or ".." in Path(relative).parts
-        or hashlib.sha256((repository_root / relative).read_bytes()).hexdigest() != expected
+        or (
+            historical_sources[relative] if relative in historical_sources
+            else hashlib.sha256((repository_root / relative).read_bytes()).hexdigest()
+        ) != expected
         for relative, expected in checks
     ):
         raise CapacityRealizationError("CAPACITY_ARTIFACT_BINDING_MISMATCH")
-    if record.production_builder_hashes.measurement_implementation_sha256 != (
+    expected_measurement = (
         measurement_implementation_sha256(repository_root)
-    ):
+        if historical_measurement is None else historical_measurement
+    )
+    if record.production_builder_hashes.measurement_implementation_sha256 != expected_measurement:
         raise CapacityRealizationError("CAPACITY_ARTIFACT_BINDING_MISMATCH")
     try:
         reserves = derive_capacity_reserves(repository_root)

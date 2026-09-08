@@ -92,11 +92,12 @@ def test_rejects_any_memory_state_or_event() -> None:
 
 
 def test_keeps_text_only_no_memory_prompt_unchanged() -> None:
+    from memcontam.baselines.common import FINAL_ANSWER_INSTRUCTION
     from memcontam.baselines.no_memory import NoMemoryPolicy
 
     task = build_instance({"sample_id": "game24-text", "numbers": [1, 3, 4, 6], "target": 24})
 
     assert NoMemoryPolicy().build_prompt(task, MemoryState())[0]["content"] == (
         "Solve the task. Use no persistent memory. "
-        "Return only the final answer in the required task format."
+        f"{FINAL_ANSWER_INSTRUCTION}"
     )

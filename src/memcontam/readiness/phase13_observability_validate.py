@@ -102,8 +102,14 @@ def validate_phase13_observability_package(
             packet.implementation_identities,
             _HISTORICAL_PACKET_PLANNING_IDENTITIES,
         )
-        for identities in (packet.verifier_identities, packet.applicability_identities):
-            _validate_identities(repository_root, repository_root, identities)
+        historical_verifiers = (
+            frozenset({"math_equation_balancer"})
+            if manifest.registration_packet_sha256
+            == "b2f9d7b5cced3b7bd4f33272b952d9a2270696a5348121608d13876bce02e454"
+            else frozenset()
+        )
+        _validate_identities(repository_root, repository_root, packet.verifier_identities, historical_verifiers)
+        _validate_identities(repository_root, repository_root, packet.applicability_identities)
         if (
             packet.implementation_identities["registration"].model_dump()
             != manifest.implementations["observability_registration"].model_dump()

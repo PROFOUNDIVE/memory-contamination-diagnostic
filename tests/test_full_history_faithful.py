@@ -5,6 +5,7 @@ from importlib import import_module
 from pathlib import Path
 
 from memcontam.baselines import full_history
+from memcontam.baselines.common import FINAL_ANSWER_INSTRUCTION
 from memcontam.baselines.full_history import (
     FullHistoryPayload,
     FullHistoryState,
@@ -14,7 +15,7 @@ from memcontam.clients.base import LLMResponse
 from memcontam.logging.schema import VerifierResult
 from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
-from memcontam.tasks.dispatch import canonical_task_json
+from memcontam.tasks.dispatch import canonical_task_json, render_model_visible_task
 
 
 FullHistoryAdapter = import_module("memcontam.baselines.full_history_adapter").FullHistoryAdapter
@@ -118,7 +119,10 @@ def test_full_history_renders_raw_records_in_order_and_keeps_valid_incorrect_suc
     assert len(client.calls) == 1
     assert client.calls[0][2]["method_stage"] == "full_history_generate"
     prompt = client.calls[0][0][0]["content"]
-    assert prompt == f"{first.content}\n\n{second.content}\n\nTASK:\n{canonical_task_json(_task())}"
+    assert prompt == (
+        f"{first.content}\n\n{second.content}\n\n"
+        f"{render_model_visible_task(_task())}\n\n{FINAL_ANSWER_INSTRUCTION}"
+    )
     assert "must not enter history" not in prompt
     assert "parsed_answer" not in prompt
     assert "parent_entry_ids" not in prompt
@@ -152,12 +156,12 @@ def test_full_history_uses_canonical_task_json_for_prompt_and_stored_pairs() -> 
     canonical_task = TaskInstance(
         sample_id="sample-1",
         task_name="game24",
-        input={"z": [2, 1], "a": "value"},
+        input={"numbers": [1, 3, 4, 6], "target": 24},
     )
     reversed_task = TaskInstance(
         sample_id="sample-1",
         task_name="game24",
-        input={"a": "value", "z": [2, 1]},
+        input={"target": 24, "numbers": [1, 3, 4, 6]},
     )
     first_state = FullHistoryState()
     second_state = FullHistoryState()

@@ -28,6 +28,7 @@ from memcontam.experiment.phase12.planner import (
     validate_route_selection,
 )
 from memcontam.manifests.archive_validation import ArchiveValidationReport
+from .test_phase12_integration_certificate import relocated_f1c_document as relocated_f1c_document
 
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "phase12"

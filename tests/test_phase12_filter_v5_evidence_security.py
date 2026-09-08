@@ -14,12 +14,22 @@ from memcontam.experiment.phase12.filter_challenge.evidence_contract import (
     approval_descriptor_path,
     approved_plan_sha256,
 )
+from memcontam.experiment.phase12.filter_challenge.registry_calibration import CalibrationStageResult
+from .test_phase12_externalized_provenance import synthetic_legacy_methods_inputs
 
 
 ROOT = Path(__file__).resolve().parents[1]
 BUNDLE = ROOT / "docs" / "evidence" / "phase12-filter-v5-bct-v1"
 PLAN = ROOT / ".omo" / "plans" / "phase12-post-filter-v5-calibration-readiness.md"
 VERIFY = ROOT / "scripts" / "verify_phase12_filter_v5_bct_evidence.py"
+
+
+@pytest.fixture(autouse=True)
+def synthetic_security_prerequisites(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    plan, _, _ = synthetic_legacy_methods_inputs(
+        tmp_path / "synthetic-security", ROOT / "configs/phase12/filter_v5_bct_calibration.yaml",
+    )
+    monkeypatch.setattr(sys.modules[__name__], "PLAN", plan)
 
 
 def _verify(bundle: Path, cwd: Path = ROOT) -> subprocess.CompletedProcess[str]:
@@ -36,7 +46,7 @@ def _verify(bundle: Path, cwd: Path = ROOT) -> subprocess.CompletedProcess[str]:
             "--artifact-root",
             str(ROOT / "runs" / "phase12-filter-v5-bct-live-v1"),
         ],
-        cwd=cwd,
+        cwd=bundle.parents[2] if cwd == ROOT else cwd,
         capture_output=True,
         text=True,
         check=False,
@@ -44,9 +54,7 @@ def _verify(bundle: Path, cwd: Path = ROOT) -> subprocess.CompletedProcess[str]:
 
 
 def _copied_bundle(tmp_path: Path) -> Path:
-    bundle = tmp_path / "bundle"
-    shutil.copytree(BUNDLE, bundle)
-    return bundle
+    return _copied_repository(tmp_path)[1]
 
 
 def _copied_repository(tmp_path: Path) -> tuple[Path, Path]:
@@ -61,8 +69,10 @@ def _copied_repository(tmp_path: Path) -> tuple[Path, Path]:
     )
     source_files = source_universe["source_files"]
     assert isinstance(source_files, dict)
+    freeze = json.loads((ROOT / "data/phase12/filter_v5_bct_v1/freeze_a.json").read_bytes())
     paths = (
         *source_files,
+        *(f"data/phase12/filter_v5_bct_v1/{name}" for name in freeze["manifest_sha256"]),
         "data/phase12/filter_v5_bct_v1/source_universe_v1.json",
         "data/phase12/filter_v5_bct_v1/freeze_a.json",
         "data/phase12/filter_v5_bct_v1/screening_authorization_request.json",
@@ -79,7 +89,41 @@ def _copied_repository(tmp_path: Path) -> tuple[Path, Path]:
         assert isinstance(relative_path, str)
         destination = repository / relative_path
         destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(ROOT / relative_path, destination)
+        if relative_path == "docs/phase12-filter-v5-bct-methods-lock.md":
+            source = ROOT / "docs/historical/phase12-filter-v5-bct-methods-lock.md"
+            assert sha256(source.read_bytes()).hexdigest() == "3c13f53695ded5503080a4ff552e3e9f4c97ec7b5eafe1a3104b6411546740e8"
+            shutil.copy2(source, destination)
+        elif relative_path.endswith("task-3-screening-stage-result.json"):
+            CalibrationStageResult.waiting("screening", "AWAITING_SCREENING_AUTHORIZATION").write_atomic(destination)
+        elif relative_path.endswith("task-5-bct-stage-result.json"):
+            CalibrationStageResult.waiting("bct", "AWAITING_SCREENING_AUTHORIZATION").write_atomic(destination)
+        elif relative_path.endswith("task-6-pilot-b-readiness-stage-result.json"):
+            CalibrationStageResult.waiting("pilot_b_readiness", "AWAITING_SCREENING_AUTHORIZATION").write_atomic(destination)
+        else:
+            shutil.copy2(ROOT / relative_path, destination)
+    freeze_digest = sha256((repository / "data/phase12/filter_v5_bct_v1/freeze_a.json").read_bytes()).hexdigest()
+    request_path = repository / "data/phase12/filter_v5_bct_v1/screening_authorization_request.json"
+    request = json.loads(request_path.read_bytes())
+    request["freeze_sha256"] = freeze_digest
+    _write_report(request_path, request)
+    request_digest = sha256(request_path.read_bytes()).hexdigest()
+    digest = approved_plan_sha256(PLAN, approval_descriptor_path(PLAN))
+    for report in bundle.glob("*_report.json"):
+        payload = json.loads(report.read_bytes())
+        payload["approved_plan_sha256"] = digest
+        inputs = payload.get("input_digests", {})
+        if inputs.get("freeze_a") is not None:
+            inputs["freeze_a"] = freeze_digest
+        if inputs.get("authorization_request") is not None:
+            inputs["authorization_request"] = request_digest
+        if payload["stage_result_path"] is not None:
+            stage = repository / payload["stage_result_path"]
+            payload["stage_result_path"] = str(stage)
+            payload["stage_result_sha256"] = sha256(stage.read_bytes()).hexdigest()
+        _write_sealed_report(report, payload)
+    _reseal_backward_hashes(bundle)
+    verified = _verify(bundle, repository)
+    assert verified.returncode == 0, verified.stdout + verified.stderr
     return repository, bundle
 
 
@@ -117,14 +161,14 @@ def _reseal_backward_hashes(bundle: Path) -> None:
             prior: sha256((bundle / f"{prior.replace('-', '_')}_report.json").read_bytes()).hexdigest()
             for prior in upstream_ids
         }
-        _write_report(path, payload)
+        _write_sealed_report(path, payload)
     readiness = bundle / "pilot_b_readiness_report.json"
     payload = json.loads(readiness.read_text(encoding="utf-8"))
     payload["prior_report_sha256"] = {
         report_id: sha256((bundle / f"{report_id.replace('-', '_')}_report.json").read_bytes()).hexdigest()
         for report_id in report_ids
     }
-    _write_report(readiness, payload)
+    _write_sealed_report(readiness, payload)
 
 
 def test_readiness_verifier_rejects_report_one_provider_counter_reseal(tmp_path: Path) -> None:

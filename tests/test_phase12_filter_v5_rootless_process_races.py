@@ -11,6 +11,8 @@ import sys
 
 import anyio
 import pytest
+from .test_phase12_filter_v5_rootless_execution import authority_native_capture_tasks as authority_native_capture_tasks
+from .test_phase12_filter_v5_freeze_a import authority_native_ordinary_tasks as authority_native_ordinary_tasks
 from memcontam.experiment.phase12.filter_challenge.rootless_local_binding import (
     build_fake_stage_binding,
 )

@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
+from .test_phase12_externalized_provenance import synthetic_legacy_methods_inputs
 
 from memcontam.experiment.phase12.filter_challenge.bct_archive import build_evidence_report
 from memcontam.experiment.phase12.filter_challenge.bct_live import (
@@ -17,7 +18,7 @@ from memcontam.experiment.phase12.filter_challenge.registry_calibration import C
 ROOT = Path(__file__).resolve().parents[1]
 PLAN = ROOT / ".omo" / "plans" / "phase12-post-filter-v5-calibration-readiness.md"
 DESCRIPTOR = ROOT / ".omo" / "approvals" / "phase12-post-filter-v5-calibration-readiness.plan.sha256"
-METHODS = ROOT / "docs" / "phase12-filter-v5-bct-methods-lock.md"
+METHODS = ROOT / "docs" / "historical" / "phase12-filter-v5-bct-methods-lock.md"
 CONFIG = ROOT / "configs" / "phase12" / "filter_v5_bct_calibration.yaml"
 SCRIPT = ROOT / "scripts" / "validate_phase12_filter_v5_methods_lock.py"
 EVIDENCE_SCRIPT = ROOT / "scripts" / "build_phase12_filter_v5_bct_evidence.py"
@@ -26,6 +27,17 @@ FREEZE_A = ROOT / "data" / "phase12" / "filter_v5_bct_v1" / "freeze_a.json"
 SCREENING_REQUEST = ROOT / "data" / "phase12" / "filter_v5_bct_v1" / "screening_authorization_request.json"
 SCREENING_STAGE = ROOT / ".omo" / "evidence" / "phase12-post-filter-v5-calibration-readiness" / "task-3-screening-stage-result.json"
 APPROVED_DIGEST = "e8d44600fb3a9177ae691fd8f49ac1c06305b004db7ccd50d391c9876356a230"
+
+
+@pytest.fixture(autouse=True)
+def synthetic_plan_prerequisites(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    plan, descriptor, config = synthetic_legacy_methods_inputs(tmp_path / "synthetic-plan", CONFIG)
+    stage_path = tmp_path / "synthetic-screening-stage.json"
+    CalibrationStageResult.waiting("screening", "AWAITING_SCREENING_AUTHORIZATION").write_atomic(stage_path)
+    for name, value in (("PLAN", plan), ("DESCRIPTOR", descriptor), ("CONFIG", config),
+                        ("SCREENING_STAGE", stage_path),
+                        ("APPROVED_DIGEST", descriptor.read_text(encoding="ascii").strip())):
+        monkeypatch.setattr(sys.modules[__name__], name, value)
 
 
 def _plan_and_descriptor(tmp_path: Path, plan_bytes: bytes, descriptor_bytes: bytes) -> Path:
@@ -41,7 +53,7 @@ def _plan_and_descriptor(tmp_path: Path, plan_bytes: bytes, descriptor_bytes: by
 def _validate_methods(plan: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
-            sys.executable,
+            "bash", "-c", 'source .omo/evidence/phase13_shell_contract.sh; phase13_python "$@"', "--",
             str(SCRIPT),
             "--document",
             str(METHODS),

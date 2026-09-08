@@ -82,9 +82,10 @@ def test_invalid_provider_dispatch_and_missing_live_credential_fail_before_run_d
             "provider": "openai_compatible",
         },
         "provider_config": {"api_key_env": "TASK_3B_API_KEY"},
+        "live_calls": {"enabled": True},
     }
     with pytest.raises(SystemExit, match="missing API key env var: TASK_3B_API_KEY"):
-        run_config(live, "missing-credential")
+        run_config(live, "missing-credential", allow_live_calls=True)
     assert not (tmp_path / "runs" / "missing-credential").exists()
 
 

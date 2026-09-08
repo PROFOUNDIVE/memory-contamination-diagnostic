@@ -13,7 +13,8 @@ from memcontam.cli import load_config, run_config
 from memcontam.memory.embeddings import FakeEmbeddingProvider
 from memcontam.memory.retrieval import DenseIndex
 from memcontam.memory.stores import MemoryEntry, MemoryState
-from memcontam.tasks.dispatch import canonical_task_json
+from memcontam.tasks.dispatch import canonical_task_json, render_model_visible_task
+from memcontam.baselines.common import FINAL_ANSWER_INSTRUCTION
 from memcontam.tasks.base import TaskInstance
 
 
@@ -147,7 +148,8 @@ def test_retrieval_rag_uses_canonical_top_three_text_only_prompt(tmp_path: Path)
         prompt_fixture["documents_header"]
         + "\n\n".join(record.text for record in expected_records)
         + prompt_fixture["task_header"]
-        + canonical_task_json(_task())
+        + render_model_visible_task(_task())
+        + f"\n\n{FINAL_ANSWER_INSTRUCTION}"
     )
     for record in expected_records:
         assert record.text in prompt

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import argparse
 import hashlib
 import json
 import shutil
+import subprocess
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 from pydantic import ValidationError
@@ -12,12 +13,14 @@ from pydantic import ValidationError
 from memcontam.evaluation.phase13_observability_registration import ObservabilityRegistrationPacket
 from memcontam.experiment.phase12.filter_challenge.mft_state_models import JsonValue
 from memcontam.readiness import phase13_main_readiness
-from memcontam.readiness.phase13_cli import add_parser, run
 from memcontam.readiness.phase13_main_readiness import (
     Phase13MainReadinessError,
     validate_main_readiness,
 )
-from memcontam.readiness.phase13_main_readiness_models import MainReadinessReport
+from memcontam.readiness.phase13_v3_builder import validate_mr_p4
+from memcontam.readiness.phase13_v3_builder_inputs import production
+from memcontam.readiness.phase13_v3_conformance import ConformanceV3
+from memcontam.readiness.phase13_v3_cost_models import canonical_bytes, digest
 from memcontam.readiness.phase13_observability_models import Phase13ObservabilityFixture
 from memcontam.readiness.phase13_production_observability import (
     ProductionObservabilityArchive,
@@ -29,6 +32,8 @@ from memcontam.readiness.phase13_production_observability import (
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "data/phase13/main/mr_p4"
+pytest_plugins = ("tests.test_phase13_v3_artifact_builder",)
+Staged = tuple[ModuleType, Path, Path, Path]
 
 
 def _manifest_sha256(root: Path = PACKAGE) -> str:
@@ -58,35 +63,43 @@ def _conformance_archive() -> ProductionObservabilityArchive:
     return conformance_archive(fixture, hashlib.sha256(packet_raw).hexdigest())
 
 
-def test_local_mr_p4_package_materializes_every_policy_fixed_registry() -> None:
-    report: MainReadinessReport = validate_main_readiness(PACKAGE, ROOT, _manifest_sha256())
+def test_local_mr_p4_package_materializes_every_policy_fixed_registry(staged: Staged) -> None:
+    _, root, output, authority = staged
+    report = validate_mr_p4(root, authority, output)
+    units = production(report.first_freeze, report.resources)
+    conformance = ConformanceV3.model_validate_json(
+        (output / "mr_p4/corrected_v3/provider_free_conformance_v3.json").read_bytes()
+    )
 
-    assert report.execution_template_count == 97
-    assert report.level2_interaction_count == 18
-    assert report.abstract_seed_slots_per_task == 10
-    assert report.H_run == report.H_primary == 50
-    assert report.synthetic_observability_conformance_status == "PASS"
-    assert report.provider_session_retry_resource_contract_status == "PASS"
-    assert report.u_t_status == "NOT_REGISTERED_FOR_CURRENT_MAIN"
-    assert report.main_a_measured_scientific_execution_count == 0
+    assert len({unit.execution_template_id for unit in units if unit.kind != "CLEAN_PREFIX"}) == 97
+    assert len({(unit.task, unit.memory_baseline) for unit in units if unit.kind == "CLEAN_PREFIX"}) == 23
+    assert len({(unit.task, unit.memory_baseline) for unit in units
+        if unit.kind == "CLEAN_PREFIX" and unit.memory_baseline != "fh_bounded"}) == 18
+    assert report.first_freeze.concrete_seed_ids == tuple(range(10))
+    assert all(task.H_run == 50 for task in report.first_freeze.registry.tasks.values())
+    assert all(predicate.passed for predicate in conformance.predicates)
+    assert report.authority.registry.transport_retries == 0
+    assert report.authority.registry.max_transport_attempts == 1
+    assert conformance.measured_trajectories == 0
+    assert _conformance_archive().u_t_status == "NOT_REGISTERED_FOR_CURRENT_MAIN"
 
 
-def test_local_mr_p4_package_closes_after_non_scientific_live_readiness() -> None:
-    report: MainReadinessReport = validate_main_readiness(PACKAGE, ROOT, _manifest_sha256())
+def test_local_mr_p4_package_closes_after_non_scientific_live_readiness(staged: Staged) -> None:
+    _, root, output, authority = staged
+    report = validate_mr_p4(root, authority, output)
+    conformance = ConformanceV3.model_validate_json(
+        (output / "mr_p4/corrected_v3/provider_free_conformance_v3.json").read_bytes()
+    )
 
-    assert report.status == "MR_P4_CLOSED"
-    assert report.blockers == ()
-    assert report.f1c_status == "PASS"
-    assert report.provider_calls_issued == 12
-    assert report.output_directory_created is True
-    assert report.scientific_result is False
-    assert report.main_result is False
-    assert report.mr_p4_status == "CLOSED"
-    assert report.mr_p4_closure_claimed is True
-    assert report.mr_p5_status == "NOT_STARTED"
-    assert report.mr_p6_status == "NOT_AUTHORIZED"
-    assert report.main_a_status == "NOT_STARTED"
-    assert report.main_execution_authorized is False
+    assert report.status == "CLOSED"
+    assert all(predicate.passed for predicate in conformance.predicates)
+    assert conformance.real_provider_calls == 0
+    assert conformance.scientific_result is False
+    assert conformance.measured_trajectories == 0
+    assert output.is_dir()
+    assert not (output / "mr_p5").exists()
+    assert not (output / "mr_p6").exists()
+    assert not (output / report.identity.run_id).exists()
 
 
 def test_mr_p4_manifest_binds_first_frozen_checkpoint_identities() -> None:
@@ -122,18 +135,19 @@ def test_mr_p4_manifest_binds_current_readiness0_attempt_artifacts() -> None:
     } <= set(manifest["artifacts"])
 
 
-def test_historical_readiness0_request_remains_stale_provenance_not_current_status() -> None:
+def test_historical_readiness0_request_remains_stale_provenance_not_current_status(staged: Staged) -> None:
     historical = json.loads(
         (PACKAGE / "readiness0_request_v1.json").read_text(encoding="utf-8")
     )
-    report: MainReadinessReport = validate_main_readiness(PACKAGE, ROOT, _manifest_sha256())
+    _, root, output, authority = staged
+    report = validate_mr_p4(root, authority, output)
 
     assert historical["external_blockers"] == [
         "OPENAI_API_KEY_MISSING",
         "F1C_RUNTIME_ENVIRONMENT_NOT_CONFIGURED",
     ]
-    assert report.blockers == ()
-    assert report.f1c_status == "PASS"
+    assert report.status == "CLOSED"
+    assert all("readiness0_request_v1.json" not in row.path for row in report.resources)
 
 
 def test_mr_p4_current_status_hash_binding_rejects_tamper(
@@ -154,30 +168,25 @@ def test_mr_p4_current_status_hash_binding_rejects_tamper(
 
 
 def test_mr_p4_current_status_semantic_tamper_fails_after_hash_refresh(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+    staged: Staged,
 ) -> None:
-    package = tmp_path / "mr_p4"
-    shutil.copytree(PACKAGE, package)
-    manifest = json.loads((package / "manifest_v1.json").read_text(encoding="utf-8"))
-    identity = manifest["artifacts"]["readiness0_current_status"]
-    status_path = ROOT / identity["path"]
-    status = json.loads(status_path.read_text(encoding="utf-8"))
-    status["provider_calls_issued"] = 1
-    status["status_hash"] = _canonical_hash(
-        {key: value for key, value in status.items() if key != "status_hash"}
+    _, root, output, authority = staged
+    manifest = validate_mr_p4(root, authority, output)
+    status_path = output / "mr_p4/corrected_v3/provider_free_conformance_v3.json"
+    status = ConformanceV3.model_validate_json(status_path.read_bytes()).model_copy(
+        update={"real_provider_calls": 1}
     )
-    tampered = json.dumps(status).encode()
-    identity["sha256"] = hashlib.sha256(tampered).hexdigest()
-    _write_rehashed_manifest(package, manifest)
-    original_read = phase13_main_readiness.read_regular_nofollow
+    status = status.model_copy(update={"conformance_hash": digest(status, "conformance_hash")})
+    tampered = canonical_bytes(status)
+    status_path.write_bytes(tampered)
+    bindings = tuple(row.model_copy(update={"sha256": hashlib.sha256(tampered).hexdigest(),
+        "size": len(tampered)}) if row.path.endswith(status_path.name) else row for row in manifest.artifacts)
+    manifest = manifest.model_copy(update={"artifacts": bindings})
+    manifest = manifest.model_copy(update={"closure_hash": digest(manifest, "closure_hash")})
+    (output / "mr_p4/corrected_v3/manifest_v3.json").write_bytes(canonical_bytes(manifest))
 
-    def read_with_tampered_status(path: Path) -> bytes:
-        return tampered if path == status_path else original_read(path)
-
-    monkeypatch.setattr(phase13_main_readiness, "read_regular_nofollow", read_with_tampered_status)
-    with pytest.raises(Phase13MainReadinessError, match="MR_P4_PREREQUISITE_INVALID"):
-        validate_main_readiness(package, ROOT, _manifest_sha256(package))
+    with pytest.raises(ValueError, match="MAIN_PROVIDER_FREE_CONFORMANCE_FAILED"):
+        validate_mr_p4(root, authority, output)
 
 
 def test_production_contract_rejects_stateful_provider_continuation() -> None:
@@ -220,6 +229,8 @@ def test_production_contract_rejects_mismatched_run_join() -> None:
             session_id=record.session_id,
             scientific_result=record.scientific_result,
             ordered_sample_ids_sha256=record.ordered_sample_ids_sha256,
+            parsed_answer=record.parsed_answer,
+            method_calls=record.method_calls,
             request=record.request,
             evidence=record.evidence,
             terminal_provider_evidence=record.terminal_provider_evidence,
@@ -304,62 +315,58 @@ def test_mr_p4_manifest_rejects_call_ceiling_after_all_hashes_are_refreshed(
     ],
 )
 def test_mr_p4_rejects_semantic_artifact_tamper_after_all_hashes_are_refreshed(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+    staged: Staged,
     artifact_name: str,
     internal_hash: str,
     mutation: tuple[str | None, str, JsonValue],
     expected_error: str,
 ) -> None:
-    package = tmp_path / "mr_p4"
-    shutil.copytree(PACKAGE, package)
-    manifest = json.loads((package / "manifest_v1.json").read_text(encoding="utf-8"))
-    identity = manifest["artifacts"][artifact_name]
-    artifact_path = ROOT / identity["path"]
-    artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
-    section, field, value = mutation
-    if section is None:
-        artifact[field] = value
-    else:
-        artifact[section][field] = value
-    artifact[internal_hash] = _canonical_hash(
-        {key: value for key, value in artifact.items() if key != internal_hash}
+    _, root, output, authority = staged
+    manifest = validate_mr_p4(root, authority, output).model_dump(mode="json")
+    _, field, value = mutation
+    match field:
+        case "attempted_seed_count_per_task":
+            manifest["first_freeze"]["concrete_seed_ids"] = list(range(11))
+            rejection = "MAIN_MR_P4_FIRST_FREEZE_MISMATCH"
+        case "schema_version":
+            manifest["schema_version"] = "phase13_mr_p4_local_closure_manifest_v2"
+            rejection = "MAIN_ARTIFACT_BINDING_MISMATCH"
+        case "current_sha256":
+            router = next(row for row in manifest["authority"]["documents"] if row["role"] == "router")
+            router["sha256"] = value
+            rejection = "MAIN_AUTHORITY_BINDING_MISMATCH"
+        case "H_run":
+            manifest["first_freeze"]["registry"]["tasks"]["game24"]["H_run"] = value
+            rejection = "MAIN_ARTIFACT_BINDING_MISMATCH"
+        case "package_id":
+            manifest["identity"]["package_id"] = value
+            rejection = "MAIN_ARTIFACT_BINDING_MISMATCH"
+        case _:
+            pytest.fail(f"unmapped historical mutation: {artifact_name}/{internal_hash}/{expected_error}")
+    manifest["closure_hash"] = hashlib.sha256((json.dumps(
+        {key: value for key, value in manifest.items() if key != "closure_hash"},
+        sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+    ) + "\n").encode()).hexdigest()
+    (output / "mr_p4/corrected_v3/manifest_v3.json").write_bytes(
+        (json.dumps(manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n").encode()
     )
-    tampered_raw = json.dumps(artifact).encode()
-    identity["sha256"] = hashlib.sha256(tampered_raw).hexdigest()
-    _write_rehashed_manifest(package, manifest)
-    original_read = phase13_main_readiness.read_regular_nofollow
 
-    def read_with_tampered_artifact(path: Path) -> bytes:
-        return tampered_raw if path == artifact_path else original_read(path)
-
-    monkeypatch.setattr(phase13_main_readiness, "read_regular_nofollow", read_with_tampered_artifact)
-    with pytest.raises(Phase13MainReadinessError, match=expected_error):
-        validate_main_readiness(package, ROOT, _manifest_sha256(package))
+    with pytest.raises(ValueError, match=rejection):
+        validate_mr_p4(root, authority, output)
 
 
 def test_phase13_cli_exposes_main_readiness_validation(
-    capsys: pytest.CaptureFixture[str],
+    staged: Staged,
 ) -> None:
-    parser = argparse.ArgumentParser()
-    subparsers = parser.add_subparsers(dest="command", required=True)
-    add_parser(subparsers)
-    args = parser.parse_args(
-        [
-            "phase13",
-            "validate-main-readiness",
-            "--repository-root",
-            str(ROOT),
-            "--root",
-            str(PACKAGE),
-            "--expected-manifest-sha256",
-            _manifest_sha256(),
-        ]
+    _, root, output, authority = staged
+    result = subprocess.run(
+        ("bash", "-c", 'source .omo/evidence/phase13_shell_contract.sh; phase13_python "$@"',
+         "--", str(ROOT / "scripts/build_phase13_corrected_main_closure.py"), "validate",
+         "--repository-root", str(root), "--authority-root", str(authority), "--stage", "mr-p4",
+         "--artifact", str(output / "mr_p4/corrected_v3/manifest_v3.json")),
+        cwd=ROOT, capture_output=True, text=True, check=False,
     )
-
-    run(args)
-
-    payload = json.loads(capsys.readouterr().out)
-    assert payload["status"] == "MR_P4_CLOSED"
-    assert payload["mr_p4_closure_claimed"] is True
-    assert payload["main_execution_authorized"] is False
+    assert result.returncode == 0, result.stdout + result.stderr
+    payload = json.loads(result.stdout)
+    assert payload == {"status": "CLOSED", "provider_calls": 0, "measured_trajectories": 0}
+    assert not (output / "mr_p6").exists()

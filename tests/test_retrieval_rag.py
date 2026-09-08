@@ -19,7 +19,8 @@ from memcontam.memory.embeddings import EmbeddingProvider, FakeEmbeddingProvider
 from memcontam.memory.retrieval import DenseIndex
 from memcontam.memory.stores import MemoryEntry, MemoryState
 from memcontam.tasks.base import TaskInstance
-from memcontam.tasks.dispatch import canonical_task_json
+from memcontam.tasks.dispatch import render_model_visible_task
+from memcontam.baselines.common import FINAL_ANSWER_INSTRUCTION
 
 
 def _entry(
@@ -132,8 +133,9 @@ def test_retrieval_rag_adapter_records_answer_source_spans(tmp_path: Path) -> No
                 + render_retrieved_documents(
                     RetrievalDocumentPayload(record.text) for record in call.retrieved_records
                 )
-                + "\n\nCurrent task:\n"
-                + canonical_task_json(task)
+                + "\n\n"
+                + render_model_visible_task(task)
+                + f"\n\n{FINAL_ANSWER_INSTRUCTION}"
             ),
         },
     ]

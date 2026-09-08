@@ -11,7 +11,8 @@ from memcontam.tasks.base import TaskInstance
 
 ParsedEquation: TypeAlias = tuple[tuple[int, ...], tuple[str, ...], int]
 _INTEGER = re.compile(r"[+-]?\d+")
-_OPERATORS = frozenset({"+", "-", "*", "/"})
+_EQUATION = re.compile(r"\s*([+-]?\d+)((?:\s*[+*/-]\s*[+-]?\d+)+)\s*=\s*([+-]?\d+)\s*")
+_OPERATOR_OPERAND = re.compile(r"\s*([+*/-])\s*([+-]?\d+)")
 
 
 def verify_answer(answer: str, task: TaskInstance) -> VerifierResult:
@@ -107,21 +108,14 @@ def verify_rhs_completion_answer(
 
 
 def _parse_equation(value: str) -> ParsedEquation | None:
-    tokens = " ".join(value.split()).split(" ")
-    if len(tokens) < 5 or len(tokens) % 2 == 0 or tokens[-2] != "=":
+    equation = _EQUATION.fullmatch(value)
+    if equation is None:
         return None
-    number_tokens = tokens[:-2:2]
-    operator_tokens = tokens[1:-2:2]
-    if (
-        len(operator_tokens) != len(number_tokens) - 1
-        or any(_INTEGER.fullmatch(token) is None for token in (*number_tokens, tokens[-1]))
-        or any(operator not in _OPERATORS for operator in operator_tokens)
-    ):
-        return None
+    pairs = _OPERATOR_OPERAND.findall(equation[2])
     return (
-        tuple(int(token) for token in number_tokens),
-        tuple(operator_tokens),
-        int(tokens[-1]),
+        (int(equation[1]), *(int(operand) for _, operand in pairs)),
+        tuple(operator for operator, _ in pairs),
+        int(equation[3]),
     )
 
 

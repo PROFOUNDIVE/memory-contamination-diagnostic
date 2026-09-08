@@ -52,6 +52,26 @@ Mutation = Literal["forbidden_diff", "invalid_python", "mft_failure", "source_di
 _COMMAND_RECORDS: dict[tuple[str, str], tuple[bytes, ...]] = {}
 
 
+@pytest.fixture
+def synthetic_scope_authorities(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from memcontam.experiment.phase12.filter_challenge import final_verifier_scope
+    from memcontam.readiness.phase13_v3_builder_inputs import STATIC_PATHS
+    from .test_phase12_externalized_provenance import legacy_registry
+
+    registry = legacy_registry()
+    assert all(not row.current_authorization_member for row in registry.records)
+    assert all(row.path not in STATIC_PATHS for row in registry.records)
+    bindings: list[tuple[str, Path, str]] = []
+    for index, (name, _, _) in enumerate(final_verifier_scope.AUTHORITY_BINDINGS):
+        path = tmp_path / f"synthetic-scope-authority-{index}.md"
+        raw = f"# Synthetic scope authority fixture {index}\n".encode()
+        path.write_bytes(raw)
+        digest = hashlib.sha256(raw).hexdigest()
+        assert all(digest != row.sha256 for row in registry.records)
+        bindings.append((name, path, digest))
+    monkeypatch.setattr(final_verifier_scope, "AUTHORITY_BINDINGS", tuple(bindings))
+
+
 @dataclass(frozen=True, slots=True)
 class VerifierFixture:
     base_commit: str
@@ -442,6 +462,7 @@ def test_integration_reruns_commands_and_rejects_evidence_mismatch(tmp_path: Pat
         verify_final_report(_request(mismatch, "integration", tmp_path / "mismatch" / "f3.json"))
 
 
+@pytest.mark.usefixtures("synthetic_scope_authorities")
 def test_scope_reads_real_diff_authorities_and_source_status(tmp_path: Path) -> None:
     fixture = _fixture(tmp_path / "passing")
     report = verify_final_report(_request(fixture, "scope", tmp_path / "passing" / "f4.json"))
@@ -737,6 +758,7 @@ def _terminal_request(
     )
 
 
+@pytest.mark.usefixtures("synthetic_scope_authorities")
 def test_terminal_requires_complete_approval_payloads_and_derives_ledger_metadata(tmp_path: Path) -> None:
     fixture = _fixture(tmp_path)
     f1 = tmp_path / "f1.json"

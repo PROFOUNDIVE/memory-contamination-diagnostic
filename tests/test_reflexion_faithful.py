@@ -16,7 +16,7 @@ from memcontam.logging.provenance import compute_exposure_from_spans, normalize_
 from memcontam.logging.schema import MemoryEvent, MemoryItemLog, VerifierResult
 from memcontam.memory.stores import MemoryEntry, MemoryState
 from memcontam.tasks.base import TaskInstance
-from memcontam.tasks.dispatch import canonical_task_json
+from memcontam.tasks.dispatch import render_model_visible_task
 
 
 def test_reflexion_contract_requires_structured_generation_and_authenticated_attempts() -> None:
@@ -420,7 +420,7 @@ def test_reflexion_prompt_renderers_match_committed_fixtures() -> None:
     fixture_dir = Path(__file__).parent / "fixtures/prompts"
     replacements = {
         "{{task_family}}": _task().task_name,
-        "{{task_canonical}}": canonical_task_json(_task()),
+        "Current task:\n{{task_canonical}}": render_model_visible_task(_task()),
         "{{reflection_id}}": "reflection-1",
         "{{reflection_text}}": "verify the operator order.",
         "{{failed_response}}": "final: wrong",

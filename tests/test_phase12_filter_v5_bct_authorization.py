@@ -3,12 +3,17 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
+import shutil
 import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from .test_phase12_externalized_provenance import synthetic_legacy_methods_inputs
+from .test_phase12_filter_v5_freeze_a import authority_native_ordinary_tasks as authority_native_ordinary_tasks
+from memcontam.experiment.phase12.filter_challenge.freeze_a import build_freeze_a
 
 from memcontam.experiment.phase12.filter_challenge import bct_live, registry_calibration
 from memcontam.experiment.phase12.filter_challenge.bct_live import (
@@ -26,6 +31,39 @@ CONFIG = ROOT / "configs" / "phase12" / "filter_v5_bct_calibration.yaml"
 FREEZE_A = ROOT / "data" / "phase12" / "filter_v5_bct_v1" / "freeze_a.json"
 AUTHORITY = ROOT / "docs" / "evidence" / "phase12-filter-v5-bct-v1" / "authority_transition_manifest.json"
 SCREENING_REPORT = ROOT / "docs" / "evidence" / "phase12-filter-v5-bct-v1" / "screening_report.json"
+APPROVED_DIGEST = "e8d44600fb3a9177ae691fd8f49ac1c06305b004db7ccd50d391c9876356a230"
+
+
+@pytest.fixture(autouse=True)
+def synthetic_authorization_prerequisites(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, authority_native_ordinary_tasks: None,
+) -> None:
+    plan, descriptor, config = synthetic_legacy_methods_inputs(tmp_path / "synthetic-authorization", CONFIG)
+    repository = plan.parents[2]
+    source_path = ROOT / "data/phase12/filter_v5_bct_v1/source_universe_v1.json"
+    sources = json.loads(source_path.read_bytes())
+    for relative in sources["source_files"]:
+        target = repository / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / relative, target)
+    synthetic_sources = repository / source_path.relative_to(ROOT)
+    synthetic_sources.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source_path, synthetic_sources)
+    freeze = build_freeze_a(config, synthetic_sources, synthetic_sources.parent)
+    for original in (AUTHORITY, SCREENING_REPORT):
+        target = repository / original.relative_to(ROOT)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(original, target)
+    environment = {**os.environ, "GIT_MASTER": "1"}
+    subprocess.run(("git", "-C", str(repository), "init", "--quiet"), check=True, env=environment)
+    subprocess.run(("git", "-C", str(repository), "add", "."), check=True, env=environment)
+    subprocess.run(("git", "-C", str(repository), "-c", "user.name=Fixture", "-c",
+                    "user.email=fixture@example.invalid", "commit", "--quiet", "-m",
+                    "Synthetic legacy authorization inputs"), check=True, env=environment)
+    monkeypatch.setattr(bct_live, "REPOSITORY_ROOT", repository)
+    for name, value in (("ROOT", repository), ("CONFIG", config), ("FREEZE_A", freeze),
+                        ("APPROVED_DIGEST", descriptor.read_text(encoding="ascii").strip())):
+        monkeypatch.setattr(sys.modules[__name__], name, value)
 
 
 def _sha256(path: Path) -> str:
@@ -103,7 +141,7 @@ def _authorization_values(request: dict[str, object], artifact_root: Path) -> di
         "artifact_root": str(artifact_root),
         "ledger_id": "filter-v5-bct-budget-v1",
         "model_id": "gpt-4o-2024-11-20",
-        "approved_plan_sha256": "e8d44600fb3a9177ae691fd8f49ac1c06305b004db7ccd50d391c9876356a230",
+        "approved_plan_sha256": APPROVED_DIGEST,
         "authority_manifest_sha256": _sha256(AUTHORITY),
         "freeze_sha256": request["freeze_sha256"],
         "provider": "openai_responses",
@@ -154,9 +192,16 @@ def test_screening_cost_preview_serializes_a_schedule_digest(tmp_path: Path) -> 
 
     result = subprocess.run(
         [
-            sys.executable,
-            "-m",
-            "memcontam.cli",
+            "bash", "-c", 'source .omo/evidence/phase13_shell_contract.sh; phase13_python "$@"', "--",
+            "-c",
+            "import runpy, sys; from pathlib import Path; "
+            "from memcontam.experiment.phase12.filter_challenge import bct_live; "
+            "from memcontam.experiment.phase12.filter_challenge import ordinary_authority; "
+            "from tests.test_phase12_filter_v5_freeze_a import native_ordinary_task; "
+            "ordinary_authority.TaskInstance = native_ordinary_task; "
+            "bct_live.REPOSITORY_ROOT = Path(sys.argv.pop(1)); "
+            "runpy.run_module('memcontam.cli', run_name='__main__')",
+            str(ROOT),
             "phase12",
             "filter-v5",
             "screening-cost-preview",
@@ -169,7 +214,7 @@ def test_screening_cost_preview_serializes_a_schedule_digest(tmp_path: Path) -> 
             "--output",
             str(output),
         ],
-        cwd=ROOT,
+        cwd=Path(__file__).resolve().parents[1],
         capture_output=True,
         text=True,
         check=False,

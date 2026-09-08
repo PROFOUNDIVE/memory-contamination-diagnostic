@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import TypeAlias
 
 import pytest
+from memcontam.tasks.base import TaskInstance
+from memcontam.experiment.phase12.filter_challenge import ordinary_authority
 
 from memcontam.experiment.phase12.filter_challenge.freeze_a import (
     FreezeAError,
@@ -18,6 +20,24 @@ ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "configs" / "phase12" / "filter_v5_bct_calibration.yaml"
 SOURCE_UNIVERSE = ROOT / "data" / "phase12" / "filter_v5_bct_v1" / "source_universe_v1.json"
 JsonValue: TypeAlias = str | int | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
+
+
+def native_ordinary_task(sample_id: str, task_name: str, input: dict[str, JsonValue]) -> TaskInstance:
+    native_inputs: dict[str, dict[str, JsonValue]] = {
+        "game24": {"numbers": [1, 3, 4, 6], "target": 24},
+        "math_equation_balancer": {"input": "1 ? 2 ? 2 = 2"},
+        "word_sorting": {"words": ["aaa", "aab", "aba"]},
+    }
+
+    return TaskInstance(
+        sample_id=sample_id, task_name=task_name,
+        input={**input, **native_inputs[task_name]},
+    )
+
+
+@pytest.fixture(autouse=True)
+def authority_native_ordinary_tasks(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ordinary_authority, "TaskInstance", native_ordinary_task)
 
 
 def _json_object(path: Path) -> dict[str, JsonValue]:

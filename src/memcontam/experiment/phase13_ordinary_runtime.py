@@ -343,7 +343,7 @@ def _context(
     return ProspectiveOrdinaryContext(
         task=task,
         client=(run.validated_resources.execution_client if run.validated_resources is not None
-                else bind_cost_policy_client(run.client, REPOSITORY_ROOT)),
+                else bind_cost_policy_client(run.client, REPOSITORY_ROOT, historical=True)),
         model=run.model,
         verifier=run.verifier,
         decoding={**run.decoding, "max_output_tokens": 512, "service_tier": "default"},

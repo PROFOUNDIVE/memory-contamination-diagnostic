@@ -16,6 +16,7 @@ from memcontam.readiness.phase12_replay import (
     P12IReplaySpec,
     run_p12i_replay,
 )
+from .test_phase12_integration_certificate import relocated_f1c_document as relocated_f1c_document
 
 
 ROOT = Path(__file__).resolve().parents[1]

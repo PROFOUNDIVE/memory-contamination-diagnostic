@@ -560,7 +560,12 @@ def test_retrieval_rag_row_contains_provenance_and_stays_read_only(tmp_path, mon
     prompt_text = "\n".join(message["content"] for message in row["prompt_messages"])
     assert "Look for complementary subexpressions" in prompt_text
     assert "Use the injected arithmetic shortcut" in prompt_text
-    assert "Current task:\n" in prompt_text
+    from memcontam.tasks.dispatch import render_model_visible_task
+    from memcontam.tasks.game24 import build_instance
+
+    assert render_model_visible_task(build_instance({
+        "sample_id": "sample_1", "numbers": [1, 3, 4, 6], "target": 24,
+    })) in prompt_text
     assert "entry_id=clean-1" not in prompt_text
     assert "score=" not in prompt_text
     assert "memory_type=strategy" not in prompt_text

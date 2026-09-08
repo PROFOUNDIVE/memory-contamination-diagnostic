@@ -34,6 +34,7 @@ _APPROVAL_MODES: tuple[ApprovalMode, ...] = (
     "plan-compliance", "code-quality", "integration", "scope",
 )
 _APPROVAL_RECORDS: dict[str, tuple[bytes, ...]] = {}
+pytest_plugins = ("tests.test_phase12_filter_v5_final_verifier_modes",)
 
 
 def _approvals(tmp_path: Path) -> tuple[VerifierFixture, tuple[Path, Path, Path, Path]]:
@@ -107,6 +108,7 @@ def _reconciled_output(report: JsonObject, name: str) -> JsonObject:
     return _json_object(_json_field(outputs, name))
 
 
+@pytest.mark.usefixtures("synthetic_scope_authorities")
 def test_terminal_rejects_semantic_approval_tampering(tmp_path: Path) -> None:
     fixture, paths = _approvals(tmp_path)
     f1, f2, f3, f4 = paths
@@ -134,6 +136,7 @@ def test_terminal_rejects_semantic_approval_tampering(tmp_path: Path) -> None:
         path.write_text(originals[path], encoding="utf-8")
 
 
+@pytest.mark.usefixtures("synthetic_scope_authorities")
 def test_terminal_lists_every_unresolved_scientific_choice(tmp_path: Path) -> None:
     fixture, paths = _approvals(tmp_path)
 
@@ -167,6 +170,7 @@ def test_terminal_lists_every_unresolved_scientific_choice(tmp_path: Path) -> No
     assert all(value == "unresolved" for key, value in choices.items() if key not in {"inventory", "provider_authorization"})
 
 
+@pytest.mark.usefixtures("synthetic_scope_authorities")
 def test_terminal_rejects_coordinated_f2_f4_commit_and_path_tampering(tmp_path: Path) -> None:
     fixture, paths = _approvals(tmp_path)
     _, f2, _, f4 = paths
@@ -178,6 +182,7 @@ def test_terminal_rejects_coordinated_f2_f4_commit_and_path_tampering(tmp_path: 
         verify_final_report(_terminal_request(fixture, tmp_path / "terminal.json", paths))
 
 
+@pytest.mark.usefixtures("synthetic_scope_authorities")
 def test_approvals_reuse_records_only_for_independent_equivalent_fixtures(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

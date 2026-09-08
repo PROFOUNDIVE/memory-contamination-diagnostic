@@ -78,7 +78,7 @@ def test_reflexion_reflection_call_and_entry_record_failed_actor_lineage() -> No
             ),
         ]
     )
-    task = TaskInstance(sample_id="sample-1", task_name="game24", input={})
+    task = TaskInstance(sample_id="sample-1", task_name="game24", input={"numbers": [1, 3, 4, 6]})
     outcome = ReflexionAdapter().execute(
         task,
         state,

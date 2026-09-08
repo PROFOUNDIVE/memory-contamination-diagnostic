@@ -130,7 +130,9 @@ def _execute_with_observed_archive(
         assert value is archive
         events.append("archive-validated")
 
-    def create_dispatch(_unit, trials, _identity, observed_archive) -> _Marker:
+    def create_dispatch(
+        _unit, trials, _identity, observed_archive, *, realized_cost_krw: int | None,
+    ) -> _Marker:
         assert len(trials) == 50
         assert observed_archive is archive
         events.append("condensed-dispatch-returned")

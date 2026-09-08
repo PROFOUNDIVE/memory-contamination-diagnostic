@@ -31,6 +31,7 @@ _APPROVED_SCOPE_TRANSITIONS = (
     ),
 )
 _DEFAULT_SCOPE_PATHS = tuple(transition[0] for transition in _APPROVED_SCOPE_TRANSITIONS)
+pytest_plugins = ("tests.test_phase12_filter_v5_final_verifier_modes",)
 
 
 @pytest.mark.parametrize(
@@ -74,6 +75,7 @@ def test_scope_rejects_actual_pilot_a_and_core_path_families(
         )
 
 
+@pytest.mark.usefixtures("synthetic_scope_authorities")
 def test_scope_payload_binds_changed_commit_metadata(tmp_path: Path) -> None:
     fixture = _fixture(tmp_path)
 
@@ -84,6 +86,7 @@ def test_scope_payload_binds_changed_commit_metadata(tmp_path: Path) -> None:
     assert report["changed_paths"] == ["src/filter_v5_marker.py"]
 
 
+@pytest.mark.usefixtures("synthetic_scope_authorities")
 def test_scope_allows_only_the_two_pinned_content_transitions(tmp_path: Path) -> None:
     repository, source, base_commit, implementation_commit = _scope_transition_repository(tmp_path)
 

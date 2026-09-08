@@ -4,8 +4,11 @@ import hashlib
 import json
 from collections import Counter
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Literal
 
+from memcontam.readiness.phase13_authority_files import read_regular_nofollow
+from memcontam.readiness.phase13_cost_policy_models import StageEnvelopeRegistry
 from memcontam.readiness.phase13_main_execution_models import MainExecutionFreeze
 from .phase13_v3_cost_binding import attribute_v3_projected_cost as attribute_v3_projected_cost
 
@@ -34,18 +37,6 @@ _SUFFIX_STAGES = {
     ),
     "reflexion_style": (("reflexion_generate", 100), ("reflexion_reflect", 100)),
     "dc_rs": (("dc_rs_generate", 50), ("dc_rs_synthesize", 50)),
-}
-_STAGE_ENVELOPES = {
-    "full_history_generate": (9330, 512, 37507, 9880),
-    "rag_generate": (344, 512, 830, 5928),
-    "bot_problem_distill": (1177, 384, 4732, 7410),
-    "bot_instantiate_solve": (1949, 512, 7835, 9880),
-    "bot_thought_distill": (2545, 384, 10231, 7410),
-    "reflexion_generate": (2282, 512, 18302, 19710),
-    "reflexion_reflect": (3349, 384, 26859, 14783),
-    "dc_rs_generate": (9212, 512, 37033, 9880),
-    "dc_rs_synthesize": (13521, 8192, 54355, 158073),
-    "no_memory_generate": (1160, 512, 1160, 2458),
 }
 
 
@@ -117,7 +108,20 @@ def build_production_objects(
     ) * len(package.dispatch.concrete_seed_ids)
     if len(objects) != expected or len({item.unit_id for item in objects}) != expected:
         raise ValueError("MAIN_RUN_UNIT_DOMAIN_INVALID")
-    objects_with_cost = _attribute_projected_cost(tuple(objects), package.cost_guard.cmax_main_krw)
+    registry_binding = next(row for row in package.artifacts if row.role == "stage_envelope_registry")
+    expected_path = {
+        "phase13_main_execution_freeze_v1": "data/phase13/main/cost_envelope_v2/stage_envelope_registry_v1.json",
+        "phase13_main_execution_freeze_v2": "data/phase13/main/cost_envelope_v2/stage_envelope_registry_corrected_v2.json",
+    }[package.schema_version]
+    if registry_binding.path != expected_path:
+        raise ValueError("MAIN_RUN_COST_PROJECTION_INVALID")
+    registry_raw = read_regular_nofollow(Path(__file__).resolve().parents[3] / expected_path)
+    if hashlib.sha256(registry_raw).hexdigest() != registry_binding.sha256:
+        raise ValueError("MAIN_RUN_COST_PROJECTION_INVALID")
+    registry = StageEnvelopeRegistry.model_validate_json(registry_raw)
+    objects_with_cost = _attribute_projected_cost(
+        tuple(objects), package.cost_guard.cmax_main_krw, registry,
+    )
     checkpoint_registry_sha256 = next(
         row.sha256 for row in package.artifacts if row.role == "common_checkpoint_registry"
     )
@@ -190,7 +194,7 @@ def _object(
 
 
 def _attribute_projected_cost(
-    objects: tuple[ProductionObject, ...], expected_total: int
+    objects: tuple[ProductionObject, ...], expected_total: int, registry: StageEnvelopeRegistry,
 ) -> tuple[ProductionObject, ...]:
     stage_counts = Counter(
         stage
@@ -198,12 +202,21 @@ def _attribute_projected_cost(
         for stage, count in _stages(item)
         for _ in range(count)
     )
+    components = {
+        stage.semantic_stage_id: (
+            _ceil_fraction(stage.calls * stage.maximum_input_tokens, 2500),
+            _ceil_fraction(stage.calls * stage.maximum_output_tokens * 24, 12500),
+        )
+        for stage in registry.stages
+    }
+    if stage_counts != {stage.semantic_stage_id: stage.calls for stage in registry.stages}:
+        raise ValueError("MAIN_RUN_COST_PROJECTION_INVALID")
     positions: Counter[str] = Counter()
     attributed: list[ProductionObject] = []
     for item in objects:
         projected = 0
         for stage, count in _stages(item):
-            _, _, input_krw, output_krw = _STAGE_ENVELOPES[stage]
+            input_krw, output_krw = components[stage]
             stage_krw = input_krw + output_krw
             for _ in range(count):
                 positions[stage] += 1
@@ -213,20 +226,8 @@ def _attribute_projected_cost(
                     (position - 1) * stage_krw, stage_counts[stage]
                 )
         attributed.append(replace(item, projected_cost_krw=projected))
-    component_totals = {
-        stage: (
-            _ceil_fraction(count * envelope[0], 2500),
-            _ceil_fraction(count * envelope[1] * 24, 12500),
-        )
-        for stage, count in stage_counts.items()
-        for envelope in (_STAGE_ENVELOPES[stage],)
-    }
-    expected_components = {
-        stage: envelope[2:] for stage, envelope in _STAGE_ENVELOPES.items()
-    }
     if (
         positions != stage_counts
-        or component_totals != expected_components
         or sum(item.projected_cost_krw for item in attributed) != expected_total
     ):
         raise ValueError("MAIN_RUN_COST_PROJECTION_INVALID")

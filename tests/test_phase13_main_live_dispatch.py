@@ -525,6 +525,9 @@ def test_live_environment_loads_approved_dotenv_without_shell_sourcing(tmp_path:
 
 
 def test_live_cli_validates_bound_contract_without_ledger(tmp_path: Path) -> None:
+    from memcontam.readiness.phase13_main_execution_models import MainExecutionFreeze
+    from memcontam.readiness.phase13_main_production import build_production_objects
+
     result = subprocess.run(
         (
             sys.executable,
@@ -549,12 +552,19 @@ def test_live_cli_validates_bound_contract_without_ledger(tmp_path: Path) -> Non
     )
 
     assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout) == {
+    payload = json.loads(result.stdout)
+    assert payload == {
         "authorization_id": "phase13-main-a-corrected-authorized-execution-v2",
+        "authorization_sha256": hashlib.sha256(P6.read_bytes()).hexdigest(),
+        "authorization_hash": json.loads(P6.read_bytes())["authorization_hash"],
+        "execution_package_sha256": hashlib.sha256(P5.read_bytes()).hexdigest(),
+        "mr_p6_status": "PASS",
         "main_a_status": "NOT_STARTED",
-        "prefix_count": 230,
+        "measured_main_a_trajectory_count": 0,
         "provider_calls_issued": 0,
-        "status": "READY_NO_CALLS",
-        "unit_count": 1200,
+        "status": "VALIDATED_HISTORICAL_ONLY",
     }
+    units = build_production_objects(MainExecutionFreeze.model_validate_json(P5.read_bytes()))
+    assert sum(unit.kind == "CLEAN_PREFIX" for unit in units) == 230
+    assert len(units) == 1200
     assert not (tmp_path / "offline-qa" / "main-run-v1.sqlite3").exists()

@@ -8,7 +8,9 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from collections.abc import Iterator
 
+import pytest
 import yaml
 
 import memcontam.cli as cli
@@ -24,6 +26,18 @@ MANIFEST = ROOT / "scripts" / "build_bfv2_evidence_manifest.py"
 SEMANTIC_CALL_FIXTURES = (
     ROOT / "tests" / "fixtures" / "baseline_fidelity_v2_semantic_call_hashes.json"
 )
+
+
+@pytest.fixture
+def absent_historical_plan() -> Iterator[Path]:
+    plan = ROOT / ".sisyphus/plans/BASELINE-FIDELITY-V2_source-contract_remediation.md"
+    with pytest.raises(FileNotFoundError):
+        plan.lstat()
+    try:
+        yield plan
+    finally:
+        with pytest.raises(FileNotFoundError):
+            plan.lstat()
 
 
 def test_f1b_config_loads_the_committed_stage_native_fixture() -> None:
@@ -73,7 +87,7 @@ def _semantic_call_hashes(trials: list[TrialLog]) -> dict[str, str]:
 
 
 def test_f1b_replay_parses_artifacts_locks_prompt_bytes_and_rejects_mutations(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch, absent_historical_plan: Path
 ) -> None:
     monkeypatch.chdir(ROOT)
     config = copy.deepcopy(cli.load_config(CONFIG_PATH))
@@ -189,8 +203,7 @@ def test_f1b_replay_parses_artifacts_locks_prompt_bytes_and_rejects_mutations(
     assert _inspect(span_mutation).returncode == 1
 
     evidence_manifest = tmp_path / "evidence-manifest.json"
-    manifest_result = subprocess.run(
-        [
+    command = [
             sys.executable,
             str(MANIFEST),
             "--config",
@@ -201,7 +214,36 @@ def test_f1b_replay_parses_artifacts_locks_prompt_bytes_and_rejects_mutations(
             str(inspector_output),
             "--output",
             str(evidence_manifest),
-        ],
+        ]
+    missing_result = subprocess.run(
+        command, cwd=ROOT, text=True, capture_output=True, check=False
+    )
+    assert missing_result.returncode == 1
+    assert f"missing evidence artifact: {absent_historical_plan}" in missing_result.stderr
+    with pytest.raises(FileNotFoundError):
+        evidence_manifest.lstat()
+    synthetic_root = tmp_path / "synthetic-test-only"
+    synthetic_config = synthetic_root / "configs" / CONFIG_PATH.name
+    synthetic_config.parent.mkdir(parents=True)
+    manifest_config = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
+    manifest_config["replay"]["fixture_path"] = str(FIXTURE_PATH)
+    manifest_config["memory"]["corpus_manifest_path"] = str(
+        ROOT / manifest_config["memory"]["corpus_manifest_path"]
+    )
+    synthetic_config.write_text(yaml.safe_dump(manifest_config), encoding="utf-8")
+    fixture_root = synthetic_root / "tests/fixtures"
+    shutil.copytree(ROOT / "tests/fixtures/prompts/baseline_fidelity_v2",
+                    fixture_root / "prompts/baseline_fidelity_v2")
+    shutil.copyfile(SEMANTIC_CALL_FIXTURES, fixture_root / SEMANTIC_CALL_FIXTURES.name)
+    synthetic_plan = synthetic_root / absent_historical_plan.relative_to(ROOT)
+    synthetic_plan.parent.mkdir(parents=True)
+    synthetic_bytes = b"Synthetic test-only BFV2 plan; not historical or authorization input.\n"
+    synthetic_plan.write_bytes(synthetic_bytes)
+    synthetic_hash = hashlib.sha256(synthetic_bytes).hexdigest()
+    assert synthetic_hash != "5a5afe7f0d5fa171ff9d0b279fdd5875ee6885e718043cdfff3e59c449428e0f"
+    command[3] = str(synthetic_config)
+    manifest_result = subprocess.run(
+        command,
         cwd=ROOT,
         text=True,
         capture_output=True,
@@ -215,7 +257,7 @@ def test_f1b_replay_parses_artifacts_locks_prompt_bytes_and_rejects_mutations(
     assert any("baseline_fidelity_v2" in path for path in artifact_hashes)
     manifest = json.loads(evidence_manifest.read_text(encoding="utf-8"))
     assert manifest["commit"]
-    assert manifest["plan"]["sha256"]
+    assert manifest["plan"] == {"path": str(synthetic_plan), "sha256": synthetic_hash}
     assert manifest["versions"]["prompt_version"] == "baseline_fidelity_v2"
     assert manifest["embedding_identity"]
     assert manifest["corpus_identity"]

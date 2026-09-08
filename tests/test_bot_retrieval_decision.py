@@ -12,7 +12,7 @@ from memcontam.clients.replay import ReplayClient
 from memcontam.memory.bot_buffer import BotBufferIdentity
 from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
-from memcontam.tasks.dispatch import canonical_task_json, render_common_task_spec
+from memcontam.tasks.dispatch import render_common_task_spec
 
 
 def _problem():

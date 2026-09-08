@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 _CORE_EXCLUDES: Final = frozenset({
     "package_core_hash", "cost_proof_hash", "live_contract_hash",
-    "generated_closure_hash", "package_hash",
+    "generated_closure_hash", "generated_closure", "package_hash",
 })
 
 

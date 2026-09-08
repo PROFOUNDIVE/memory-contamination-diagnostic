@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 
 import pytest
+from .test_phase12_externalized_provenance import synthetic_legacy_methods_inputs
+from . import test_phase12_filter_v5_plan_digest as plan_fixtures
 
 from memcontam.experiment.phase12.filter_challenge import bct_live
 from memcontam.experiment.phase12.filter_challenge import registry_calibration
@@ -27,10 +29,26 @@ EXPERIMENT_PACKAGE = ROOT / "src" / "memcontam" / "experiment" / "__init__.py"
 PYRIGHT_CONFIG = ROOT / "pyrightconfig.json"
 
 
+@pytest.fixture
+def synthetic_waiting_prerequisites(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    plan, descriptor, _ = synthetic_legacy_methods_inputs(tmp_path / "synthetic-waiting", CONFIG)
+    stage = tmp_path / "synthetic-waiting-screening.json"
+    CalibrationStageResult.waiting("screening", "AWAITING_SCREENING_AUTHORIZATION").write_atomic(stage)
+    for name, value in (("PLAN", plan), ("SCREENING_STAGE", stage),
+                        ("APPROVED_DIGEST", descriptor.read_text(encoding="ascii").strip())):
+        monkeypatch.setattr(plan_fixtures, name, value)
+    repository = plan.parents[2]
+    bundle = repository / "docs/evidence/phase12-filter-v5-bct-v1"
+    plan_fixtures._build_waiting_freeze_b_report(bundle)
+    monkeypatch.setattr(bct_live, "REPOSITORY_ROOT", repository)
+    monkeypatch.setattr(sys.modules[__name__], "PLAN", plan)
+    monkeypatch.setattr(sys.modules[__name__], "BUNDLE", bundle)
+
+
 def _verify(bundle: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
-            sys.executable,
+            "bash", "-c", 'source .omo/evidence/phase13_shell_contract.sh; phase13_python "$@"', "--",
             str(VERIFY_SCRIPT),
             "--through",
             "bct",
@@ -77,7 +95,7 @@ def _waiting_bundle(tmp_path: Path) -> tuple[Path, Path]:
     bundle = _upstream_bundle(tmp_path / "bundle")
     built = subprocess.run(
         [
-            sys.executable,
+            "bash", "-c", 'source .omo/evidence/phase13_shell_contract.sh; phase13_python "$@"', "--",
             str(EVIDENCE_SCRIPT),
             "--report-set",
             "bct",
@@ -102,7 +120,7 @@ def _waiting_bundle(tmp_path: Path) -> tuple[Path, Path]:
 
 
 def test_bct_waiting_branch_uses_raw_screening_terminal_and_seals_reports(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, synthetic_waiting_prerequisites: None,
 ) -> None:
     # Given: report 5 binds the raw Task-4 missing-screening-authorization stage.
     stage_result = tmp_path / "bct-stage-result.json"
@@ -132,7 +150,7 @@ def test_bct_waiting_branch_uses_raw_screening_terminal_and_seals_reports(
     bundle = _upstream_bundle(tmp_path / "bundle")
     built = subprocess.run(
         [
-            sys.executable,
+            "bash", "-c", 'source .omo/evidence/phase13_shell_contract.sh; phase13_python "$@"', "--",
             str(EVIDENCE_SCRIPT),
             "--report-set",
             "bct",
@@ -188,7 +206,9 @@ def test_bct_waiting_branch_uses_raw_screening_terminal_and_seals_reports(
     assert rejected.stdout == "EVIDENCE_REPORT_CONTRACT_INVALID\n"
 
 
-def test_bct_waiting_verifier_rejects_stage_terminal_and_hash_tampering(tmp_path: Path) -> None:
+def test_bct_waiting_verifier_rejects_stage_terminal_and_hash_tampering(
+    tmp_path: Path, synthetic_waiting_prerequisites: None,
+) -> None:
     bundle, stage_result = _waiting_bundle(tmp_path / "stage")
     stage = json.loads(stage_result.read_text(encoding="utf-8"))
     stage["terminal_status"] = "AWAITING_BCT_AUTHORIZATION"
@@ -228,7 +248,9 @@ def test_bct_waiting_branch_rejects_an_existing_live_root(
     assert result.provider_calls_issued == 0
 
 
-def test_bct_waiting_verifier_rejects_malformed_report_bytes(tmp_path: Path) -> None:
+def test_bct_waiting_verifier_rejects_malformed_report_bytes(
+    tmp_path: Path, synthetic_waiting_prerequisites: None,
+) -> None:
     bundle, _ = _waiting_bundle(tmp_path)
     (bundle / "claim_scope_report.json").write_text("{\n", encoding="utf-8")
 

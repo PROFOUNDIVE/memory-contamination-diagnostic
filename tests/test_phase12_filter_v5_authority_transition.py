@@ -7,8 +7,12 @@ import stat
 import subprocess
 import sys
 from pathlib import Path
+from types import ModuleType
 
 import pytest
+
+from memcontam.readiness.phase13_v3_builder import validate_mr_p4
+from .test_phase12_externalized_provenance import legacy_registry
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "validate_phase12_filter_v5_authority_snapshot.py"
@@ -16,6 +20,7 @@ MANIFEST = ROOT / "docs" / "evidence" / "phase12-filter-v5-bct-v1" / "authority_
 AUTHORITY_ROOT = Path(
     "/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts"
 )
+pytest_plugins = ("tests.test_phase13_v3_artifact_builder",)
 
 
 def _run(manifest: Path, output: Path, authority_root: Path | None = None) -> subprocess.CompletedProcess[str]:
@@ -45,13 +50,23 @@ def _copy_authorities(tmp_path: Path) -> tuple[Path, Path]:
     return authority_root, manifest
 
 
-def test_authority_snapshot_validates_exact_repository_inputs(tmp_path: Path) -> None:
-    result = _run(MANIFEST, tmp_path / "snapshot.json")
+def test_authority_snapshot_validates_exact_repository_inputs(
+    staged: tuple[ModuleType, Path, Path, Path],
+) -> None:
+    _, root, output, authority = staged
+    legacy = legacy_registry()
+    before = {path.name: path.read_bytes() for path in authority.iterdir()}
 
-    assert result.returncode == 0, result.stdout + result.stderr
-    snapshot = json.loads((tmp_path / "snapshot.json").read_text(encoding="utf-8"))
-    assert snapshot["external_files_changed"] is False
-    assert snapshot["provider_calls_issued"] == 0
+    snapshot = validate_mr_p4(root, authority, output)
+
+    assert snapshot.status == "CLOSED"
+    assert {path.name: path.read_bytes() for path in authority.iterdir()} == before
+    serialized = snapshot.model_dump_json()
+    assert all(row.sha256 not in serialized for row in legacy.records)
+    assert all(not row.current_authorization_member for row in legacy.records)
+    conformance = json.loads((output / "mr_p4/corrected_v3/provider_free_conformance_v3.json").read_bytes())
+    assert conformance["real_provider_calls"] == 0
+    assert not (output / "mr_p6").exists()
 
 
 @pytest.mark.parametrize(
