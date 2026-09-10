@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from contextlib import ExitStack
 from pathlib import Path
 import re
 import subprocess
@@ -117,7 +118,7 @@ def freeze_resources(root: Path, paths: tuple[str, ...]) -> ResourceClosure:
 
 
 def validate_resources(
-    root: Path, closure: ResourceClosure, expected_paths: tuple[str, ...],
+    root: Path, closure: ResourceClosure, expected_paths: tuple[str, ...], *, lease: ExitStack | None = None,
 ) -> tuple[ValidatedResource, ...]:
     """Return immutable verified bytes, not paths for downstream reopening.
 
@@ -127,7 +128,7 @@ def validate_resources(
     names = _resource_names(tuple(row.path for row in closure.rows))
     if names != _resource_names(expected_paths) or _rows_hash(closure.rows) != closure.resource_closure_sha256:
         raise ClosureError("MAIN_GOVERNED_SOURCE_DRIFT")
-    resources = read_files(root, names)
+    resources = read_files(root, names, lease=lease)
     if tuple(item.binding for item in resources) != closure.rows:
         raise ClosureError("MAIN_GOVERNED_SOURCE_DRIFT")
     return resources

@@ -10,6 +10,7 @@ from pathlib import Path
 from memcontam.memory.checkpoint_v3 import NativeState, Phase12Checkpoint, serialize_checkpoint
 
 from .phase13_main_preloaded_resources import PreloadedMainResources
+from .phase13_main_live_runtime import ProductionMainRuntime
 from .phase13_main_production import ProductionObject
 from .phase13_main_production_backend import OrdinaryRuntimeRequest, _memory_baseline, _ordinary_arm
 from .phase13_main_request_client import MainRequestClientV3
@@ -20,7 +21,6 @@ from .phase13_main_request_dispatch import (
     production_provider,
 )
 from .phase13_main_request_recovery import require_known_costs
-from .phase13_v3_cost_actual import reconcile_actual
 from .phase13_v3_entrypoint import EntrypointError, SelectedExecutionV3
 from .phase13_v3_entrypoint_paths import PrivateLedger, private_ledger
 from .phase13_v3_request import PackageBindingV3, ParentTrajectoryV3, RequestKeyV3, Stage
@@ -49,15 +49,18 @@ class V3MainRun:
     private: PrivateLedger
     ledger: TerminalLedgerV3
     lease: ExitStack
+    seed: int
 
     def close(self) -> None:
         self.lease.close()
 
     @classmethod
-    def open(cls, selected: SelectedExecutionV3, directory: Path, *, create: bool) -> V3MainRun:
+    def open(cls, selected: SelectedExecutionV3, directory: Path, *, create: bool, seed: int) -> V3MainRun:
         with ExitStack() as lease:
             lease.callback(selected.close)
             selected.preflight(selected.repository_root)
+            if seed not in {unit.seed for unit in selected.package.production}:
+                raise EntrypointError("MAIN_AUTHORIZATION_BINDING_MISMATCH")
             private = lease.enter_context(private_ledger(directory, create=create))
             unit_ids: list[str] = []
             for unit in selected.costs.resources.phase4.base.units:
@@ -72,6 +75,7 @@ class V3MainRun:
                 package_sha256=selected.package_sha256, authorization_sha256=selected.authorization_sha256)
             ledger = (TerminalLedgerV3.create_guarded(private, binding.model_dump(mode="json")) if create
                       else TerminalLedgerV3.open_guarded(private, binding))
+            lease.callback(ledger.close)
             with private.connect() as connection:
                 if create:
                     connection.execute("CREATE TABLE parents (unit_id TEXT PRIMARY KEY, raw BLOB, sha256 TEXT)")
@@ -79,7 +83,7 @@ class V3MainRun:
                         ((unit.unit_id,) for unit in selected.package.production))
                 if {row[0] for row in connection.execute("SELECT unit_id FROM parents")} != set(selected.package.final_order.unit_ids):
                     raise EntrypointError("MAIN_AUTHORIZATION_BINDING_MISMATCH")
-            return cls(selected, private, ledger, lease.pop_all())
+            return cls(selected, private, ledger, lease.pop_all(), seed)
 
     def dispatcher(self, factory: Callable[[PackageBindingV3], CompiledProvider] = production_provider) -> ProductionRequestDispatcherV3:
         def checked_factory(binding: PackageBindingV3) -> CompiledProvider:
@@ -94,24 +98,32 @@ class V3MainRun:
     def status(self) -> V3RunStatus:
         failed = self.dispatcher().terminal_parents
         with self.private.connect() as connection:
+            completed = 0
             for unit_id, raw, checksum in connection.execute("SELECT * FROM parents WHERE raw IS NOT NULL"):
                 if hashlib.sha256(raw).hexdigest() != checksum or json.loads(raw)["unit_id"] != unit_id:
                     raise EntrypointError("MAIN_AUTHORIZATION_BINDING_MISMATCH")
-            completed = connection.execute("SELECT count(*) FROM parents WHERE raw IS NOT NULL").fetchone()[0]
+                completed += 1
         attempts = sum(json.loads(raw)["kind"] == "ATTEMPT_STARTED" for raw in self.ledger.rows())
         pending = len(self.selected.package.production) - completed - len(failed)
         return V3RunStatus("COMPLETED" if pending == 0 else "READY", completed, len(failed), pending, attempts)
 
     def execute(self, cache: Path, *, max_units: int | None, tranche_ceiling_krw: int,
                 provider_factory: Callable[[PackageBindingV3], CompiledProvider] = production_provider) -> V3RunStatus:
-        from .phase13_main_live_runtime import ProductionMainRuntime
-
+        self.selected.preflight(self.selected.repository_root)
         dispatcher = self.dispatcher(provider_factory)
         self.status()
         dispatcher.recover()
+        preceding = {unit.unit_id for unit in self.selected.package.production if unit.seed < self.seed}
+        if preceding:
+            with self.private.connect() as connection:
+                completed = {row[0] for row in connection.execute(
+                    "SELECT unit_id FROM parents WHERE raw IS NOT NULL"
+                )}
+            if preceding - completed - dispatcher.terminal_parents:
+                raise EntrypointError("MAIN_TRANCHE_ORDER_MISMATCH")
         attempted = 0
         projected = 0
-        for unit in self.selected.package.production:
+        for unit in (unit for unit in self.selected.package.production if unit.seed == self.seed):
             with self.private.connect() as connection:
                 complete = connection.execute("SELECT raw FROM parents WHERE unit_id=?", (unit.unit_id,)).fetchone()[0]
             if complete is not None or unit.unit_id in dispatcher.terminal_parents:
@@ -127,8 +139,7 @@ class V3MainRun:
                         key = RequestKeyV3(parent_id=unit.unit_id, stage=STAGE_NAMES[group.stage_id], ordinal=ordinal)
                         if self.ledger.state(key.dispatch_id).kind == "COMPLETED":
                             raise EntrypointError("MAIN_RUN_IN_FLIGHT_RECONCILIATION_REQUIRED")
-            realized = sum(reconcile_actual(state.attempted_cost).realized_krw
-                           for state in self.ledger.states().values() if state.attempted_cost is not None)
+            realized = self.ledger.realized_cost_krw()
             if (projected + unit.projected_cost_krw > tranche_ceiling_krw
                 or realized + unit.projected_cost_krw > 450000):
                 break

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, Self
+
+from pydantic import model_validator
 
 from .phase13_cost_policy_models import Sha256
 from .phase13_main_production import ProductionObject
@@ -15,6 +17,11 @@ class ExecutionResourceV3(FileBinding):
     role: str
 
 
+class ExecutionPackageError(ValueError):
+    def __init__(self) -> None:
+        super().__init__("MAIN_AUTHORIZATION_BINDING_MISMATCH")
+
+
 class MainExecutionPackageV3(CostBoundPackageV3):
     schema_version: Literal["phase13_main_execution_freeze_v3"]
     identity: V3Identity
@@ -23,10 +30,20 @@ class MainExecutionPackageV3(CostBoundPackageV3):
     runtime_identity: RuntimeIdentityV3
     resources: tuple[ExecutionResourceV3, ...]
     production: tuple[ProductionObject, ...]
+    tranche_unit_count: Literal[120]
     measured_main_a_trajectory_count: Literal[0]
     governed_source: GovernedInventory | None = None
     mr_p4_closure: FileBinding | None = None
     generated_closure: ResourceClosure | None = None
+
+    @model_validator(mode="after")
+    def validate_tranche_boundaries(self) -> Self:
+        if len(self.production) >= self.tranche_unit_count and any(
+                unit.sequence != sequence or unit.seed != sequence // self.tranche_unit_count
+                for sequence, unit in enumerate(self.production)
+        ):
+            raise ExecutionPackageError()
+        return self
 
 
 class MainAuthorizationV3(FrozenModel):

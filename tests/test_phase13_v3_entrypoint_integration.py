@@ -83,7 +83,7 @@ def test_legacy_active_runner_rejects_before_reading_package(tmp_path):
     from memcontam.readiness.phase13_main_runner import MainRunRequest, prepare_main_run
 
     request = MainRunRequest(tmp_path, tmp_path / "absent", tmp_path / "absent-auth",
-                             "a" * 64, tmp_path, "old-v2")
+                             "a" * 64, tmp_path, "old-v2", 0)
     with pytest.raises(ValueError, match="MAIN_CORRECTED_RUN_ID_MISMATCH"):
         prepare_main_run(request)
 
@@ -110,7 +110,7 @@ def test_both_active_runner_apis_reject_old_identity(entrypoint_fixture, command
 
     request = entrypoint_fixture
     active = MainRunRequest(request.repository_root, request.package_path, request.authorization_path, "",
-        request.repository_root, "old-run", request.authority_root, request.expected_authorization_sha256_file)
+        request.repository_root, "old-run", 0, request.authority_root, request.expected_authorization_sha256_file)
     with pytest.raises(ValueError, match="MAIN_CORRECTED_RUN_ID_MISMATCH"):
         (prepare_main_run if command == "run" else open_main_run)(active)
 
@@ -122,14 +122,14 @@ def test_valid_v3_guarded_run_and_resume_without_calls(entrypoint_fixture, deny_
     directory = entrypoint_fixture.repository_root / "fixture-ledger"
     selected = select_execution(entrypoint_fixture, "run")
     assert isinstance(selected, SelectedExecutionV3)
-    run = V3MainRun.open(selected, directory, create=True)
+    run = V3MainRun.open(selected, directory, create=True, seed=0)
     try:
         assert run.execute(directory / "cache", max_units=0, tranche_ceiling_krw=450000).provider_calls_issued == 0
     finally:
         run.close()
     selected = select_execution(entrypoint_fixture, "resume")
     assert isinstance(selected, SelectedExecutionV3)
-    resumed = V3MainRun.open(selected, directory, create=False)
+    resumed = V3MainRun.open(selected, directory, create=False, seed=0)
     try:
         assert resumed.status().pending_count == 1
     finally:
@@ -184,7 +184,7 @@ def test_v3_execution_uses_guarded_requests_and_real_ordinary_runtime(entrypoint
 
     selected = select_execution(entrypoint_fixture, "run")
     assert isinstance(selected, SelectedExecutionV3)
-    run = V3MainRun.open(selected, entrypoint_fixture.repository_root / "fake-run", create=True)
+    run = V3MainRun.open(selected, entrypoint_fixture.repository_root / "fake-run", create=True, seed=0)
     try:
         report = run.execute(entrypoint_fixture.repository_root / "cache", max_units=1, tranche_ceiling_krw=450000,
                              provider_factory=lambda _: FakeProvider())

@@ -35,6 +35,12 @@ from .phase13_v3_entrypoint_paths import (
 )
 from .phase13_v3_resource_files import ValidatedResource, read_files
 from .phase13_v3_runtime_identity import validate_runtime_identity
+from .phase13_v3_source_closure import (
+    GovernedInventory,
+    ResourceClosure,
+    validate_governed,
+    validate_resources,
+)
 
 
 class EntrypointError(ValueError):
@@ -150,6 +156,23 @@ def _select_v3(request: SelectionRequest, package_resource: ValidatedResource, l
         or package.identity != authorization.identity
         or package.authority != load_authority_v3(request.authority_root)):
         raise EntrypointError("MAIN_AUTHORIZATION_BINDING_MISMATCH")
+    if package.governed_source is None or package.mr_p4_closure is None or package.generated_closure is None:
+        raise EntrypointError("MAIN_GOVERNED_SOURCE_DRIFT")
+    from .phase13_v3_builder_inputs import PREFIX, STATIC_PATHS
+    from .phase13_v3_publication import P4_PATHS, P5_PATHS
+    from .phase13_v3_resource_files import ClosureError
+    expected_closure = (*STATIC_PATHS, *(PREFIX + path for path in P4_PATHS),
+                        *(PREFIX + path for path in P5_PATHS[:-1]))
+    try:
+        governed_inventory = GovernedInventory.model_validate(package.governed_source.model_dump())
+        generated_closure = ResourceClosure.model_validate(package.generated_closure.model_dump())
+        validate_governed(request.repository_root, governed_inventory)
+        governed = read_files(request.repository_root,
+            tuple(row.path for row in governed_inventory.rows), lease=lease)
+    except ClosureError as error:
+        raise EntrypointError(error.code) from error
+    if tuple(row.binding for row in governed) != package.governed_source.rows:
+        raise EntrypointError("MAIN_GOVERNED_SOURCE_DRIFT")
     validate_runtime_identity(package.runtime_identity)
     if package.final_order.runtime_hash != digest(package.runtime_identity):
         raise EntrypointError("MAIN_RUNTIME_IDENTITY_DRIFT")
@@ -178,15 +201,26 @@ def _select_v3(request: SelectionRequest, package_resource: ValidatedResource, l
             complete=CompleteCostInputsV3.model_validate_json(by_path[additional[0]].raw),
             proof=CostProofV3.model_validate_json(by_path[additional[1]].raw),
         ))
-        contract = MainLiveContractV3.model_validate_json(by_path[additional[2]].raw)
     except (KeyError, ValidationError) as error:
         raise EntrypointError("MAIN_COST_PROOF_MISMATCH") from error
     if (any(by_path[path].raw != canonical_bytes(model) for path, model in (
-            (additional[0], costs.resources.complete), (additional[1], costs.resources.proof),
-            (additional[2], contract)))
+            (additional[0], costs.resources.complete), (additional[1], costs.resources.proof)))
         or any(by_role[role] != canonical_bytes(model) for role, model in (
             ("activated_policy", phase4.policy), ("base_inputs", phase4.base), ("cost_witness", phase4.witness)))
-        or phase4.policy.authority != package.authority
+        or phase4.policy.authority != package.authority):
+        raise EntrypointError("MAIN_COST_PROOF_MISMATCH")
+    try:
+        closure = validate_resources(request.repository_root, generated_closure,
+                                     expected_closure, lease=lease)
+    except ClosureError as error:
+        raise EntrypointError(error.code) from error
+    if next((row.binding for row in closure if row.binding.path == package.mr_p4_closure.path), None) != package.mr_p4_closure:
+        raise EntrypointError("MAIN_GOVERNED_SOURCE_DRIFT")
+    try:
+        contract = MainLiveContractV3.model_validate_json(by_path[additional[2]].raw)
+    except ValidationError as error:
+        raise EntrypointError("MAIN_COST_PROOF_MISMATCH") from error
+    if (by_path[additional[2]].raw != canonical_bytes(contract)
         or contract.contract_hash != digest(contract, "contract_hash")
         or package.live_contract_hash != contract.contract_hash
         or contract.package_core_hash != package.package_core_hash
@@ -195,7 +229,8 @@ def _select_v3(request: SelectionRequest, package_resource: ValidatedResource, l
         or tuple(row.unit_id for row in package.production) != package.final_order.unit_ids):
         raise EntrypointError("MAIN_COST_PROOF_MISMATCH")
     selected = SelectedExecutionV3(package, authorization, package_resource.binding.sha256,
-        authorization_resource.binding.sha256, (package_resource, sidecar, authorization_resource, *resources), costs,
+        authorization_resource.binding.sha256,
+        (package_resource, sidecar, authorization_resource, *resources, *governed, *closure), costs,
         ExitStack(), request.repository_root)
     from .phase13_main_resource_contract import validate_resource_contract
     try:

@@ -26,6 +26,7 @@ def build_parser(prog: str, *, live: bool) -> argparse.ArgumentParser:
         if name != "validate":
             command.add_argument("--run-root", type=Path, required=True)
             command.add_argument("--run-id", required=True)
+            command.add_argument("--seed", type=int, choices=range(10), required=True)
             command.add_argument("--max-units", type=int)
             command.add_argument("--tranche-ceiling-krw", type=int, default=450000,
                                  required=live and name in {"run", "resume"})
@@ -61,7 +62,7 @@ def execute_command(args: argparse.Namespace, *, live: bool) -> None:
                         "unit_count": len(selected.package.production),
                         "prefix_count": sum(unit.kind == "CLEAN_PREFIX" for unit in selected.package.production)}))
                     return
-                run = V3MainRun.open(selected, args.run_root / args.run_id, create=args.command == "run")
+                run = V3MainRun.open(selected, args.run_root / args.run_id, create=args.command == "run", seed=args.seed)
                 try:
                     if args.command == "resume":
                         run.dispatcher().recover()

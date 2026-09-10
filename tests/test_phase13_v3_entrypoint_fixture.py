@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import subprocess
 from dataclasses import replace
 from pathlib import Path
 
@@ -29,8 +31,16 @@ from memcontam.readiness.phase13_v3_entrypoint_models import (
     MainExecutionPackageV3,
     MainLiveContractV3,
 )
-from memcontam.readiness.phase13_v3_resource_files import read_files
+from memcontam.readiness.phase13_v3_builder_inputs import PREFIX, STATIC_PATHS
+from memcontam.readiness.phase13_v3_publication import P4_PATHS, P5_PATHS
+from memcontam.readiness.phase13_v3_resource_files import FileBinding, read_files
 from memcontam.readiness.phase13_v3_runtime_identity import ROOT, freeze_runtime_identity
+from memcontam.readiness.phase13_v3_source_closure import (
+    GovernedInventory,
+    ResourceClosure,
+    freeze_governed,
+    freeze_resources,
+)
 
 AUTHORITY = Path("/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts")
 
@@ -40,7 +50,10 @@ def entrypoint_bytes():
     return build_entrypoint_bytes((0,))
 
 
-def build_entrypoint_bytes(seeds: tuple[int, ...]) -> dict[str, bytes]:
+def build_entrypoint_bytes(
+    seeds: tuple[int, ...], governed_source: GovernedInventory | None = None,
+    mr_p4_closure: FileBinding | None = None, generated_closure: ResourceClosure | None = None,
+) -> dict[str, bytes]:
     authority = load_authority_v3(AUTHORITY)
     identity = freeze_runtime_identity()
     resources = {row.binding.path: row.raw for row in read_files(ROOT, tuple(
@@ -60,8 +73,21 @@ def build_entrypoint_bytes(seeds: tuple[int, ...]) -> dict[str, bytes]:
         "NOT_APPLICABLE", None, 0, "game24|nomem", checkpoint.tasks["game24"].seeds[seed].suffix_sample_ids_sha256,
         hashlib.sha256(resources[RESOURCE_PATHS["observability_packet"]]).hexdigest(), hashlib.sha256(checkpoint_raw).hexdigest())
         for sequence, (unit_id, seed) in enumerate(zip(unit_ids, seeds, strict=True)))
+    manifest_path = "data/phase13/main/mr_p4/corrected_v3/manifest_v3.json"
+    manifest = FileBinding(path=manifest_path, size=0, sha256=hashlib.sha256(b"").hexdigest())
+    closure_raw = json.dumps([manifest.model_dump()], sort_keys=True, separators=(",", ":")).encode() + b"\n"
+    if mr_p4_closure is None:
+        resources[manifest_path] = b""
+    governed_source = governed_source or GovernedInventory(governed_source_commit="a" * 40, rows=(),
+        governed_tree_sha256=hashlib.sha256(b"[]\n").hexdigest())
+    mr_p4_closure = mr_p4_closure or manifest
+    generated_closure = generated_closure or ResourceClosure(rows=(manifest,),
+        resource_closure_sha256=hashlib.sha256(closure_raw).hexdigest())
     package = MainExecutionPackageV3(schema_version="phase13_main_execution_freeze_v3", identity=V3Identity(),
-        status="FROZEN", authority=authority, runtime_identity=identity, measured_main_a_trajectory_count=0,
+        status="FROZEN", authority=authority, runtime_identity=identity, tranche_unit_count=120,
+        measured_main_a_trajectory_count=0,
+        governed_source=governed_source, mr_p4_closure=mr_p4_closure,
+        generated_closure=generated_closure,
         resources=tuple(ExecutionResourceV3(role=role, path=path, size=len(resources[path]),
             sha256=hashlib.sha256(resources[path]).hexdigest()) for role, path in RESOURCE_PATHS.items()),
         production=units, final_order=FinalOrder(unit_ids=unit_ids, runtime_hash=digest(identity),
@@ -96,5 +122,52 @@ def entrypoint_fixture(tmp_path, entrypoint_bytes):
         target = tmp_path / path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(raw)
+
+    seal_fixture_closure(tmp_path)
     return SelectionRequest(tmp_path, tmp_path / "package.json", tmp_path / "authorization.json",
         AUTHORITY, tmp_path / "authorization.sha256", V3Identity().run_id)
+
+
+def seal_fixture_closure(root: Path) -> None:
+    governed = (
+        "pyproject.toml",
+        "scripts/build_phase13_corrected_main_closure.py",
+        "scripts/diagnose_phase13_mr_p5_closure.py",
+        "scripts/build_phase13_main_registries.py",
+        "src/memcontam/__init__.py",
+    )
+    for path in governed:
+        target = root / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((ROOT / path).read_bytes() if (ROOT / path).is_file() else b"")
+    environment = {**os.environ, "GIT_MASTER": "1", "GIT_CONFIG_NOSYSTEM": "1"}
+    subprocess.run(("git", "-C", str(root), "init", "-q"), check=True, env=environment)
+    subprocess.run(("git", "-C", str(root), "add", "."), check=True, env=environment)
+    subprocess.run(("git", "-C", str(root), "-c", "user.name=Fixture", "-c",
+        "user.email=fixture@invalid", "-c", "core.hooksPath=/dev/null", "commit", "-qm", "fixture"),
+        check=True, env=environment)
+    commit = subprocess.run(("git", "-C", str(root), "rev-parse", "HEAD"), check=True,
+                            capture_output=True, text=True, env=environment).stdout.strip()
+    expected = (*STATIC_PATHS, *(PREFIX + path for path in P4_PATHS),
+                *(PREFIX + path for path in P5_PATHS[:-1]))
+    for path in expected:
+        target = root / path
+        if target.exists():
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        source = ROOT / path
+        target.write_bytes(source.read_bytes() if source.is_file() else b"fixture\n")
+    inventory = freeze_governed(root, commit)
+    manifest_path = PREFIX + P4_PATHS[-1]
+    manifest, = tuple(row for row in freeze_resources(root, expected).rows if row.path == manifest_path)
+    package = MainExecutionPackageV3.model_validate_json((root / "package.json").read_bytes())
+    seeds = tuple(unit.seed for unit in package.production)
+    for path, raw in build_entrypoint_bytes(seeds, inventory, manifest).items():
+        target = root / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(raw)
+    closure = freeze_resources(root, expected)
+    for path, raw in build_entrypoint_bytes(seeds, inventory, manifest, closure).items():
+        target = root / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(raw)

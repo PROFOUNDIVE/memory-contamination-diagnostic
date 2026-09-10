@@ -7,7 +7,6 @@ from contextlib import ExitStack, contextmanager
 from typing import assert_never
 
 from .phase13_v3_authority_models import FrozenModel
-from .phase13_v3_cost_actual import reconcile_actual
 from .phase13_v3_request import STAGES, PackageBindingV3, ParentTrajectoryV3, RequestKeyV3
 from .phase13_v3_terminal_ledger import TerminalLedgerV3
 from .phase13_v3_terminal_models import TerminalEvidenceError
@@ -62,8 +61,9 @@ def recover_requests(ledger: TerminalLedgerV3) -> None:
     reopened = (TerminalLedgerV3.open(ledger.path, ledger.binding) if ledger.guard is None
                 else TerminalLedgerV3.open_guarded(ledger.guard, ledger.binding))
     proof = hashlib.sha256(b"phase13-restart-v3\n" + b"\n".join(reopened.rows())).hexdigest()
+    states = reopened.states()
     for unit_id in ledger.binding.unit_ids:
-        state = reopened.state(unit_id)
+        state = states[unit_id]
         if state.kind == "REQUEST_COMPILED" and state.compiled is not None:
             receipt = RequestIdentityReceiptV3.model_validate_json(ledger.read_record(f"{unit_id}.identity.json"))
             if state.compiled.token_count > STAGES[receipt.key.stage][0]:
@@ -74,7 +74,8 @@ def recover_requests(ledger: TerminalLedgerV3) -> None:
                     "failure_code": "MAIN_INPUT_ENVELOPE_EXCEEDED", "transport_attempts": 0,
                     "realized_cost_krw": 0,
                 })
-        match reopened.state(unit_id).kind:
+                state = reopened.state(unit_id)
+        match state.kind:
             case "DISPATCH_INTENT_PERSISTED" | "REQUEST_COMPILED" | "ATTEMPT_STARTED" | "INPUT_ENVELOPE_OVERFLOW":
                 reopened.recover(unit_id, proof)
             case "PENDING" | "COMPLETED" | "TERMINAL_TECHNICAL_MISSING" | "ATTEMPTED_PROVIDER_FAILURE" | "AMBIGUOUS_ATTEMPT":
@@ -84,7 +85,4 @@ def recover_requests(ledger: TerminalLedgerV3) -> None:
 
 
 def require_known_costs(ledger: TerminalLedgerV3) -> None:
-    for state in ledger.states().values():
-        cost = state.attempted_cost
-        if cost is not None:
-            reconcile_actual(cost)
+    ledger.require_known_costs()

@@ -69,7 +69,7 @@ def _phase5_artifacts(manifest: MRP4Manifest, output: Path) -> tuple[tuple[str, 
         status="FROZEN", authority=manifest.authority, runtime_identity=manifest.runtime_identity,
         governed_source=manifest.governed_source, mr_p4_closure=binding(PREFIX + P4_PATHS[-1], canonical_bytes(manifest)),
         resources=tuple(ExecutionResourceV3(role=role, **rows[path].model_dump()) for role, path in RESOURCE_PATHS.items()),
-        production=units, measured_main_a_trajectory_count=0,
+        production=units, tranche_unit_count=120, measured_main_a_trajectory_count=0,
         final_order=FinalOrder(unit_ids=tuple(unit.unit_id for unit in units), runtime_hash=digest(manifest.runtime_identity),
                               request_hash=costs.base.bindings.request_compiler_hash, tokenizer_hash=costs.base.bindings.tokenizer_hash))
     provisional = bind_package_costs(package, costs)
