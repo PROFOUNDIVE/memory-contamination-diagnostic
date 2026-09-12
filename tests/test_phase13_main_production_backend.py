@@ -71,7 +71,7 @@ def _checkpoint():
     entry = PHASE13_CORE_BASELINE_REGISTRY["fh_bounded"]
     snapshot = entry.serialize_state(FullHistoryStateV3(records=[]))
     assert isinstance(snapshot, NativeState)
-    return serialize_checkpoint(snapshot)
+    return serialize_checkpoint(snapshot, checkpoint_index=1)
 
 
 def _completed_call(call_id: str, stage: str) -> MethodCall:

@@ -101,6 +101,7 @@ class MainProductionBackend:
                     "checkpoint_identity_sha256": output.checkpoint.identity.sha256,
                     "canonical_sha256": output.checkpoint.canonical_sha256,
                     "canonical_state_utf8": output.checkpoint.canonical_bytes.decode("utf-8"),
+                    "checkpoint_index": output.checkpoint.checkpoint_index,
                 },
                 "runtime_evidence": output.dispatch.evidence,
             },
@@ -178,7 +179,10 @@ class MainProductionBackend:
             state_payload = json.loads(record.canonical_state_utf8)
             if not isinstance(state_payload, dict):
                 raise TypeError
-            checkpoint = serialize_checkpoint(NativeState.from_mapping(state_payload))
+            checkpoint = serialize_checkpoint(
+                NativeState.from_mapping(state_payload),
+                checkpoint_index=record.checkpoint_index,
+            )
         except (OSError, ValidationError, json.JSONDecodeError, KeyError, TypeError, CheckpointError) as error:
             raise MainProductionBackendError("MAIN_PREFIX_CHECKPOINT_INVALID") from error
         if (
