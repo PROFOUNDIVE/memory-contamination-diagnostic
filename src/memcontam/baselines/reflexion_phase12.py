@@ -167,6 +167,7 @@ class ReflexionPhase12Adapter:
             config={
                 **dict(trial.config),
                 "run_id": trial.run_id,
+                "trial_id": trial.trial_id,
                 "baseline": "reflexion_style",
                 "arm": trial.branch,
                 "model": trial.model,

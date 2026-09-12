@@ -680,6 +680,9 @@ def _contaminated_source_entry_ids(entries: list[MemoryEntry]) -> list[str]:
 
 
 def _trial_id(task: TaskInstance, config: dict[str, Any], model: str) -> str:
+    explicit = config.get("trial_id")
+    if isinstance(explicit, str) and explicit:
+        return explicit
     return ":".join(
         [
             str(config.get("run_id", "unknown")),

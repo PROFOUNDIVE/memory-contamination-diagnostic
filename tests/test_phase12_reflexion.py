@@ -132,6 +132,9 @@ def test_injected_reflection_conditions_actor_and_records_failed_actor_parent() 
         "reflexion_reflect",
         "reflexion_generate",
     ]
+    assert [call.call_id for call in result.outcome.method_calls] == [
+        f"{trial.trial_id}:call:{index}" for index in range(1, 4)
+    ]
     assert injected.entry_id in actor_call.messages[1]["content"]
     assert "Failed actor response" not in retry_call.messages[1]["content"]
     assert result.outcome.verifier_result is True
