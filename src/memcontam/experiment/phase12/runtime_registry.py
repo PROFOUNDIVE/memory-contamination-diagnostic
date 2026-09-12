@@ -54,6 +54,10 @@ class RuntimeTrialResult:
     context_event: object | None = None
     native_entries: tuple[NativeEntry, ...] = ()
     write_envelopes: tuple[MemoryCardEnvelopeV3, ...] = ()
+    state_before: NativeState | None = None
+    state_after: NativeState | None = None
+    provenance_entries: tuple[NativeEntry, ...] = ()
+    provenance_envelopes: tuple[MemoryCardEnvelopeV3, ...] = ()
 
 
 @dataclass(frozen=True)
