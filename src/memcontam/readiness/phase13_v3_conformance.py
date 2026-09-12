@@ -41,7 +41,7 @@ class Predicate(FrozenModel):
 
 class ConformanceV3(FrozenModel):
     schema_version: str = "phase13_main_provider_free_conformance_v3"
-    identity: V3Identity = V3Identity()
+    identity: V3Identity
     predicates: tuple[Predicate, ...]
     test_bindings: tuple[FileBinding, ...]
     scientific_result: bool = False
@@ -95,7 +95,7 @@ def task_receiving_messages(task: TaskInstance) -> tuple[tuple[str, str], ...]:
     return tuple((stage, "\n".join(message["content"] for message in rows)) for stage, rows in messages)
 
 
-def evaluate_conformance(repository: Path, authority_root: Path) -> ConformanceV3:
+def evaluate_conformance(repository: Path, authority_root: Path, identity: V3Identity) -> ConformanceV3:
     authority = read_regular_nofollow(authority_root / ROUTED_DOCUMENTS[5][1]).decode("utf-8")
     templates = tuple(block for block in re.findall(r"```text\n(.*?)\n```", authority, re.DOTALL) if block.startswith("Task family:"))
     if len(templates) != 4:
@@ -130,5 +130,5 @@ def evaluate_conformance(repository: Path, authority_root: Path) -> ConformanceV
                                           observation_sha256=hashlib.sha256(observed.encode()).hexdigest()))
     if not all(row.passed for row in observations):
         raise ArtifactError("MAIN_PROVIDER_FREE_CONFORMANCE_FAILED")
-    result = ConformanceV3(predicates=tuple(observations), test_bindings=tuple(row.binding for row in read_files(repository, TEST_PATHS)))
+    result = ConformanceV3(identity=identity, predicates=tuple(observations), test_bindings=tuple(row.binding for row in read_files(repository, TEST_PATHS)))
     return result.model_copy(update={"conformance_hash": digest(result, "conformance_hash")})
