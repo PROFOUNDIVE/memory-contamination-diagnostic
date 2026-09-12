@@ -3,12 +3,12 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Final, Generic, Literal, Self, TypeVar
+from typing import TYPE_CHECKING, Final, Generic, Self, TypeVar
 
 from pydantic import Field, model_validator
 
 from .phase13_cost_policy_models import Sha256
-from .phase13_v3_authority_models import FrozenModel
+from .phase13_v3_authority_models import FrozenModel, IdentityComponent
 from .phase13_v3_cost import (
     build_proof, freeze_complete, validate_base, validate_complete,
     validate_policy, validate_proof, validate_witness,
@@ -46,7 +46,7 @@ class CostBoundPackageV3(FrozenModel):
     participates in the core projection without maintaining a field allowlist.
     """
 
-    package_id: Literal["phase13-main-a-corrected-execution-freeze-v3"] = "phase13-main-a-corrected-execution-freeze-v3"
+    package_id: IdentityComponent
     final_order: FinalOrder
     base_inputs_hash: Sha256 = "0" * 64
     witness_hash: Sha256 = "0" * 64
@@ -90,6 +90,8 @@ def validate_phase4_costs(phase4: MRP4Costs) -> None:
 
 def bind_package_costs(package: PackageT, phase4: MRP4Costs) -> BoundPackageCosts[PackageT]:
     validate_phase4_costs(phase4)
+    if package.package_id != phase4.policy.authority.identity.package_id:
+        raise CostError("MAIN_COST_PROOF_MISMATCH")
     complete = freeze_complete(phase4.base, package.final_order)
     core = package.model_copy(update={
         "base_inputs_hash": phase4.base.base_inputs_hash,
