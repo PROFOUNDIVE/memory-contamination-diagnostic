@@ -110,7 +110,7 @@ def validate_evidence_joins(evidence: Phase13TrialEvidence) -> None:
         recorded = parents.get(entry_id, ())
         asserted = (*node.direct_parent_ids, node.version_predecessor_id)
         asserted_ids = tuple(parent for parent in asserted if parent is not None)
-        if not recorded or set(recorded) != set(asserted_ids):
+        if set(recorded) != set(asserted_ids):
             raise Phase13ObservabilityError("EXACT_LINEAGE_REQUIRED")
 
 
