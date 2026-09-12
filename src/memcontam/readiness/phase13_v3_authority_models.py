@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Final, Literal
+from typing import Annotated, Final, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from memcontam.readiness.phase13_cost_policy_models import Capacity, Sha256
 
@@ -11,13 +11,34 @@ class FrozenModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
 
+IdentityComponent = Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9_-]*-v3$", max_length=200)]
+RETIRED_IDENTITIES: Final = frozenset({
+    "phase13-main-a-corrected-20260905-v3",
+    "phase13-main-a-corrected-execution-freeze-v3",
+    "phase13-main-a-corrected-authorized-execution-v3",
+    "phase13-main-a-corrected-cost-proof-v3",
+})
+
+
+class IdentityError(ValueError):
+    def __init__(self) -> None:
+        super().__init__("MAIN_CORRECTED_RUN_ID_MISMATCH")
+
+
 class V3Identity(FrozenModel):
-    run_id: Literal["phase13-main-a-corrected-20260905-v3"] = "phase13-main-a-corrected-20260905-v3"
-    package_id: Literal["phase13-main-a-corrected-execution-freeze-v3"] = "phase13-main-a-corrected-execution-freeze-v3"
-    authorization_id: Literal["phase13-main-a-corrected-authorized-execution-v3"] = "phase13-main-a-corrected-authorized-execution-v3"
-    cost_proof_id: Literal["phase13-main-a-corrected-cost-proof-v3"] = "phase13-main-a-corrected-cost-proof-v3"
+    run_id: IdentityComponent
+    package_id: IdentityComponent
+    authorization_id: IdentityComponent
+    cost_proof_id: IdentityComponent
     ledger_filename: Literal["main_run_ledger_v3.sqlite3"] = "main_run_ledger_v3.sqlite3"
     conformance_contract_id: Literal["phase13-main-provider-free-conformance-v3"] = "phase13-main-provider-free-conformance-v3"
+
+    @field_validator("run_id", "package_id", "authorization_id", "cost_proof_id")
+    @classmethod
+    def reject_retired(cls, value: str) -> str:
+        if value in RETIRED_IDENTITIES:
+            raise IdentityError()
+        return value
 
 
 V3Schema = Literal[
@@ -78,7 +99,7 @@ class TerminalContract(FrozenModel):
 
 class AuthoritySnapshotV3(FrozenModel):
     schema_version: Literal["phase13_main_authority_snapshot_v3"] = "phase13_main_authority_snapshot_v3"
-    identity: V3Identity = V3Identity()
+    identity: V3Identity
     documents: tuple[DocumentBinding, ...]
     provenance: DocumentBinding
     registry: V3Registry

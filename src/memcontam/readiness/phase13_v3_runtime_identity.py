@@ -14,7 +14,7 @@ import memcontam
 from .phase13_v3_authority_models import FrozenModel
 from .phase13_v3_resource_files import read_files
 
-ROOT: Final = Path("/home/hyunwoo/git/memory-contamination-diagnostic-phase13-main-execution-entrypoint-closure")
+ROOT: Final = Path(__file__).resolve().parents[3]
 PREFIX: Final = "/home/hyunwoo/miniconda3/envs/memcontam"
 EXECUTABLE: Final = PREFIX + "/bin/python"
 LOCK_HASHES: Final = (
