@@ -1,4 +1,5 @@
 from __future__ import annotations
+from .phase13_corrective_identity import corrective_identity
 
 import hashlib
 import json
@@ -41,13 +42,13 @@ class FakeClient:
 @pytest.fixture(scope="session")
 def costs():
     authority = load_authority_v3(Path(
-        "/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts"))
+        "/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts"), identity=corrective_identity())
     base = freeze_base(activate_policy(authority), PrefreezeBindings(**{
         name: "a" * 64 for name in PrefreezeBindings.model_fields
     }), (CostUnit(unit_id="a" * 64, stages=(StageOccurrences(
         stage_id="NoMem_generation", calls=50,
     ),)),))
-    bound = bind_package_costs(CostBoundPackageV3(final_order=FinalOrder(
+    bound = bind_package_costs(CostBoundPackageV3(package_id=authority.identity.package_id, final_order=FinalOrder(
         unit_ids=("a" * 64,), runtime_hash="b" * 64, request_hash="c" * 64, tokenizer_hash="d" * 64,
     )), MRP4Costs(policy=base.policy, base=base, witness=build_witness(base)))
     return LiveCosts(bound.package, bound.resources)
