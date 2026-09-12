@@ -42,7 +42,10 @@ from memcontam.readiness.phase13_v3_source_closure import (
     freeze_resources,
 )
 
+from .phase13_corrective_identity import corrective_identity
+
 AUTHORITY = Path("/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts")
+RESOURCE_ROOT = Path("/home/hyunwoo/git/memory-contamination-diagnostic-phase13-main-execution-entrypoint-closure")
 
 
 @pytest.fixture(scope="session")
@@ -53,10 +56,12 @@ def entrypoint_bytes():
 def build_entrypoint_bytes(
     seeds: tuple[int, ...], governed_source: GovernedInventory | None = None,
     mr_p4_closure: FileBinding | None = None, generated_closure: ResourceClosure | None = None,
+    *, execution_identity: V3Identity | None = None,
 ) -> dict[str, bytes]:
-    authority = load_authority_v3(AUTHORITY)
+    execution_identity = execution_identity or corrective_identity()
+    authority = load_authority_v3(AUTHORITY, identity=execution_identity)
     identity = freeze_runtime_identity()
-    resources = {row.binding.path: row.raw for row in read_files(ROOT, tuple(
+    resources = {row.binding.path: row.raw for row in read_files(RESOURCE_ROOT, tuple(
         path for role, path in RESOURCE_PATHS.items() if role not in {"activated_policy", "base_inputs", "cost_witness"}))}
     unit_ids = tuple(hashlib.sha256(json.dumps(["phase13-main-a-disjoint-unit-id-v1", "NO_MEMORY_SINGLETON",
         seed, "game24", None, "NOT_APPLICABLE"], separators=(",", ":")).encode()).hexdigest() for seed in seeds)
@@ -83,7 +88,8 @@ def build_entrypoint_bytes(
     mr_p4_closure = mr_p4_closure or manifest
     generated_closure = generated_closure or ResourceClosure(rows=(manifest,),
         resource_closure_sha256=hashlib.sha256(closure_raw).hexdigest())
-    package = MainExecutionPackageV3(schema_version="phase13_main_execution_freeze_v3", identity=V3Identity(),
+    package = MainExecutionPackageV3(schema_version="phase13_main_execution_freeze_v3", identity=execution_identity,
+        package_id=execution_identity.package_id,
         status="FROZEN", authority=authority, runtime_identity=identity, tranche_unit_count=120,
         measured_main_a_trajectory_count=0,
         governed_source=governed_source, mr_p4_closure=mr_p4_closure,
@@ -96,7 +102,7 @@ def build_entrypoint_bytes(
     units = tuple(replace(unit, projected_cost_krw=row.projected_krw)
                   for unit, row in zip(units, first.resources.proof.projected_krw, strict=True))
     bound = bind_package_costs(package.model_copy(update={"production": units}), phase4)
-    contract = MainLiveContractV3(schema_version="phase13_main_live_contract_v3", identity=V3Identity(),
+    contract = MainLiveContractV3(schema_version="phase13_main_live_contract_v3", identity=execution_identity,
         package_core_hash=bound.package.package_core_hash, cost_proof_hash=bound.package.cost_proof_hash,
         projected_krw=tuple((unit.unit_id, unit.projected_cost_krw) for unit in units), contract_hash="0" * 64)
     contract = contract.model_copy(update={"contract_hash": digest(contract, "contract_hash")})
@@ -106,8 +112,8 @@ def build_entrypoint_bytes(
     resources["data/phase13/main/cost_envelope_v3/cost_proof_v3.json"] = canonical_bytes(bound.resources.proof)
     resources["data/phase13/main/main_live_contract_v3.json"] = canonical_bytes(contract)
     resources["package.json"] = canonical_bytes(package)
-    authorization = MainAuthorizationV3(schema_version="phase13_main_authorization_v3", identity=V3Identity(),
-        authorization_id=V3Identity().authorization_id, status="AUTHORIZED_EXECUTION", execution_package_id=V3Identity().package_id,
+    authorization = MainAuthorizationV3(schema_version="phase13_main_authorization_v3", identity=execution_identity,
+        authorization_id=execution_identity.authorization_id, status="AUTHORIZED_EXECUTION", execution_package_id=execution_identity.package_id,
         execution_package_path="package.json", execution_package_sha256=digest(package), execution_package_hash=package.package_hash,
         authorization_hash="0" * 64, main_a_status="NOT_STARTED", measured_main_a_trajectory_count=0)
     authorization = authorization.model_copy(update={"authorization_hash": digest(authorization, "authorization_hash")})
@@ -125,7 +131,7 @@ def entrypoint_fixture(tmp_path, entrypoint_bytes):
 
     seal_fixture_closure(tmp_path)
     return SelectionRequest(tmp_path, tmp_path / "package.json", tmp_path / "authorization.json",
-        AUTHORITY, tmp_path / "authorization.sha256", V3Identity().run_id)
+        AUTHORITY, tmp_path / "authorization.sha256", corrective_identity().run_id)
 
 
 def seal_fixture_closure(root: Path) -> None:
@@ -155,19 +161,19 @@ def seal_fixture_closure(root: Path) -> None:
         if target.exists():
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
-        source = ROOT / path
+        source = RESOURCE_ROOT / path
         target.write_bytes(source.read_bytes() if source.is_file() else b"fixture\n")
     inventory = freeze_governed(root, commit)
     manifest_path = PREFIX + P4_PATHS[-1]
     manifest, = tuple(row for row in freeze_resources(root, expected).rows if row.path == manifest_path)
     package = MainExecutionPackageV3.model_validate_json((root / "package.json").read_bytes())
     seeds = tuple(unit.seed for unit in package.production)
-    for path, raw in build_entrypoint_bytes(seeds, inventory, manifest).items():
+    for path, raw in build_entrypoint_bytes(seeds, inventory, manifest, execution_identity=package.identity).items():
         target = root / path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(raw)
     closure = freeze_resources(root, expected)
-    for path, raw in build_entrypoint_bytes(seeds, inventory, manifest, closure).items():
+    for path, raw in build_entrypoint_bytes(seeds, inventory, manifest, closure, execution_identity=package.identity).items():
         target = root / path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(raw)
