@@ -31,11 +31,11 @@ def test_historical_packages_validate_without_production_preflight(module, versi
 @pytest.mark.parametrize("command", ["run", "resume"])
 @pytest.mark.parametrize("version", [1, 2])
 def test_historical_packages_never_select_for_active_execution(command, version, deny_external):
-    from memcontam.readiness.phase13_v3_authority_models import V3Identity
+    from .phase13_corrective_identity import corrective_identity
     from memcontam.readiness.phase13_v3_entrypoint import SelectionRequest, select_execution
 
     request = SelectionRequest(ROOT, ROOT / f"data/phase13/main/mr_p5/execution_package_v{version}.json",
-        ROOT / "absent-authorization", None, None, V3Identity().run_id)
+        ROOT / "absent-authorization", None, None, corrective_identity().run_id)
     with pytest.raises(ValueError, match="MAIN_PACKAGE_VERSION_UNSUPPORTED"):
         select_execution(request, command)
 

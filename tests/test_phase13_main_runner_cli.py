@@ -16,7 +16,7 @@ from memcontam.readiness.phase13_main_runner import (
     resume_main,
     run_main,
 )
-from memcontam.readiness.phase13_v3_authority_models import V3Identity
+from .phase13_corrective_identity import corrective_identity
 from memcontam.readiness.phase13_v3_entrypoint import EntrypointError, SelectionRequest
 from memcontam.readiness.phase13_v3_entrypoint_paths import EntrypointPathError
 
@@ -41,7 +41,7 @@ def _request(selection: SelectionRequest) -> MainRunRequest:
         authorization_path=selection.authorization_path,
         expected_authorization_sha256="",
         run_root=selection.repository_root,
-        run_id=V3Identity().run_id,
+        run_id=corrective_identity().run_id,
         seed=0,
         authority_root=selection.authority_root,
         expected_authorization_sha256_file=selection.expected_authorization_sha256_file,
@@ -96,7 +96,7 @@ def test_authorized_run_and_resume_enforce_distinct_seed_boundaries(tmp_path, mo
     seal_fixture_closure(tmp_path)
 
     selection = SelectionRequest(tmp_path, tmp_path / "package.json", tmp_path / "authorization.json",
-                                 AUTHORITY, tmp_path / "authorization.sha256", V3Identity().run_id)
+                                 AUTHORITY, tmp_path / "authorization.sha256", corrective_identity().run_id)
     request = _request(selection)
     calls: list[tuple[str, str]] = []
     monkeypatch.setattr(dispatch, "count_prompt_tokens", lambda *_: 1)
@@ -137,7 +137,7 @@ def test_run_and_resume_reject_seed_one_while_seed_zero_is_pending(
 
     seal_fixture_closure(tmp_path)
     selection = SelectionRequest(tmp_path, tmp_path / "package.json", tmp_path / "authorization.json",
-                                 AUTHORITY, tmp_path / "authorization.sha256", V3Identity().run_id)
+                                 AUTHORITY, tmp_path / "authorization.sha256", corrective_identity().run_id)
     request = replace(_request(selection), seed=1)
     for invoke in (run_main, resume_main):
         with pytest.raises(ValueError, match="MAIN_TRANCHE_ORDER_MISMATCH"):

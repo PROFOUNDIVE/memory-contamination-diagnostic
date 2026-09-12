@@ -1,4 +1,5 @@
 from __future__ import annotations
+from .phase13_corrective_identity import corrective_identity
 
 import contextlib
 import hashlib
@@ -26,6 +27,7 @@ from .test_phase13_v3_entrypoint_integration import deny_external as deny_extern
 def _binding(unit_count: int) -> dict[str, JsonValue]:
     return {
         "schema_version": "phase13_main_run_ledger_v3",
+        "identity": corrective_identity().model_dump(mode="json"),
         "unit_ids": [hashlib.sha256(str(index).encode()).hexdigest() for index in range(unit_count)],
         "package_sha256": "b" * 64,
         "authorization_sha256": "c" * 64,
@@ -343,6 +345,10 @@ def test_t06_package_rejects_seed_outside_exact_seed_zero_partition(
 
     path = Path("data/phase13/main/mr_p5/execution_package_v3.json")
     payload = json.loads(path.read_bytes())
+    identity = corrective_identity()
+    payload["identity"] = identity.model_dump(mode="json")
+    payload["authority"]["identity"] = identity.model_dump(mode="json")
+    payload["package_id"] = identity.package_id
     payload["tranche_unit_count"] = 120
     payload["production"][sequence]["seed"] = seed
 
