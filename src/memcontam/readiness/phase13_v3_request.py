@@ -25,7 +25,7 @@ STAGES: Final[dict[Stage, tuple[int, int]]] = {
 
 
 class PackageBindingV3(FrozenModel):
-    identity: V3Identity = V3Identity()
+    identity: V3Identity
     package_sha256: Sha256
     authorization_sha256: Sha256
 
