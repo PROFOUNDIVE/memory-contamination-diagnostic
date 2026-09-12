@@ -6,12 +6,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 from .phase13_authority_files import load_authority_v3
 from .phase13_main_execution import validate_main_authorization
 from .phase13_main_execution_models import MainAuthorizationReport
-from .phase13_v3_authority_models import V3Identity
+from .phase13_v3_authority_models import IdentityComponent, IdentityError, V3Identity
 from .phase13_v3_cost_binding import CostResourcesV3, LiveCosts, MRP4Costs
 from .phase13_v3_cost_models import (
     ActivatedPolicyV3,
@@ -92,8 +92,13 @@ class SelectedExecutionV3:
 def select_execution(
     request: SelectionRequest, command: Literal["validate", "run", "resume", "status"],
 ) -> SelectedExecutionV3 | MainAuthorizationReport:
-    if command in {"run", "resume", "status"} and request.run_id != V3Identity().run_id:
+    if command in {"run", "resume", "status"} and request.run_id is None:
         raise EntrypointError("MAIN_CORRECTED_RUN_ID_MISMATCH")
+    if request.run_id is not None:
+        try:
+            V3Identity.reject_retired(TypeAdapter(IdentityComponent).validate_python(request.run_id, strict=True))
+        except (ValidationError, IdentityError) as error:
+            raise EntrypointError("MAIN_CORRECTED_RUN_ID_MISMATCH") from error
     with ExitStack() as lease:
         result = _select_with_lease(request, command, lease)
         if isinstance(result, SelectedExecutionV3):
@@ -120,10 +125,11 @@ def _select_with_lease(request: SelectionRequest, command: str, lease: ExitStack
             return validate_main_authorization(request.repository_root, request.package_path,
                                                request.authorization_path, expected)
         case "phase13_main_execution_freeze_v3":
-            if raw.get("package_id") != V3Identity().package_id:
-                raise EntrypointError("MAIN_PACKAGE_VERSION_UNSUPPORTED")
-            supplied_identity = raw.get("identity")
-            if not isinstance(supplied_identity, dict) or supplied_identity.get("run_id") != V3Identity().run_id:
+            try:
+                supplied_identity = V3Identity.model_validate(raw.get("identity"))
+            except ValidationError as error:
+                raise EntrypointError("MAIN_CORRECTED_RUN_ID_MISMATCH") from error
+            if request.run_id is not None and request.run_id != supplied_identity.run_id:
                 raise EntrypointError("MAIN_CORRECTED_RUN_ID_MISMATCH")
             return _select_v3(request, package_resource, lease)
         case _:
@@ -154,7 +160,7 @@ def _select_v3(request: SelectionRequest, package_resource: ValidatedResource, l
         or authorization.execution_package_hash != package.package_hash
         or authorization.execution_package_path != package_resource.binding.path
         or package.identity != authorization.identity
-        or package.authority != load_authority_v3(request.authority_root)):
+        or package.authority != load_authority_v3(request.authority_root, identity=package.identity)):
         raise EntrypointError("MAIN_AUTHORIZATION_BINDING_MISMATCH")
     if package.governed_source is None or package.mr_p4_closure is None or package.generated_closure is None:
         raise EntrypointError("MAIN_GOVERNED_SOURCE_DRIFT")
@@ -221,6 +227,7 @@ def _select_v3(request: SelectionRequest, package_resource: ValidatedResource, l
     except ValidationError as error:
         raise EntrypointError("MAIN_COST_PROOF_MISMATCH") from error
     if (by_path[additional[2]].raw != canonical_bytes(contract)
+        or contract.identity != package.identity
         or contract.contract_hash != digest(contract, "contract_hash")
         or package.live_contract_hash != contract.contract_hash
         or contract.package_core_hash != package.package_core_hash

@@ -11,6 +11,7 @@ from dataclasses import replace
 import pytest
 
 from memcontam.readiness.phase13_v3_entrypoint import SelectedExecutionV3
+from .phase13_corrective_identity import corrective_identity
 
 from .test_phase13_v3_entrypoint_fixture import entrypoint_bytes as entrypoint_bytes
 from .test_phase13_v3_entrypoint_fixture import entrypoint_fixture as entrypoint_fixture
@@ -48,9 +49,8 @@ def deny_external(monkeypatch):
 def test_cli_validate_uses_selector_before_any_runtime(tmp_path, monkeypatch, module):
     cli = importlib.import_module("memcontam.readiness." + module)
     package = tmp_path / "package.json"
-    from memcontam.readiness.phase13_v3_authority_models import V3Identity
     package.write_text(json.dumps({"schema_version": "phase13_main_execution_freeze_v3",
-        "package_id": V3Identity().package_id, "identity": V3Identity().model_dump()}))
+        "package_id": corrective_identity().package_id, "identity": corrective_identity().model_dump()}))
     monkeypatch.setattr(sys, "argv", [module, "validate", "--repository-root", str(tmp_path),
         "--package", str(package), "--authorization", str(tmp_path / "auth.json"),
         "--expected-authorization-sha256-file", str(tmp_path / "auth.sha256"),
@@ -64,6 +64,7 @@ def test_guarded_terminal_store_reopens_and_preserves_events(tmp_path):
     from memcontam.readiness.phase13_v3_terminal_ledger import TerminalLedgerV3
 
     binding = {"schema_version": "phase13_main_run_ledger_v3", "unit_ids": ["a" * 64],
+               "identity": corrective_identity().model_dump(mode="json"),
                "package_sha256": "b" * 64, "authorization_sha256": "c" * 64}
     with private_ledger(tmp_path / "fixture", create=True) as private:
         ledger = TerminalLedgerV3.create_guarded(private, binding)
