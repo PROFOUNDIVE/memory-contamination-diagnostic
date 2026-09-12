@@ -19,7 +19,7 @@ class FirstFreeze(FrozenModel):
 
 class MRP4Manifest(FrozenModel):
     schema_version: Literal["phase13_mr_p4_local_closure_manifest_v3"] = "phase13_mr_p4_local_closure_manifest_v3"
-    identity: V3Identity = V3Identity()
+    identity: V3Identity
     status: Literal["CLOSED"] = "CLOSED"
     authority: AuthoritySnapshotV3
     governed_source: GovernedInventory

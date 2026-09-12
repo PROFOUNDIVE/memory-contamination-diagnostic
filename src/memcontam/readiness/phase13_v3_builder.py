@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Literal, assert_never
 
 from .phase13_authority_files import load_authority_v3
+from .phase13_v3_authority_models import V3Identity
 from .phase13_v3_builder_inputs import (
     PREFIX, STATIC_PATHS, artifact_raw, binding, first_freeze, parse_artifact,
     phase4_costs, production, resource_closure,
@@ -32,11 +33,11 @@ def _phase4_artifacts(manifest: MRP4Manifest, conformance: ConformanceV3) -> tup
     return (*predecessors, (P4_PATHS[-1], canonical_bytes(frozen)))
 
 
-def build_mr_p4(repository: Path, authority_root: Path, output: Path, *, governed_source_commit: str) -> MRP4Manifest:
-    manifest = MRP4Manifest(authority=load_authority_v3(authority_root),
+def build_mr_p4(repository: Path, authority_root: Path, output: Path, *, governed_source_commit: str, identity: V3Identity) -> MRP4Manifest:
+    manifest = MRP4Manifest(identity=identity, authority=load_authority_v3(authority_root, identity=identity),
         governed_source=freeze_governed(repository, governed_source_commit), runtime_identity=freeze_runtime_identity(),
         first_freeze=first_freeze(repository), resources=tuple(row.binding for row in read_files(repository, STATIC_PATHS)), artifacts=())
-    artifacts = _phase4_artifacts(manifest, evaluate_conformance(repository, authority_root))
+    artifacts = _phase4_artifacts(manifest, evaluate_conformance(repository, authority_root, identity))
     publish_artifacts(output, artifacts)
     return parse_artifact(artifacts[-1][1], MRP4Manifest)
 
@@ -51,7 +52,9 @@ def validate_mr_p4(repository: Path, authority_root: Path, output: Path) -> MRP4
         raise ArtifactError("MAIN_MR_P4_FIRST_FREEZE_MISMATCH")
     if manifest.resources != tuple(row.binding for row in read_files(repository, STATIC_PATHS)):
         raise ArtifactError("MAIN_ARTIFACT_BINDING_MISMATCH")
-    conformance = evaluate_conformance(repository, authority_root)
+    if manifest.identity != manifest.authority.identity:
+        raise ArtifactError("MAIN_ARTIFACT_BINDING_MISMATCH")
+    conformance = evaluate_conformance(repository, authority_root, manifest.identity)
     actual = parse_artifact(artifact_raw(output, P4_PATHS[-2]), ConformanceV3)
     if actual != conformance:
         raise ArtifactError("MAIN_PROVIDER_FREE_CONFORMANCE_FAILED")
@@ -66,6 +69,7 @@ def _phase5_artifacts(manifest: MRP4Manifest, output: Path) -> tuple[tuple[str, 
     units = production(manifest.first_freeze, manifest.resources)
     rows = {row.path: row for row in (*manifest.resources, *manifest.artifacts)}
     package = MainExecutionPackageV3(schema_version="phase13_main_execution_freeze_v3", identity=manifest.identity,
+        package_id=manifest.identity.package_id,
         status="FROZEN", authority=manifest.authority, runtime_identity=manifest.runtime_identity,
         governed_source=manifest.governed_source, mr_p4_closure=binding(PREFIX + P4_PATHS[-1], canonical_bytes(manifest)),
         resources=tuple(ExecutionResourceV3(role=role, **rows[path].model_dump()) for role, path in RESOURCE_PATHS.items()),
