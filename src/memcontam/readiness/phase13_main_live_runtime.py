@@ -48,8 +48,12 @@ from memcontam.readiness.phase13_main_production_backend import (
     PrefixRuntimeOutput,
 )
 from memcontam.readiness.phase13_main_request_dispatch import DeferredMainClient
-from memcontam.readiness.phase13_production_observability import validate_production_archive
+from memcontam.readiness.phase13_production_observability import (
+    ProductionObservabilityError,
+    validate_production_archive,
+)
 from memcontam.readiness.phase13_production_runtime_join import production_archive_from_ordinary
+from memcontam.readiness.phase13_production_runtime_models import ProductionRuntimeJoinError
 from memcontam.readiness.phase13_route_capacity import bind_capacity_configs
 from memcontam.tasks.base import TaskInstance
 from memcontam.tasks.game24 import build_instance as build_game24
@@ -159,14 +163,7 @@ class ProductionMainRuntime:
         snapshot = entry.serialize_state(result.state)
         if not isinstance(snapshot, NativeState):
             raise MainLiveRuntimeError("MAIN_PREFIX_CHECKPOINT_INVALID")
-        checkpoint = serialize_checkpoint(
-            NativeState(
-                snapshot.baseline,
-                snapshot.entries,
-                {**snapshot.native_state, "checkpoint_index": 1},
-                snapshot.schema_version,
-            )
-        )
+        checkpoint = serialize_checkpoint(snapshot, checkpoint_index=1)
         return PrefixRuntimeOutput(checkpoint, dispatch_output(unit, (result,), production_identity(unit),
             realized_cost_krw=self._client.realized_cost_krw() if isinstance(self._client, MainRequestClientV3) else None))
 
@@ -243,8 +240,15 @@ class ProductionMainRuntime:
             validated_resources=None if self._resources is None else self._resources.ordinary(self._client),
         )
         result = execute_prospective_ordinary(run)
-        archive = production_archive_from_ordinary(run, result, identity)
-        validate_production_archive(archive, self._packet, identity.registration_packet_sha256)
+        try:
+            archive = production_archive_from_ordinary(run, result, identity)
+            validate_production_archive(
+                archive, self._packet, identity.registration_packet_sha256
+            )
+        except ProductionRuntimeJoinError as error:
+            raise ProductionObservabilityError(
+                "PRODUCTION_RECONSTRUCTION_FAILED"
+            ) from error
         return dispatch_output(unit, result.trials, identity, archive,
             realized_cost_krw=self._client.realized_cost_krw() if isinstance(self._client, MainRequestClientV3) else None)
 
