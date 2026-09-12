@@ -7,7 +7,7 @@ from typing import Annotated, ClassVar, Final, Literal, Self, TypeVar
 from pydantic import BaseModel, Field, model_validator
 
 from memcontam.readiness.phase13_cost_policy_models import Budget, RateCard, Sha256
-from memcontam.readiness.phase13_v3_authority_models import AuthoritySnapshotV3, FrozenModel
+from memcontam.readiness.phase13_v3_authority_models import AuthoritySnapshotV3, FrozenModel, IdentityComponent
 
 
 RATE_CARD: Final = RateCard(
@@ -175,7 +175,7 @@ class UnitProjection(FrozenModel):
 class CostProofV3(CostArtifact):
     hash_field: ClassVar[str] = "proof_hash"
     schema_version: Literal["phase13_main_cost_proof_v3"] = "phase13_main_cost_proof_v3"
-    proof_id: Literal["phase13-main-a-corrected-cost-proof-v3"] = "phase13-main-a-corrected-cost-proof-v3"
+    proof_id: IdentityComponent
     role: Literal["DERIVED_RECOMPUTABLE_EXECUTION_ARTIFACT"] = "DERIVED_RECOMPUTABLE_EXECUTION_ARTIFACT"
     complete_inputs_hash: Sha256
     witness_hash: Sha256
