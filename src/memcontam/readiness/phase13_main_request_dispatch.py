@@ -80,8 +80,8 @@ class ProductionRequestDispatcherV3:
     def __init__(self, ledger: TerminalLedgerV3, binding: PackageBindingV3,
                  parents: tuple[ParentTrajectoryV3, ...], *,
                  provider_factory: Callable[[PackageBindingV3], CompiledProvider] = production_provider) -> None:
-        if (ledger.binding.package_sha256, ledger.binding.authorization_sha256) != (
-            binding.package_sha256, binding.authorization_sha256,
+        if (ledger.binding.identity, ledger.binding.package_sha256, ledger.binding.authorization_sha256) != (
+            binding.identity, binding.package_sha256, binding.authorization_sha256,
         ):
             raise TerminalEvidenceError("MAIN_AUTHORIZATION_BINDING_MISMATCH")
         self.ledger, self.binding, self.parents = ledger, binding, parents
@@ -272,8 +272,8 @@ class ProductionRequestDispatcherV3:
 class CostBoundRequestDispatcherV3:
     def __init__(self, dispatcher: ProductionRequestDispatcherV3,
                  costs: LiveCosts, package_hash: str) -> None:
-        if (digest(costs.package), costs.package.package_hash) != (
-            dispatcher.binding.package_sha256, package_hash,
+        if (costs.resources.phase4.policy.authority.identity, digest(costs.package), costs.package.package_hash) != (
+            dispatcher.binding.identity, dispatcher.binding.package_sha256, package_hash,
         ):
             raise CostError("MAIN_COST_PROOF_MISMATCH")
         self._dispatcher, self._costs, self._package_hash = dispatcher, costs, package_hash

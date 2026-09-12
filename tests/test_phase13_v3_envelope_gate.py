@@ -1,4 +1,5 @@
 from __future__ import annotations
+from .phase13_corrective_identity import corrective_identity
 
 import hashlib
 import importlib.util
@@ -27,7 +28,7 @@ def api():
 
 @pytest.fixture
 def rig(api, tmp_path: Path, monkeypatch):
-    binding = api.PackageBindingV3(package_sha256="b" * 64, authorization_sha256="c" * 64)
+    binding = api.PackageBindingV3(identity=corrective_identity(), package_sha256="b" * 64, authorization_sha256="c" * 64)
     parents = (
         api.ParentTrajectoryV3(parent_id="a" * 64, kind="CLEAN_PREFIX"),
         api.ParentTrajectoryV3(parent_id="d" * 64, kind="MEMORY_BEARING", prefix_parent_id="a" * 64),
@@ -37,6 +38,7 @@ def rig(api, tmp_path: Path, monkeypatch):
                  for parent in parents for ordinal in (0, 1))
     ledger = TerminalLedgerV3.create(tmp_path / "requests.sqlite3", {
         "schema_version": "phase13_main_run_ledger_v3", "unit_ids": [key.dispatch_id for key in keys],
+        "identity": binding.identity.model_dump(mode="json"),
         "package_sha256": binding.package_sha256, "authorization_sha256": binding.authorization_sha256,
     })
     seen = SimpleNamespace(constructors=0, requests=0, count=378, outcome="ok", trace=[])
@@ -221,7 +223,7 @@ def test_bound_openai_v3_sends_exact_compiled_bytes_once(api, monkeypatch, stage
 
     monkeypatch.setattr(openai_responses, "OpenAI", SDK)
     monkeypatch.setenv("OPENAI_API_KEY", "synthetic-not-a-credential")
-    binding = api.PackageBindingV3(package_sha256="b" * 64, authorization_sha256="c" * 64)
+    binding = api.PackageBindingV3(identity=corrective_identity(), package_sha256="b" * 64, authorization_sha256="c" * 64)
     key = api.RequestKeyV3(parent_id="a" * 64, stage=stage, ordinal=0)
     material = api.RequestMaterialV3(messages=({"role": "user", "content": "input"},), native_state=b"state")
     compiled = request_api.CompiledProviderRequestV3(binding, key, material,
