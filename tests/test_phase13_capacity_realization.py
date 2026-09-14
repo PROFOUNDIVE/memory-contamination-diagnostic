@@ -108,7 +108,7 @@ def test_approved_token_contract_binds_complete_common_capacity() -> None:
         "a6e895dcc9599e19889066da1647f92f41f021435af8ca0311d17f68641166a1"
     )
     assert status["validator"]["sha256"] == (
-        "693901cf5f66f0b91410bd8ae297dc96caac75e8a39646179e6086d344f69bd1"
+        "a0d8ce7aaf43427e4ee8ea0a1d83493ec2cd7403691d1ddc15e984db5753e48d"
     )
     assert capacity["B_mem_tokens"] == min(
         capacity["B_FH_feasible"], capacity["B_DC_feasible"]
