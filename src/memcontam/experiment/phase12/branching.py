@@ -3,10 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Literal
 
-from memcontam.contamination.phase12.controls import (
-    construct_correct_control,
-    construct_irrelevant_control,
-)
 from memcontam.contamination.phase12.models import CandidateTriplet
 from memcontam.contamination.phase12.renderers import RendererRegistry
 from memcontam.memory.admission import AdmissionContext
@@ -141,8 +137,8 @@ def build_matched_branches(
 
     baseline = prefix.state.baseline
     false_entry = _single_entry(renderers.render_false(baseline, triplet, prefix))
-    correct_entry = _single_entry(construct_correct_control(baseline, triplet, prefix))
-    irrelevant_entry = _single_entry(construct_irrelevant_control(baseline, triplet, prefix))
+    correct_entry = _single_entry(renderers.render_correct(baseline, triplet, prefix))
+    irrelevant_entry = _single_entry(renderers.render_irrelevant(baseline, triplet, prefix))
     contam = append_native_entry(prefix, false_entry)
     correct = append_native_entry(prefix, correct_entry)
     irrelevant = append_native_entry(prefix, irrelevant_entry)

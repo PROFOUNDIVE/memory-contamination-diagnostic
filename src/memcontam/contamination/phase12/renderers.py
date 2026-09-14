@@ -3,9 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from memcontam.contamination.phase12.models import (
+    CandidateRegistry,
     CandidateTriplet,
     CandidateVariant,
     canonical_content_hash,
+)
+from memcontam.contamination.phase13_legacy_dc_rs import (
+    LegacyDcRsRegistry,
+    load_legacy_dc_rs_registry,
 )
 from memcontam.memory.checkpoint_v3 import (
     CheckpointError,
@@ -13,7 +18,7 @@ from memcontam.memory.checkpoint_v3 import (
     Phase12Checkpoint,
     deserialize_checkpoint,
 )
-from memcontam.memory.serializer_registry import SerializerRegistry
+from memcontam.memory.serializer_registry import NativeSchema, SerializerRegistry
 
 
 _NATIVE_CONTENT_TEMPLATES = {
@@ -49,22 +54,7 @@ def render_irrelevant(
 
 
 def _render(beta: str, candidate: CandidateVariant, checkpoint: Phase12Checkpoint) -> NativeEntry:
-    if beta == "no_memory":
-        raise RendererError("NOMEM_INJECTION_FORBIDDEN")
-    try:
-        state = deserialize_checkpoint(checkpoint)
-    except CheckpointError as error:
-        raise RendererError(error.code) from error
-    if state.baseline != beta:
-        raise RendererError("CHECKPOINT_BASELINE_MISMATCH")
-    if candidate.candidate_id in {
-        entry.entry_id if isinstance(entry, NativeEntry) else entry for entry in state.entries
-    }:
-        raise RendererError("DUPLICATE_ROOT")
-    try:
-        schema = SerializerRegistry.native().schema_for(beta)
-    except CheckpointError as error:
-        raise RendererError(error.code) from error
+    schema = _validate_checkpoint(beta, candidate, checkpoint)
     template = _NATIVE_CONTENT_TEMPLATES.get(beta)
     if beta == "dc_rs":
         raise RendererError("DC_RS_INTERVENTION_REGISTRY_REQUIRED")
@@ -87,23 +77,72 @@ def _render(beta: str, candidate: CandidateVariant, checkpoint: Phase12Checkpoin
     )
 
 
+def _validate_checkpoint(
+    beta: str,
+    candidate: CandidateVariant,
+    checkpoint: Phase12Checkpoint,
+) -> NativeSchema:
+    if beta == "no_memory":
+        raise RendererError("NOMEM_INJECTION_FORBIDDEN")
+    try:
+        state = deserialize_checkpoint(checkpoint)
+    except CheckpointError as error:
+        raise RendererError(error.code) from error
+    if state.baseline != beta:
+        raise RendererError("CHECKPOINT_BASELINE_MISMATCH")
+    if candidate.candidate_id in {
+        entry.entry_id if isinstance(entry, NativeEntry) else entry for entry in state.entries
+    }:
+        raise RendererError("DUPLICATE_ROOT")
+    try:
+        schema = SerializerRegistry.native().schema_for(beta)
+    except CheckpointError as error:
+        raise RendererError(error.code) from error
+    return schema
+
+
 @dataclass(frozen=True)
 class RendererRegistry:
+    dc_rs: LegacyDcRsRegistry | None = None
+
     @classmethod
     def native(cls) -> RendererRegistry:
         return cls()
 
+    @classmethod
+    def governed(
+        cls,
+        raw: bytes,
+        candidates: CandidateRegistry,
+        candidate_registry_sha256: str,
+    ) -> RendererRegistry:
+        return cls(load_legacy_dc_rs_registry(raw, candidates, candidate_registry_sha256))
+
     def render_false(
         self, beta: str, triplet: CandidateTriplet, checkpoint: Phase12Checkpoint
     ) -> NativeEntry:
-        return render_false(beta, triplet, checkpoint)
+        return self._render(beta, triplet, triplet.false_candidate, checkpoint)
 
     def render_correct(
         self, beta: str, triplet: CandidateTriplet, checkpoint: Phase12Checkpoint
     ) -> NativeEntry:
-        return render_correct(beta, triplet, checkpoint)
+        return self._render(beta, triplet, triplet.correct_twin, checkpoint)
 
     def render_irrelevant(
         self, beta: str, triplet: CandidateTriplet, checkpoint: Phase12Checkpoint
     ) -> NativeEntry:
-        return render_irrelevant(beta, triplet, checkpoint)
+        return self._render(beta, triplet, triplet.irrelevant_control, checkpoint)
+
+    def _render(
+        self,
+        beta: str,
+        triplet: CandidateTriplet,
+        candidate: CandidateVariant,
+        checkpoint: Phase12Checkpoint,
+    ) -> NativeEntry:
+        if beta != "dc_rs":
+            return _render(beta, candidate, checkpoint)
+        _validate_checkpoint(beta, candidate, checkpoint)
+        if self.dc_rs is None:
+            raise RendererError("DC_RS_INTERVENTION_REGISTRY_REQUIRED")
+        return self.dc_rs.render(triplet.task, candidate)
