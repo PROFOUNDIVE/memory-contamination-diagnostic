@@ -288,6 +288,10 @@ def test_second_reflection_uses_a_later_native_order_than_its_explicit_parent(mo
         first_id,
         second_id,
     ]
+    assert [envelope.entry_id for envelope in result.write_envelopes] == [
+        first_id,
+        second_id,
+    ]
     assert result.native_reflections[-1].direct_parent_ids == (first_id,)
     assert result.filter_transition is not None
     assert result.filter_transition.decision.admitted

@@ -254,7 +254,7 @@ def _reflexion_execute(context: Any, state: object) -> RuntimeTrialResult:
         result.outcome,
         state,
         native_entries=result.native_reflections,
-        write_envelopes=() if result.write_envelope is None else (result.write_envelope,),
+        write_envelopes=result.write_envelopes,
     )
 
 
