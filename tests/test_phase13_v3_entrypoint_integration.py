@@ -180,8 +180,12 @@ def test_v3_execution_uses_guarded_requests_and_real_ordinary_runtime(entrypoint
             assert compiled.native_state == b"{}"
             before_request()
             calls.append(compiled.key.dispatch_id)
-            return LLMResponse("final: 0", {"usage": {"input_tokens": 0, "output_tokens": 0}, "attempts": 1},
-                               {"prompt_tokens": 0, "completion_tokens": 0}, 0)
+            return LLMResponse("final: 0", {
+                "usage": {"input_tokens": 1, "output_tokens": 0}, "attempts": 1,
+                "authoritative_provider_cost_usd": "0.0000002", "currency": "USD",
+                "status": "completed", "response_id": f"fake-{compiled.key.dispatch_id}",
+                "model": "gpt-5.6-luna", "service_tier": "default",
+            }, {"prompt_tokens": 1, "completion_tokens": 0}, 0)
 
     selected = select_execution(entrypoint_fixture, "run")
     assert isinstance(selected, SelectedExecutionV3)

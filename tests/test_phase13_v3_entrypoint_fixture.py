@@ -11,7 +11,7 @@ import pytest
 
 from memcontam.readiness.phase13_authority_files import load_authority_v3
 from memcontam.readiness.phase13_main_checkpoint import CommonCheckpointRegistry
-from memcontam.readiness.phase13_main_production import ProductionObject
+from memcontam.readiness.phase13_main_production import ProductionObject, _stages
 from memcontam.readiness.phase13_main_resource_contract import RESOURCE_PATHS
 from memcontam.readiness.phase13_v3_authority_models import V3Identity
 from memcontam.readiness.phase13_v3_cost import activate_policy, build_witness, freeze_base
@@ -31,7 +31,7 @@ from memcontam.readiness.phase13_v3_entrypoint_models import (
     MainExecutionPackageV3,
     MainLiveContractV3,
 )
-from memcontam.readiness.phase13_v3_builder_inputs import PREFIX, STATIC_PATHS
+from memcontam.readiness.phase13_v3_builder_inputs import PREFIX, STATIC_PATHS, STAGES
 from memcontam.readiness.phase13_v3_publication import P4_PATHS, P5_PATHS
 from memcontam.readiness.phase13_v3_resource_files import FileBinding, read_files
 from memcontam.readiness.phase13_v3_runtime_identity import ROOT, freeze_runtime_identity
@@ -46,6 +46,7 @@ from .phase13_corrective_identity import corrective_identity
 
 AUTHORITY = Path("/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts")
 RESOURCE_ROOT = Path("/home/hyunwoo/git/memory-contamination-diagnostic-phase13-main-execution-entrypoint-closure")
+REPAIR_ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture(scope="session")
@@ -57,27 +58,37 @@ def build_entrypoint_bytes(
     seeds: tuple[int, ...], governed_source: GovernedInventory | None = None,
     mr_p4_closure: FileBinding | None = None, generated_closure: ResourceClosure | None = None,
     *, execution_identity: V3Identity | None = None,
+    production_units: tuple[ProductionObject, ...] | None = None,
 ) -> dict[str, bytes]:
     execution_identity = execution_identity or corrective_identity()
     authority = load_authority_v3(AUTHORITY, identity=execution_identity)
     identity = freeze_runtime_identity()
+    generated_roles = {"activated_policy", "base_inputs", "cost_witness"}
+    repair_roles = {"legacy_dc_rs_intervention_registry"}
     resources = {row.binding.path: row.raw for row in read_files(RESOURCE_ROOT, tuple(
-        path for role, path in RESOURCE_PATHS.items() if role not in {"activated_policy", "base_inputs", "cost_witness"}))}
-    unit_ids = tuple(hashlib.sha256(json.dumps(["phase13-main-a-disjoint-unit-id-v1", "NO_MEMORY_SINGLETON",
-        seed, "game24", None, "NOT_APPLICABLE"], separators=(",", ":")).encode()).hexdigest() for seed in seeds)
+        path for role, path in RESOURCE_PATHS.items() if role not in generated_roles | repair_roles))}
+    resources.update({row.binding.path: row.raw for row in read_files(
+        REPAIR_ROOT, tuple(RESOURCE_PATHS[role] for role in repair_roles))})
+    if production_units is None:
+        unit_ids = tuple(hashlib.sha256(json.dumps(["phase13-main-a-disjoint-unit-id-v1", "NO_MEMORY_SINGLETON",
+            seed, "game24", None, "NOT_APPLICABLE"], separators=(",", ":")).encode()).hexdigest() for seed in seeds)
+        checkpoint_raw = resources[RESOURCE_PATHS["common_checkpoint_registry"]]
+        checkpoint = CommonCheckpointRegistry.model_validate_json(checkpoint_raw)
+        units = tuple(ProductionObject(sequence, unit_id, "NO_MEMORY_SINGLETON", seed, "game24", None,
+            "NOT_APPLICABLE", None, 0, "game24|nomem", checkpoint.tasks["game24"].seeds[seed].suffix_sample_ids_sha256,
+            hashlib.sha256(resources[RESOURCE_PATHS["observability_packet"]]).hexdigest(), hashlib.sha256(checkpoint_raw).hexdigest())
+            for sequence, (unit_id, seed) in enumerate(zip(unit_ids, seeds, strict=True)))
+    else:
+        units = production_units
+        unit_ids = tuple(unit.unit_id for unit in units)
     base = freeze_base(activate_policy(authority), PrefreezeBindings(**{
         name: hashlib.sha256(name.encode()).hexdigest() for name in PrefreezeBindings.model_fields
-    }), tuple(CostUnit(unit_id=unit_id, stages=(StageOccurrences(stage_id="NoMem_generation", calls=50),))
-              for unit_id in unit_ids))
+    }), tuple(CostUnit(unit_id=unit.unit_id, stages=tuple(
+        StageOccurrences(stage_id=STAGES[stage], calls=calls) for stage, calls in _stages(unit)
+    )) for unit in units))
     phase4 = MRP4Costs(policy=base.policy, base=base, witness=build_witness(base))
     for role, model in (("activated_policy", base.policy), ("base_inputs", base), ("cost_witness", phase4.witness)):
         resources[RESOURCE_PATHS[role]] = canonical_bytes(model)
-    checkpoint_raw = resources[RESOURCE_PATHS["common_checkpoint_registry"]]
-    checkpoint = CommonCheckpointRegistry.model_validate_json(checkpoint_raw)
-    units = tuple(ProductionObject(sequence, unit_id, "NO_MEMORY_SINGLETON", seed, "game24", None,
-        "NOT_APPLICABLE", None, 0, "game24|nomem", checkpoint.tasks["game24"].seeds[seed].suffix_sample_ids_sha256,
-        hashlib.sha256(resources[RESOURCE_PATHS["observability_packet"]]).hexdigest(), hashlib.sha256(checkpoint_raw).hexdigest())
-        for sequence, (unit_id, seed) in enumerate(zip(unit_ids, seeds, strict=True)))
     manifest_path = "data/phase13/main/mr_p4/corrected_v3/manifest_v3.json"
     manifest = FileBinding(path=manifest_path, size=0, sha256=hashlib.sha256(b"").hexdigest())
     closure_raw = json.dumps([manifest.model_dump()], sort_keys=True, separators=(",", ":")).encode() + b"\n"
@@ -168,12 +179,18 @@ def seal_fixture_closure(root: Path) -> None:
     manifest, = tuple(row for row in freeze_resources(root, expected).rows if row.path == manifest_path)
     package = MainExecutionPackageV3.model_validate_json((root / "package.json").read_bytes())
     seeds = tuple(unit.seed for unit in package.production)
-    for path, raw in build_entrypoint_bytes(seeds, inventory, manifest, execution_identity=package.identity).items():
+    for path, raw in build_entrypoint_bytes(
+        seeds, inventory, manifest, execution_identity=package.identity,
+        production_units=package.production,
+    ).items():
         target = root / path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(raw)
     closure = freeze_resources(root, expected)
-    for path, raw in build_entrypoint_bytes(seeds, inventory, manifest, closure, execution_identity=package.identity).items():
+    for path, raw in build_entrypoint_bytes(
+        seeds, inventory, manifest, closure, execution_identity=package.identity,
+        production_units=package.production,
+    ).items():
         target = root / path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(raw)
