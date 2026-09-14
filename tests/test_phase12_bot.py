@@ -177,6 +177,28 @@ def test_empty_bot_state_uses_native_fallback_and_writes_first_template() -> Non
     assert len(state.entries) == 1
 
 
+def test_active_capacity_refuses_admitted_candidate_without_reporting_a_write() -> None:
+    entries = [_memory_template(f"clean-template-{index}") for index in range(3)]
+    state = BoTStateV3(entries=list(entries), active_capacity=3)
+
+    result = BoTPhase12Adapter().execute(
+        _trial(branch="clean", used_ids=[entries[0].entry_id], verifier=lambda _answer: True),
+        state,
+    )
+
+    expected = tuple(entry.model_dump() for entry in entries)
+    assert result.native_novelty_decision.admitted
+    assert state.entries == entries
+    assert result.outcome.memory_before == result.outcome.memory_after == expected
+    assert result.outcome.memory_write_event is not None
+    assert result.outcome.memory_write_event["status"] == "rejected_capacity"
+    assert result.outcome.memory_write_event["accepted"] is False
+    assert result.outcome.memory_write_event["candidate_entry_id"] is None
+    assert result.outcome.memory_write_event["new_entry_id"] is None
+    assert result.native_entry is None
+    assert result.write_envelope is None
+
+
 def test_exposed_false_template_can_create_explicitly_parented_descendant() -> None:
     false_template = _native_template("false-template", "Require integer intermediate values.")
     clean_templates = [
