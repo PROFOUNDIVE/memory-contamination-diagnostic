@@ -125,7 +125,7 @@ def prefix_output(unit: ProductionObject, *, cost_usd: float = 0.01) -> MainUnit
                 "schema_version": "phase13_main_prefix_checkpoint_v1",
                 "baseline": unit.memory_baseline, "checkpoint_id": "checkpoint-1",
                 "checkpoint_identity_sha256": "b" * 64, "canonical_sha256": "c" * 64,
-                "canonical_state_utf8": "{}",
+                "canonical_state_utf8": "{}", "checkpoint_index": 0,
             },
             "runtime_evidence": {
                 "unit_id": unit.unit_id, "task": unit.task, "seed": unit.seed,
