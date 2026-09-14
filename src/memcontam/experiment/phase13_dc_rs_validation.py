@@ -53,7 +53,12 @@ def validate_task(task: TaskInstance, code: str) -> None:
         _validate_core_fields(task.task_name, task.input, code)
 
 
-def validate_state(state: dc.DcRsStateV3, budget: int | None, code: str) -> None:
+def validate_state(
+    state: dc.DcRsStateV3,
+    budget: int | None,
+    code: str,
+    expected_intervention: NativeEntry | None = None,
+) -> None:
     if (
         state.allow_unparented_strategies is not True
         or state.filter_state is not None
@@ -71,7 +76,24 @@ def validate_state(state: dc.DcRsStateV3, budget: int | None, code: str) -> None
             raise DcRsRuntimeError(code)
         if "tool_trace" in archive_entry.metadata:
             raise DcRsRuntimeError(code)
-        _validate_archive_input(archive_entry.content, code)
+        if archive_entry.entry_id == state.injected_root_id:
+            normalized_expected = (
+                None
+                if expected_intervention is None
+                else dc._archive_native(dc._archive_entry(expected_intervention))
+            )
+            if (
+                archive_entry.source_trial_id is not None
+                or native.content_hash != canonical_content_hash(native.content)
+                or native.render_id is None
+                or (
+                    normalized_expected is not None
+                    and native != normalized_expected
+                )
+            ):
+                raise DcRsRuntimeError(code)
+        else:
+            _validate_archive_input(archive_entry.content, code)
         archive_ids.append(archive_entry.entry_id)
     strategy_ids: list[str] = []
     for raw_entry in state.strategies or ():
@@ -104,14 +126,20 @@ def validate_ordinary_history(
         return
     for raw_entry in state.archive:
         archive_entry = dc._archive_entry(raw_entry)
-        if (
-            _validate_archive_input(
-                archive_entry.content,
-                "DC_RS_ORDINARY_HISTORY_UNPROVEN",
-            )
-            != identity.task_name
-            or archive_entry.source_trial_id is None
-        ):
+        if archive_entry.entry_id == state.injected_root_id:
+            if (
+                archive_entry.source_trial_id is not None
+                or dc._archive_native(archive_entry).render_id is None
+            ):
+                raise DcRsRuntimeError("DC_RS_ORDINARY_HISTORY_UNPROVEN")
+            continue
+        task_name = _validate_archive_input(
+            archive_entry.content,
+            "DC_RS_ORDINARY_HISTORY_UNPROVEN",
+        )
+        if task_name != identity.task_name:
+            raise DcRsRuntimeError("DC_RS_ORDINARY_HISTORY_UNPROVEN")
+        if archive_entry.source_trial_id is None:
             raise DcRsRuntimeError("DC_RS_ORDINARY_HISTORY_UNPROVEN")
         source_index = _trajectory_index(archive_entry.source_trial_id, identity.run_id)
         if source_index > current_index:

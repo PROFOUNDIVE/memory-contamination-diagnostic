@@ -196,6 +196,7 @@ def curate_pre_generation(
     strict_whole_response: bool = False,
 ) -> StrategyCandidateState:
     """Parse a curator result without turning visible archive entries into parents."""
+    source_ids: tuple[str, ...]
     if inferred_parent_ids:
         raise DcRsContractError("IMPLICIT_PARENT_UNION")
     if strict_whole_response:
@@ -268,7 +269,9 @@ class DcRsPhase12Adapter:
         model_visible_task = (
             render_model_visible_task(trial.task) if core_dc_rs else canonical_task
         )
-        recorder = MethodCallRecorder(trial.client)
+        recorder = MethodCallRecorder(
+            trial.client, trial_context={"trial_id": trial.trial_id}
+        )
         call_config = {**dict(trial.config), "sample_id": trial.task.sample_id}
         if core_dc_rs:
             curation_message, curation_spans, source_aliases = core_synthesis_message(
@@ -822,6 +825,7 @@ def _archive_native(entry: MemoryEntry) -> NativeEntry:
         native_component="archive",
         content=content,
         content_hash=canonical_content_hash(content),
+        render_id=entry.metadata.get("render_id"),
     )
 
 
@@ -924,6 +928,8 @@ def _archive_entry(entry: MemoryEntry | NativeEntry) -> MemoryEntry:
         raise DcRsContractError("INVALID_ARCHIVE_COMPONENT")
     input_text, raw_output, tool_trace = _native_archive_values(entry.content)
     metadata = {"generated_output": raw_output}
+    if entry.render_id is not None:
+        metadata["render_id"] = entry.render_id
     if tool_trace is not None:
         metadata["tool_trace"] = tool_trace
     return MemoryEntry(

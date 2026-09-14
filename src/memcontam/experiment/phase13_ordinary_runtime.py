@@ -88,6 +88,7 @@ class ProspectiveOrdinaryContext:
     embedding_provider: Any | None = None
     baseline_configs: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     initial_states: Mapping[str, Any] = field(default_factory=dict)
+    expected_intervention: NativeEntry | None = None
     condition: Any | None = None
     maturity_horizon: int = 1
 
@@ -109,6 +110,7 @@ class ProspectiveOrdinaryContext:
             embedding_provider=self.embedding_provider,
             baseline_configs=self.baseline_configs,
             initial_states=self.initial_states,
+            expected_intervention=self.expected_intervention,
             condition=self.condition,
             maturity_horizon=self.maturity_horizon,
         )
@@ -395,7 +397,25 @@ def _context(
              else _validated_common_capacity_tokens()),
         ),
         initial_states=run.initial_states,
+        expected_intervention=_expected_intervention(run),
     )
+
+
+def _expected_intervention(run: ProspectiveOrdinaryRun) -> NativeEntry | None:
+    if run.branch is None or run.branch.injected_root_id is None:
+        return None
+    expected = next(
+        (
+            entry
+            for entry in run.branch.checkpoint.state.entries
+            if isinstance(entry, NativeEntry)
+            and entry.entry_id == run.branch.injected_root_id
+        ),
+        None,
+    )
+    if expected is None:
+        raise ProspectiveOrdinaryError("ORDINARY_BRANCH_IDENTITY_MISMATCH")
+    return expected
 
 
 def _write(callbacks: RuntimeWriterCallbacks, result: RuntimeTrialResult) -> None:

@@ -5,6 +5,7 @@ from typing import Any, Callable, Literal, Mapping
 
 from memcontam.clients.base import LLMClient
 from memcontam.experiment.phase12.runtime_registry import LIVE_BASELINE_REGISTRY, RuntimeTrialResult
+from memcontam.memory.checkpoint_v3 import NativeEntry
 from memcontam.tasks.base import TaskInstance
 
 
@@ -50,6 +51,7 @@ class Game24RuntimeContext:
     embedding_provider: object | None = None
     baseline_configs: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     initial_states: Mapping[str, object] = field(default_factory=dict)
+    expected_intervention: NativeEntry | None = None
     condition: object | None = None
     maturity_horizon: int = 1
 
