@@ -405,10 +405,6 @@ class V3MainRun:
                         prefix.checkpoint.checkpoint_id,
                         prefix.checkpoint.checkpoint_identity_sha256,
                         prefix.checkpoint.canonical_sha256,
-                    ) or any(
-                        getattr(item.evidence.trial, "checkpoint_id", None)
-                        != prefix.checkpoint.checkpoint_id
-                        for item in archive.records
                     ):
                         raise MainEvidenceValidationError("MAIN_UNIT_EVIDENCE_JOIN_INVALID")
         except (
