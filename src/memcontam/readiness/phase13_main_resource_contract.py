@@ -23,6 +23,7 @@ RESOURCE_PATHS: Final = {
     "task_seed_orders": "data/phase13/main/mr_p4/task_seed_orders_v1.json",
     "observability_packet": "data/phase13/observability/registration_packet_v1.json",
     "candidate_registry": "data/phase12/registries/candidate_registry_v1.json",
+    "legacy_dc_rs_intervention_registry": "data/phase13/main/legacy_dc_rs_intervention_registry_v1.json",
     "main_new_mcq_authority_selection": "data/phase13/rag/new_mcq/authority_selection_v1.json",
     "main_new_mcq_intervention_registry": "data/phase13/rag/new_mcq/intervention_registry_v1.json",
     "legacy_rag_seal": "data/phase13/rag/legacy_seal_v1.json",

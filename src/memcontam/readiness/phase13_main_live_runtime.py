@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import replace
 from pathlib import Path
@@ -11,6 +12,7 @@ from memcontam.clients.base import LLMClient
 from memcontam.clients.config import ProviderConfig
 from memcontam.clients.openai_responses import OpenAIResponsesClient
 from memcontam.contamination.phase12.registry import load_candidate_registry
+from memcontam.contamination.phase12.renderers import RendererRegistry
 from memcontam.evaluation.phase13_observability_registration import ObservabilityRegistrationPacket
 from memcontam.experiment.phase12.game24_runner import (
     Branch,
@@ -109,6 +111,7 @@ class ProductionMainRuntime:
             self._checkpoint_registry = resources.checkpoint_registry
             self._packet = resources.packet
             self._candidate_registry = resources.candidate_registry
+            self._renderers = resources.legacy_dc_rs_renderers
             self._new_mcq_registry = resources.new_mcq_registry
             return
         self._checkpoint_registry = CommonCheckpointRegistry.model_validate_json(
@@ -121,6 +124,12 @@ class ProductionMainRuntime:
         self._packet = ObservabilityRegistrationPacket.model_validate_json(packet_raw)
         self._candidate_registry = load_candidate_registry(
             repository_root / "data/phase12/registries/candidate_registry_v1.json"
+        )
+        candidate_path = repository_root / "data/phase12/registries/candidate_registry_v1.json"
+        self._renderers = RendererRegistry.governed(
+            (repository_root / "data/phase13/main/legacy_dc_rs_intervention_registry_v1.json").read_bytes(),
+            self._candidate_registry,
+            hashlib.sha256(candidate_path.read_bytes()).hexdigest(),
         )
         self._new_mcq_registry = load_new_mcq_runtime_registry(repository_root)
 
@@ -218,6 +227,7 @@ class ProductionMainRuntime:
                     ),
                     candidate_registry=self._candidate_registry,
                     registry=PHASE13_CORE_BASELINE_REGISTRY,
+                    renderers=self._renderers,
                 ).arms[request.arm]
         run = ProspectiveOrdinaryRun(
             task_name=task_name(unit.task),
