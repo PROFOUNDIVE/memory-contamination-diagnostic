@@ -135,14 +135,13 @@ def test_seed_zero_shadow_commits_every_production_unit_without_external_access(
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, target)
     source_rows = read_files(source_root, STATIC_PATHS)
-    units = tuple(
-        unit
-        for unit in production(
-            first_freeze(source_root), tuple(row.binding for row in source_rows)
-        )
-        if unit.seed == 0
+    all_units = production(
+        first_freeze(source_root), tuple(row.binding for row in source_rows)
     )
-    entrypoint_bytes = build_entrypoint_bytes((0,), production_units=units)
+    seed_zero_units = tuple(unit for unit in all_units if unit.seed == 0)
+    entrypoint_bytes = build_entrypoint_bytes(
+        tuple(range(10)), production_units=all_units
+    )
     for path, raw in entrypoint_bytes.items():
         target = tmp_path / path
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -164,6 +163,12 @@ def test_seed_zero_shadow_commits_every_production_unit_without_external_access(
     monkeypatch.setattr(ProductionMainRuntime, "_embedder", lambda _self: local_embedder)
     provider = SeedZeroShadowProvider()
     run = open_run(request, create=True)
+    expected_dispatches = sum(
+        group.calls
+        for unit in run.selected.costs.resources.phase4.base.units
+        if unit.unit_id in {item.unit_id for item in seed_zero_units}
+        for group in unit.stages
+    )
     try:
         status = run.execute(
             tmp_path / "cache",
@@ -171,10 +176,30 @@ def test_seed_zero_shadow_commits_every_production_unit_without_external_access(
             tranche_ceiling_krw=450000,
             provider_factory=provider.factory,
         )
-        assert status.completed_count == 120
+        assert status.completed_count == len(seed_zero_units)
         assert status.terminal_technical_missing_count == 0
-        assert status.pending_count == 0
-        assert len(provider.requests) == 10893
-        assert len(set(provider.requests)) == 10893
+        assert status.pending_count == len(all_units) - len(seed_zero_units)
+        assert len(provider.requests) == expected_dispatches
+        assert len(set(provider.requests)) == expected_dispatches
     finally:
         run.close()
+    reopened = open_run(request, create=False)
+    try:
+        before_resume = tuple(provider.requests)
+        assert reopened.status() == status
+        resumed = reopened.execute(
+            tmp_path / "cache",
+            max_units=None,
+            tranche_ceiling_krw=450000,
+            provider_factory=provider.factory,
+        )
+        assert resumed == status
+        assert tuple(provider.requests) == before_resume
+    finally:
+        reopened.close()
+    later_seed = open_run(request, create=False, seed=1)
+    try:
+        assert later_seed.status().pending_count == len(all_units) - len(seed_zero_units)
+        assert tuple(provider.requests) == before_resume
+    finally:
+        later_seed.close()
