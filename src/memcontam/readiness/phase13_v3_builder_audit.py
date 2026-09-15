@@ -56,6 +56,7 @@ ALLOW: Final = (
     "src/memcontam/baselines/retrieval_rag_phase12.py",
     "src/memcontam/contamination/phase12/renderers.py",
     "src/memcontam/contamination/phase13_legacy_dc_rs.py",
+    "src/memcontam/evaluation/phase12_observables.py",
     "src/memcontam/evaluation/phase13_observability_lineage.py",
     "src/memcontam/experiment/phase12/branching.py",
     "src/memcontam/experiment/phase12/game24_runner.py",
