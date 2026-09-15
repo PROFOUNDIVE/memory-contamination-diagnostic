@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from typing import Literal
 
+import pytest
+
 from memcontam.baselines.bot_phase12 import (
     BoTPhase12Adapter,
     BoTStateV3,
@@ -230,6 +232,64 @@ def test_exposed_false_template_can_create_explicitly_parented_descendant() -> N
     assert result.write_envelope is not None
     assert result.write_envelope.direct_parent_ids == (false_template.entry_id,)
     assert result.write_envelope.source_outcome is None
+
+
+@pytest.mark.parametrize(
+    ("matched", "used_ids", "answer_exposed", "write_parented"),
+    [
+        (True, ["false-template"], True, True),
+        (True, [], True, False),
+        (False, [], False, False),
+    ],
+)
+def test_actual_bot_answer_and_distillation_visibility_matrix(
+    matched: bool,
+    used_ids: list[str],
+    answer_exposed: bool,
+    write_parented: bool,
+) -> None:
+    false_template = _native_template("false-template", "Require integer intermediate values.")
+    state = BoTStateV3(entries=[false_template] if matched else [])
+    solve_response = _SOLVED if matched else _SOLVED_WITH_FALLBACK
+
+    result = BoTPhase12Adapter().execute(
+        _trial(
+            branch="contam",
+            used_ids=used_ids,
+            verifier=lambda _answer: True,
+            solve_response=solve_response,
+        ),
+        state,
+    )
+
+    answer_call = next(
+        call for call in result.outcome.method_calls if call.call_id == result.outcome.answer_call_id
+    )
+    distillation_call = result.outcome.method_calls[-1]
+    assert ("false-template" in {span.entry_id for span in answer_call.source_spans}) is answer_exposed
+    assert distillation_call.stage == "bot_thought_distill"
+    assert distillation_call.source_spans == []
+    assert result.native_entry is not None
+    assert (result.native_entry.direct_parent_ids == ("false-template",)) is write_parented
+
+
+def test_actual_bot_cannot_fabricate_distillation_only_target_use() -> None:
+    result = BoTPhase12Adapter().execute(
+        _trial(
+            branch="contam",
+            used_ids=["false-template"],
+            verifier=lambda _answer: True,
+            solve_response=_SOLVED_WITH_FALLBACK,
+        ),
+        BoTStateV3(entries=[]),
+    )
+
+    answer_call = next(
+        call for call in result.outcome.method_calls if call.call_id == result.outcome.answer_call_id
+    )
+    assert answer_call.source_spans == []
+    assert result.outcome.status == "failed"
+    assert result.native_entry is None
 
 
 def test_rejects_visibility_only_parent_and_verifier_dependent_novelty() -> None:
