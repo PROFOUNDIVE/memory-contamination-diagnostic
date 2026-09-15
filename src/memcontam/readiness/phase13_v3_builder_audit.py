@@ -49,6 +49,7 @@ ALLOW: Final = (
     "data/phase13/common_capacity_status_corrected_v2.json",
     "data/phase13/observability/manifest_v1.json",
     "data/phase13/main/legacy_dc_rs_intervention_registry_v1.json",
+    "src/memcontam/baselines/bot_phase12.py",
     "src/memcontam/baselines/dynamic_cheatsheet_phase12.py",
     "src/memcontam/baselines/reflexion_adapter.py",
     "src/memcontam/baselines/reflexion_phase12.py",
@@ -64,6 +65,7 @@ ALLOW: Final = (
     "src/memcontam/memory/checkpoint_v3.py",
     "tests/phase13_corrective_identity.py",
     "tests/phase13_runner_safety_fixture.py",
+    "tests/test_phase12_bot.py",
     "tests/test_phase12_reflexion.py",
 )
 
