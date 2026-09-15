@@ -224,3 +224,56 @@ def test_propagation_must_descend_from_the_exact_exposed_root() -> None:
 
     assert row.propagation.status == "supported"
     assert row.propagation.value is False
+
+
+def test_historical_exact_hops_remain_traversable_for_a_current_write() -> None:
+    module = _module()
+    exact = _evidence(module, retrieved=True, included=True, verified=0)
+    event = _memory_event(
+        ("root-b", "child-b1"),
+        ("root-b", "child-b1", "child-b2"),
+        ("child-b2",),
+    )
+    event = event.model_copy(
+        update={
+            "baseline": "dc_rs",
+            "parent_entry_ids": ["child-b1"],
+            "source_entry_ids": ["child-b1"],
+            "lineage_edges": [
+                event.lineage_edges[0].model_copy(
+                    update={"parent_entry_id": "child-b1"}
+                )
+            ],
+        }
+    )
+    evidence = exact.model_copy(
+        update={
+            "baseline": "dc_rs",
+            "trial": _trial(retrieved=True, memory_event=True),
+            "memory_before_ids": ("root-b", "child-b1"),
+            "memory_after_ids": ("root-b", "child-b1", "child-b2"),
+            "new_entry_ids": ("child-b2",),
+            "memory_events": (event,),
+            "lineage": (
+                exact.lineage[0],
+                module.Phase13LineageNode(
+                    entry_id="child-b1",
+                    lineage_status="exact",
+                    injected_root_ids=("root-b",),
+                    direct_parent_ids=("root-b",),
+                ),
+                module.Phase13LineageNode(
+                    entry_id="child-b2",
+                    lineage_status="exact",
+                    injected_root_ids=("root-b",),
+                    direct_parent_ids=("child-b1",),
+                ),
+            ),
+        }
+    )
+
+    row = module.reconstruct_phase13_trial(evidence)
+
+    assert row.descendant_entry_ids == ("child-b1", "child-b2")
+    assert row.propagation.value is True
+    assert row.propagation.path == ("root-b", "child-b1", "child-b2")

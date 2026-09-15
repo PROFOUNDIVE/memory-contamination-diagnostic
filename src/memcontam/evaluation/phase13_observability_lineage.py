@@ -51,7 +51,12 @@ def validate_evidence_joins(evidence: Phase13TrialEvidence) -> None:
         raise Phase13ObservabilityError("ANSWER_CALL_IDENTITY_MISMATCH")
     if any(
         span.target_set_id != evidence.target_set.target_set_id
-        or span.entry_id not in evidence.target_set.target_entry_ids
+        or (
+            span.entry_id not in evidence.target_set.target_entry_ids
+            and not set(span.injected_root_ids).intersection(
+                evidence.target_set.target_entry_ids
+            )
+        )
         or span.is_target_contamination is not True
         for span in evidence.target_set.answer_call_spans
     ):
@@ -149,7 +154,14 @@ def recorded_path(
         raise Phase13ObservabilityError("EXACT_LINEAGE_REQUIRED")
     if node.entry_id in target_ids:
         return (node.entry_id,)
-    for reference in writer_parent_ids.get(node.entry_id, ()):
+    references = writer_parent_ids.get(
+        node.entry_id,
+        (
+            *node.direct_parent_ids,
+            *((node.version_predecessor_id,) if node.version_predecessor_id is not None else ()),
+        ),
+    )
+    for reference in references:
         parent = nodes.get(reference)
         if parent is None:
             raise Phase13ObservabilityError("FABRICATED_LINEAGE")
