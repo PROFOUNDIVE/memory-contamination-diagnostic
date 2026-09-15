@@ -21,6 +21,7 @@ from memcontam.experiment.phase13_dc_rs_runtime import Phase13DcRsContext
 from memcontam.memory.checkpoint_v3 import NativeEntry, NativeState, serialize_checkpoint
 from memcontam.memory.cards_v3 import canonical_content_hash
 from memcontam.memory.stores import MemoryEntry
+from memcontam.readiness.phase13_production_runtime_evidence import _target_spans
 from memcontam.tasks.base import TaskInstance
 
 
@@ -167,6 +168,66 @@ def test_dc_rs_runtime_is_first_class_text_only_retrieve_synthesize_generate() -
     assert result.write_envelopes[0].writer_stage == "dc_rs_generate"
     assert result.state.strategies is not None
     assert cast(NativeEntry, result.state.strategies[-1]).direct_parent_ids == ("archive-root",)
+
+
+def test_dc_rs_generation_and_archive_share_exact_strategy_ancestry() -> None:
+    context = replace(
+        _context(),
+        branch="contam",
+        baseline_configs={
+            "dc_rs": {
+                "embedding_mode": "test_double",
+                "tool_mode": "text_only",
+                "serialized_cheatsheet_budget_tokens": 8192,
+            }
+        },
+    )
+    context.initial_states["dc_rs"].archive[0].metadata.update(
+        {
+            "render_id": "controlled-dc-rs-root-v1",
+            "contamination_class": "injected",
+            "injected_root_ids": ["archive-root"],
+            "lineage_status": "exact",
+            "lineage_basis": "seed",
+            "direct_parent_ids": [],
+            "target_set_id": "targets-v1",
+            "is_target_contamination": True,
+        }
+    )
+    context.initial_states["dc_rs"].archive[0].source_trial_id = None
+    context.initial_states["dc_rs"].injected_root_id = "archive-root"
+    context = replace(
+        context,
+        expected_intervention=dc._archive_native(
+            dc._archive_entry(context.initial_states["dc_rs"].archive[0])
+        ),
+    )
+    entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
+
+    result = entry.execute_trial(context, entry.initial_state(context))
+
+    strategy = next(item for item in result.native_entries if item.native_component == "strategy")
+    archive = next(item for item in result.native_entries if item.native_component == "archive")
+    answer_call = next(
+        call for call in result.outcome.method_calls if call.call_id == result.outcome.answer_call_id
+    )
+    answer_span = answer_call.source_spans[0]
+    assert answer_span.entry_id == strategy.entry_id
+    assert answer_span.direct_parent_ids == ["archive-root"]
+    assert answer_span.injected_root_ids == ["archive-root"]
+    assert answer_span.lineage_status == "exact"
+    assert archive.direct_parent_ids == (strategy.entry_id,)
+    archive_envelope = next(
+        envelope for envelope in result.write_envelopes if envelope.entry_id == archive.entry_id
+    )
+    assert archive_envelope.direct_parent_ids == (strategy.entry_id,)
+    projected = _target_spans(
+        result.outcome.method_calls,
+        result.outcome.answer_call_id,
+        ("archive-root",),
+        "targets-v1",
+    )
+    assert tuple(span.entry_id for span in projected) == (strategy.entry_id,)
 
 
 def test_dc_rs_first_trial_generates_from_transient_whole_cheatsheet() -> None:

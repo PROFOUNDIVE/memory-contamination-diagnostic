@@ -198,7 +198,10 @@ def _is_target_span(span: PromptSourceSpan, evidence: TargetSetEvidence) -> bool
     if span.target_set_id not in {None, evidence.target_set_id}:
         raise ObservableError("TARGET_SET_ID_MISMATCH")
     if evidence.target_entry_ids:
-        return span.entry_id in evidence.target_entry_ids
+        return span.entry_id in evidence.target_entry_ids or (
+            span.lineage_status == "exact"
+            and bool(set(span.injected_root_ids).intersection(evidence.target_entry_ids))
+        )
     if evidence.definition is not None:
         return span.contamination_class in evidence.definition.included_classes and (
             not evidence.definition.require_exact_lineage or span.lineage_status == "exact"

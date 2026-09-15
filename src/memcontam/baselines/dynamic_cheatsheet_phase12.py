@@ -361,6 +361,35 @@ class DcRsPhase12Adapter:
             curation_spans,
             trial.config.get("_logging_target_set_id"),
         )
+        if strategy_entry is not None:
+            generation_spans = [
+                span.model_copy(
+                    update={
+                        "entry_id": strategy_entry.entry_id,
+                        "direct_parent_ids": list(strategy_entry.direct_parent_ids),
+                        "lineage_status": (
+                            "exact" if strategy_entry.direct_parent_ids else span.lineage_status
+                        ),
+                        "lineage_basis": (
+                            "recorded_source"
+                            if strategy_entry.direct_parent_ids
+                            else span.lineage_basis
+                        ),
+                        "injected_root_ids": list(dict.fromkeys(
+                            (
+                                *span.injected_root_ids,
+                                *(
+                                    (state.injected_root_id,)
+                                    if state.injected_root_id
+                                    in strategy_entry.direct_parent_ids
+                                    else ()
+                                ),
+                            )
+                        )),
+                    }
+                )
+                for span in generation_spans
+            ]
         generation_config = {
             **call_config,
             "method_stage": "dc_rs_generate",
@@ -383,7 +412,13 @@ class DcRsPhase12Adapter:
         ) > _REGISTERED_PERSISTED_RAW_ANSWER_CEILING:
             raise DcRsContractError("DC_RS_RAW_ANSWER_BUDGET_EXCEEDED")
         archive_entry = _archive_write(
-            generated_output, canonical_task, trial, tool_trace=tool_trace
+            generated_output,
+            canonical_task,
+            trial,
+            tool_trace=tool_trace,
+            parent_strategy_id=(
+                None if strategy_entry is None else strategy_entry.entry_id
+            ),
         )
         state.archive.append(archive_entry)
         archive_envelope = _archive_envelope(archive_entry, trial)
@@ -799,8 +834,11 @@ def _archive_write(
     trial: DcRsTrialContextV3,
     *,
     tool_trace: str | None = None,
+    parent_strategy_id: str | None = None,
 ) -> MemoryEntry:
     metadata: dict[str, Any] = {"generated_output": raw_output, "parsed_answer": None}
+    if parent_strategy_id is not None:
+        metadata["direct_parent_ids"] = [parent_strategy_id]
     if tool_trace is not None:
         metadata["tool_trace"] = tool_trace
     return MemoryEntry(
@@ -825,6 +863,11 @@ def _archive_native(entry: MemoryEntry) -> NativeEntry:
         native_component="archive",
         content=content,
         content_hash=canonical_content_hash(content),
+        direct_parent_ids=(
+            _metadata_ids(entry, "direct_parent_ids")
+            if "direct_parent_ids" in entry.metadata
+            else ()
+        ),
         render_id=entry.metadata.get("render_id"),
     )
 
@@ -843,8 +886,8 @@ def _archive_envelope(entry: MemoryEntry, trial: DcRsTrialContextV3) -> MemoryCa
         source_trial_ids=(trial.trial_id,),
         source_outcome=None,
         trial_support_ids=(trial.trial_id,),
-        memory_support_ids=(),
-        direct_parent_ids=(),
+        memory_support_ids=native.direct_parent_ids,
+        direct_parent_ids=native.direct_parent_ids,
         version_predecessor_id=None,
         order_key=_archive_order_key(trial),
         native_component=native.native_component,
@@ -927,7 +970,9 @@ def _archive_entry(entry: MemoryEntry | NativeEntry) -> MemoryEntry:
     ):
         raise DcRsContractError("INVALID_ARCHIVE_COMPONENT")
     input_text, raw_output, tool_trace = _native_archive_values(entry.content)
-    metadata = {"generated_output": raw_output}
+    metadata: dict[str, Any] = {"generated_output": raw_output}
+    if entry.direct_parent_ids:
+        metadata["direct_parent_ids"] = list(entry.direct_parent_ids)
     if entry.render_id is not None:
         metadata["render_id"] = entry.render_id
     if tool_trace is not None:

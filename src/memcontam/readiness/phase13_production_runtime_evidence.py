@@ -312,14 +312,22 @@ def _target_spans(
         if not isinstance(call, MethodCall) or call.call_id != answer_call_id:
             continue
         for span in call.source_spans:
-            if span.entry_id in target:
+            matched_roots = tuple(
+                root_id
+                for root_id in target_ids
+                if root_id == span.entry_id or root_id in span.injected_root_ids
+            )
+            if matched_roots and (
+                span.entry_id in target or span.lineage_status == "exact"
+            ):
+                direct_root = span.entry_id in target
                 spans.append(span.model_copy(update={
                     "parent_call_id": call.call_id,
                     "clean_or_contaminated": "contaminated",
-                    "contamination_class": "injected",
-                    "injected_root_ids": [span.entry_id],
+                    "contamination_class": "injected" if direct_root else "derived",
+                    "injected_root_ids": list(matched_roots),
                     "lineage_status": "exact",
-                    "lineage_basis": "seed",
+                    "lineage_basis": "seed" if direct_root else "recorded_source",
                     "target_set_id": target_set_id,
                     "is_target_contamination": True,
                 }))
