@@ -105,8 +105,16 @@ def test_authorized_run_and_resume_enforce_distinct_seed_boundaries(tmp_path, mo
         def send_compiled_v3(self, compiled, before_request):
             before_request()
             calls.append((compiled.key.parent_id, compiled.key.dispatch_id))
-            return LLMResponse("final: 0", {"usage": {"input_tokens": 0, "output_tokens": 0}, "attempts": 1},
-                               {"prompt_tokens": 0, "completion_tokens": 0}, 0)
+            return LLMResponse("final: 0", {
+                "usage": {"input_tokens": 0, "output_tokens": 0},
+                "attempts": 1,
+                "authoritative_provider_cost_usd": "0",
+                "currency": "USD",
+                "status": "completed",
+                "response_id": f"runner-cli-{compiled.key.dispatch_id}",
+                "model": "gpt-5.6-luna",
+                "service_tier": "default",
+            }, {"prompt_tokens": 0, "completion_tokens": 0}, 0)
 
     run = prepare_main_run(request)
     try:
