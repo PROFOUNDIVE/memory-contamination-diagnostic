@@ -47,6 +47,7 @@ def test_reconstruction_failure_is_sanitized_durable_and_never_retried(
         run.close()
     reopened = open_run(entrypoint_fixture, create=False)
     try:
+        assert reopened.status().session_state == "RECONSTRUCTION_FAILED"
         with pytest.raises(ValueError, match="MAIN_RUN_IN_FLIGHT_RECONCILIATION_REQUIRED"):
             reopened.execute(Path("unused"), max_units=1, tranche_ceiling_krw=450000, provider_factory=provider.factory)
         assert (provider.constructors, len(provider.requests)) == (50, 50)

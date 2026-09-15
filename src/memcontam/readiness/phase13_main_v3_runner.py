@@ -36,7 +36,7 @@ from .phase13_main_request_dispatch import (
     production_provider,
 )
 from .phase13_main_request_recovery import require_known_costs
-from .phase13_main_run_journal import RunJournalV3, RunPauseV3
+from .phase13_main_run_journal import ReconstructionFailureV3, RunJournalV3, RunPauseV3
 from .phase13_production_observability import (
     ProductionObservabilityError,
     validate_production_archive,
@@ -160,8 +160,12 @@ class V3MainRun:
         session = "COMPLETED" if pending == 0 else "READY"
         if journal_rows:
             events = RunJournalV3(self.ledger, self.selected.package.production).rows()
-            if pending and isinstance(events[-1], RunPauseV3):
-                session = events[-1].kind
+            if pending:
+                match events[-1]:
+                    case ReconstructionFailureV3():
+                        session = "RECONSTRUCTION_FAILED"
+                    case RunPauseV3():
+                        session = events[-1].kind
         return V3RunStatus(session, completed, len(failed), pending, attempts)
 
     def execute(self, cache: Path, *, max_units: int | None, tranche_ceiling_krw: int,
