@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from memcontam.baselines.bot_read import BoTRetrievalDecision, DistilledProblem
 from memcontam.baselines.contracts import NonEmptyStr
 from memcontam.clients.base import LLMClient
+from memcontam.logging.provenance import PromptSourcePart, build_prompt_with_sources
 from memcontam.memory.stores import MemoryEntry
 
 
@@ -72,23 +73,34 @@ def distill_thought_template(
     if rendered_memory != visible_memory_for_retrieval_decision(retrieval_decision):
         raise ValueError("visible BoT memory must exactly match the retrieval decision")
     rendered_trajectory = [dict(item) for item in executed_trajectory]
+    prompt_prefix = (
+        f"Canonical task JSON:\n{canonical_task}\n\n"
+        f"Distilled problem JSON:\n{json.dumps(distilled_problem.model_dump(), sort_keys=True, separators=(',', ':'))}\n\n"
+        f"Retrieval decision JSON:\n{render_retrieval_decision(retrieval_decision)}\n\n"
+        f"Selected reasoning structure:\n{selected_structure}\n\n"
+        f"Solution trace:\n{solution_trace}\n\n"
+        f"Executed trajectory JSON:\n{json.dumps(rendered_trajectory, sort_keys=True, separators=(',', ':'))}\n\n"
+        f"Final answer:\n{final_answer}\n\n"
+        "Visible memory JSON:\n"
+    )
+    rendered_memory_json = render_visible_bot_memory(rendered_memory)
+    matched_entry = retrieval_decision.matched_entry
+    if matched_entry is None:
+        user_content, source_spans = prompt_prefix + rendered_memory_json, []
+    else:
+        user_content, source_spans = build_prompt_with_sources(
+            [prompt_prefix, PromptSourcePart(rendered_memory_json, matched_entry)],
+            message_index=1,
+        )
     call_config = dict(config)
     call_config["method_stage"] = "bot_thought_distill"
+    call_config["source_spans"] = source_spans
     response = client.chat(
         [
             {"role": "system", "content": _THOUGHT_DISTILL_INSTRUCTIONS},
             {
                 "role": "user",
-                "content": (
-                    f"Canonical task JSON:\n{canonical_task}\n\n"
-                    f"Distilled problem JSON:\n{json.dumps(distilled_problem.model_dump(), sort_keys=True, separators=(',', ':'))}\n\n"
-                    f"Retrieval decision JSON:\n{render_retrieval_decision(retrieval_decision)}\n\n"
-                    f"Selected reasoning structure:\n{selected_structure}\n\n"
-                    f"Solution trace:\n{solution_trace}\n\n"
-                    f"Executed trajectory JSON:\n{json.dumps(rendered_trajectory, sort_keys=True, separators=(',', ':'))}\n\n"
-                    f"Final answer:\n{final_answer}\n\n"
-                    f"Visible memory JSON:\n{render_visible_bot_memory(rendered_memory)}"
-                ),
+                "content": user_content,
             },
         ],
         model,

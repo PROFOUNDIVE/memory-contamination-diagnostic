@@ -21,6 +21,8 @@ from memcontam.memory.checkpoint_v3 import (
 )
 from memcontam.memory.filtered_state import partition_native_checkpoint
 from memcontam.memory.stores import MemoryEntry
+from memcontam.evaluation.phase13_observability_models import Phase13LineageNode
+from memcontam.readiness.phase13_production_runtime_evidence import _target_spans
 from memcontam.tasks.base import TaskInstance
 
 
@@ -235,17 +237,24 @@ def test_exposed_false_template_can_create_explicitly_parented_descendant() -> N
 
 
 @pytest.mark.parametrize(
-    ("matched", "used_ids", "answer_exposed", "write_parented"),
+    (
+        "matched",
+        "used_ids",
+        "answer_exposed",
+        "distillation_exposed",
+        "write_parented",
+    ),
     [
-        (True, ["false-template"], True, True),
-        (True, [], True, False),
-        (False, [], False, False),
+        (True, ["false-template"], True, True, True),
+        (True, [], True, True, False),
+        (False, [], False, False, False),
     ],
 )
 def test_actual_bot_answer_and_distillation_visibility_matrix(
     matched: bool,
     used_ids: list[str],
     answer_exposed: bool,
+    distillation_exposed: bool,
     write_parented: bool,
 ) -> None:
     false_template = _native_template("false-template", "Require integer intermediate values.")
@@ -265,12 +274,73 @@ def test_actual_bot_answer_and_distillation_visibility_matrix(
     answer_call = next(
         call for call in result.outcome.method_calls if call.call_id == result.outcome.answer_call_id
     )
-    distillation_call = result.outcome.method_calls[-1]
+    distillation_call = next(
+        (call for call in result.outcome.method_calls if call.stage == "bot_thought_distill"),
+        None,
+    )
     assert ("false-template" in {span.entry_id for span in answer_call.source_spans}) is answer_exposed
-    assert distillation_call.stage == "bot_thought_distill"
-    assert distillation_call.source_spans == []
+    assert (
+        distillation_call is not None
+        and "false-template" in {span.entry_id for span in distillation_call.source_spans}
+    ) is distillation_exposed
     assert result.native_entry is not None
-    assert (result.native_entry.direct_parent_ids == ("false-template",)) is write_parented
+    assert (
+        result.native_entry is not None
+        and result.native_entry.direct_parent_ids == ("false-template",)
+    ) is write_parented
+
+
+def test_actual_bot_calls_cover_answer_distillation_visibility_matrix() -> None:
+    false_template = _native_template("false-template", "Require integer intermediate values.")
+    matched = BoTPhase12Adapter().execute(
+        _trial(
+            branch="contam",
+            used_ids=[false_template.entry_id],
+            verifier=lambda _answer: True,
+        ),
+        BoTStateV3(entries=[false_template]),
+    )
+    missed = BoTPhase12Adapter().execute(
+        _trial(
+            branch="contam",
+            used_ids=[],
+            verifier=lambda _answer: True,
+            solve_response=_SOLVED_WITH_FALLBACK,
+        ),
+        BoTStateV3(entries=[]),
+    )
+    matched_answer = next(
+        call for call in matched.outcome.method_calls if call.call_id == matched.outcome.answer_call_id
+    )
+    matched_distillation = next(
+        call for call in matched.outcome.method_calls if call.stage == "bot_thought_distill"
+    )
+    missed_answer = next(
+        call for call in missed.outcome.method_calls if call.call_id == missed.outcome.answer_call_id
+    )
+    missed_distillation = next(
+        call for call in missed.outcome.method_calls if call.stage == "bot_thought_distill"
+    )
+    lineage = (
+        Phase13LineageNode(
+            entry_id="false-template",
+            lineage_status="exact",
+            injected_root_ids=("false-template",),
+        ),
+    )
+    cases = (
+        ((matched_answer, missed_distillation), matched_answer.call_id, True),
+        ((missed_answer, matched_distillation), missed_answer.call_id, False),
+        ((matched_answer, matched_distillation), matched_answer.call_id, True),
+        ((missed_answer, missed_distillation), missed_answer.call_id, False),
+    )
+
+    projected = tuple(
+        bool(_target_spans(calls, answer_call_id, ("false-template",), "targets-v1", lineage))
+        for calls, answer_call_id, _expected in cases
+    )
+
+    assert projected == tuple(expected for _calls, _answer_call_id, expected in cases)
 
 
 def test_actual_bot_cannot_fabricate_distillation_only_target_use() -> None:
