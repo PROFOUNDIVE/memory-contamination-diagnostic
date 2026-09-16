@@ -12,16 +12,27 @@ from memcontam.clients.replay import ReplayClient
 from memcontam.contamination.phase12.registry import load_candidate_registry
 from memcontam.contamination.phase12.renderers import RendererError
 from memcontam.experiment.phase12.game24_runner import Game24RuntimeContext, RuntimeIdentities
-from memcontam.experiment.phase12.live_branch import build_live_reduced_main_branches
+from memcontam.experiment.phase12.live_branch import LiveArmBranch, build_live_reduced_main_branches
 from memcontam.experiment.phase12.runtime_registry import (
     PHASE13_CORE_BASELINE_REGISTRY,
     RuntimeStateError,
 )
 from memcontam.experiment.phase13_dc_rs_runtime import Phase13DcRsContext
+from memcontam.evaluation.phase13_observability_models import (
+    Phase13LineageNode,
+    Phase13TrialEvidence,
+)
+from memcontam.experiment import phase13_ordinary_runtime as ordinary_runtime
 from memcontam.memory.checkpoint_v3 import NativeEntry, NativeState, serialize_checkpoint
 from memcontam.memory.cards_v3 import canonical_content_hash
 from memcontam.memory.stores import MemoryEntry
-from memcontam.readiness.phase13_production_runtime_evidence import _target_spans
+from memcontam.evaluation.phase13_observability import reconstruct_phase13_trial
+from memcontam.experiment.phase13_ordinary_runtime import ProspectiveOrdinaryRun
+from memcontam.readiness.phase13_production_runtime_evidence import (
+    _target_spans,
+    build_production_trial_evidence,
+)
+from memcontam.readiness.phase13_production_runtime_models import ProductionOrdinaryRunIdentity
 from memcontam.tasks.base import TaskInstance
 
 
@@ -170,7 +181,10 @@ def test_dc_rs_runtime_is_first_class_text_only_retrieve_synthesize_generate() -
     assert cast(NativeEntry, result.state.strategies[-1]).direct_parent_ids == ("archive-root",)
 
 
-def test_dc_rs_generation_and_archive_share_exact_strategy_ancestry() -> None:
+def test_dc_rs_generation_and_archive_share_exact_strategy_ancestry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(ordinary_runtime, "_validated_common_capacity_tokens", lambda: 8192)
     context = replace(
         _context(),
         branch="contam",
@@ -198,13 +212,23 @@ def test_dc_rs_generation_and_archive_share_exact_strategy_ancestry() -> None:
     context.initial_states["dc_rs"].injected_root_id = "archive-root"
     context = replace(
         context,
+        identities=RuntimeIdentities(
+            "run-1",
+            "run-1:contam:trial:2:mmlu_pro_engineering:11775",
+            2,
+            "dc_rs:contam",
+        ),
         expected_intervention=dc._archive_native(
             dc._archive_entry(context.initial_states["dc_rs"].archive[0])
         ),
     )
     entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
 
-    result = entry.execute_trial(context, entry.initial_state(context))
+    state = entry.initial_state(context)
+    snapshot = entry.serialize_state(state)
+    assert isinstance(snapshot, NativeState)
+    checkpoint = serialize_checkpoint(snapshot, checkpoint_index=0)
+    result = entry.execute_trial(context, state)
 
     strategy = next(item for item in result.native_entries if item.native_component == "strategy")
     archive = next(item for item in result.native_entries if item.native_component == "archive")
@@ -226,8 +250,111 @@ def test_dc_rs_generation_and_archive_share_exact_strategy_ancestry() -> None:
         result.outcome.answer_call_id,
         ("archive-root",),
         "targets-v1",
+        (
+            Phase13LineageNode(
+                entry_id="archive-root",
+                lineage_status="exact",
+                injected_root_ids=("archive-root",),
+            ),
+            Phase13LineageNode(
+                entry_id=strategy.entry_id,
+                lineage_status="exact",
+                injected_root_ids=("archive-root",),
+                direct_parent_ids=("archive-root",),
+            ),
+        ),
     )
     assert tuple(span.entry_id for span in projected) == (strategy.entry_id,)
+    run = ProspectiveOrdinaryRun(
+        task_name="game24",
+        baseline="dc_rs",
+        run_id="run-1",
+        model="replay",
+        client=context.client,
+        verifier=context.verifier,
+        decoding=context.decoding,
+        arm="contam",
+        branch=LiveArmBranch(
+            "contam",
+            "prefix-v1",
+            "prefix-v1",
+            checkpoint,
+            state,
+            1,
+            injected_root_id="archive-root",
+            candidate_triplet_id="triplet-v1",
+            native_render_id="controlled-dc-rs-root-v1",
+        ),
+        tasks=(
+            TaskInstance(
+                sample_id="game24:fixture",
+                task_name="game24",
+                input={"numbers": [1, 3, 4, 6], "target": 24},
+            ),
+        ),
+        allow_test_client=True,
+    )
+    evidence = build_production_trial_evidence(
+        run,
+        replace(
+            result,
+            provenance_entries=result.native_entries,
+            provenance_envelopes=result.write_envelopes,
+        ),
+        ProductionOrdinaryRunIdentity(
+            execution_template_id="dc-rs-contam",
+            trajectory_seed=0,
+            concrete_seed_id="0",
+            ordered_sample_ids_sha256="a" * 64,
+            registration_packet_sha256="b" * 64,
+            scientific_result=True,
+        ),
+        context.task.sample_id,
+        2,
+        0,
+    )
+
+    assert isinstance(evidence, Phase13TrialEvidence)
+    reconstructed = reconstruct_phase13_trial(evidence)
+
+    assert reconstructed.theory_exposure.value is True
+    assert strategy.entry_id in reconstructed.descendant_entry_ids
+    assert archive.entry_id in reconstructed.descendant_entry_ids
+
+    class PreferGeneratedArchive(_EmbeddingProvider):
+        def __init__(self) -> None:
+            self.document_index = 0
+
+        def encode_document(self, text: str) -> list[float]:
+            del text
+            self.document_index += 1
+            return [0.0, 1.0] if self.document_index == 2 else [1.0, 0.0]
+
+        def encode_query(self, text: str) -> list[float]:
+            del text
+            return [0.0, 1.0]
+
+    subsequent = entry.execute_trial(
+        replace(
+            context,
+            embedding_provider=PreferGeneratedArchive(),
+            identities=RuntimeIdentities(
+                "run-1",
+                "run-1:contam:trial:3:mmlu_pro_engineering:11775",
+                3,
+                "dc_rs:contam",
+            ),
+        ),
+        result.state,
+    )
+    subsequent_answer = next(
+        call
+        for call in subsequent.outcome.method_calls
+        if call.call_id == subsequent.outcome.answer_call_id
+    )
+
+    assert archive.entry_id in subsequent_answer.source_spans[0].direct_parent_ids
+    assert subsequent_answer.source_spans[0].injected_root_ids == ["archive-root"]
 
 
 def test_dc_rs_first_trial_generates_from_transient_whole_cheatsheet() -> None:

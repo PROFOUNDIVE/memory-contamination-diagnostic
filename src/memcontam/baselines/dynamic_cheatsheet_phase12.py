@@ -362,6 +362,16 @@ class DcRsPhase12Adapter:
             trial.config.get("_logging_target_set_id"),
         )
         if strategy_entry is not None:
+            strategy_roots = tuple(dict.fromkeys(
+                root_id
+                for entry in retrieved_archive
+                if entry.entry_id in strategy_entry.direct_parent_ids
+                for root_id in (
+                    _metadata_ids(entry, "injected_root_ids")
+                    if "injected_root_ids" in entry.metadata
+                    else ()
+                )
+            ))
             generation_spans = [
                 span.model_copy(
                     update={
@@ -378,12 +388,7 @@ class DcRsPhase12Adapter:
                         "injected_root_ids": list(dict.fromkeys(
                             (
                                 *span.injected_root_ids,
-                                *(
-                                    (state.injected_root_id,)
-                                    if state.injected_root_id
-                                    in strategy_entry.direct_parent_ids
-                                    else ()
-                                ),
+                                *strategy_roots,
                             )
                         )),
                     }
@@ -419,6 +424,11 @@ class DcRsPhase12Adapter:
             parent_strategy_id=(
                 None if strategy_entry is None else strategy_entry.entry_id
             ),
+            injected_root_ids=tuple(dict.fromkeys(
+                root_id
+                for span in generation_spans
+                for root_id in span.injected_root_ids
+            )),
         )
         state.archive.append(archive_entry)
         archive_envelope = _archive_envelope(archive_entry, trial)
@@ -835,10 +845,20 @@ def _archive_write(
     *,
     tool_trace: str | None = None,
     parent_strategy_id: str | None = None,
+    injected_root_ids: tuple[str, ...] = (),
 ) -> MemoryEntry:
     metadata: dict[str, Any] = {"generated_output": raw_output, "parsed_answer": None}
     if parent_strategy_id is not None:
         metadata["direct_parent_ids"] = [parent_strategy_id]
+    if injected_root_ids:
+        metadata.update(
+            {
+                "contamination_class": "derived",
+                "injected_root_ids": list(injected_root_ids),
+                "lineage_status": "exact",
+                "lineage_basis": "recorded_parent",
+            }
+        )
     if tool_trace is not None:
         metadata["tool_trace"] = tool_trace
     return MemoryEntry(
