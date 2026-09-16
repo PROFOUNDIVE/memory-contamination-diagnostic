@@ -316,15 +316,16 @@ def _target_spans(
         if not isinstance(call, MethodCall) or call.call_id != answer_call_id:
             continue
         for span in call.source_spans:
+            node = nodes.get(span.entry_id)
+            recorded_roots = () if node is None else node.injected_root_ids
             matched_roots = tuple(
                 root_id
                 for root_id in target_ids
-                if root_id == span.entry_id or root_id in span.injected_root_ids
+                if root_id == span.entry_id
+                or root_id in recorded_roots
+                or root_id in span.injected_root_ids
             )
-            if matched_roots and (
-                span.entry_id in target or span.lineage_status == "exact"
-            ):
-                node = nodes.get(span.entry_id)
+            if matched_roots:
                 direct_root = span.entry_id in target
                 if (
                     node is None
@@ -334,7 +335,7 @@ def _target_spans(
                         and node.injected_root_ids != (span.entry_id,)
                     )
                     or (
-                        not direct_root
+                        span.injected_root_ids
                         and set(node.injected_root_ids) != set(span.injected_root_ids)
                     )
                     or any(

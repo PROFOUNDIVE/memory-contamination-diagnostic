@@ -167,6 +167,78 @@ def test_target_spans_require_an_exact_recorded_lineage_path() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "descendant_id",
+    ["dc-rs-strategy", "reflexion-second-actor", "bot-later-template"],
+)
+def test_target_spans_derive_governed_roots_from_exact_lineage(
+    descendant_id: str,
+) -> None:
+    lineage = (
+        Phase13LineageNode(
+            entry_id="governed-root",
+            lineage_status="exact",
+            injected_root_ids=("governed-root",),
+        ),
+        Phase13LineageNode(
+            entry_id=descendant_id,
+            lineage_status="exact",
+            injected_root_ids=("governed-root",),
+            direct_parent_ids=("governed-root",),
+        ),
+    )
+
+    spans = _target_spans(
+        (_call("answer", descendant_id),),
+        "answer",
+        ("governed-root",),
+        "target-set",
+        lineage,
+    )
+
+    assert tuple(span.entry_id for span in spans) == (descendant_id,)
+    assert spans[0].injected_root_ids == ["governed-root"]
+    assert spans[0].is_target_contamination is True
+
+
+def test_target_spans_reject_conflicting_nonempty_root_claim() -> None:
+    lineage = (
+        Phase13LineageNode(
+            entry_id="governed-root",
+            lineage_status="exact",
+            injected_root_ids=("governed-root",),
+        ),
+        Phase13LineageNode(
+            entry_id="descendant",
+            lineage_status="exact",
+            injected_root_ids=("governed-root",),
+            direct_parent_ids=("governed-root",),
+        ),
+    )
+    call = _call("answer", "descendant")
+    conflicting = call.model_copy(
+        update={
+            "source_spans": [
+                call.source_spans[0].model_copy(
+                    update={
+                        "injected_root_ids": ["unrelated-root"],
+                        "lineage_status": "exact",
+                    }
+                )
+            ]
+        }
+    )
+
+    with pytest.raises(ProductionRuntimeJoinError, match="PRODUCTION_TARGET_LINEAGE_INVALID"):
+        _target_spans(
+            (conflicting,),
+            "answer",
+            ("governed-root",),
+            "target-set",
+            lineage,
+        )
+
+
 def test_lineage_preserves_version_predecessor_and_independent_origin() -> None:
     entries = (
         _RuntimeMemoryEntry(entry_id="root"),
