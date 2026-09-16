@@ -486,6 +486,30 @@ def test_dc_rs_runtime_rejects_snapshot_with_unresolved_strategy_parent() -> Non
         entry.restore_state(replace(snapshot, entries=tuple(entries)), context)
 
 
+def test_dc_rs_runtime_rejects_snapshot_with_unresolved_archive_parent_before_llm() -> None:
+    entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
+    context = _context()
+    executed = entry.execute_trial(context, entry.initial_state(context))
+    snapshot = cast(NativeState, entry.serialize_state(executed.state))
+    entries = list(snapshot.entries)
+    archive = cast(NativeEntry, entries[0])
+    entries[0] = replace(archive, direct_parent_ids=("missing-strategy",))
+    native_state = dict(snapshot.native_state)
+    archive_rows = cast(list[dict[str, object]], native_state["archive"])
+    first_row = dict(archive_rows[0])
+    metadata = cast(dict[str, object], first_row["metadata"])
+    first_row["metadata"] = {**metadata, "direct_parent_ids": ["missing-strategy"]}
+    native_state["archive"] = [first_row, *archive_rows[1:]]
+    client = _BombClient()
+
+    with pytest.raises(RuntimeStateError, match="INVALID_DC_RS_SNAPSHOT"):
+        entry.restore_state(
+            replace(snapshot, entries=tuple(entries), native_state=native_state),
+            replace(context, client=client),
+        )
+    assert client.calls == 0
+
+
 def test_dc_rs_runtime_rejects_false_core_strategy_mode() -> None:
     entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
     context = _context()

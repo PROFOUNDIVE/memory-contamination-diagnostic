@@ -66,6 +66,7 @@ def validate_state(
     ):
         raise DcRsRuntimeError(code)
     archive_ids: list[str] = []
+    archive_parent_ids: list[tuple[str, ...]] = []
     for raw_entry in state.archive:
         try:
             archive_entry = dc._archive_entry(raw_entry)
@@ -95,6 +96,7 @@ def validate_state(
         else:
             _validate_archive_input(archive_entry.content, code)
         archive_ids.append(archive_entry.entry_id)
+        archive_parent_ids.append(native.direct_parent_ids)
     strategy_ids: list[str] = []
     for raw_entry in state.strategies or ():
         try:
@@ -109,8 +111,13 @@ def validate_state(
             raise DcRsRuntimeError("DC_RS_CHEATSHEET_BUDGET_EXCEEDED")
         strategy_ids.append(strategy_entry.entry_id)
     all_ids = [*archive_ids, *strategy_ids]
-    if len(set(all_ids)) != len(all_ids) or (
-        state.injected_root_id is not None and state.injected_root_id not in archive_ids
+    if (
+        len(set(all_ids)) != len(all_ids)
+        or any(not set(parent_ids).issubset(strategy_ids) for parent_ids in archive_parent_ids)
+        or (
+            state.injected_root_id is not None
+            and state.injected_root_id not in archive_ids
+        )
     ):
         raise DcRsRuntimeError(code)
 
