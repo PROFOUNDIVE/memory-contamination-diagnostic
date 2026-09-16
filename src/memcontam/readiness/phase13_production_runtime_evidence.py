@@ -9,6 +9,7 @@ from memcontam.evaluation.phase13_observability_models import (
     Phase13TargetSetEvidence,
     Phase13TrialEvidence,
 )
+from memcontam.evaluation.phase13_observability_lineage import recorded_path
 from memcontam.experiment.phase12.filter_challenge.mft_state_models import JsonValue
 from memcontam.experiment.phase12.runtime_registry import RuntimeTrialResult
 from memcontam.experiment.phase13_ordinary_runtime import ProspectiveOrdinaryRun
@@ -169,6 +170,7 @@ def build_production_trial_evidence(
                 result.outcome.answer_call_id,
                 target_ids,
                 target_set_id,
+                lineage,
             ),
             source_package_manifest_sha256=identity.source_package_manifest_sha256,
         ),
@@ -303,10 +305,12 @@ def _target_spans(
     answer_call_id: str | None,
     target_ids: tuple[str, ...],
     target_set_id: str,
+    lineage: Sequence[Phase13LineageNode],
 ) -> tuple[PromptSourceSpan, ...]:
     if not target_ids:
         return ()
     target = set(target_ids)
+    nodes = {node.entry_id: node for node in lineage}
     spans: list[PromptSourceSpan] = []
     for call in calls:
         if not isinstance(call, MethodCall) or call.call_id != answer_call_id:
@@ -320,7 +324,25 @@ def _target_spans(
             if matched_roots and (
                 span.entry_id in target or span.lineage_status == "exact"
             ):
+                node = nodes.get(span.entry_id)
                 direct_root = span.entry_id in target
+                if (
+                    node is None
+                    or node.lineage_status != "exact"
+                    or (
+                        direct_root
+                        and node.injected_root_ids != (span.entry_id,)
+                    )
+                    or (
+                        not direct_root
+                        and set(node.injected_root_ids) != set(span.injected_root_ids)
+                    )
+                    or any(
+                        not recorded_path(node, nodes, {root_id}, {}, set())
+                        for root_id in matched_roots
+                    )
+                ):
+                    raise ProductionRuntimeJoinError("PRODUCTION_TARGET_LINEAGE_INVALID")
                 spans.append(span.model_copy(update={
                     "parent_call_id": call.call_id,
                     "clean_or_contaminated": "contaminated",

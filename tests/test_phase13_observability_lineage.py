@@ -226,6 +226,32 @@ def test_propagation_must_descend_from_the_exact_exposed_root() -> None:
     assert row.propagation.value is False
 
 
+def test_answer_exposure_rejects_descendant_absent_from_exact_lineage() -> None:
+    module = _module()
+    evidence = _evidence(module, retrieved=False, included=False, verified=0)
+    forged_span = _span("root-b").model_copy(
+        update={
+            "entry_id": "forged-descendant",
+            "source_ids": ["forged-descendant"],
+            "lineage_id": "forged-descendant",
+            "contamination_class": "derived",
+            "injected_root_ids": ["root-b"],
+            "lineage_basis": "recorded_source",
+        }
+    )
+    forged = evidence.model_copy(
+        update={
+            "context": _context(["forged-descendant"]),
+            "target_set": evidence.target_set.model_copy(
+                update={"answer_call_spans": (forged_span,)}
+            )
+        }
+    )
+
+    with pytest.raises(module.Phase13ObservabilityError, match="FABRICATED_LINEAGE"):
+        module.reconstruct_phase13_trial(forged)
+
+
 def test_historical_exact_hops_remain_traversable_for_a_current_write() -> None:
     module = _module()
     exact = _evidence(module, retrieved=True, included=True, verified=0)

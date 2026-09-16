@@ -28,6 +28,7 @@ from memcontam.readiness.phase13_production_runtime_evidence import (
     _target_spans,
 )
 from memcontam.readiness.phase13_production_runtime_models import ProductionRuntimeJoinError
+from memcontam.evaluation.phase13_observability_models import Phase13LineageNode
 from memcontam.readiness.phase13_main_live_evidence import PrefixCheckpointState
 from memcontam.readiness.phase13_main_live_evidence import _reflexion_stage_sequences_valid
 from memcontam.tasks.base import TaskInstance
@@ -93,11 +94,77 @@ def test_selected_answer_call_defines_context_and_target_spans() -> None:
     answer = _call("answer", "clean")
 
     context = _context(None, {}, "run", "trial", (), (auxiliary, answer), "answer")
-    spans = _target_spans((auxiliary, answer), "answer", ("target",), "target-set")
+    spans = _target_spans(
+        (auxiliary, answer),
+        "answer",
+        ("target",),
+        "target-set",
+        (
+            Phase13LineageNode(
+                entry_id="target", lineage_status="exact", injected_root_ids=("target",)
+            ),
+        ),
+    )
 
     assert context is not None
     assert context.final_entry_ids == ["clean"]
     assert spans == ()
+
+
+def test_target_spans_require_an_exact_recorded_lineage_path() -> None:
+    lineage = (
+        Phase13LineageNode(
+            entry_id="target", lineage_status="exact", injected_root_ids=("target",)
+        ),
+        Phase13LineageNode(
+            entry_id="descendant",
+            lineage_status="exact",
+            injected_root_ids=("target",),
+            direct_parent_ids=("target",),
+        ),
+    )
+
+    descendant_call = _call("answer", "descendant")
+    descendant_call = descendant_call.model_copy(
+        update={
+            "source_spans": [
+                descendant_call.source_spans[0].model_copy(
+                    update={
+                        "injected_root_ids": ["target"],
+                        "lineage_status": "exact",
+                        "lineage_basis": "recorded_source",
+                    }
+                )
+            ]
+        }
+    )
+    forged_call = descendant_call.model_copy(
+        update={
+            "source_spans": [
+                descendant_call.source_spans[0].model_copy(
+                    update={"entry_id": "forged-descendant"}
+                )
+            ]
+        }
+    )
+
+    spans = _target_spans(
+        (descendant_call,),
+        "answer",
+        ("target",),
+        "target-set",
+        lineage,
+    )
+
+    assert tuple(span.entry_id for span in spans) == ("descendant",)
+    with pytest.raises(ProductionRuntimeJoinError, match="PRODUCTION_TARGET_LINEAGE_INVALID"):
+        _target_spans(
+            (forged_call,),
+            "answer",
+            ("target",),
+            "target-set",
+            lineage,
+        )
 
 
 def test_lineage_preserves_version_predecessor_and_independent_origin() -> None:
