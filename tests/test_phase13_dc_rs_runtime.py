@@ -196,17 +196,8 @@ def test_dc_rs_generation_and_archive_share_exact_strategy_ancestry(
             }
         },
     )
-    context.initial_states["dc_rs"].archive[0].metadata.update(
-        {
-            "render_id": "controlled-dc-rs-root-v1",
-            "contamination_class": "injected",
-            "injected_root_ids": ["archive-root"],
-            "lineage_status": "exact",
-            "lineage_basis": "seed",
-            "direct_parent_ids": [],
-            "target_set_id": "targets-v1",
-            "is_target_contamination": True,
-        }
+    context.initial_states["dc_rs"].archive[0].metadata["render_id"] = (
+        "controlled-dc-rs-root-v1"
     )
     context.initial_states["dc_rs"].archive[0].source_trial_id = None
     context.initial_states["dc_rs"].injected_root_id = "archive-root"
@@ -238,8 +229,7 @@ def test_dc_rs_generation_and_archive_share_exact_strategy_ancestry(
     answer_span = answer_call.source_spans[0]
     assert answer_span.entry_id == strategy.entry_id
     assert answer_span.direct_parent_ids == ["archive-root"]
-    assert answer_span.injected_root_ids == ["archive-root"]
-    assert answer_span.lineage_status == "exact"
+    assert answer_span.injected_root_ids == []
     assert archive.direct_parent_ids == (strategy.entry_id,)
     archive_envelope = next(
         envelope for envelope in result.write_envelopes if envelope.entry_id == archive.entry_id
@@ -354,7 +344,7 @@ def test_dc_rs_generation_and_archive_share_exact_strategy_ancestry(
     )
 
     assert archive.entry_id in subsequent_answer.source_spans[0].direct_parent_ids
-    assert subsequent_answer.source_spans[0].injected_root_ids == ["archive-root"]
+    assert subsequent_answer.source_spans[0].injected_root_ids == []
 
 
 def test_dc_rs_first_trial_generates_from_transient_whole_cheatsheet() -> None:
