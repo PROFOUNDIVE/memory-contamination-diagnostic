@@ -50,6 +50,7 @@ ALLOW: Final = (
     "data/phase13/observability/manifest_v1.json",
     "data/phase13/main/legacy_dc_rs_intervention_registry_v1.json",
     "src/memcontam/baselines/bot_phase12.py",
+    "src/memcontam/baselines/bot_write.py",
     "src/memcontam/baselines/dynamic_cheatsheet_phase12.py",
     "src/memcontam/baselines/reflexion_adapter.py",
     "src/memcontam/baselines/reflexion_phase12.py",
