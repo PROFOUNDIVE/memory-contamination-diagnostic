@@ -106,7 +106,8 @@ def _state() -> DcRsStateV3:
                     "parsed_answer": "A",
                 },
             )
-        ]
+        ],
+        allow_unparented_strategies=True,
     )
 
 
@@ -359,7 +360,12 @@ def test_dc_rs_first_trial_generates_from_transient_whole_cheatsheet() -> None:
                 }
             }
         ),
-        initial_states={"dc_rs": DcRsStateV3(archive=[])},
+        initial_states={
+            "dc_rs": DcRsStateV3(
+                archive=[],
+                allow_unparented_strategies=True,
+            )
+        },
     )
     entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
 
@@ -522,6 +528,22 @@ def test_dc_rs_runtime_rejects_false_core_strategy_mode() -> None:
         entry.restore_state(replace(snapshot, native_state=native_state), context)
 
 
+def test_dc_rs_runtime_rejects_false_initial_strategy_mode_before_llm() -> None:
+    state = DcRsStateV3(archive=[], allow_unparented_strategies=False)
+    client = _BombClient()
+    context = replace(
+        _context(),
+        client=client,
+        initial_states={"dc_rs": state},
+    )
+    entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
+
+    with pytest.raises(RuntimeStateError, match="INVALID_DC_RS_STATE"):
+        entry.initial_state(context)
+    assert state.allow_unparented_strategies is False
+    assert client.calls == 0
+
+
 @pytest.mark.parametrize(
     "mutation",
     [
@@ -608,7 +630,12 @@ def test_dc_rs_runtime_rejects_archive_without_proven_prior_trajectory(
     context = replace(
         _context(),
         client=client,
-        initial_states={"dc_rs": DcRsStateV3(archive=[archive])},
+        initial_states={
+            "dc_rs": DcRsStateV3(
+                archive=[archive],
+                allow_unparented_strategies=True,
+            )
+        },
     )
     entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
 
@@ -630,7 +657,12 @@ def test_dc_rs_runtime_rejects_cross_task_archive_before_curator() -> None:
     context = replace(
         _context(),
         client=client,
-        initial_states={"dc_rs": DcRsStateV3(archive=[archive])},
+        initial_states={
+            "dc_rs": DcRsStateV3(
+                archive=[archive],
+                allow_unparented_strategies=True,
+            )
+        },
     )
     entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
 
@@ -645,7 +677,12 @@ def test_dc_rs_runtime_rejects_unproven_current_identity_on_empty_state() -> Non
         _context(),
         client=client,
         identities=RuntimeIdentities("run-1", "trial-1", 1, "dc_rs"),
-        initial_states={"dc_rs": DcRsStateV3(archive=[])},
+        initial_states={
+            "dc_rs": DcRsStateV3(
+                archive=[],
+                allow_unparented_strategies=True,
+            )
+        },
     )
     entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
 
@@ -923,7 +960,12 @@ def test_dc_rs_runtime_accepts_historical_task_native_context() -> None:
                 "serialized_cheatsheet_budget_tokens": 8192,
             }
         },
-        initial_states={"dc_rs": DcRsStateV3(archive=[])},
+        initial_states={
+            "dc_rs": DcRsStateV3(
+                archive=[],
+                allow_unparented_strategies=True,
+            )
+        },
     )
     entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
 
@@ -973,7 +1015,12 @@ def test_dc_rs_matched_intervention_stays_blocked_without_frozen_raw_interaction
         branch="clean",
         identities=RuntimeIdentities("run-1", "trial-1", 1),
         embedding_provider=_EmbeddingProvider(),
-        initial_states={"dc_rs": DcRsStateV3(archive=[])},
+        initial_states={
+            "dc_rs": DcRsStateV3(
+                archive=[],
+                allow_unparented_strategies=True,
+            )
+        },
     )
     entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
     prefix = serialize_checkpoint(

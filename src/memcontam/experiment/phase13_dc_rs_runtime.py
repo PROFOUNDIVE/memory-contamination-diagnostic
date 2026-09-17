@@ -56,7 +56,6 @@ def initial_state(context: Any) -> dc.DcRsStateV3:
     )
     if not isinstance(state, dc.DcRsStateV3):
         raise DcRsRuntimeError("INVALID_DC_RS_STATE")
-    state.allow_unparented_strategies = True
     _validate_bound_state(state, context, configured_budget(context), "INVALID_DC_RS_STATE")
     validate_ordinary_history(state, _ordinary_identity(context))
     return state
