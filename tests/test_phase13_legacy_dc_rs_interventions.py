@@ -16,6 +16,7 @@ from memcontam.experiment.phase12.game24_runner import Game24RuntimeContext, Run
 from memcontam.experiment.phase12.live_branch import build_live_reduced_main_branches
 from memcontam.experiment.phase12.runtime_registry import PHASE13_CORE_BASELINE_REGISTRY
 from memcontam.memory.checkpoint_v3 import NativeEntry, NativeState, serialize_checkpoint
+from memcontam.memory.stores import MemoryEntry
 from memcontam.tasks.base import TaskInstance
 
 from .test_phase13_dc_rs_runtime import _EmbeddingProvider
@@ -54,7 +55,7 @@ def _context() -> Game24RuntimeContext:
                 "tool_mode": "text_only",
             }
         },
-        initial_states={"dc_rs": DcRsStateV3(archive=[])},
+        initial_states={},
     )
 
 
@@ -172,6 +173,7 @@ def test_controlled_dc_rs_root_rejects_self_consistent_forgery() -> None:
     ).arms["contam"]
     state = cast(DcRsStateV3, branch.state)
     root = next(item for item in state.archive if item.entry_id == state.injected_root_id)
+    assert isinstance(root, MemoryEntry)
     root.content = '{"input":"forged","raw_output":"forged"}'
     root.metadata["render_id"] = "legacy-dc-rs-render-v1::forged"
 

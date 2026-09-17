@@ -809,7 +809,12 @@ def test_dc_rs_ordinary_execution_accepts_each_core_task_stream(
                     "tool_mode": "text_only",
                 }
             },
-            initial_states={"dc_rs": DcRsStateV3(archive=[])},
+            initial_states={
+                "dc_rs": DcRsStateV3(
+                    archive=[],
+                    allow_unparented_strategies=True,
+                )
+            },
         )
     )
 
@@ -872,7 +877,12 @@ def test_dc_rs_ordinary_execution_accepts_original_task_native_inputs(
                     "tool_mode": "text_only",
                 }
             },
-            initial_states={"dc_rs": DcRsStateV3(archive=[])},
+            initial_states={
+                "dc_rs": DcRsStateV3(
+                    archive=[],
+                    allow_unparented_strategies=True,
+                )
+            },
         )
     )
 
