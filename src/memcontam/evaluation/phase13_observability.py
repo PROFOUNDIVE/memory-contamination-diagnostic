@@ -212,14 +212,13 @@ def _propagation(
                 node = nodes.get(entry_id)
                 if node is None:
                     raise Phase13ObservabilityError("FABRICATED_LINEAGE")
-                candidate_roots = exposed_target_ids.intersection(node.injected_root_ids)
                 if set(node.injected_root_ids).intersection(evidence.target_set.target_entry_ids):
                     if not exposed_target_ids:
                         raise Phase13ObservabilityError("PROPAGATION_REQUIRES_EXPOSURE")
                     if node.lineage_status != "exact":
                         raise Phase13ObservabilityError("EXACT_LINEAGE_REQUIRED")
                     path = _recorded_path(
-                        node, nodes, candidate_roots, writer_parents, set()
+                        node, nodes, exposed_target_ids, writer_parents, set()
                     )
                     if len(path) >= 2:
                         return MetricValue(
