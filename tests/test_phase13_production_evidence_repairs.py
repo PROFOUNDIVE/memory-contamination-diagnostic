@@ -157,6 +157,7 @@ def test_target_spans_require_an_exact_recorded_lineage_path() -> None:
     )
 
     assert tuple(span.entry_id for span in spans) == ("descendant",)
+    assert spans[0].direct_parent_ids == ["target"]
     with pytest.raises(ProductionRuntimeJoinError, match="PRODUCTION_TARGET_LINEAGE_INVALID"):
         _target_spans(
             (forged_call,),

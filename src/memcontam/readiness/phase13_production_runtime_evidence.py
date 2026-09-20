@@ -351,6 +351,7 @@ def _target_spans(
                     "injected_root_ids": list(matched_roots),
                     "lineage_status": "exact",
                     "lineage_basis": "seed" if direct_root else "recorded_source",
+                    "direct_parent_ids": list(node.direct_parent_ids),
                     "target_set_id": target_set_id,
                     "is_target_contamination": True,
                 }))
