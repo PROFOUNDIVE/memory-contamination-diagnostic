@@ -6,11 +6,11 @@
   "artifacts": {
     "observability_registration_packet": {
       "path": "registration_packet_v1.json",
-      "sha256": "8edf92d502d6c4a65ca7d3e08de2575f29e8875bc7b41dacffc5fa897e7a3f1b"
+      "sha256": "895246497a2c47ebc5ae812a9e2b9f1c582a46c49894ae59d4b33fcfbeda1558"
     },
     "synthetic_contract_fixture": {
       "path": "fixture_v1.json",
-      "sha256": "5f7d1134d6e247a0458c9b34166b5c383a69d90d043544ce3d4674ff7c12d871"
+      "sha256": "b59ee6a3c9409a8538eaeedf3b9d816f137920f81d551b8363125a8738bec8d7"
     },
     "target_set_registry": {
       "path": "target_set_registry_v1.json",
@@ -68,7 +68,7 @@
     }
   },
   "expected_reconstruction_sha256": "e0e57053cf676439670e160ca49bb2d21df42d2f54e0afdc135248938a803d9f",
-  "registration_packet_sha256": "8edf92d502d6c4a65ca7d3e08de2575f29e8875bc7b41dacffc5fa897e7a3f1b",
+  "registration_packet_sha256": "895246497a2c47ebc5ae812a9e2b9f1c582a46c49894ae59d4b33fcfbeda1558",
   "failure_classifier_registry_status": "PACKET_BOUND_REGISTERED",
   "u_t_status": "NOT_REGISTERED_FOR_CURRENT_MAIN",
   "downstream_blockers": [],

@@ -40,7 +40,7 @@
     },
     "math_equation_balancer": {
       "path": "src/memcontam/verifiers/math_equation_balancer.py",
-      "sha256": "1225789314c153528ba7284e108fc9c8e1e93114345cb1458af332ccb380bfca"
+      "sha256": "5d79d483a80f25ba1dc84e77712a52660070deb575a6ed03dbe7c7d9441440aa"
     },
     "word_sorting": {
       "path": "src/memcontam/verifiers/word_sorting.py",
