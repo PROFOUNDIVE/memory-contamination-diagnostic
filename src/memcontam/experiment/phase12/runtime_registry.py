@@ -54,6 +54,10 @@ class RuntimeTrialResult:
     context_event: object | None = None
     native_entries: tuple[NativeEntry, ...] = ()
     write_envelopes: tuple[MemoryCardEnvelopeV3, ...] = ()
+    state_before: NativeState | None = None
+    state_after: NativeState | None = None
+    provenance_entries: tuple[NativeEntry, ...] = ()
+    provenance_envelopes: tuple[MemoryCardEnvelopeV3, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -250,7 +254,7 @@ def _reflexion_execute(context: Any, state: object) -> RuntimeTrialResult:
         result.outcome,
         state,
         native_entries=result.native_reflections,
-        write_envelopes=() if result.write_envelope is None else (result.write_envelope,),
+        write_envelopes=result.write_envelopes,
     )
 
 

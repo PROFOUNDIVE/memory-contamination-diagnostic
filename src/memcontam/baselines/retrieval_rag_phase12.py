@@ -224,6 +224,8 @@ def _run_answer(
                 "sample_id": trial.task.sample_id,
                 "method_stage": "rag_generate",
                 "source_spans": source_spans,
+                "temperature": 0.0,
+                "top_p": 1.0,
             },
         )
     except RecordedCallFailure as failure:

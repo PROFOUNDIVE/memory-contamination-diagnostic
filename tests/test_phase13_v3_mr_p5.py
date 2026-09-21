@@ -121,7 +121,7 @@ def test_mr_p5_rebuild_is_byte_deterministic(staged, tmp_path):
     first = module.build_mr_p5(root, authority, output)
     fresh = tmp_path / "fresh"
     fresh.mkdir()
-    module.build_mr_p4(root, authority, fresh, governed_source_commit=first.governed_source.governed_source_commit)
+    module.build_mr_p4(root, authority, fresh, governed_source_commit=first.governed_source.governed_source_commit, identity=first.identity)
     second = module.build_mr_p5(root, authority, fresh)
     assert first == second
 

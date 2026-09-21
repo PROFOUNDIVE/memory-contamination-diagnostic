@@ -65,6 +65,7 @@ class PrefixCheckpointState(_FrozenModel):
     checkpoint_identity_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     canonical_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     canonical_state_utf8: str
+    checkpoint_index: int = Field(ge=0)
 
 
 class PrefixUnitEvidence(_FrozenModel):
@@ -178,18 +179,58 @@ def _stages_valid(
     calls: tuple[MethodCall, ...],
     evidence: UnitEvidence,
 ) -> bool:
-    stages = tuple(call.stage for call in calls)
-    if unit.kind == "CLEAN_PREFIX" and unit.memory_baseline == "reflexion_style":
-        verifier_result = evidence.runtime_evidence.verifier_result
-        if verifier_result is None:
-            return False
-        expected = (
-            ("reflexion_generate",)
-            if verifier_result is True
-            else ("reflexion_generate", "reflexion_reflect")
+    if unit.memory_baseline == "reflexion_style":
+        expected_trials = 1 if unit.kind == "CLEAN_PREFIX" else 50
+        archive = evidence.runtime_evidence.production_observability_archive
+        trial_ids = (
+            None
+            if archive is None
+            else tuple(record.evidence.trial_id for record in archive.records)
         )
-        return stages == expected
+        return _reflexion_stage_sequences_valid(
+            calls, expected_trials, unit.kind, trial_ids
+        )
+    stages = tuple(call.stage for call in calls)
     return Counter(stages) == _expected_stages(unit)
+
+
+def _reflexion_stage_sequences_valid(
+    calls: tuple[MethodCall, ...], expected_trials: int, kind: str,
+    expected_trial_ids: tuple[str, ...] | None = None,
+) -> bool:
+    groups: list[list[str]] = []
+    trial_ids: list[str] = []
+    for call in calls:
+        if call.call_id is None or ":call:" not in call.call_id:
+            return False
+        trial_id = call.call_id.rsplit(":call:", 1)[0]
+        if not trial_ids or trial_ids[-1] != trial_id:
+            if trial_id in trial_ids:
+                return False
+            trial_ids.append(trial_id)
+            groups.append([])
+        if call.call_id != f"{trial_id}:call:{len(groups[-1]) + 1}":
+            return False
+        groups[-1].append(call.stage)
+    allowed = (
+        {("reflexion_generate",), ("reflexion_generate", "reflexion_reflect")}
+        if kind == "CLEAN_PREFIX"
+        else {
+            ("reflexion_generate",),
+            ("reflexion_generate", "reflexion_reflect", "reflexion_generate"),
+            (
+            "reflexion_generate",
+            "reflexion_reflect",
+            "reflexion_generate",
+            "reflexion_reflect",
+            ),
+        }
+    )
+    return (
+        len(groups) == expected_trials
+        and (expected_trial_ids is None or tuple(trial_ids) == expected_trial_ids)
+        and all(tuple(group) in allowed for group in groups)
+    )
 
 
 def load_durable_unit_evidence(

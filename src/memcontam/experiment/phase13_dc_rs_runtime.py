@@ -34,6 +34,7 @@ class Phase13DcRsContext:
     embedding_provider: Any | None = None
     baseline_configs: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     initial_states: Mapping[str, Any] = field(default_factory=dict)
+    expected_intervention: NativeEntry | None = None
 
     def __post_init__(self) -> None:
         if self.task.task_name not in ORDINARY_TASKS:
@@ -55,8 +56,7 @@ def initial_state(context: Any) -> dc.DcRsStateV3:
     )
     if not isinstance(state, dc.DcRsStateV3):
         raise DcRsRuntimeError("INVALID_DC_RS_STATE")
-    state.allow_unparented_strategies = True
-    validate_state(state, configured_budget(context), "INVALID_DC_RS_STATE")
+    _validate_bound_state(state, context, configured_budget(context), "INVALID_DC_RS_STATE")
     validate_ordinary_history(state, _ordinary_identity(context))
     return state
 
@@ -73,7 +73,7 @@ def execute(context: Any, state: Any) -> DcRsRuntimeExecution:
     if configured.get("tool_mode", "text_only") != "text_only":
         raise DcRsRuntimeError("DC_RS_TEXT_ONLY_REQUIRED")
     budget = configured_budget(context)
-    validate_state(state, budget, "INVALID_DC_RS_STATE")
+    _validate_bound_state(state, context, budget, "INVALID_DC_RS_STATE")
     validate_ordinary_history(state, _ordinary_identity(context))
     if context.embedding_provider is None:
         raise DcRsRuntimeError("DC_RS_EMBEDDING_PROVIDER_REQUIRED")
@@ -226,8 +226,20 @@ def restore(snapshot: Any, context: Any) -> dc.DcRsStateV3:
     )
     try:
         budget = configured_budget(context)
-        validate_state(restored, budget, "INVALID_DC_RS_SNAPSHOT")
+        _validate_bound_state(restored, context, budget, "INVALID_DC_RS_SNAPSHOT")
         validate_ordinary_history(restored, _ordinary_identity(context))
     except DcRsRuntimeError as error:
         raise DcRsRuntimeError("INVALID_DC_RS_SNAPSHOT") from error
     return restored
+
+
+def _validate_bound_state(
+    state: dc.DcRsStateV3,
+    context: Any,
+    budget: int | None,
+    code: str,
+) -> None:
+    expected = getattr(context, "expected_intervention", None)
+    if (state.injected_root_id is None) != (expected is None):
+        raise DcRsRuntimeError(code)
+    validate_state(state, budget, code, expected)

@@ -196,6 +196,7 @@ def curate_pre_generation(
     strict_whole_response: bool = False,
 ) -> StrategyCandidateState:
     """Parse a curator result without turning visible archive entries into parents."""
+    source_ids: tuple[str, ...]
     if inferred_parent_ids:
         raise DcRsContractError("IMPLICIT_PARENT_UNION")
     if strict_whole_response:
@@ -268,7 +269,9 @@ class DcRsPhase12Adapter:
         model_visible_task = (
             render_model_visible_task(trial.task) if core_dc_rs else canonical_task
         )
-        recorder = MethodCallRecorder(trial.client)
+        recorder = MethodCallRecorder(
+            trial.client, trial_context={"trial_id": trial.trial_id}
+        )
         call_config = {**dict(trial.config), "sample_id": trial.task.sample_id}
         if core_dc_rs:
             curation_message, curation_spans, source_aliases = core_synthesis_message(
@@ -358,6 +361,40 @@ class DcRsPhase12Adapter:
             curation_spans,
             trial.config.get("_logging_target_set_id"),
         )
+        if strategy_entry is not None:
+            strategy_roots = tuple(dict.fromkeys(
+                root_id
+                for entry in retrieved_archive
+                if entry.entry_id in strategy_entry.direct_parent_ids
+                for root_id in (
+                    _metadata_ids(entry, "injected_root_ids")
+                    if "injected_root_ids" in entry.metadata
+                    else ()
+                )
+            ))
+            generation_spans = [
+                span.model_copy(
+                    update={
+                        "entry_id": strategy_entry.entry_id,
+                        "direct_parent_ids": list(strategy_entry.direct_parent_ids),
+                        "lineage_status": (
+                            "exact" if strategy_entry.direct_parent_ids else span.lineage_status
+                        ),
+                        "lineage_basis": (
+                            "recorded_source"
+                            if strategy_entry.direct_parent_ids
+                            else span.lineage_basis
+                        ),
+                        "injected_root_ids": list(dict.fromkeys(
+                            (
+                                *span.injected_root_ids,
+                                *strategy_roots,
+                            )
+                        )),
+                    }
+                )
+                for span in generation_spans
+            ]
         generation_config = {
             **call_config,
             "method_stage": "dc_rs_generate",
@@ -380,7 +417,18 @@ class DcRsPhase12Adapter:
         ) > _REGISTERED_PERSISTED_RAW_ANSWER_CEILING:
             raise DcRsContractError("DC_RS_RAW_ANSWER_BUDGET_EXCEEDED")
         archive_entry = _archive_write(
-            generated_output, canonical_task, trial, tool_trace=tool_trace
+            generated_output,
+            canonical_task,
+            trial,
+            tool_trace=tool_trace,
+            parent_strategy_id=(
+                None if strategy_entry is None else strategy_entry.entry_id
+            ),
+            injected_root_ids=tuple(dict.fromkeys(
+                root_id
+                for span in generation_spans
+                for root_id in span.injected_root_ids
+            )),
         )
         state.archive.append(archive_entry)
         archive_envelope = _archive_envelope(archive_entry, trial)
@@ -796,8 +844,21 @@ def _archive_write(
     trial: DcRsTrialContextV3,
     *,
     tool_trace: str | None = None,
+    parent_strategy_id: str | None = None,
+    injected_root_ids: tuple[str, ...] = (),
 ) -> MemoryEntry:
     metadata: dict[str, Any] = {"generated_output": raw_output, "parsed_answer": None}
+    if parent_strategy_id is not None:
+        metadata["direct_parent_ids"] = [parent_strategy_id]
+    if injected_root_ids:
+        metadata.update(
+            {
+                "contamination_class": "derived",
+                "injected_root_ids": list(injected_root_ids),
+                "lineage_status": "exact",
+                "lineage_basis": "recorded_parent",
+            }
+        )
     if tool_trace is not None:
         metadata["tool_trace"] = tool_trace
     return MemoryEntry(
@@ -822,6 +883,12 @@ def _archive_native(entry: MemoryEntry) -> NativeEntry:
         native_component="archive",
         content=content,
         content_hash=canonical_content_hash(content),
+        direct_parent_ids=(
+            _metadata_ids(entry, "direct_parent_ids")
+            if "direct_parent_ids" in entry.metadata
+            else ()
+        ),
+        render_id=entry.metadata.get("render_id"),
     )
 
 
@@ -839,8 +906,8 @@ def _archive_envelope(entry: MemoryEntry, trial: DcRsTrialContextV3) -> MemoryCa
         source_trial_ids=(trial.trial_id,),
         source_outcome=None,
         trial_support_ids=(trial.trial_id,),
-        memory_support_ids=(),
-        direct_parent_ids=(),
+        memory_support_ids=native.direct_parent_ids,
+        direct_parent_ids=native.direct_parent_ids,
         version_predecessor_id=None,
         order_key=_archive_order_key(trial),
         native_component=native.native_component,
@@ -923,7 +990,11 @@ def _archive_entry(entry: MemoryEntry | NativeEntry) -> MemoryEntry:
     ):
         raise DcRsContractError("INVALID_ARCHIVE_COMPONENT")
     input_text, raw_output, tool_trace = _native_archive_values(entry.content)
-    metadata = {"generated_output": raw_output}
+    metadata: dict[str, Any] = {"generated_output": raw_output}
+    if entry.direct_parent_ids:
+        metadata["direct_parent_ids"] = list(entry.direct_parent_ids)
+    if entry.render_id is not None:
+        metadata["render_id"] = entry.render_id
     if tool_trace is not None:
         metadata["tool_trace"] = tool_trace
     return MemoryEntry(

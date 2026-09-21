@@ -130,9 +130,15 @@ class Phase12Checkpoint:
     state: NativeState
     canonical_bytes: bytes
     canonical_sha256: str
+    checkpoint_index: int | None = None
 
 
-def serialize_checkpoint(state: NativeState, *, registry=None) -> Phase12Checkpoint:
+def serialize_checkpoint(
+    state: NativeState,
+    *,
+    registry=None,
+    checkpoint_index: int | None = None,
+) -> Phase12Checkpoint:
     registry = _registry_or_native(registry)
     registry.validate(state)
     canonical_bytes = _canonical_bytes(state)
@@ -149,6 +155,7 @@ def serialize_checkpoint(state: NativeState, *, registry=None) -> Phase12Checkpo
         state=state,
         canonical_bytes=canonical_bytes,
         canonical_sha256=canonical_sha256,
+        checkpoint_index=checkpoint_index,
     )
 
 
@@ -190,6 +197,7 @@ def append_native_entry(
             schema_version=state.schema_version,
         ),
         registry=registry,
+        checkpoint_index=checkpoint.checkpoint_index,
     )
 
 

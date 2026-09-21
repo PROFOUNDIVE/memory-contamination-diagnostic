@@ -58,6 +58,8 @@ def test_post_intent_value_error_preserves_runtime_failure_identity(
             str(request.repository_root),
             "--run-id",
             str(request.run_id),
+            "--seed",
+            "0",
             "--cache-root",
             str(request.repository_root / "cache"),
             "--tranche-ceiling-krw",
@@ -73,7 +75,7 @@ def test_post_intent_value_error_preserves_runtime_failure_identity(
 
     selected = select_execution(request, "run")
     assert isinstance(selected, SelectedExecutionV3)
-    run = V3MainRun.open(selected, request.repository_root / str(request.run_id), create=False)
+    run = V3MainRun.open(selected, request.repository_root / str(request.run_id), create=False, seed=0)
     try:
         unit = selected.package.production[0]
         key = RequestKeyV3(parent_id=unit.unit_id, stage="no_memory_generate", ordinal=0)

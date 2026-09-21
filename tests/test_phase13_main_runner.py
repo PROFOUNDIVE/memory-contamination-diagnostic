@@ -158,6 +158,7 @@ def _success(tmp_path: Path, unit) -> DispatchCompleted:
                 "checkpoint_identity_sha256": "6" * 64,
                 "canonical_sha256": "7" * 64,
                 "canonical_state_utf8": "{}",
+                "checkpoint_index": 1,
             },
         }
     else:

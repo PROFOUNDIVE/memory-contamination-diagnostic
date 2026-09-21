@@ -11,6 +11,7 @@ from memcontam.contamination.phase12.registry import (
     _reject_selection_markers,
     _validate_registry,
 )
+from memcontam.contamination.phase12.renderers import RendererRegistry
 from memcontam.evaluation.phase13_observability_registration import ObservabilityRegistrationPacket
 from memcontam.tasks.base import TaskInstance
 from memcontam.tasks.game24 import build_instance as game24
@@ -31,7 +32,12 @@ class PreloadedMainResources:
 
     def __post_init__(self) -> None:
         registry = self.checkpoint_registry
-        _ = self.packet, self.candidate_registry, self.new_mcq_registry
+        _ = (
+            self.packet,
+            self.candidate_registry,
+            self.legacy_dc_rs_renderers,
+            self.new_mcq_registry,
+        )
         for task in registry.tasks:
             rows = self.tasks(task)
             by_id = {row.sample_id: row for row in rows}
@@ -72,6 +78,14 @@ class PreloadedMainResources:
             or authority.task_selections != {task: row.selected_candidate_id for task, row in registry.tasks.items()}):
             raise EntrypointError("MAIN_AUTHORIZATION_BINDING_MISMATCH")
         return registry
+
+    @property
+    def legacy_dc_rs_renderers(self) -> RendererRegistry:
+        return RendererRegistry.governed(
+            self.selected.resource("legacy_dc_rs_intervention_registry"),
+            self.candidate_registry,
+            self.selected.resource_binding("candidate_registry").sha256,
+        )
 
     def tasks(self, task: str) -> tuple[TaskInstance, ...]:
         lines = self.selected.resource("task_" + task).splitlines()

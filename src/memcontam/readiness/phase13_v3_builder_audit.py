@@ -45,6 +45,30 @@ ALLOW: Final = (
     "tests/fixtures/tracked_ignored_provenance_baseline_v1.json",
     "tests/fixtures/prompts/reflexion_generate.json", "tests/fixtures/prompts/reflexion_reflect.json",
     "tests/fixtures/prompts/rag_generate.json", "tests/fixtures/baseline_fidelity_v2_semantic_call_hashes.json",
+    "data/phase13/common_capacity_corrected_v2.json",
+    "data/phase13/common_capacity_status_corrected_v2.json",
+    "data/phase13/observability/manifest_v1.json",
+    "data/phase13/main/legacy_dc_rs_intervention_registry_v1.json",
+    "src/memcontam/baselines/bot_phase12.py",
+    "src/memcontam/baselines/bot_write.py",
+    "src/memcontam/baselines/dynamic_cheatsheet_phase12.py",
+    "src/memcontam/baselines/reflexion_adapter.py",
+    "src/memcontam/baselines/reflexion_phase12.py",
+    "src/memcontam/baselines/retrieval_rag_phase12.py",
+    "src/memcontam/contamination/phase12/renderers.py",
+    "src/memcontam/contamination/phase13_legacy_dc_rs.py",
+    "src/memcontam/evaluation/phase12_observables.py",
+    "src/memcontam/evaluation/phase13_observability_lineage.py",
+    "src/memcontam/experiment/phase12/branching.py",
+    "src/memcontam/experiment/phase12/game24_runner.py",
+    "src/memcontam/experiment/phase12/runtime_registry.py",
+    "src/memcontam/experiment/phase13_dc_rs_runtime.py",
+    "src/memcontam/experiment/phase13_dc_rs_validation.py",
+    "src/memcontam/memory/checkpoint_v3.py",
+    "tests/phase13_corrective_identity.py",
+    "tests/phase13_runner_safety_fixture.py",
+    "tests/test_phase12_bot.py",
+    "tests/test_phase12_reflexion.py",
 )
 
 
@@ -79,6 +103,8 @@ def audit_scope(repository: Path, output: Path, compare: Path | None) -> None:
                 raise ArtifactError("MAIN_GOVERNED_SOURCE_DRIFT")
     baseline_names = {row.path.removeprefix(PREFIX) for row in baseline if row.path.startswith(PREFIX)}
     actual = {path.relative_to(output).as_posix() for path in output.rglob("*") if not path.is_dir()}
-    if actual != baseline_names | set(OUTPUT_PATHS):
+    if actual != baseline_names | set(OUTPUT_PATHS) | {
+        "legacy_dc_rs_intervention_registry_v1.json"
+    }:
         raise ArtifactError("MAIN_ARTIFACT_BINDING_MISMATCH")
     read_files(output, tuple(actual))

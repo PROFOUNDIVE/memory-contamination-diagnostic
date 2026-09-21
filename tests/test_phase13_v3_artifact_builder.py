@@ -1,4 +1,5 @@
 from __future__ import annotations
+from .phase13_corrective_identity import corrective_identity
 
 import importlib
 import json
@@ -9,6 +10,7 @@ import subprocess
 import sys
 
 import pytest
+from .test_phase13_v3_entrypoint_fixture import REPAIR_ROOT, RESOURCE_ROOT
 
 ROOT = Path(__file__).resolve().parents[1]
 AUTHORITY = Path("/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts")
@@ -27,7 +29,10 @@ def builder_source(tmp_path_factory):
         shutil.copyfile(ROOT / "scripts" / name, root / "scripts" / name)
     for name in ("artifact_builder", "mr_p4", "mr_p5", "mr_p6"):
         shutil.copyfile(ROOT / f"tests/test_phase13_v3_{name}.py", root / f"tests/test_phase13_v3_{name}.py")
-    for resource in read_files(ROOT, STATIC_PATHS):
+    repair_path = "data/phase13/main/legacy_dc_rs_intervention_registry_v1.json"
+    for resource in read_files(RESOURCE_ROOT, tuple(
+        path for path in STATIC_PATHS if path != repair_path
+    )) + read_files(REPAIR_ROOT, (repair_path,)):
         target = root / resource.binding.path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(resource.raw)
@@ -49,7 +54,7 @@ def builder_source(tmp_path_factory):
 def staged(tmp_path, builder_source):
     module = importlib.import_module("memcontam.readiness.phase13_v3_builder")
     root, commit, authority = builder_source
-    module.build_mr_p4(root, authority, tmp_path, governed_source_commit=commit)
+    module.build_mr_p4(root, authority, tmp_path, governed_source_commit=commit, identity=corrective_identity())
     return module, root, tmp_path, authority
 
 
@@ -162,11 +167,11 @@ def test_scope_audit_accepts_approved_legacy_contract_correction(staged):
     for name in RECEIPTS:
         target = root / name
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(ROOT / name, target)
-    for row in json.loads((ROOT / ".omo/evidence/phase13-historical-baseline.json").read_bytes()):
+        shutil.copyfile(RESOURCE_ROOT / name, target)
+    for row in json.loads((RESOURCE_ROOT / ".omo/evidence/phase13-historical-baseline.json").read_bytes()):
         target = root / row["path"]
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(ROOT / row["path"], target)
+        shutil.copyfile(RESOURCE_ROOT / row["path"], target)
     shutil.copytree(output, root / "data/phase13/main", dirs_exist_ok=True)
     path = "tests/test_baseline_source_contract_replay.py"
     (root / path).write_bytes((root / path).read_bytes() + b"\n")

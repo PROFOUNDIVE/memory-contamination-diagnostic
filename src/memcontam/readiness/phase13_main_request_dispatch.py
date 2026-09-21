@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# noqa: SIZE_OK — provider dispatch markers and failure finalization form one state machine.
+
 import hashlib
 import json
 import os
@@ -11,6 +13,8 @@ from pydantic import JsonValue
 
 from memcontam.baselines.prompt_budget import count_prompt_tokens
 from memcontam.clients.base import LLMClient, LLMResponse
+from memcontam.clients.config import ProviderConfig
+from memcontam.clients.openai_responses import OpenAIResponsesClient
 from memcontam.readiness.phase13_authority_files import read_regular_nofollow
 from memcontam.readiness.phase13_main_request_recovery import (
     RequestIdentityReceiptV3,
@@ -64,9 +68,6 @@ class DispatchTechnicalFailureV3(RuntimeError):
 
 
 def production_provider(binding: PackageBindingV3) -> CompiledProvider:
-    from memcontam.clients.config import ProviderConfig
-    from memcontam.clients.openai_responses import OpenAIResponsesClient
-
     return OpenAIResponsesClient(ProviderConfig(
         provider="openai_responses", timeout_seconds=180, live_calls_enabled=True,
         retries_after_initial_attempt=0, max_output_tokens=512,
@@ -79,23 +80,27 @@ class ProductionRequestDispatcherV3:
     def __init__(self, ledger: TerminalLedgerV3, binding: PackageBindingV3,
                  parents: tuple[ParentTrajectoryV3, ...], *,
                  provider_factory: Callable[[PackageBindingV3], CompiledProvider] = production_provider) -> None:
-        if (ledger.binding.package_sha256, ledger.binding.authorization_sha256) != (
-            binding.package_sha256, binding.authorization_sha256,
+        if (ledger.binding.identity, ledger.binding.package_sha256, ledger.binding.authorization_sha256) != (
+            binding.identity, binding.package_sha256, binding.authorization_sha256,
         ):
             raise TerminalEvidenceError("MAIN_AUTHORIZATION_BINDING_MISMATCH")
         self.ledger, self.binding, self.parents = ledger, binding, parents
         self._factory = provider_factory
-        terminal_parents(ledger, binding, parents)
+        self._terminal_parents = terminal_parents(ledger, binding, parents)
+        self._terminal_generation = ledger.generation()
         self._compiled: dict[str, CompiledProviderRequestV3] = {}
 
     @property
     def terminal_parents(self) -> frozenset[str]:
-        return terminal_parents(self.ledger, self.binding, self.parents)
+        with request_lock(self.ledger):
+            self._refresh_terminal_parents()
+            return self._terminal_parents
 
     def recover(self) -> None:
         with request_lock(self.ledger):
-            terminal_parents(self.ledger, self.binding, self.parents)
             recover_requests(self.ledger)
+            self._terminal_parents = terminal_parents(self.ledger, self.binding, self.parents)
+            self._terminal_generation = self.ledger.generation()
 
     def compiled_request(self, key: RequestKeyV3) -> CompiledProviderRequestV3:
         return self._compiled[key.dispatch_id]
@@ -103,11 +108,12 @@ class ProductionRequestDispatcherV3:
     def dispatch(self, key: RequestKeyV3, compile_material: Callable[[], RequestMaterialV3],
                  parse_result: Callable[[LLMResponse], ResultT]) -> ResultT:
         with request_lock(self.ledger):
+            self._refresh_terminal_parents()
             return self._dispatch(key, compile_material, parse_result)
 
     def _dispatch(self, key: RequestKeyV3, compile_material: Callable[[], RequestMaterialV3],
                   parse_result: Callable[[LLMResponse], ResultT], *, defer_completion: bool = False) -> ResultT:
-        if key.parent_id in self.terminal_parents:
+        if key.parent_id in self._terminal_parents:
             raise DispatchTechnicalFailureV3("MAIN_TRAJECTORY_TERMINAL", key.parent_id, None)
         if key.parent_id not in {parent.parent_id for parent in self.parents}:
             raise TerminalEvidenceError()
@@ -185,6 +191,7 @@ class ProductionRequestDispatcherV3:
 
     def receive(self, key: RequestKeyV3, compile_material: Callable[[], RequestMaterialV3]) -> LLMResponse:
         with request_lock(self.ledger):
+            self._refresh_terminal_parents()
             return self._dispatch(key, compile_material, lambda response: response, defer_completion=True)
 
     def acknowledge(self, key: RequestKeyV3, response: LLMResponse, *, semantic_success: bool) -> None:
@@ -215,6 +222,20 @@ class ProductionRequestDispatcherV3:
             "compiled": None if evidence is None else evidence.model_dump(mode="json"),
             **(extra or {}),
         })
+        self._terminal_generation = self.ledger.generation()
+        if kind in {"INPUT_ENVELOPE_OVERFLOW", "TERMINAL_TECHNICAL_MISSING",
+                    "ATTEMPTED_PROVIDER_FAILURE", "AMBIGUOUS_ATTEMPT"}:
+            failed = {key.parent_id}
+            parent = next(row for row in self.parents if row.parent_id == key.parent_id)
+            if parent.kind == "CLEAN_PREFIX":
+                failed.update(row.parent_id for row in self.parents if row.prefix_parent_id == parent.parent_id)
+            self._terminal_parents = frozenset((*self._terminal_parents, *failed))
+
+    def _refresh_terminal_parents(self) -> None:
+        generation = self.ledger.generation()
+        if generation != self._terminal_generation:
+            self._terminal_parents = terminal_parents(self.ledger, self.binding, self.parents)
+            self._terminal_generation = generation
 
     def _persist_compiled(self, compiled: CompiledProviderRequestV3) -> None:
         raw = json.dumps({
@@ -251,8 +272,8 @@ class ProductionRequestDispatcherV3:
 class CostBoundRequestDispatcherV3:
     def __init__(self, dispatcher: ProductionRequestDispatcherV3,
                  costs: LiveCosts, package_hash: str) -> None:
-        if (digest(costs.package), costs.package.package_hash) != (
-            dispatcher.binding.package_sha256, package_hash,
+        if (costs.resources.phase4.policy.authority.identity, digest(costs.package), costs.package.package_hash) != (
+            dispatcher.binding.identity, dispatcher.binding.package_sha256, package_hash,
         ):
             raise CostError("MAIN_COST_PROOF_MISMATCH")
         self._dispatcher, self._costs, self._package_hash = dispatcher, costs, package_hash

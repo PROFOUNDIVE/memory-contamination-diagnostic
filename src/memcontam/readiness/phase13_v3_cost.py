@@ -75,7 +75,8 @@ def build_proof(complete: CompleteCostInputsV3, witness: CostWitnessV3, package_
     totals, projections = calculate(complete.base, complete.final_order.unit_ids)
     if totals != witness.totals or sum(row.projected_krw for row in projections) != totals.cmax_main_krw:
         raise CostError("MAIN_COST_PROOF_MISMATCH")
-    return seal(CostProofV3(complete_inputs_hash=complete.complete_inputs_hash,
+    return seal(CostProofV3(proof_id=complete.base.policy.authority.identity.cost_proof_id,
+                           complete_inputs_hash=complete.complete_inputs_hash,
                            witness_hash=witness.witness_hash, package_core_hash=package_core_hash,
                            totals=totals, projected_krw=projections, proof_hash="0" * 64))
 

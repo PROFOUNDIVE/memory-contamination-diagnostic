@@ -24,10 +24,12 @@ from memcontam.readiness.phase13_main_live_dispatch import (
 )
 from memcontam.readiness.phase13_main_runner_models import ExecutionUnit
 
+from .test_phase13_v3_entrypoint_fixture import RESOURCE_ROOT
+
 
 ROOT = Path(__file__).resolve().parents[1]
-P5 = ROOT / "data/phase13/main/mr_p5/execution_package_v2.json"
-P6 = ROOT / "data/phase13/main/mr_p6/authorized_execution_v2.json"
+P5 = RESOURCE_ROOT / "data/phase13/main/mr_p5/execution_package_v2.json"
+P6 = RESOURCE_ROOT / "data/phase13/main/mr_p6/authorized_execution_v2.json"
 
 
 def _contract_payload() -> dict[str, JsonValue]:
@@ -162,6 +164,7 @@ def _evidence_for(
             "checkpoint_identity_sha256": "d" * 64,
             "canonical_sha256": "e" * 64,
             "canonical_state_utf8": "{}",
+            "checkpoint_index": 0,
         },
         "runtime_evidence": {
             "unit_id": unit.unit_id,
@@ -341,7 +344,10 @@ def test_reflexion_prefix_accepts_failure_dependent_reflection_stage(
     stages: tuple[str, ...],
 ) -> None:
     unit = _reflexion_unit()
-    calls = tuple(_call(stage, f"call-{index}") for index, stage in enumerate(stages, start=1))
+    calls = tuple(
+        _call(stage, f"trial-1:call:{index}")
+        for index, stage in enumerate(stages, start=1)
+    )
 
     completed = persist_unit_dispatch(
         tmp_path,
@@ -356,7 +362,7 @@ def test_reflexion_prefix_accepts_failure_dependent_reflection_stage(
     assert completed.realized_cost_krw == 16 * len(calls)
 
 
-def test_reflexion_prefix_rejects_unknown_verifier_result(tmp_path: Path) -> None:
+def test_reflexion_prefix_rejects_unscoped_call_ids(tmp_path: Path) -> None:
     unit = _reflexion_unit()
     calls = (
         _call("reflexion_generate", "call-1"),
@@ -535,7 +541,7 @@ def test_live_cli_validates_bound_contract_without_ledger(tmp_path: Path) -> Non
             "memcontam.readiness.phase13_main_live_cli",
             "validate",
             "--repository-root",
-            str(ROOT),
+            str(RESOURCE_ROOT),
             "--package",
             str(P5),
             "--authorization",

@@ -44,8 +44,8 @@
     "measurement_implementation_sha256": "a6e895dcc9599e19889066da1647f92f41f021435af8ca0311d17f68641166a1",
     "openai_client_sha256": "bb83936fdc4534f7588061dd6b436083ab60400cd1cee2ace0d033aeded4f73b",
     "full_history_builder_sha256": "68e79b446b30708bf974610ce9f848f41738f752b02f256ab94a1d4d6df657e9",
-    "dc_rs_builder_sha256": "a893ab9431a064431099818d94a18a2a1b1822d2dedc8d5dc45d9c3c964f3f95",
-    "dc_rs_runtime_builder_sha256": "66274d3056457e5dd0c6e84c3df5a5f8bbf2380404bea59000928478c831723f",
+    "dc_rs_builder_sha256": "e0b76ccda1aae3fdd5efba14ee00d425b4ed1b07a7d303a1904536174700ae44",
+    "dc_rs_runtime_builder_sha256": "5455c5f40e5b5d0d3fceb1ece833ba0443613c3ca970012f75f8349610e1bd07",
     "ordinary_runtime_builder_sha256": "05492b3ff486e101536243597e2d5b07a00d984dbbcdd49152905f45c847859c"
   },
   "per_task_R_FH": {

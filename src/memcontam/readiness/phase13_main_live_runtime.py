@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import replace
 from pathlib import Path
@@ -11,6 +12,7 @@ from memcontam.clients.base import LLMClient
 from memcontam.clients.config import ProviderConfig
 from memcontam.clients.openai_responses import OpenAIResponsesClient
 from memcontam.contamination.phase12.registry import load_candidate_registry
+from memcontam.contamination.phase12.renderers import RendererRegistry
 from memcontam.evaluation.phase13_observability_registration import ObservabilityRegistrationPacket
 from memcontam.experiment.phase12.game24_runner import (
     Branch,
@@ -48,8 +50,12 @@ from memcontam.readiness.phase13_main_production_backend import (
     PrefixRuntimeOutput,
 )
 from memcontam.readiness.phase13_main_request_dispatch import DeferredMainClient
-from memcontam.readiness.phase13_production_observability import validate_production_archive
+from memcontam.readiness.phase13_production_observability import (
+    ProductionObservabilityError,
+    validate_production_archive,
+)
 from memcontam.readiness.phase13_production_runtime_join import production_archive_from_ordinary
+from memcontam.readiness.phase13_production_runtime_models import ProductionRuntimeJoinError
 from memcontam.readiness.phase13_route_capacity import bind_capacity_configs
 from memcontam.tasks.base import TaskInstance
 from memcontam.tasks.game24 import build_instance as build_game24
@@ -105,6 +111,7 @@ class ProductionMainRuntime:
             self._checkpoint_registry = resources.checkpoint_registry
             self._packet = resources.packet
             self._candidate_registry = resources.candidate_registry
+            self._renderers = resources.legacy_dc_rs_renderers
             self._new_mcq_registry = resources.new_mcq_registry
             return
         self._checkpoint_registry = CommonCheckpointRegistry.model_validate_json(
@@ -117,6 +124,12 @@ class ProductionMainRuntime:
         self._packet = ObservabilityRegistrationPacket.model_validate_json(packet_raw)
         self._candidate_registry = load_candidate_registry(
             repository_root / "data/phase12/registries/candidate_registry_v1.json"
+        )
+        candidate_path = repository_root / "data/phase12/registries/candidate_registry_v1.json"
+        self._renderers = RendererRegistry.governed(
+            (repository_root / "data/phase13/main/legacy_dc_rs_intervention_registry_v1.json").read_bytes(),
+            self._candidate_registry,
+            hashlib.sha256(candidate_path.read_bytes()).hexdigest(),
         )
         self._new_mcq_registry = load_new_mcq_runtime_registry(repository_root)
 
@@ -159,14 +172,7 @@ class ProductionMainRuntime:
         snapshot = entry.serialize_state(result.state)
         if not isinstance(snapshot, NativeState):
             raise MainLiveRuntimeError("MAIN_PREFIX_CHECKPOINT_INVALID")
-        checkpoint = serialize_checkpoint(
-            NativeState(
-                snapshot.baseline,
-                snapshot.entries,
-                {**snapshot.native_state, "checkpoint_index": 1},
-                snapshot.schema_version,
-            )
-        )
+        checkpoint = serialize_checkpoint(snapshot, checkpoint_index=1)
         return PrefixRuntimeOutput(checkpoint, dispatch_output(unit, (result,), production_identity(unit),
             realized_cost_krw=self._client.realized_cost_krw() if isinstance(self._client, MainRequestClientV3) else None))
 
@@ -221,6 +227,7 @@ class ProductionMainRuntime:
                     ),
                     candidate_registry=self._candidate_registry,
                     registry=PHASE13_CORE_BASELINE_REGISTRY,
+                    renderers=self._renderers,
                 ).arms[request.arm]
         run = ProspectiveOrdinaryRun(
             task_name=task_name(unit.task),
@@ -243,8 +250,15 @@ class ProductionMainRuntime:
             validated_resources=None if self._resources is None else self._resources.ordinary(self._client),
         )
         result = execute_prospective_ordinary(run)
-        archive = production_archive_from_ordinary(run, result, identity)
-        validate_production_archive(archive, self._packet, identity.registration_packet_sha256)
+        try:
+            archive = production_archive_from_ordinary(run, result, identity)
+            validate_production_archive(
+                archive, self._packet, identity.registration_packet_sha256
+            )
+        except ProductionRuntimeJoinError as error:
+            raise ProductionObservabilityError(
+                "PRODUCTION_RECONSTRUCTION_FAILED"
+            ) from error
         return dispatch_output(unit, result.trials, identity, archive,
             realized_cost_krw=self._client.realized_cost_krw() if isinstance(self._client, MainRequestClientV3) else None)
 

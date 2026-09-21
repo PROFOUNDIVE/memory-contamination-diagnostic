@@ -155,7 +155,7 @@ class BoTPhase12Adapter:
         )
         if _at_active_capacity(state, active_entries):
             return BaselineStepResultV3(
-                _replace_candidate(outcome, normalized_candidate),
+                _reject_at_capacity(outcome),
                 retrieval_event,
                 context_event,
                 prompt_decision,
@@ -410,6 +410,26 @@ def _replace_candidate(
             **(outcome.memory_write_event or {}),
             "direct_parent_ids": list(candidate.metadata["direct_parent_ids"]),
             "memory_support_ids": list(candidate.metadata["memory_support_ids"]),
+            "source_outcome": None,
+        },
+    )
+
+
+def _reject_at_capacity(outcome: BaselineExecutionOutcome) -> BaselineExecutionOutcome:
+    return replace(
+        outcome,
+        memory_after=outcome.memory_before,
+        memory_write_event={
+            **(outcome.memory_write_event or {}),
+            "event_type": "bot_write_rejected",
+            "status": "rejected_capacity",
+            "accepted": False,
+            "candidate_entry_id": None,
+            "candidate_content": None,
+            "source_entry_ids": [],
+            "direct_parent_ids": [],
+            "memory_support_ids": [],
+            "new_entry_id": None,
             "source_outcome": None,
         },
     )

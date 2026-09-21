@@ -35,6 +35,19 @@ def production_memory_events(
         for entry_id in new_ids
         for parent_id in nodes[entry_id].direct_parent_ids
     ]
+    edges.extend(
+        LineageEdge(
+            child_entry_id=entry_id,
+            parent_entry_id=predecessor_id,
+            relation="recorded_parent",
+            lineage_status="exact",
+            lineage_basis="version_edge",
+            injected_root_ids=list(nodes[entry_id].injected_root_ids),
+        )
+        for entry_id in new_ids
+        for predecessor_id in (nodes[entry_id].version_predecessor_id,)
+        if predecessor_id is not None
+    )
     return (
         MemoryEvent(
             run_metadata_id=f"{run_id}:metadata",

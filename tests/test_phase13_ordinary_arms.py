@@ -61,7 +61,10 @@ class _Client:
         )
 
 
-def test_prospective_ordinary_executes_each_registered_arm_from_native_branch() -> None:
+def test_prospective_ordinary_executes_each_registered_arm_from_native_branch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(ordinary_runtime, "_validated_common_capacity_tokens", lambda: 8192)
     task = TaskInstance(
         sample_id="game24:arm-test",
         task_name="game24",
@@ -115,6 +118,24 @@ def test_prospective_ordinary_executes_each_registered_arm_from_native_branch() 
         assert [config["arm"] for config in client.configs] == [arm]
         assert isinstance(branch.state, FullHistoryStateV3)
         assert len(branch.state.records) == branch.root_count
+        assert result.trials[0].state_before is not None
+        assert result.trials[0].state_after is not None
+        state_before = result.trials[0].state_before
+        state_after = result.trials[0].state_after
+        assert state_before is not None
+        assert state_after is not None
+        assert tuple(
+            entry if isinstance(entry, str) else entry.entry_id
+            for entry in state_before.entries
+        ) == tuple(
+            record.entry_id for record in branch.state.records
+        )
+        assert tuple(
+            entry if isinstance(entry, str) else entry.entry_id
+            for entry in state_after.entries
+        ) == tuple(
+            row["entry_id"] for row in result.trials[0].outcome.memory_after
+        )
         results.append(result)
 
     assert len({id(result.trials[0].state) for result in results}) == 4
@@ -145,14 +166,8 @@ def test_production_archive_reconstructs_an_ordinary_contamination_trial(
     )
     snapshot = entry.serialize_state(clean_state)
     assert isinstance(snapshot, NativeState)
-    checkpoint = NativeState(
-        baseline=snapshot.baseline,
-        entries=snapshot.entries,
-        native_state={**snapshot.native_state, "checkpoint_index": 0},
-        schema_version=snapshot.schema_version,
-    )
     branches = build_live_reduced_main_branches(
-        prefix=serialize_checkpoint(checkpoint),
+        prefix=serialize_checkpoint(snapshot, checkpoint_index=0),
         context=context,
         candidate_registry=load_candidate_registry(
             Path("data/phase12/registries/candidate_registry_v1.json")
@@ -259,6 +274,16 @@ def test_production_archive_reconstructs_an_ordinary_contamination_trial(
     evidence = archive.records[0].evidence
     assert isinstance(evidence, Phase13TrialEvidence)
     assert evidence.evidence_scope == "production_runtime"
+    state_before = result.trials[0].state_before
+    state_after = result.trials[0].state_after
+    assert state_before is not None
+    assert state_after is not None
+    assert evidence.memory_before_ids == tuple(
+        entry if isinstance(entry, str) else entry.entry_id for entry in state_before.entries
+    )
+    assert evidence.memory_after_ids == tuple(
+        entry if isinstance(entry, str) else entry.entry_id for entry in state_after.entries
+    )
     assert evidence.target_set.target_entry_ids == (
         branch.injected_root_id,
     )

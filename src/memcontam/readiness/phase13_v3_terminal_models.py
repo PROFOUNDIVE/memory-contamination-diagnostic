@@ -6,7 +6,7 @@ from typing import Annotated, Final, Literal, Self, assert_never
 from pydantic import Field, TypeAdapter, ValidationError, model_validator
 
 from .phase13_cost_policy_models import Sha256
-from .phase13_v3_authority_models import FrozenModel
+from .phase13_v3_authority_models import FrozenModel, V3Identity
 from .phase13_v3_cost_actual import reconcile_actual
 from .phase13_v3_cost_models import CostError, NonnegativeInt, ProviderCostEvidence, digest
 
@@ -20,6 +20,7 @@ class TerminalEvidenceError(ValueError):
 
 
 class LedgerBindingV3(FrozenModel):
+    identity: V3Identity
     schema_version: Literal["phase13_main_run_ledger_v3"]
     unit_ids: tuple[Sha256, ...] = Field(min_length=1)
     package_sha256: Sha256

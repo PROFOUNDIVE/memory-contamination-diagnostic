@@ -10,7 +10,7 @@ import stat
 from uuid import uuid4
 
 from memcontam.readiness.phase13_v3_authority_models import (
-    PROVENANCE_FILENAME, ROUTED_DOCUMENTS, AuthoritySnapshotV3, DocumentBinding,
+    PROVENANCE_FILENAME, ROUTED_DOCUMENTS, AuthoritySnapshotV3, DocumentBinding, V3Identity,
 )
 from memcontam.readiness.phase13_v3_authority_parser import (
     parse_capacity, parse_registry, parse_terminal, validate_router,
@@ -88,7 +88,10 @@ def read_authority_at(directory: int, filename: str) -> bytes:
             raise AuthorityFileError("MAIN_PATH_UNSAFE") from error
 
 
-def load_authority_v3(root: Path, expected: AuthoritySnapshotV3 | None = None) -> AuthoritySnapshotV3:
+def load_authority_v3(root: Path, expected: AuthoritySnapshotV3 | None = None, *, identity: V3Identity | None = None) -> AuthoritySnapshotV3:
+    selected_identity = expected.identity if expected is not None else identity
+    if selected_identity is None or (identity is not None and identity != selected_identity):
+        raise AuthorityFileError("MAIN_AUTHORITY_BINDING_MISMATCH")
     with authority_directory(root) as directory:
         raw_documents = tuple(read_authority_at(directory, filename) for _, filename in ROUTED_DOCUMENTS)
         provenance_raw = read_authority_at(directory, PROVENANCE_FILENAME)
@@ -103,6 +106,7 @@ def load_authority_v3(root: Path, expected: AuthoritySnapshotV3 | None = None) -
     except (ValueError, IndexError, KeyError) as error:
         raise AuthorityFileError("MAIN_ENVELOPE_REGISTRY_MISMATCH") from error
     snapshot = AuthoritySnapshotV3(
+        identity=selected_identity,
         documents=tuple(DocumentBinding(filename=filename, role=role, size=len(raw), sha256=hashlib.sha256(raw).hexdigest())
                         for (role, filename), raw in zip(ROUTED_DOCUMENTS, raw_documents, strict=True)),
         provenance=DocumentBinding(filename=PROVENANCE_FILENAME, role="provenance_only", size=len(provenance_raw), sha256=hashlib.sha256(provenance_raw).hexdigest()),
@@ -113,9 +117,9 @@ def load_authority_v3(root: Path, expected: AuthoritySnapshotV3 | None = None) -
     return snapshot
 
 
-def build_authority_v3(root: Path, output_root: Path) -> AuthoritySnapshotV3:
+def build_authority_v3(root: Path, output_root: Path, identity: V3Identity) -> AuthoritySnapshotV3:
     """Publish only the authority snapshot into an existing output directory."""
-    snapshot = load_authority_v3(root)
+    snapshot = load_authority_v3(root, identity=identity)
     raw = (json.dumps(snapshot.model_dump(mode="json"), ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
     with ExitStack() as cleanup:
         published = False

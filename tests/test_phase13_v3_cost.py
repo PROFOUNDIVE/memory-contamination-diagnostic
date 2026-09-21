@@ -1,4 +1,5 @@
 import hashlib
+from .phase13_corrective_identity import corrective_identity
 import importlib
 import importlib.util
 import json
@@ -45,7 +46,7 @@ def cost() -> ModuleType:
 
 @pytest.fixture(scope="session")
 def authority():
-    return load_authority_v3(Path("/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts"))
+    return load_authority_v3(Path("/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts"), identity=corrective_identity())
 
 
 @pytest.fixture

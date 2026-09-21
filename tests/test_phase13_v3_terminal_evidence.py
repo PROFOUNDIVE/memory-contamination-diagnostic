@@ -1,4 +1,5 @@
 from __future__ import annotations
+from .phase13_corrective_identity import corrective_identity
 
 import importlib
 import importlib.util
@@ -27,6 +28,7 @@ def api() -> ModuleType:
 def ledger(api: ModuleType, tmp_path: Path):
     return api.TerminalLedgerV3.create(tmp_path / "ledger.sqlite3", {
         "schema_version": "phase13_main_run_ledger_v3", "unit_ids": ["a" * 64, "b" * 64],
+        "identity": corrective_identity().model_dump(mode="json"),
         "package_sha256": "c" * 64, "authorization_sha256": "d" * 64,
     })
 

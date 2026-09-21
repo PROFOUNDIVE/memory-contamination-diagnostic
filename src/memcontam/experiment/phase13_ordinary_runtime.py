@@ -4,7 +4,7 @@ import hashlib
 import json
 from collections.abc import Callable, Mapping
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
 from typing import Any, Literal, TypeAlias, assert_never
@@ -17,6 +17,7 @@ from memcontam.experiment.phase12.runtime_registry import (
     PHASE13_CORE_BASELINE_REGISTRY,
     RuntimeTrialResult,
 )
+from memcontam.memory.checkpoint_v3 import NativeEntry, NativeState
 from memcontam.readiness import phase13_capacity_realization as capacity_realization
 from memcontam.readiness.phase13_core_bundle import CoreTask
 from memcontam.readiness.phase13_core_datasets import (
@@ -87,6 +88,7 @@ class ProspectiveOrdinaryContext:
     embedding_provider: Any | None = None
     baseline_configs: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     initial_states: Mapping[str, Any] = field(default_factory=dict)
+    expected_intervention: NativeEntry | None = None
     condition: Any | None = None
     maturity_horizon: int = 1
 
@@ -108,6 +110,7 @@ class ProspectiveOrdinaryContext:
             embedding_provider=self.embedding_provider,
             baseline_configs=self.baseline_configs,
             initial_states=self.initial_states,
+            expected_intervention=self.expected_intervention,
             condition=self.condition,
             maturity_horizon=self.maturity_horizon,
         )
@@ -217,11 +220,39 @@ def execute_prospective_ordinary(run: ProspectiveOrdinaryRun) -> ProspectiveOrdi
     contexts = tuple(_context(run, task, index) for index, task in enumerate(tasks, start=1))
     state = entry.initial_state(contexts[0]) if run.branch is None else deepcopy(run.branch.state)
     results: list[RuntimeTrialResult] = []
+    provenance_entries = {
+        native_entry.entry_id: native_entry
+        for native_entry in (
+            ()
+            if run.branch is None
+            else tuple(
+                value
+                for value in run.branch.checkpoint.state.entries
+                if isinstance(value, NativeEntry)
+            )
+        )
+    }
+    provenance_envelopes = {}
     for context in contexts:
+        state_before = entry.serialize_state(state)
         request_client = None if run.validated_resources is None else run.validated_resources.request_client
         result = (entry.execute_trial(context, state) if request_client is None else request_client.trial(
             partial(entry.execute_trial, context, state),
             partial(native_state_bytes, entry.serialize_state, state)))
+        state_after = entry.serialize_state(result.state)
+        if not isinstance(state_before, NativeState) or not isinstance(state_after, NativeState):
+            state_before = state_after = None
+        for native_entry in result.native_entries:
+            provenance_entries[native_entry.entry_id] = native_entry
+        for envelope in result.write_envelopes:
+            provenance_envelopes[envelope.entry_id] = envelope
+        result = replace(
+            result,
+            state_before=state_before,
+            state_after=state_after,
+            provenance_entries=tuple(provenance_entries.values()),
+            provenance_envelopes=tuple(provenance_envelopes.values()),
+        )
         _write(context.writer_callbacks, result)
         results.append(result)
         state = result.state
@@ -366,7 +397,25 @@ def _context(
              else _validated_common_capacity_tokens()),
         ),
         initial_states=run.initial_states,
+        expected_intervention=_expected_intervention(run),
     )
+
+
+def _expected_intervention(run: ProspectiveOrdinaryRun) -> NativeEntry | None:
+    if run.branch is None or run.branch.injected_root_id is None:
+        return None
+    expected = next(
+        (
+            entry
+            for entry in run.branch.checkpoint.state.entries
+            if isinstance(entry, NativeEntry)
+            and entry.entry_id == run.branch.injected_root_id
+        ),
+        None,
+    )
+    if expected is None:
+        raise ProspectiveOrdinaryError("ORDINARY_BRANCH_IDENTITY_MISMATCH")
+    return expected
 
 
 def _write(callbacks: RuntimeWriterCallbacks, result: RuntimeTrialResult) -> None:

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from .phase13_corrective_identity import corrective_identity
 
 import importlib
 from pathlib import Path
@@ -46,7 +47,7 @@ def test_audit_compares_complete_fresh_rebuild(staged, builder_source, tmp_path)
     module.build_mr_p6(root, authority, output)
     fresh = tmp_path / "fresh"
     fresh.mkdir()
-    module.build_mr_p4(root, authority, fresh, governed_source_commit=builder_source[1])
+    module.build_mr_p4(root, authority, fresh, governed_source_commit=builder_source[1], identity=corrective_identity())
     module.build_mr_p5(root, authority, fresh)
     module.build_mr_p6(root, authority, fresh)
     module.audit(root, authority, output, compare_output_root=fresh)
@@ -144,4 +145,3 @@ def test_mr_p6_rejects_missing_authorization_payload(staged):
     (output / P6_PATHS[0]).unlink()
     with pytest.raises(ValueError, match="MAIN_PREDECESSOR_MISSING"):
         module.validate_mr_p6(root, authority, output)
-

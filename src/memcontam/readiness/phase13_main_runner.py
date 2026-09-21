@@ -55,6 +55,7 @@ class MainRunRequest:
     expected_authorization_sha256: str
     run_root: Path
     run_id: str
+    seed: int
     authority_root: Path | None = None
     expected_authorization_sha256_file: Path | None = None
 
@@ -74,7 +75,7 @@ def _open_v3(request: MainRunRequest, *, create: bool) -> V3MainRun:
         request.run_id, request.expected_authorization_sha256 or None), "run" if create else "resume")
     if not isinstance(selected, SelectedExecutionV3):
         raise MainRunError("MAIN_PACKAGE_VERSION_UNSUPPORTED")
-    return V3MainRun.open(selected, request.run_root / request.run_id, create=create)
+    return V3MainRun.open(selected, request.run_root / request.run_id, create=create, seed=request.seed)
 
 
 def run_main(

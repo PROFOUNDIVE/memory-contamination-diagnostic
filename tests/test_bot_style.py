@@ -299,10 +299,9 @@ def test_bot_runtime_runs_reference_order_and_updates() -> None:
     answer_call = result.method_calls[1]
     assert result.answer_call_id == answer_call.call_id
     assert answer_call.stage == "bot_instantiate_solve"
-    assert [call.source_spans for call in result.method_calls if call is not answer_call] == [
-        [],
-        [],
-    ]
+    assert result.method_calls[0].source_spans == []
+    thought_call = result.method_calls[2]
+    assert [span.entry_id for span in thought_call.source_spans] == ["tpl_001"]
     assert len(answer_call.source_spans) == 1
     span = answer_call.source_spans[0]
     assert answer_call.messages[1]["content"][span.start : span.end] == (
@@ -310,7 +309,6 @@ def test_bot_runtime_runs_reference_order_and_updates() -> None:
     )
     assert span.source_ids == ["template-source"]
     assert span.parent_ids == ["template-parent"]
-    thought_call = result.method_calls[2]
     assert "Pair 1 + 3 and 2 + 4" in thought_call.messages[1]["content"]
     assert "final: (1 + 3) * (2 + 4) = 24" in thought_call.messages[1]["content"]
 

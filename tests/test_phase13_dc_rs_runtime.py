@@ -12,15 +12,27 @@ from memcontam.clients.replay import ReplayClient
 from memcontam.contamination.phase12.registry import load_candidate_registry
 from memcontam.contamination.phase12.renderers import RendererError
 from memcontam.experiment.phase12.game24_runner import Game24RuntimeContext, RuntimeIdentities
-from memcontam.experiment.phase12.live_branch import build_live_reduced_main_branches
+from memcontam.experiment.phase12.live_branch import LiveArmBranch, build_live_reduced_main_branches
 from memcontam.experiment.phase12.runtime_registry import (
     PHASE13_CORE_BASELINE_REGISTRY,
     RuntimeStateError,
 )
 from memcontam.experiment.phase13_dc_rs_runtime import Phase13DcRsContext
+from memcontam.evaluation.phase13_observability_models import (
+    Phase13LineageNode,
+    Phase13TrialEvidence,
+)
+from memcontam.experiment import phase13_ordinary_runtime as ordinary_runtime
 from memcontam.memory.checkpoint_v3 import NativeEntry, NativeState, serialize_checkpoint
 from memcontam.memory.cards_v3 import canonical_content_hash
 from memcontam.memory.stores import MemoryEntry
+from memcontam.evaluation.phase13_observability import reconstruct_phase13_trial
+from memcontam.experiment.phase13_ordinary_runtime import ProspectiveOrdinaryRun
+from memcontam.readiness.phase13_production_runtime_evidence import (
+    _target_spans,
+    build_production_trial_evidence,
+)
+from memcontam.readiness.phase13_production_runtime_models import ProductionOrdinaryRunIdentity
 from memcontam.tasks.base import TaskInstance
 
 
@@ -94,7 +106,8 @@ def _state() -> DcRsStateV3:
                     "parsed_answer": "A",
                 },
             )
-        ]
+        ],
+        allow_unparented_strategies=True,
     )
 
 
@@ -169,6 +182,172 @@ def test_dc_rs_runtime_is_first_class_text_only_retrieve_synthesize_generate() -
     assert cast(NativeEntry, result.state.strategies[-1]).direct_parent_ids == ("archive-root",)
 
 
+def test_dc_rs_generation_and_archive_share_exact_strategy_ancestry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(ordinary_runtime, "_validated_common_capacity_tokens", lambda: 8192)
+    context = replace(
+        _context(),
+        branch="contam",
+        baseline_configs={
+            "dc_rs": {
+                "embedding_mode": "test_double",
+                "tool_mode": "text_only",
+                "serialized_cheatsheet_budget_tokens": 8192,
+            }
+        },
+    )
+    context.initial_states["dc_rs"].archive[0].metadata["render_id"] = (
+        "controlled-dc-rs-root-v1"
+    )
+    context.initial_states["dc_rs"].archive[0].source_trial_id = None
+    context.initial_states["dc_rs"].injected_root_id = "archive-root"
+    context = replace(
+        context,
+        identities=RuntimeIdentities(
+            "run-1",
+            "run-1:contam:trial:2:mmlu_pro_engineering:11775",
+            2,
+            "dc_rs:contam",
+        ),
+        expected_intervention=dc._archive_native(
+            dc._archive_entry(context.initial_states["dc_rs"].archive[0])
+        ),
+    )
+    entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
+
+    state = entry.initial_state(context)
+    snapshot = entry.serialize_state(state)
+    assert isinstance(snapshot, NativeState)
+    checkpoint = serialize_checkpoint(snapshot, checkpoint_index=0)
+    result = entry.execute_trial(context, state)
+
+    strategy = next(item for item in result.native_entries if item.native_component == "strategy")
+    archive = next(item for item in result.native_entries if item.native_component == "archive")
+    answer_call = next(
+        call for call in result.outcome.method_calls if call.call_id == result.outcome.answer_call_id
+    )
+    answer_span = answer_call.source_spans[0]
+    assert answer_span.entry_id == strategy.entry_id
+    assert answer_span.direct_parent_ids == ["archive-root"]
+    assert answer_span.injected_root_ids == []
+    assert archive.direct_parent_ids == (strategy.entry_id,)
+    archive_envelope = next(
+        envelope for envelope in result.write_envelopes if envelope.entry_id == archive.entry_id
+    )
+    assert archive_envelope.direct_parent_ids == (strategy.entry_id,)
+    projected = _target_spans(
+        result.outcome.method_calls,
+        result.outcome.answer_call_id,
+        ("archive-root",),
+        "targets-v1",
+        (
+            Phase13LineageNode(
+                entry_id="archive-root",
+                lineage_status="exact",
+                injected_root_ids=("archive-root",),
+            ),
+            Phase13LineageNode(
+                entry_id=strategy.entry_id,
+                lineage_status="exact",
+                injected_root_ids=("archive-root",),
+                direct_parent_ids=("archive-root",),
+            ),
+        ),
+    )
+    assert tuple(span.entry_id for span in projected) == (strategy.entry_id,)
+    run = ProspectiveOrdinaryRun(
+        task_name="game24",
+        baseline="dc_rs",
+        run_id="run-1",
+        model="replay",
+        client=context.client,
+        verifier=context.verifier,
+        decoding=context.decoding,
+        arm="contam",
+        branch=LiveArmBranch(
+            "contam",
+            "prefix-v1",
+            "prefix-v1",
+            checkpoint,
+            state,
+            1,
+            injected_root_id="archive-root",
+            candidate_triplet_id="triplet-v1",
+            native_render_id="controlled-dc-rs-root-v1",
+        ),
+        tasks=(
+            TaskInstance(
+                sample_id="game24:fixture",
+                task_name="game24",
+                input={"numbers": [1, 3, 4, 6], "target": 24},
+            ),
+        ),
+        allow_test_client=True,
+    )
+    evidence = build_production_trial_evidence(
+        run,
+        replace(
+            result,
+            provenance_entries=result.native_entries,
+            provenance_envelopes=result.write_envelopes,
+        ),
+        ProductionOrdinaryRunIdentity(
+            execution_template_id="dc-rs-contam",
+            trajectory_seed=0,
+            concrete_seed_id="0",
+            ordered_sample_ids_sha256="a" * 64,
+            registration_packet_sha256="b" * 64,
+            scientific_result=True,
+        ),
+        context.task.sample_id,
+        2,
+        0,
+    )
+
+    assert isinstance(evidence, Phase13TrialEvidence)
+    reconstructed = reconstruct_phase13_trial(evidence)
+
+    assert reconstructed.theory_exposure.value is True
+    assert strategy.entry_id in reconstructed.descendant_entry_ids
+    assert archive.entry_id in reconstructed.descendant_entry_ids
+
+    class PreferGeneratedArchive(_EmbeddingProvider):
+        def __init__(self) -> None:
+            self.document_index = 0
+
+        def encode_document(self, text: str) -> list[float]:
+            del text
+            self.document_index += 1
+            return [0.0, 1.0] if self.document_index == 2 else [1.0, 0.0]
+
+        def encode_query(self, text: str) -> list[float]:
+            del text
+            return [0.0, 1.0]
+
+    subsequent = entry.execute_trial(
+        replace(
+            context,
+            embedding_provider=PreferGeneratedArchive(),
+            identities=RuntimeIdentities(
+                "run-1",
+                "run-1:contam:trial:3:mmlu_pro_engineering:11775",
+                3,
+                "dc_rs:contam",
+            ),
+        ),
+        result.state,
+    )
+    subsequent_answer = next(
+        call
+        for call in subsequent.outcome.method_calls
+        if call.call_id == subsequent.outcome.answer_call_id
+    )
+
+    assert archive.entry_id in subsequent_answer.source_spans[0].direct_parent_ids
+    assert subsequent_answer.source_spans[0].injected_root_ids == []
+
+
 def test_dc_rs_first_trial_generates_from_transient_whole_cheatsheet() -> None:
     task = _task()
     context = replace(
@@ -181,7 +360,12 @@ def test_dc_rs_first_trial_generates_from_transient_whole_cheatsheet() -> None:
                 }
             }
         ),
-        initial_states={"dc_rs": DcRsStateV3(archive=[])},
+        initial_states={
+            "dc_rs": DcRsStateV3(
+                archive=[],
+                allow_unparented_strategies=True,
+            )
+        },
     )
     entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
 
@@ -308,6 +492,30 @@ def test_dc_rs_runtime_rejects_snapshot_with_unresolved_strategy_parent() -> Non
         entry.restore_state(replace(snapshot, entries=tuple(entries)), context)
 
 
+def test_dc_rs_runtime_rejects_snapshot_with_unresolved_archive_parent_before_llm() -> None:
+    entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
+    context = _context()
+    executed = entry.execute_trial(context, entry.initial_state(context))
+    snapshot = cast(NativeState, entry.serialize_state(executed.state))
+    entries = list(snapshot.entries)
+    archive = cast(NativeEntry, entries[0])
+    entries[0] = replace(archive, direct_parent_ids=("missing-strategy",))
+    native_state = dict(snapshot.native_state)
+    archive_rows = cast(list[dict[str, object]], native_state["archive"])
+    first_row = dict(archive_rows[0])
+    metadata = cast(dict[str, object], first_row["metadata"])
+    first_row["metadata"] = {**metadata, "direct_parent_ids": ["missing-strategy"]}
+    native_state["archive"] = [first_row, *archive_rows[1:]]
+    client = _BombClient()
+
+    with pytest.raises(RuntimeStateError, match="INVALID_DC_RS_SNAPSHOT"):
+        entry.restore_state(
+            replace(snapshot, entries=tuple(entries), native_state=native_state),
+            replace(context, client=client),
+        )
+    assert client.calls == 0
+
+
 def test_dc_rs_runtime_rejects_false_core_strategy_mode() -> None:
     entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
     context = _context()
@@ -318,6 +526,22 @@ def test_dc_rs_runtime_rejects_false_core_strategy_mode() -> None:
 
     with pytest.raises(RuntimeStateError, match="INVALID_DC_RS_SNAPSHOT"):
         entry.restore_state(replace(snapshot, native_state=native_state), context)
+
+
+def test_dc_rs_runtime_rejects_false_initial_strategy_mode_before_llm() -> None:
+    state = DcRsStateV3(archive=[], allow_unparented_strategies=False)
+    client = _BombClient()
+    context = replace(
+        _context(),
+        client=client,
+        initial_states={"dc_rs": state},
+    )
+    entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
+
+    with pytest.raises(RuntimeStateError, match="INVALID_DC_RS_STATE"):
+        entry.initial_state(context)
+    assert state.allow_unparented_strategies is False
+    assert client.calls == 0
 
 
 @pytest.mark.parametrize(
@@ -406,7 +630,12 @@ def test_dc_rs_runtime_rejects_archive_without_proven_prior_trajectory(
     context = replace(
         _context(),
         client=client,
-        initial_states={"dc_rs": DcRsStateV3(archive=[archive])},
+        initial_states={
+            "dc_rs": DcRsStateV3(
+                archive=[archive],
+                allow_unparented_strategies=True,
+            )
+        },
     )
     entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
 
@@ -428,7 +657,12 @@ def test_dc_rs_runtime_rejects_cross_task_archive_before_curator() -> None:
     context = replace(
         _context(),
         client=client,
-        initial_states={"dc_rs": DcRsStateV3(archive=[archive])},
+        initial_states={
+            "dc_rs": DcRsStateV3(
+                archive=[archive],
+                allow_unparented_strategies=True,
+            )
+        },
     )
     entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
 
@@ -443,7 +677,12 @@ def test_dc_rs_runtime_rejects_unproven_current_identity_on_empty_state() -> Non
         _context(),
         client=client,
         identities=RuntimeIdentities("run-1", "trial-1", 1, "dc_rs"),
-        initial_states={"dc_rs": DcRsStateV3(archive=[])},
+        initial_states={
+            "dc_rs": DcRsStateV3(
+                archive=[],
+                allow_unparented_strategies=True,
+            )
+        },
     )
     entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
 
@@ -721,7 +960,12 @@ def test_dc_rs_runtime_accepts_historical_task_native_context() -> None:
                 "serialized_cheatsheet_budget_tokens": 8192,
             }
         },
-        initial_states={"dc_rs": DcRsStateV3(archive=[])},
+        initial_states={
+            "dc_rs": DcRsStateV3(
+                archive=[],
+                allow_unparented_strategies=True,
+            )
+        },
     )
     entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
 
@@ -771,7 +1015,12 @@ def test_dc_rs_matched_intervention_stays_blocked_without_frozen_raw_interaction
         branch="clean",
         identities=RuntimeIdentities("run-1", "trial-1", 1),
         embedding_provider=_EmbeddingProvider(),
-        initial_states={"dc_rs": DcRsStateV3(archive=[])},
+        initial_states={
+            "dc_rs": DcRsStateV3(
+                archive=[],
+                allow_unparented_strategies=True,
+            )
+        },
     )
     entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
     prefix = serialize_checkpoint(

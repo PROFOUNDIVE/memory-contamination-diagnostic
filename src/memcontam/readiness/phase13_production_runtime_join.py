@@ -67,7 +67,7 @@ def production_archive_from_ordinary(
     checkpoint_index = (
         None
         if run.branch is None
-        else run.branch.checkpoint.state.native_state.get("checkpoint_index")
+        else run.branch.checkpoint.checkpoint_index
     )
     if run.branch is not None and (type(checkpoint_index) is not int or checkpoint_index < 0):
         raise ProductionRuntimeJoinError("PRODUCTION_CHECKPOINT_INDEX_REQUIRED")

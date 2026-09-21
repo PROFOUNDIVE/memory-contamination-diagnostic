@@ -16,7 +16,7 @@ from memcontam.readiness.phase13_main_runner import (
     resume_main,
     run_main,
 )
-from memcontam.readiness.phase13_v3_authority_models import V3Identity
+from .phase13_corrective_identity import corrective_identity
 from memcontam.readiness.phase13_v3_entrypoint import EntrypointError, SelectionRequest
 from memcontam.readiness.phase13_v3_entrypoint_paths import EntrypointPathError
 
@@ -41,7 +41,8 @@ def _request(selection: SelectionRequest) -> MainRunRequest:
         authorization_path=selection.authorization_path,
         expected_authorization_sha256="",
         run_root=selection.repository_root,
-        run_id=V3Identity().run_id,
+        run_id=corrective_identity().run_id,
+        seed=0,
         authority_root=selection.authority_root,
         expected_authorization_sha256_file=selection.expected_authorization_sha256_file,
     )
@@ -83,17 +84,19 @@ def test_authorized_run_reopen_revalidates_package_and_authorization(entrypoint_
         open_main_run(request)
 
 
-def test_authorized_run_and_resume_dispatch_distinct_pending_units(tmp_path, monkeypatch, deny_external):
+def test_authorized_run_and_resume_enforce_distinct_seed_boundaries(tmp_path, monkeypatch, deny_external):
     import memcontam.readiness.phase13_main_request_dispatch as dispatch
 
     for path, raw in build_entrypoint_bytes((0, 1)).items():
         target = tmp_path / path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(raw)
-    from .test_phase13_v3_entrypoint_fixture import AUTHORITY
+    from .test_phase13_v3_entrypoint_fixture import AUTHORITY, seal_fixture_closure
+
+    seal_fixture_closure(tmp_path)
 
     selection = SelectionRequest(tmp_path, tmp_path / "package.json", tmp_path / "authorization.json",
-                                 AUTHORITY, tmp_path / "authorization.sha256", V3Identity().run_id)
+                                 AUTHORITY, tmp_path / "authorization.sha256", corrective_identity().run_id)
     request = _request(selection)
     calls: list[tuple[str, str]] = []
     monkeypatch.setattr(dispatch, "count_prompt_tokens", lambda *_: 1)
@@ -102,8 +105,16 @@ def test_authorized_run_and_resume_dispatch_distinct_pending_units(tmp_path, mon
         def send_compiled_v3(self, compiled, before_request):
             before_request()
             calls.append((compiled.key.parent_id, compiled.key.dispatch_id))
-            return LLMResponse("final: 0", {"usage": {"input_tokens": 0, "output_tokens": 0}, "attempts": 1},
-                               {"prompt_tokens": 0, "completion_tokens": 0}, 0)
+            return LLMResponse("final: 0", {
+                "usage": {"input_tokens": 0, "output_tokens": 0},
+                "attempts": 1,
+                "authoritative_provider_cost_usd": "0",
+                "currency": "USD",
+                "status": "completed",
+                "response_id": f"runner-cli-{compiled.key.dispatch_id}",
+                "model": "gpt-5.6-luna",
+                "service_tier": "default",
+            }, {"prompt_tokens": 0, "completion_tokens": 0}, 0)
 
     run = prepare_main_run(request)
     try:
@@ -112,7 +123,7 @@ def test_authorized_run_and_resume_dispatch_distinct_pending_units(tmp_path, mon
         assert (first.completed_count, first.pending_count) == (1, 1)
     finally:
         run.close()
-    resumed = open_main_run(request)
+    resumed = open_main_run(replace(request, seed=1))
     try:
         final = resumed.execute(tmp_path / "cache", max_units=1, tranche_ceiling_krw=500,
                                 provider_factory=lambda _: FakeProvider())
@@ -121,6 +132,24 @@ def test_authorized_run_and_resume_dispatch_distinct_pending_units(tmp_path, mon
         resumed.close()
     assert len({parent for parent, _request in calls}) == 2
     assert len(calls) == len({request_id for _parent, request_id in calls}) == 100
+
+
+def test_run_and_resume_reject_seed_one_while_seed_zero_is_pending(
+    tmp_path: Path, deny_external,
+) -> None:
+    for path, raw in build_entrypoint_bytes((0, 1)).items():
+        target = tmp_path / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(raw)
+    from .test_phase13_v3_entrypoint_fixture import AUTHORITY, seal_fixture_closure
+
+    seal_fixture_closure(tmp_path)
+    selection = SelectionRequest(tmp_path, tmp_path / "package.json", tmp_path / "authorization.json",
+                                 AUTHORITY, tmp_path / "authorization.sha256", corrective_identity().run_id)
+    request = replace(_request(selection), seed=1)
+    for invoke in (run_main, resume_main):
+        with pytest.raises(ValueError, match="MAIN_TRANCHE_ORDER_MISMATCH"):
+            invoke(request, cache_root=tmp_path / "cache", tranche_ceiling_krw=500, max_units=0)
 
 
 def test_authorized_run_rejects_authorization_hash_tampering(entrypoint_fixture, deny_external):
@@ -160,6 +189,18 @@ def test_phase13_help_exposes_main_execution_control_surface():
     result = _read_only_cli("--help")
     assert result.returncode == 0
     assert all(command in result.stdout for command in ("validate", "run", "status", "resume"))
+
+
+def test_run_and_resume_require_explicit_authorized_seed() -> None:
+    from memcontam.readiness.phase13_main_command import build_parser
+
+    parser = build_parser("phase13-main-a", live=False)
+    common = ["--repository-root", ".", "--package", "package.json", "--authorization", "authorization.json",
+              "--expected-authorization-sha256", "a" * 64, "--run-root", ".", "--run-id", "run"]
+    for command in ("run", "resume"):
+        with pytest.raises(SystemExit):
+            parser.parse_args([command, *common])
+        assert parser.parse_args([command, *common, "--seed", "4"]).seed == 4
 
 
 def test_main_runner_run_status_resume_are_offline_and_stable(entrypoint_fixture, deny_external):

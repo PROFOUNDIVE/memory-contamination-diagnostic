@@ -7,6 +7,7 @@ from typing import Final
 import pytest
 
 from memcontam.readiness import phase13_authority_files as files
+from .phase13_corrective_identity import corrective_identity
 
 ROOT: Final = Path("/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts")
 NAMES: Final = (
@@ -55,7 +56,7 @@ def test_baseline_rejects_nonregular(tmp_path: Path, kind: str) -> None:
 
 
 def test_snapshot_binds_exact_routed_stack(authority_root: Path) -> None:
-    snapshot = files.load_authority_v3(authority_root)
+    snapshot = files.load_authority_v3(authority_root, identity=corrective_identity())
     assert tuple(row.filename for row in snapshot.documents) == NAMES
     assert tuple(row.role for row in snapshot.documents) == (
         "theory", "baseline", "contamination_protocol", "narrow_addendum",
@@ -69,7 +70,7 @@ def test_snapshot_binds_exact_routed_stack(authority_root: Path) -> None:
 
 
 def test_registry_values_and_identities(authority_root: Path) -> None:
-    snapshot = files.load_authority_v3(authority_root)
+    snapshot = files.load_authority_v3(authority_root, identity=corrective_identity())
     assert [(stage.stage_id, stage.maximum_output_tokens, stage.maximum_input_tokens)
             for stage in snapshot.registry.stages] == [
         ("FH_generation", 512, 9330), ("RAG_generation", 512, 378),
@@ -82,7 +83,7 @@ def test_registry_values_and_identities(authority_root: Path) -> None:
     assert snapshot.registry.sha256 == "f97e30aa81d71a76a3023792314de606073d9d9215cc612927e69050688269ee"
     assert snapshot.terminal.sha256 == "9bbcdd9dd1686af034f7c0d2114ac86d5837a07de0cc6ba8fef7940bbc822b75"
     assert (snapshot.registry.T, snapshot.registry.transport_retries, snapshot.capacity.B_mem_tokens) == (1, 0, 8192)
-    assert snapshot.identity.run_id == "phase13-main-a-corrected-20260905-v3"
+    assert snapshot.identity == corrective_identity()
     assert snapshot.predecessor_rag_input_tokens == 290
     assert snapshot.repository_344_status == "STALE_IMPLEMENTATION_HISTORY"
 
@@ -98,19 +99,19 @@ def test_altered_block_rejected(authority_root: Path, old: bytes, new: bytes) ->
     target = authority_root / NAMES[4]
     target.write_bytes(target.read_bytes().replace(old, new))
     with pytest.raises(files.AuthorityFileError, match="MAIN_ENVELOPE_REGISTRY_MISMATCH"):
-        files.load_authority_v3(authority_root)
+        files.load_authority_v3(authority_root, identity=corrective_identity())
 
 
 def test_v3_rejects_repository_344_projection(authority_root: Path, tmp_path: Path) -> None:
     target = authority_root / NAMES[4]
     target.write_bytes(target.read_bytes().replace(b"RAG_generation|512|378", b"RAG_generation|512|344"))
     with pytest.raises(files.AuthorityFileError, match="MAIN_ENVELOPE_REGISTRY_MISMATCH"):
-        files.build_authority_v3(authority_root, tmp_path)
+        files.build_authority_v3(authority_root, tmp_path, corrective_identity())
     assert not (tmp_path / "current_authority_v3.json").exists()
 
 
 def test_wrong_whole_file_hash_rejected(authority_root: Path) -> None:
-    expected = files.load_authority_v3(authority_root)
+    expected = files.load_authority_v3(authority_root, identity=corrective_identity())
     target = authority_root / NAMES[0]
     target.write_bytes(target.read_bytes() + b"\n")
     with pytest.raises(files.AuthorityFileError, match="MAIN_AUTHORITY_BINDING_MISMATCH"):
@@ -121,14 +122,14 @@ def test_altered_router_target_rejected(authority_root: Path) -> None:
     router = authority_root / "AGENTS.md"
     router.write_bytes(router.read_bytes().replace(NAMES[4].encode(), b"stale.md", 1))
     with pytest.raises(files.AuthorityFileError, match="MAIN_AUTHORITY_BINDING_MISMATCH"):
-        files.load_authority_v3(authority_root)
+        files.load_authority_v3(authority_root, identity=corrective_identity())
 
 
 def test_authority_loader_rejects_symlinked_parent(authority_root: Path, tmp_path: Path) -> None:
     parent = tmp_path / "linked"
     parent.symlink_to(authority_root, target_is_directory=True)
     with pytest.raises(files.AuthorityFileError, match="MAIN_PATH_UNSAFE"):
-        files.build_authority_v3(parent, tmp_path)
+        files.build_authority_v3(parent, tmp_path, corrective_identity())
     assert not (tmp_path / "current_authority_v3.json").exists()
 
 
@@ -137,12 +138,12 @@ def test_authority_loader_rejects_symlinked_final(authority_root: Path) -> None:
     target.unlink()
     target.symlink_to(ROOT / NAMES[0])
     with pytest.raises(files.AuthorityFileError, match="MAIN_PATH_UNSAFE"):
-        files.load_authority_v3(authority_root)
+        files.load_authority_v3(authority_root, identity=corrective_identity())
 
 
 def test_authority_loader_rejects_escape(authority_root: Path) -> None:
     with pytest.raises(files.AuthorityFileError, match="MAIN_PATH_UNSAFE"):
-        files.load_authority_v3(authority_root / ".." / "inputs")
+        files.load_authority_v3(authority_root / ".." / "inputs", identity=corrective_identity())
 
 
 def test_unstable_read_rejected(authority_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -156,12 +157,12 @@ def test_unstable_read_rejected(authority_root: Path, monkeypatch: pytest.Monkey
         return raw
     monkeypatch.setattr(files.os, "read", changing_read)
     with pytest.raises(files.AuthorityFileError, match="MAIN_PATH_UNSAFE"):
-        files.load_authority_v3(authority_root)
+        files.load_authority_v3(authority_root, identity=corrective_identity())
 
 
 def test_builder_emits_json_without_external_mutation(tmp_path: Path) -> None:
     before = tuple(files.read_regular_nofollow(ROOT / name) for name in (*NAMES, MANIFEST))
-    snapshot = files.build_authority_v3(ROOT, tmp_path)
+    snapshot = files.build_authority_v3(ROOT, tmp_path, corrective_identity())
     raw = (tmp_path / "current_authority_v3.json").read_bytes()
     assert json.loads(raw)["schema_version"] == "phase13_main_authority_snapshot_v3"
     assert raw.endswith(b"\n") and not raw.endswith(b"\n\n")
@@ -173,7 +174,7 @@ def test_publication_never_replaces(authority_root: Path, tmp_path: Path) -> Non
     target = tmp_path / "current_authority_v3.json"
     target.write_bytes(b"existing")
     with pytest.raises(files.AuthorityFileError, match="MAIN_AUTHORITY_BINDING_MISMATCH"):
-        files.build_authority_v3(authority_root, tmp_path)
+        files.build_authority_v3(authority_root, tmp_path, corrective_identity())
     assert target.read_bytes() == b"existing"
 
 
@@ -181,7 +182,7 @@ def test_capacity_drift_rejected(authority_root: Path) -> None:
     router = authority_root / "AGENTS.md"
     router.write_bytes(router.read_bytes().replace(b"B_mem_tokens=8192", b"B_mem_tokens=4096"))
     with pytest.raises(files.AuthorityFileError, match="MAIN_ENVELOPE_REGISTRY_MISMATCH"):
-        files.load_authority_v3(authority_root)
+        files.load_authority_v3(authority_root, identity=corrective_identity())
 
 
 @pytest.mark.parametrize("attempt", range(3))
@@ -191,7 +192,7 @@ def test_interruption_closes_descriptors(authority_root: Path, monkeypatch: pyte
         raise InterruptedError(attempt)
     monkeypatch.setattr(files.os, "read", interrupted_read)
     with pytest.raises(files.AuthorityFileError, match="MAIN_PATH_UNSAFE"):
-        files.load_authority_v3(authority_root)
+        files.load_authority_v3(authority_root, identity=corrective_identity())
     assert len(tuple(Path("/proc/self/fd").iterdir())) == before
 
 
@@ -206,11 +207,11 @@ def test_ancestor_swap_during_read_rejected(authority_root: Path, monkeypatch: p
         return raw
     monkeypatch.setattr(files.os, "read", swapping_read)
     with pytest.raises(files.AuthorityFileError, match="MAIN_PATH_UNSAFE"):
-        files.load_authority_v3(authority_root)
+        files.load_authority_v3(authority_root, identity=corrective_identity())
 
 
 def test_self_rehashed_semantic_projection_rejected(authority_root: Path) -> None:
-    expected = files.load_authority_v3(authority_root)
+    expected = files.load_authority_v3(authority_root, identity=corrective_identity())
     payload = json.loads(expected.model_dump_json())
     payload["registry"]["stages"][1]["maximum_input_tokens"] = 344
     payload["registry"]["sha256"] = hashlib.sha256(json.dumps(payload["registry"], sort_keys=True).encode()).hexdigest()
@@ -225,7 +226,7 @@ def test_duplicate_block_rejected(authority_root: Path) -> None:
     end = raw.index(b"\nEND_CORE_EXECUTION_ENVELOPE_REGISTRY_V3\n", begin)
     target.write_bytes(raw + raw[begin:end] + b"\nEND_CORE_EXECUTION_ENVELOPE_REGISTRY_V3\n")
     with pytest.raises(files.AuthorityFileError, match="MAIN_ENVELOPE_REGISTRY_MISMATCH"):
-        files.load_authority_v3(authority_root)
+        files.load_authority_v3(authority_root, identity=corrective_identity())
 
 
 def test_router_decoy_does_not_override_precedence(authority_root: Path) -> None:
@@ -235,7 +236,7 @@ def test_router_decoy_does_not_override_precedence(authority_root: Path) -> None
     decoy = f"Theory \u2192 Baseline \u2192 Contamination Protocol \u2192 `{NAMES[3]}` \u2192 Experiment Design\n"
     router.write_text(raw.replace("## Ownership", decoy + "## Ownership"))
     with pytest.raises(files.AuthorityFileError, match="MAIN_AUTHORITY_BINDING_MISMATCH"):
-        files.load_authority_v3(authority_root)
+        files.load_authority_v3(authority_root, identity=corrective_identity())
 
 
 def test_output_ancestor_swap_leaves_no_snapshot(authority_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -249,6 +250,6 @@ def test_output_ancestor_swap_leaves_no_snapshot(authority_root: Path, tmp_path:
         output.mkdir()
     monkeypatch.setattr(files.os, "link", swapping_link)
     with pytest.raises(files.AuthorityFileError, match="MAIN_PATH_UNSAFE"):
-        files.build_authority_v3(authority_root, output)
+        files.build_authority_v3(authority_root, output, corrective_identity())
     assert not tuple(moved.iterdir())
     assert not tuple(output.iterdir())

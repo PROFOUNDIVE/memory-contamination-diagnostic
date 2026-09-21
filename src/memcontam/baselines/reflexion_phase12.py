@@ -120,10 +120,14 @@ class ReflectionEvictionEvent:
 class BaselineStepResultV3:
     outcome: BaselineExecutionOutcome
     native_reflections: tuple[NativeEntry, ...]
-    write_envelope: MemoryCardEnvelopeV3 | None
+    write_envelopes: tuple[MemoryCardEnvelopeV3, ...]
     filter_transition: FilterTransition | None
     call_lineage_events: tuple[ReflectionCallLineageEvent, ...]
     eviction_events: tuple[ReflectionEvictionEvent, ...]
+
+    @property
+    def write_envelope(self) -> MemoryCardEnvelopeV3 | None:
+        return self.write_envelopes[-1] if self.write_envelopes else None
 
 
 class ReflexionPhase12Adapter:
@@ -167,6 +171,7 @@ class ReflexionPhase12Adapter:
             config={
                 **dict(trial.config),
                 "run_id": trial.run_id,
+                "trial_id": trial.trial_id,
                 "baseline": "reflexion_style",
                 "arm": trial.branch,
                 "model": trial.model,
@@ -178,7 +183,7 @@ class ReflexionPhase12Adapter:
         return BaselineStepResultV3(
             outcome=_active_filter_outcome(outcome, state, transitions),
             native_reflections=tuple(native_reflections),
-            write_envelope=envelopes[-1] if envelopes else None,
+            write_envelopes=tuple(envelopes),
             filter_transition=transitions[-1] if transitions else None,
             call_lineage_events=tuple(lineage_events),
             eviction_events=tuple(evictions),

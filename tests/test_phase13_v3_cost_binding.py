@@ -1,4 +1,5 @@
 from __future__ import annotations
+from .phase13_corrective_identity import corrective_identity
 
 import hashlib
 import importlib
@@ -33,7 +34,7 @@ def api():
 def base():
     authority = load_authority_v3(Path(
         "/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts"
-    ))
+    ), identity=corrective_identity())
     bindings = PrefreezeBindings(**{
         name: hashlib.sha256(name.encode()).hexdigest() for name in PrefreezeBindings.model_fields
     })
@@ -46,7 +47,7 @@ def base():
 @pytest.fixture
 def bound(api, base):
     phase4 = api.MRP4Costs(policy=base.policy, base=base, witness=build_witness(base))
-    package = api.CostBoundPackageV3(final_order=FinalOrder(
+    package = api.CostBoundPackageV3(package_id=base.policy.authority.identity.package_id, final_order=FinalOrder(
         unit_ids=("c" * 64, "a" * 64, "b" * 64), runtime_hash="1" * 64,
         request_hash="2" * 64, tokenizer_hash="3" * 64,
     ))
@@ -73,10 +74,13 @@ def dispatch_fake(api, tmp_path, monkeypatch):
     def execute(package, resources, drift=None):
         parent_id = package.final_order.unit_ids[0]
         binding = dispatch.PackageBindingV3(package_sha256=("f" * 64 if drift == "raw_hash" else digest(package)),
+                                             identity=(corrective_identity("foreign") if drift == "identity"
+                                                       else resources.phase4.policy.authority.identity),
                                              authorization_sha256="b" * 64)
         key = dispatch.RequestKeyV3(parent_id=parent_id, stage="rag_generate", ordinal=0)
         ledger = TerminalLedgerV3.create(tmp_path / "request.sqlite3", {
             "schema_version": "phase13_main_run_ledger_v3", "unit_ids": [key.dispatch_id],
+            "identity": binding.identity.model_dump(mode="json"),
             "package_sha256": binding.package_sha256, "authorization_sha256": binding.authorization_sha256,
         })
         dispatcher = dispatch.ProductionRequestDispatcherV3(ledger, binding, (
@@ -280,7 +284,7 @@ def test_production_projection_rejects_wrong_unit_order(api, bound):
                                         bound.package.package_hash)
 
 
-@pytest.mark.parametrize("drift", ["raw_hash", "package_hash"])
+@pytest.mark.parametrize("drift", ["raw_hash", "package_hash", "identity"])
 def test_dispatch_rejects_wrong_package_before_fake_constructor(bound, dispatch_fake, drift):
     execute, counts = dispatch_fake
     with pytest.raises(CostError, match="MAIN_COST_PROOF_MISMATCH"):

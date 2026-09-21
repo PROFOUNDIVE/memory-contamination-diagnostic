@@ -11,6 +11,7 @@ from dataclasses import replace
 import pytest
 
 from memcontam.readiness.phase13_v3_entrypoint import SelectedExecutionV3
+from .phase13_corrective_identity import corrective_identity
 
 from .test_phase13_v3_entrypoint_fixture import entrypoint_bytes as entrypoint_bytes
 from .test_phase13_v3_entrypoint_fixture import entrypoint_fixture as entrypoint_fixture
@@ -48,9 +49,8 @@ def deny_external(monkeypatch):
 def test_cli_validate_uses_selector_before_any_runtime(tmp_path, monkeypatch, module):
     cli = importlib.import_module("memcontam.readiness." + module)
     package = tmp_path / "package.json"
-    from memcontam.readiness.phase13_v3_authority_models import V3Identity
     package.write_text(json.dumps({"schema_version": "phase13_main_execution_freeze_v3",
-        "package_id": V3Identity().package_id, "identity": V3Identity().model_dump()}))
+        "package_id": corrective_identity().package_id, "identity": corrective_identity().model_dump()}))
     monkeypatch.setattr(sys, "argv", [module, "validate", "--repository-root", str(tmp_path),
         "--package", str(package), "--authorization", str(tmp_path / "auth.json"),
         "--expected-authorization-sha256-file", str(tmp_path / "auth.sha256"),
@@ -64,6 +64,7 @@ def test_guarded_terminal_store_reopens_and_preserves_events(tmp_path):
     from memcontam.readiness.phase13_v3_terminal_ledger import TerminalLedgerV3
 
     binding = {"schema_version": "phase13_main_run_ledger_v3", "unit_ids": ["a" * 64],
+               "identity": corrective_identity().model_dump(mode="json"),
                "package_sha256": "b" * 64, "authorization_sha256": "c" * 64}
     with private_ledger(tmp_path / "fixture", create=True) as private:
         ledger = TerminalLedgerV3.create_guarded(private, binding)
@@ -83,7 +84,7 @@ def test_legacy_active_runner_rejects_before_reading_package(tmp_path):
     from memcontam.readiness.phase13_main_runner import MainRunRequest, prepare_main_run
 
     request = MainRunRequest(tmp_path, tmp_path / "absent", tmp_path / "absent-auth",
-                             "a" * 64, tmp_path, "old-v2")
+                             "a" * 64, tmp_path, "old-v2", 0)
     with pytest.raises(ValueError, match="MAIN_CORRECTED_RUN_ID_MISMATCH"):
         prepare_main_run(request)
 
@@ -110,7 +111,7 @@ def test_both_active_runner_apis_reject_old_identity(entrypoint_fixture, command
 
     request = entrypoint_fixture
     active = MainRunRequest(request.repository_root, request.package_path, request.authorization_path, "",
-        request.repository_root, "old-run", request.authority_root, request.expected_authorization_sha256_file)
+        request.repository_root, "old-run", 0, request.authority_root, request.expected_authorization_sha256_file)
     with pytest.raises(ValueError, match="MAIN_CORRECTED_RUN_ID_MISMATCH"):
         (prepare_main_run if command == "run" else open_main_run)(active)
 
@@ -122,14 +123,14 @@ def test_valid_v3_guarded_run_and_resume_without_calls(entrypoint_fixture, deny_
     directory = entrypoint_fixture.repository_root / "fixture-ledger"
     selected = select_execution(entrypoint_fixture, "run")
     assert isinstance(selected, SelectedExecutionV3)
-    run = V3MainRun.open(selected, directory, create=True)
+    run = V3MainRun.open(selected, directory, create=True, seed=0)
     try:
         assert run.execute(directory / "cache", max_units=0, tranche_ceiling_krw=450000).provider_calls_issued == 0
     finally:
         run.close()
     selected = select_execution(entrypoint_fixture, "resume")
     assert isinstance(selected, SelectedExecutionV3)
-    resumed = V3MainRun.open(selected, directory, create=False)
+    resumed = V3MainRun.open(selected, directory, create=False, seed=0)
     try:
         assert resumed.status().pending_count == 1
     finally:
@@ -179,12 +180,16 @@ def test_v3_execution_uses_guarded_requests_and_real_ordinary_runtime(entrypoint
             assert compiled.native_state == b"{}"
             before_request()
             calls.append(compiled.key.dispatch_id)
-            return LLMResponse("final: 0", {"usage": {"input_tokens": 0, "output_tokens": 0}, "attempts": 1},
-                               {"prompt_tokens": 0, "completion_tokens": 0}, 0)
+            return LLMResponse("final: 0", {
+                "usage": {"input_tokens": 1, "output_tokens": 0}, "attempts": 1,
+                "authoritative_provider_cost_usd": "0.0000002", "currency": "USD",
+                "status": "completed", "response_id": f"fake-{compiled.key.dispatch_id}",
+                "model": "gpt-5.6-luna", "service_tier": "default",
+            }, {"prompt_tokens": 1, "completion_tokens": 0}, 0)
 
     selected = select_execution(entrypoint_fixture, "run")
     assert isinstance(selected, SelectedExecutionV3)
-    run = V3MainRun.open(selected, entrypoint_fixture.repository_root / "fake-run", create=True)
+    run = V3MainRun.open(selected, entrypoint_fixture.repository_root / "fake-run", create=True, seed=0)
     try:
         report = run.execute(entrypoint_fixture.repository_root / "cache", max_units=1, tranche_ceiling_krw=450000,
                              provider_factory=lambda _: FakeProvider())

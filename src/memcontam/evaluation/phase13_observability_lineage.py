@@ -51,7 +51,12 @@ def validate_evidence_joins(evidence: Phase13TrialEvidence) -> None:
         raise Phase13ObservabilityError("ANSWER_CALL_IDENTITY_MISMATCH")
     if any(
         span.target_set_id != evidence.target_set.target_set_id
-        or span.entry_id not in evidence.target_set.target_entry_ids
+        or (
+            span.entry_id not in evidence.target_set.target_entry_ids
+            and not set(span.injected_root_ids).intersection(
+                evidence.target_set.target_entry_ids
+            )
+        )
         or span.is_target_contamination is not True
         for span in evidence.target_set.answer_call_spans
     ):
@@ -60,11 +65,22 @@ def validate_evidence_joins(evidence: Phase13TrialEvidence) -> None:
     nodes = {node.entry_id: node for node in evidence.lineage}
     if any(target_id not in nodes or nodes[target_id].lineage_status != "exact" for target_id in target_ids):
         raise Phase13ObservabilityError("EXACT_LINEAGE_REQUIRED")
-    if any(
-        span.entry_id in target_ids and span.lineage_status != "exact"
-        for span in evidence.target_set.answer_call_spans
-    ):
-        raise Phase13ObservabilityError("EXACT_LINEAGE_REQUIRED")
+    parents = writer_parents(evidence)
+    for span in evidence.target_set.answer_call_spans:
+        node = nodes.get(span.entry_id)
+        if node is None:
+            raise Phase13ObservabilityError("FABRICATED_LINEAGE")
+        claimed_roots = set(span.injected_root_ids)
+        if (
+            span.lineage_status != "exact"
+            or node.lineage_status != "exact"
+            or claimed_roots != set(node.injected_root_ids)
+            or not claimed_roots.intersection(target_ids)
+        ):
+            raise Phase13ObservabilityError("EXACT_LINEAGE_REQUIRED")
+        for root_id in claimed_roots.intersection(target_ids):
+            if not recorded_path(node, nodes, {root_id}, parents, set()):
+                raise Phase13ObservabilityError("EXACT_LINEAGE_REQUIRED")
     changed = (*evidence.new_entry_ids, *evidence.updated_entry_ids, *evidence.removed_entry_ids)
     if not changed:
         return
@@ -102,7 +118,6 @@ def validate_evidence_joins(evidence: Phase13TrialEvidence) -> None:
         or after != before.difference(removed).union(new)
     ):
         raise Phase13ObservabilityError("MEMORY_MUTATION_SET_MISMATCH")
-    parents = writer_parents(evidence)
     for entry_id in (*evidence.new_entry_ids, *evidence.updated_entry_ids):
         node = nodes.get(entry_id)
         if node is None:
@@ -110,7 +125,7 @@ def validate_evidence_joins(evidence: Phase13TrialEvidence) -> None:
         recorded = parents.get(entry_id, ())
         asserted = (*node.direct_parent_ids, node.version_predecessor_id)
         asserted_ids = tuple(parent for parent in asserted if parent is not None)
-        if not recorded or set(recorded) != set(asserted_ids):
+        if set(recorded) != set(asserted_ids):
             raise Phase13ObservabilityError("EXACT_LINEAGE_REQUIRED")
 
 
@@ -149,7 +164,14 @@ def recorded_path(
         raise Phase13ObservabilityError("EXACT_LINEAGE_REQUIRED")
     if node.entry_id in target_ids:
         return (node.entry_id,)
-    for reference in writer_parent_ids.get(node.entry_id, ()):
+    references = writer_parent_ids.get(
+        node.entry_id,
+        (
+            *node.direct_parent_ids,
+            *((node.version_predecessor_id,) if node.version_predecessor_id is not None else ()),
+        ),
+    )
+    for reference in references:
         parent = nodes.get(reference)
         if parent is None:
             raise Phase13ObservabilityError("FABRICATED_LINEAGE")

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from .phase13_corrective_identity import corrective_identity
 
 import threading
 from typing import Never
@@ -32,7 +33,7 @@ def client_fixture(tmp_path, monkeypatch):
     import memcontam.readiness.phase13_main_request_dispatch as dispatch
 
     monkeypatch.setattr(dispatch, "count_prompt_tokens", lambda *_: 1)
-    binding = PackageBindingV3(package_sha256="b" * 64, authorization_sha256="c" * 64)
+    binding = PackageBindingV3(identity=corrective_identity(), package_sha256="b" * 64, authorization_sha256="c" * 64)
     keys = tuple(RequestKeyV3(parent_id="a" * 64, stage="no_memory_generate", ordinal=index) for index in range(2))
     counts = {"constructor": 0, "requests": 0}
 
@@ -49,6 +50,7 @@ def client_fixture(tmp_path, monkeypatch):
 
     with private_ledger(tmp_path / "fixture", create=True) as private:
         ledger = TerminalLedgerV3.create_guarded(private, {"schema_version": "phase13_main_run_ledger_v3",
+            "identity": binding.identity.model_dump(mode="json"),
             "unit_ids": [key.dispatch_id for key in keys], "package_sha256": binding.package_sha256,
             "authorization_sha256": binding.authorization_sha256})
         dispatcher = ProductionRequestDispatcherV3(ledger, binding,

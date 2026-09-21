@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -10,10 +9,11 @@ from memcontam.evaluation.phase13_observability_models import (
     Phase13TargetSetEvidence,
     Phase13TrialEvidence,
 )
+from memcontam.evaluation.phase13_observability_lineage import recorded_path
 from memcontam.experiment.phase12.filter_challenge.mft_state_models import JsonValue
 from memcontam.experiment.phase12.runtime_registry import RuntimeTrialResult
 from memcontam.experiment.phase13_ordinary_runtime import ProspectiveOrdinaryRun
-from memcontam.logging.schema import PromptSourceSpan
+from memcontam.logging.schema import MethodCall, PromptSourceSpan
 from memcontam.logging.schema_v3 import (
     ContextEvent,
     MemoryArmExecutionKey,
@@ -22,6 +22,8 @@ from memcontam.logging.schema_v3 import (
     NoMemTrialLog,
     RetrievalEvent,
 )
+from memcontam.memory.checkpoint_v3 import NativeEntry, NativeState
+from memcontam.memory.cards_v3 import MemoryCardEnvelopeV3
 from memcontam.readiness.phase13_production_runtime_memory import production_memory_events
 from memcontam.readiness.phase13_production_runtime_models import (
     ProductionNoMemTrialEvidence,
@@ -50,15 +52,6 @@ class _FullHistoryContext(BaseModel):
     removed_record_ids: tuple[str, ...] = ()
 
 
-@runtime_checkable
-class _SourceSpanCall(Protocol):
-    @property
-    def call_id(self) -> str: ...
-
-    @property
-    def source_spans(self) -> Sequence[PromptSourceSpan]: ...
-
-
 def build_production_trial_evidence(
     run: ProspectiveOrdinaryRun,
     result: RuntimeTrialResult,
@@ -73,8 +66,8 @@ def build_production_trial_evidence(
         raise ProductionRuntimeJoinError("PRODUCTION_CHECKPOINT_REQUIRED")
     current_trial_id = trial_id(run, sample_id, suffix_order)
     absolute_index = checkpoint_index + suffix_order
-    before = _entries(result.outcome.memory_before)
-    after = _entries(result.outcome.memory_after)
+    before = _snapshot_entries(result.state_before, result.outcome.memory_before)
+    after = _snapshot_entries(result.state_after, result.outcome.memory_after)
     before_ids = tuple(entry.entry_id for entry in before)
     after_ids = tuple(entry.entry_id for entry in after)
     new_ids = tuple(entry_id for entry_id in after_ids if entry_id not in before_ids)
@@ -98,8 +91,21 @@ def build_production_trial_evidence(
         run.run_id,
         current_trial_id,
         retrievals,
+        result.outcome.method_calls,
+        result.outcome.answer_call_id,
     )
-    lineage = _lineage((*before, *after), target_ids)
+    lineage = _lineage(
+        (
+            *(_entry_from_native(entry) for entry in result.provenance_entries),
+            *before,
+            *after,
+            *_entries(result.outcome.memory_before),
+            *_entries(result.outcome.memory_after),
+        ),
+        target_ids,
+        result.provenance_envelopes,
+        new_ids,
+    )
     memory_events = production_memory_events(
         run.run_id,
         current_trial_id,
@@ -160,7 +166,11 @@ def build_production_trial_evidence(
             target_entry_ids=target_ids,
             answer_call_id=result.outcome.answer_call_id,
             answer_call_spans=_target_spans(
-                result.outcome.method_calls, target_ids, target_set_id
+                result.outcome.method_calls,
+                result.outcome.answer_call_id,
+                target_ids,
+                target_set_id,
+                lineage,
             ),
             source_package_manifest_sha256=identity.source_package_manifest_sha256,
         ),
@@ -231,25 +241,59 @@ def _entries(rows: Sequence[Mapping[str, JsonValue]]) -> tuple[_RuntimeMemoryEnt
     return tuple(_RuntimeMemoryEntry.model_validate(row) for row in rows)
 
 
+def _entry_from_native(entry: NativeEntry) -> _RuntimeMemoryEntry:
+    return _RuntimeMemoryEntry(
+        entry_id=entry.entry_id,
+        metadata=_RuntimeEntryMetadata(source_entry_ids=entry.direct_parent_ids),
+    )
+
+
+def _snapshot_entries(
+    snapshot: NativeState | None,
+    fallback: Sequence[Mapping[str, JsonValue]],
+) -> tuple[_RuntimeMemoryEntry, ...]:
+    if snapshot is None:
+        return _entries(fallback)
+    return tuple(
+        _entry_from_native(entry) if isinstance(entry, NativeEntry) else _RuntimeMemoryEntry(entry_id=entry)
+        for entry in snapshot.entries
+    )
+
+
 def _context(
     value: ContextEvent | None,
     metadata: Mapping[str, JsonValue],
     run_id: str,
     current_trial_id: str,
     retrievals: tuple[RetrievalEvent, ...],
+    calls: Sequence[JsonValue | MethodCall],
+    answer_call_id: str | None,
 ) -> ContextEvent | None:
     if isinstance(value, ContextEvent):
         return value
     raw = metadata.get("full_history_context")
-    if not isinstance(raw, Mapping):
-        return None
-    recorded = _FullHistoryContext.model_validate(raw)
+    if isinstance(raw, Mapping):
+        recorded = _FullHistoryContext.model_validate(raw)
+        final_entry_ids = list(recorded.post_record_ids)
+        removed_entry_ids = list(recorded.removed_record_ids)
+    else:
+        answer_calls = tuple(
+            call
+            for call in calls
+            if isinstance(call, MethodCall) and call.call_id == answer_call_id
+        )
+        if not answer_calls:
+            return None
+        final_entry_ids = list(dict.fromkeys(
+            span.entry_id for span in answer_calls[-1].source_spans
+        ))
+        removed_entry_ids = []
     return ContextEvent(
         record_type="context_event",
         event_id=f"{current_trial_id}:context",
         context_id=f"{current_trial_id}:context",
-        final_entry_ids=list(recorded.post_record_ids),
-        removed_entry_ids=list(recorded.removed_record_ids),
+        final_entry_ids=final_entry_ids,
+        removed_entry_ids=removed_entry_ids,
         run_id=run_id,
         trial_id=current_trial_id,
         event_seq=max((event.event_seq for event in retrievals), default=-1) + 1,
@@ -257,24 +301,56 @@ def _context(
 
 
 def _target_spans(
-    calls: Sequence[JsonValue], target_ids: tuple[str, ...], target_set_id: str
+    calls: Sequence[JsonValue | MethodCall],
+    answer_call_id: str | None,
+    target_ids: tuple[str, ...],
+    target_set_id: str,
+    lineage: Sequence[Phase13LineageNode],
 ) -> tuple[PromptSourceSpan, ...]:
     if not target_ids:
         return ()
     target = set(target_ids)
+    nodes = {node.entry_id: node for node in lineage}
     spans: list[PromptSourceSpan] = []
     for call in calls:
-        if not isinstance(call, _SourceSpanCall):
+        if not isinstance(call, MethodCall) or call.call_id != answer_call_id:
             continue
         for span in call.source_spans:
-            if span.entry_id in target:
+            node = nodes.get(span.entry_id)
+            recorded_roots = () if node is None else node.injected_root_ids
+            matched_roots = tuple(
+                root_id
+                for root_id in target_ids
+                if root_id == span.entry_id
+                or root_id in recorded_roots
+                or root_id in span.injected_root_ids
+            )
+            if matched_roots:
+                direct_root = span.entry_id in target
+                if (
+                    node is None
+                    or node.lineage_status != "exact"
+                    or (
+                        direct_root
+                        and node.injected_root_ids != (span.entry_id,)
+                    )
+                    or (
+                        span.injected_root_ids
+                        and set(node.injected_root_ids) != set(span.injected_root_ids)
+                    )
+                    or any(
+                        not recorded_path(node, nodes, {root_id}, {}, set())
+                        for root_id in matched_roots
+                    )
+                ):
+                    raise ProductionRuntimeJoinError("PRODUCTION_TARGET_LINEAGE_INVALID")
                 spans.append(span.model_copy(update={
                     "parent_call_id": call.call_id,
                     "clean_or_contaminated": "contaminated",
-                    "contamination_class": "injected",
-                    "injected_root_ids": [span.entry_id],
+                    "contamination_class": "injected" if direct_root else "derived",
+                    "injected_root_ids": list(matched_roots),
                     "lineage_status": "exact",
-                    "lineage_basis": "seed",
+                    "lineage_basis": "seed" if direct_root else "recorded_source",
                     "target_set_id": target_set_id,
                     "is_target_contamination": True,
                 }))
@@ -282,20 +358,75 @@ def _target_spans(
 
 
 def _lineage(
-    entries: Sequence[_RuntimeMemoryEntry], target_ids: tuple[str, ...]
+    entries: Sequence[_RuntimeMemoryEntry],
+    target_ids: tuple[str, ...],
+    envelopes: Sequence[MemoryCardEnvelopeV3] = (),
+    new_ids: tuple[str, ...] = (),
 ) -> tuple[Phase13LineageNode, ...]:
     targets = set(target_ids)
     by_id = {entry.entry_id: entry for entry in entries}
+    by_envelope = {envelope.entry_id: envelope for envelope in envelopes}
+    references: dict[str, tuple[str, ...]] = {}
+    for entry in by_id.values():
+        envelope = by_envelope.get(entry.entry_id)
+        parent_ids = (
+            entry.metadata.source_entry_ids
+            if envelope is None
+            else envelope.direct_parent_ids
+        )
+        predecessor_id = None if envelope is None else envelope.version_predecessor_id
+        if entry.entry_id in new_ids and (
+            envelope is None
+            or envelope.created_trial_id is None
+            or envelope.created_trial_id not in envelope.source_trial_ids
+        ):
+            raise ProductionRuntimeJoinError("PRODUCTION_WRITER_ORIGIN_MISSING")
+        if any(
+            parent_id not in by_id
+            for parent_id in (*parent_ids, predecessor_id)
+            if parent_id is not None
+        ):
+            raise ProductionRuntimeJoinError("PRODUCTION_LINEAGE_PARENT_MISSING")
+        references[entry.entry_id] = (
+            *parent_ids,
+            *((predecessor_id,) if predecessor_id is not None else ()),
+        )
+
+    memo: dict[str, tuple[str, ...]] = {}
+
+    def injected_roots(entry_id: str, visiting: frozenset[str] = frozenset()) -> tuple[str, ...]:
+        if entry_id in targets:
+            return (entry_id,)
+        if entry_id in memo:
+            return memo[entry_id]
+        if entry_id in visiting:
+            raise ProductionRuntimeJoinError("PRODUCTION_LINEAGE_CYCLE")
+        discovered = {
+            root_id
+            for parent_id in references[entry_id]
+            for root_id in injected_roots(parent_id, visiting | {entry_id})
+        }
+        result = tuple(root_id for root_id in target_ids if root_id in discovered)
+        memo[entry_id] = result
+        return result
+
     return tuple(
         Phase13LineageNode(
             entry_id=entry.entry_id,
             lineage_status="exact",
             injected_root_ids=(
-                (entry.entry_id,)
-                if entry.entry_id in targets
-                else tuple(target for target in target_ids if target in entry.metadata.source_entry_ids)
+                injected_roots(entry.entry_id)
             ),
-            direct_parent_ids=entry.metadata.source_entry_ids,
+            direct_parent_ids=(
+                by_envelope[entry.entry_id].direct_parent_ids
+                if entry.entry_id in by_envelope
+                else entry.metadata.source_entry_ids
+            ),
+            version_predecessor_id=(
+                by_envelope[entry.entry_id].version_predecessor_id
+                if entry.entry_id in by_envelope
+                else None
+            ),
         )
         for entry in by_id.values()
     )
