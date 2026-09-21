@@ -6,11 +6,11 @@
   "artifacts": {
     "observability_registration_packet": {
       "path": "registration_packet_v1.json",
-      "sha256": "b2f9d7b5cced3b7bd4f33272b952d9a2270696a5348121608d13876bce02e454"
+      "sha256": "8edf92d502d6c4a65ca7d3e08de2575f29e8875bc7b41dacffc5fa897e7a3f1b"
     },
     "synthetic_contract_fixture": {
       "path": "fixture_v1.json",
-      "sha256": "e3f472e24c3c95b378067ad780e56b72228c5f45ab11c6ca833667245f52bb5b"
+      "sha256": "5f7d1134d6e247a0458c9b34166b5c383a69d90d043544ce3d4674ff7c12d871"
     },
     "target_set_registry": {
       "path": "target_set_registry_v1.json",
@@ -24,7 +24,7 @@
     },
     "observability_sequence": {
       "path": "src/memcontam/evaluation/phase13_observability_sequence.py",
-      "sha256": "1417da9e1d87ea2aecf0570930829d32e03aacdabfd348ab7f4823dd0ab2b12e"
+      "sha256": "6f48b8b3b8ec1bef2e484d0180cbe1b0b40f8fe20cd8c61b094503a8a7fa9d40"
     },
     "observable_contract": {
       "path": "src/memcontam/evaluation/phase13_observability_models.py",
@@ -68,7 +68,7 @@
     }
   },
   "expected_reconstruction_sha256": "e0e57053cf676439670e160ca49bb2d21df42d2f54e0afdc135248938a803d9f",
-  "registration_packet_sha256": "b2f9d7b5cced3b7bd4f33272b952d9a2270696a5348121608d13876bce02e454",
+  "registration_packet_sha256": "8edf92d502d6c4a65ca7d3e08de2575f29e8875bc7b41dacffc5fa897e7a3f1b",
   "failure_classifier_registry_status": "PACKET_BOUND_REGISTERED",
   "u_t_status": "NOT_REGISTERED_FOR_CURRENT_MAIN",
   "downstream_blockers": [],
