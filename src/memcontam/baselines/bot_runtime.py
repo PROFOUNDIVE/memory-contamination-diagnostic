@@ -39,6 +39,10 @@ from memcontam.memory.bot_buffer import (
 )
 from memcontam.memory.embeddings import EmbeddingProvider
 from memcontam.memory.stores import MemoryEntry
+from memcontam.readiness.phase13_cost_policy import (
+    Phase13CostPolicyError,
+    Phase13ProviderCallError,
+)
 from memcontam.tasks.base import TaskInstance
 from memcontam.tasks.dispatch import render_model_visible_task
 from memcontam.tools.base import (
@@ -311,6 +315,24 @@ class BotRuntime:
                 config=text_call_config,
                 executed_trajectory=metadata["executed_trajectory"],
                 require_executed_programming=tool_mode == "python_sandbox",
+            )
+        except (Phase13CostPolicyError, Phase13ProviderCallError):
+            finalize_answer_call(
+                provenance_observer,
+                recorded_solve,
+                tuple(visible_entry_ids),
+                parsed_answer,
+                None,
+            )
+            return _failure_outcome(
+                recorder,
+                memory_before,
+                metadata,
+                "provider_call_failed",
+                answer_call_id,
+                final_response=solve_result.final_answer,
+                parsed_answer=parsed_answer,
+                retrieval_decision=retrieval_decision,
             )
         except BoTToolContractError as error:
             metadata["tool_contract_error"] = error.code

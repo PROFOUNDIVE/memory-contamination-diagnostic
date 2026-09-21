@@ -315,3 +315,67 @@ def test_bot_invalid_thought_distillation_returns_closed_failure_without_verifie
         "bot_instantiate_solve",
         "bot_thought_distill",
     ]
+
+
+@pytest.mark.parametrize("failure_code", ("PROVIDER_FAILURE", "INPUT_ENVELOPE_EXCEEDED"))
+def test_bot_thought_distillation_terminal_failure_preserves_answer_and_state(
+    failure_code: str,
+) -> None:
+    from memcontam.baselines.bot_runtime import BotRuntime
+    from memcontam.clients.base import LLMResponse
+    from memcontam.memory.bot_buffer import BotBufferIdentity
+    from memcontam.readiness.phase13_cost_policy import (
+        Phase13CostPolicyError,
+        Phase13ProviderCallError,
+    )
+    from memcontam.tasks.base import TaskInstance
+
+    class Client:
+        def chat(self, messages, model, config):
+            del messages, model
+            match config["method_stage"]:
+                case "bot_problem_distill":
+                    content = (
+                        '{"key_information":"numbers = [1, 2, 3, 4]",'
+                        '"restrictions":"Use each number once.",'
+                        '"distilled_task":"Construct 24."}'
+                    )
+                case "bot_instantiate_solve":
+                    content = (
+                        '{"selected_structure":"procedure-based",'
+                        '"solution_trace":"Build pairs.","final_answer":"final: 24"}'
+                    )
+                case "bot_thought_distill":
+                    if failure_code == "INPUT_ENVELOPE_EXCEEDED":
+                        raise Phase13CostPolicyError(failure_code)
+                    raise Phase13ProviderCallError(TimeoutError("distillation failed"))
+                case unreachable:
+                    raise AssertionError(unreachable)
+            return LLMResponse(content=content, raw={}, token_usage={}, latency_ms=0)
+
+    outcome = BotRuntime().run(
+        identity=BotBufferIdentity("run", "game24", "bot_style", "clean", "replay"),
+        task=TaskInstance(
+            sample_id="sample-1",
+            task_name="game24",
+            input={"numbers": [1, 2, 3, 4], "target": 24},
+        ),
+        buffer_snapshot=[],
+        client=Client(),
+        model="replay",
+        config={"sample_id": "sample-1", "embedding_provider": FakeEmbeddingProvider()},
+        verifier=lambda _answer: True,
+    )
+
+    assert outcome.status == "failed"
+    assert outcome.failure_disposition == "provider_call_failed"
+    assert outcome.answer_call_id == outcome.method_calls[1].call_id
+    assert outcome.method_calls[2].call_id != outcome.answer_call_id
+    assert outcome.method_calls[2].failure_code == (
+        "INPUT_ENVELOPE_EXCEEDED" if failure_code == "INPUT_ENVELOPE_EXCEEDED" else None
+    )
+    assert outcome.method_calls[2].transport_attempts == (
+        0 if failure_code == "INPUT_ENVELOPE_EXCEEDED" else 1
+    )
+    assert outcome.memory_after == outcome.memory_before
+    assert outcome.memory_write_event is None
