@@ -71,10 +71,28 @@ def validate_evidence_joins(evidence: Phase13TrialEvidence) -> None:
         if node is None:
             raise Phase13ObservabilityError("FABRICATED_LINEAGE")
         claimed_roots = set(span.injected_root_ids)
+        direct_root = span.entry_id in target_ids
+        recorded_parents = set(node.direct_parent_ids)
+        relationship_matches = (
+            span.contamination_class == "injected"
+            and span.lineage_basis == "seed"
+            and not recorded_parents
+            and node.version_predecessor_id is None
+            if direct_root
+            else span.contamination_class == "derived"
+            and (
+                span.lineage_basis in {"recorded_parent", "recorded_source"}
+                if recorded_parents
+                else span.lineage_basis == "version_edge"
+                and node.version_predecessor_id is not None
+            )
+        )
         if (
             span.lineage_status != "exact"
             or node.lineage_status != "exact"
             or claimed_roots != set(node.injected_root_ids)
+            or set(span.direct_parent_ids) != recorded_parents
+            or not relationship_matches
             or not claimed_roots.intersection(target_ids)
         ):
             raise Phase13ObservabilityError("EXACT_LINEAGE_REQUIRED")

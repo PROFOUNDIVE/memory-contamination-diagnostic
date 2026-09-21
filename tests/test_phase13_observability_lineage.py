@@ -1,8 +1,22 @@
 from __future__ import annotations
 
 import importlib
+import hashlib
+from pathlib import Path
 
 import pytest
+from pydantic import JsonValue
+
+from memcontam.evaluation.phase13_observability_registration import (
+    ObservabilityRegistrationPacket,
+)
+from memcontam.readiness.phase13_production_observability import (
+    ProductionObservabilityArchive,
+    ProductionObservabilityError,
+    ProductionTrialRecord,
+    ProviderRequestRecord,
+    validate_production_archive,
+)
 
 _helpers = importlib.import_module("tests.phase13_observability_helpers")
 _context = _helpers.context
@@ -250,6 +264,96 @@ def test_answer_exposure_rejects_descendant_absent_from_exact_lineage() -> None:
 
     with pytest.raises(module.Phase13ObservabilityError, match="FABRICATED_LINEAGE"):
         module.reconstruct_phase13_trial(forged)
+
+
+@pytest.mark.parametrize(
+    "span_update",
+    (
+        {"direct_parent_ids": ["unrelated"]},
+        {"contamination_class": "injected", "lineage_basis": "seed"},
+        {"lineage_basis": "version_edge"},
+    ),
+    ids=("parents", "classification", "basis"),
+)
+def test_archive_rejects_answer_span_that_contradicts_exact_lineage(
+    span_update: dict[str, JsonValue],
+) -> None:
+    module = _module()
+    evidence = _evidence(module, retrieved=False, included=False, verified=0)
+    descendant = _span("root-b").model_copy(
+        update={
+            "entry_id": "child-b1",
+            "source_ids": ["child-b1"],
+            "lineage_id": "child-b1",
+            "contamination_class": "derived",
+            "injected_root_ids": ["root-b"],
+            "lineage_basis": "recorded_source",
+            "direct_parent_ids": ["root-b"],
+            **span_update,
+        }
+    )
+    contradictory = evidence.model_copy(
+        update={
+            "context": _context(["child-b1"]),
+            "target_set": evidence.target_set.model_copy(
+                update={"answer_call_spans": (descendant,)}
+            ),
+            "lineage": (
+                evidence.lineage[0],
+                module.Phase13LineageNode(
+                    entry_id="child-b1",
+                    lineage_status="exact",
+                    injected_root_ids=("root-b",),
+                    direct_parent_ids=("root-b",),
+                ),
+            ),
+        }
+    )
+    packet_path = (
+        Path(__file__).resolve().parents[1]
+        / "data/phase13/observability/registration_packet_v1.json"
+    )
+    packet_raw = packet_path.read_bytes()
+    archive = ProductionObservabilityArchive(
+        schema_version="phase13_production_observability_archive_v1",
+        registration_packet_sha256=hashlib.sha256(packet_raw).hexdigest(),
+        u_t_status="NOT_REGISTERED_FOR_CURRENT_MAIN",
+        records=(
+            ProductionTrialRecord(
+                execution_template_id="adversarial-lineage",
+                run_id="run-1",
+                session_id="session-1",
+                scientific_result=False,
+                ordered_sample_ids_sha256="a" * 64,
+                request=ProviderRequestRecord(
+                    api="OpenAI Responses API",
+                    model="gpt-5.6-luna",
+                    service_tier="default",
+                    reasoning_mode="standard",
+                    reasoning_effort="none",
+                    reasoning_context="current_turn",
+                    previous_response_id=None,
+                    store=False,
+                    timeout_seconds=180,
+                    retries_after_initial_attempt=0,
+                    semantic_invalid_generic_retry=False,
+                ),
+                parsed_answer="fixture",
+                method_calls=(),
+                evidence=contradictory,
+            ),
+        ),
+    )
+
+    with pytest.raises(ProductionObservabilityError) as raised:
+        validate_production_archive(
+            archive,
+            ObservabilityRegistrationPacket.model_validate_json(packet_raw),
+            archive.registration_packet_sha256,
+        )
+
+    assert raised.value.code == "PRODUCTION_RECONSTRUCTION_FAILED"
+    assert getattr(raised.value.__cause__, "code", None) == "EXACT_LINEAGE_REQUIRED"
 
 
 def test_historical_exact_hops_remain_traversable_for_a_current_write() -> None:

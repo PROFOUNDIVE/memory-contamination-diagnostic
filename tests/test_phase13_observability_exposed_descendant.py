@@ -19,7 +19,7 @@ def test_propagation_starts_from_an_exact_exposed_descendant() -> None:
         update={
             "entry_id": "child-b1",
             "source_ids": ["child-b1"],
-            "parent_ids": ["root-b"],
+            "direct_parent_ids": ["root-b"],
             "lineage_id": "child-b1",
             "contamination_class": "derived",
             "injected_root_ids": ["root-b"],
