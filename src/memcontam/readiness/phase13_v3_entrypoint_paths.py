@@ -175,6 +175,16 @@ class PrivateLedger:
         self.check()
         return raw
 
+    def record_exists(self, name: str) -> bool:
+        self.check()
+        try:
+            info = os.stat(name, dir_fd=self.directory_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            return False
+        _require(info)
+        self.check()
+        return True
+
     def publish_record(self, name: str, raw: bytes) -> None:
         if not name or "/" in name or name in {".", ".."}:
             raise EntrypointPathError()

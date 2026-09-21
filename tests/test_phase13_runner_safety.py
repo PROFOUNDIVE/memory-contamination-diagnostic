@@ -129,6 +129,112 @@ def test_rehashed_parent_evidence_tamper_fails_closed(
         run.close()
 
 
+def test_malformed_orphan_parent_file_fails_on_reopen_before_provider(
+    entrypoint_fixture, provider: FakeProvider
+) -> None:
+    run = open_run(entrypoint_fixture, create=True)
+    unit_id = run.selected.package.production[0].unit_id
+    run.close()
+    (entrypoint_fixture.repository_root / "safety-run" / f"{unit_id}.parent.json").write_bytes(
+        b"{}"
+    )
+
+    with pytest.raises(ValueError, match="MAIN_PATH_UNSAFE|MAIN_AUTHORIZATION_BINDING_MISMATCH"):
+        open_run(entrypoint_fixture, create=False)
+
+    assert (provider.constructors, len(provider.requests)) == (0, 0)
+
+
+def test_stale_identity_orphan_parent_fails_on_reopen_before_provider(
+    entrypoint_fixture, provider: FakeProvider
+) -> None:
+    run = open_run(entrypoint_fixture, create=True)
+    try:
+        assert run.execute(
+            Path("unused"),
+            max_units=1,
+            tranche_ceiling_krw=450000,
+            provider_factory=provider.factory,
+        ).completed_count == 1
+        completed_id, orphan_id = (
+            unit.unit_id for unit in run.selected.package.production[:2]
+        )
+        stale = run.private.read_record(f"{completed_id}.parent.json")
+    finally:
+        run.close()
+    provider.constructors = 0
+    provider.requests.clear()
+    (entrypoint_fixture.repository_root / "safety-run" / f"{orphan_id}.parent.json").write_bytes(
+        stale
+    )
+
+    with pytest.raises(ValueError, match="MAIN_PATH_UNSAFE|MAIN_AUTHORIZATION_BINDING_MISMATCH"):
+        open_run(entrypoint_fixture, create=False, seed=1)
+
+    assert (provider.constructors, len(provider.requests)) == (0, 0)
+
+
+def test_missing_committed_parent_file_fails_on_reopen_before_provider(
+    entrypoint_fixture, provider: FakeProvider
+) -> None:
+    run = open_run(entrypoint_fixture, create=True)
+    try:
+        assert run.execute(
+            Path("unused"),
+            max_units=1,
+            tranche_ceiling_krw=450000,
+            provider_factory=provider.factory,
+        ).completed_count == 1
+        unit_id = run.selected.package.production[0].unit_id
+    finally:
+        run.close()
+    provider.constructors = 0
+    provider.requests.clear()
+    (entrypoint_fixture.repository_root / "safety-run" / f"{unit_id}.parent.json").unlink()
+
+    with pytest.raises(ValueError):
+        open_run(entrypoint_fixture, create=False)
+
+    assert (provider.constructors, len(provider.requests)) == (0, 0)
+
+
+def test_self_consistent_stale_identity_parent_fails_on_reopen_before_provider(
+    entrypoint_fixture, provider: FakeProvider
+) -> None:
+    run = open_run(entrypoint_fixture, create=True)
+    try:
+        assert run.execute(
+            Path("unused"),
+            max_units=1,
+            tranche_ceiling_krw=450000,
+            provider_factory=provider.factory,
+        ).completed_count == 1
+        unit_id = run.selected.package.production[0].unit_id
+        with run.private.connect() as connection:
+            raw = connection.execute(
+                "SELECT raw FROM parents WHERE unit_id=?", (unit_id,)
+            ).fetchone()[0]
+            payload = json.loads(raw)
+            payload["identity"]["run_id"] = "foreign-run"
+            malformed = json.dumps(payload, sort_keys=True, allow_nan=False).encode()
+            connection.execute(
+                "UPDATE parents SET raw=?, sha256=? WHERE unit_id=?",
+                (malformed, hashlib.sha256(malformed).hexdigest(), unit_id),
+            )
+        (entrypoint_fixture.repository_root / "safety-run" / f"{unit_id}.parent.json").write_bytes(
+            malformed
+        )
+    finally:
+        run.close()
+    provider.constructors = 0
+    provider.requests.clear()
+
+    with pytest.raises(ValueError, match="MAIN_AUTHORIZATION_BINDING_MISMATCH"):
+        open_run(entrypoint_fixture, create=False)
+
+    assert (provider.constructors, len(provider.requests)) == (0, 0)
+
+
 def test_process_ownership_recovers_after_death(entrypoint_fixture, provider: FakeProvider) -> None:
     run = open_run(entrypoint_fixture, create=True)
     run.close()

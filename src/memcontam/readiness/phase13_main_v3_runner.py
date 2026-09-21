@@ -148,12 +148,18 @@ class V3MainRun:
     def status(self) -> V3RunStatus:
         failed = self.dispatcher().terminal_parents
         with self.private.connect() as connection:
-            parent_rows = tuple(
-                connection.execute("SELECT * FROM parents WHERE raw IS NOT NULL")
-            )
+            parent_rows = tuple(connection.execute("SELECT * FROM parents"))
+        completed = 0
         for unit_id, raw, checksum in parent_rows:
+            exists = self.private.record_exists(f"{unit_id}.parent.json")
+            if raw is None:
+                if checksum is not None or exists:
+                    raise EntrypointError("MAIN_AUTHORIZATION_BINDING_MISMATCH")
+                continue
+            if checksum is None or not exists:
+                raise EntrypointError("MAIN_AUTHORIZATION_BINDING_MISMATCH")
             self._load_parent(unit_id, raw, checksum)
-        completed = len(parent_rows)
+            completed += 1
         attempts = sum(json.loads(raw)["kind"] == "ATTEMPT_STARTED" for raw in self.ledger.rows())
         pending = len(self.selected.package.production) - completed - len(failed)
         with self.private.connect() as connection:
@@ -350,6 +356,11 @@ class V3MainRun:
         evidence = record.unit_evidence.evidence
         if not isinstance(evidence, PrefixUnitEvidence):
             raise EntrypointError("MAIN_AUTHORIZATION_BINDING_MISMATCH")
+        return self._validated_checkpoint(unit, evidence)
+
+    def _validated_checkpoint(
+        self, unit: ProductionObject, evidence: PrefixUnitEvidence
+    ) -> Phase12Checkpoint:
         try:
             checkpoint = serialize_checkpoint(
                 NativeState.from_mapping(
@@ -391,6 +402,8 @@ class V3MainRun:
             self._validate_parent_calls(unit_id, record.unit_evidence.provider_calls)
             if self.private.read_record(f"{unit_id}.parent.json") != raw:
                 raise MainEvidenceValidationError("MAIN_UNIT_EVIDENCE_JOIN_INVALID")
+            if isinstance(validated, PrefixUnitEvidence):
+                self._validated_checkpoint(unit, validated)
             archive = validated.runtime_evidence.production_observability_archive
             if unit.kind != "CLEAN_PREFIX":
                 if archive is None:

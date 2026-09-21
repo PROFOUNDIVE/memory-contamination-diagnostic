@@ -259,6 +259,53 @@ def test_failed_prefix_after_completion_is_sanitized_and_never_retried(
         reopened.close()
 
 
+def test_self_consistent_malformed_prefix_checkpoint_fails_on_reopen_before_provider(
+    prefix_entrypoint_fixture,
+    provider: FakeProvider,
+    local_embedder,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import memcontam.readiness.phase13_main_live_runtime as runtime
+
+    monkeypatch.setattr(
+        runtime.ProductionMainRuntime, "_embedder", lambda _self: local_embedder
+    )
+    run = open_run(prefix_entrypoint_fixture, create=True)
+    try:
+        assert run.execute(
+            Path("unused"),
+            max_units=1,
+            tranche_ceiling_krw=450000,
+            provider_factory=provider.factory,
+        ).completed_count == 1
+        unit_id = run.selected.package.production[0].unit_id
+        with run.private.connect() as connection:
+            raw = connection.execute(
+                "SELECT raw FROM parents WHERE unit_id=?", (unit_id,)
+            ).fetchone()[0]
+            payload = json.loads(raw)
+            payload["unit_evidence"]["evidence"]["checkpoint"][
+                "canonical_state_utf8"
+            ] = "{}"
+            malformed = json.dumps(payload, sort_keys=True, allow_nan=False).encode()
+            connection.execute(
+                "UPDATE parents SET raw=?, sha256=? WHERE unit_id=?",
+                (malformed, hashlib.sha256(malformed).hexdigest(), unit_id),
+            )
+        (prefix_entrypoint_fixture.repository_root / "safety-run" / f"{unit_id}.parent.json").write_bytes(
+            malformed
+        )
+    finally:
+        run.close()
+    provider.constructors = 0
+    provider.requests.clear()
+
+    with pytest.raises(ValueError, match="MAIN_AUTHORIZATION_BINDING_MISMATCH"):
+        open_run(prefix_entrypoint_fixture, create=False)
+
+    assert (provider.constructors, len(provider.requests)) == (0, 0)
+
+
 def test_parent_finalization_failure_is_durable_and_never_retried(
     entrypoint_fixture, provider: FakeProvider, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
