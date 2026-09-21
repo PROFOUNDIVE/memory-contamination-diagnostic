@@ -67,6 +67,8 @@ def reconstruct_registered_sequence(
     roots = tuple(_root_ids(evidence) for evidence in evidence_rows)
     descendants_by_row = _cumulative_descendants(rows)
     registered_roots = {root_id for row_roots in roots for root_id in row_roots}
+    if not registered_roots:
+        return rows
     if len(registered_roots) != 1:
         raise Phase13ObservabilityError("FIXTURE_EXACTLY_ONE_REGISTERED_ROOT_REQUIRED")
     registered_root = next(iter(registered_roots))

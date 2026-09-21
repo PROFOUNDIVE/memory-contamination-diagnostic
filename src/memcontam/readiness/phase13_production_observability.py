@@ -200,18 +200,11 @@ def validate_production_archive(
     )
     if memory_completed and nomem_completed:
         raise ProductionObservabilityError("PRODUCTION_EVIDENCE_KIND_MISMATCH")
-    registered_target_present = any(
-        row.target_set.target_entry_ids for row in memory_completed
-    )
     try:
-        base = (
-            tuple(reconstruct_phase13_trial(row) for row in memory_completed)
-            if registered_target_present
-            else ()
-        )
+        base = tuple(reconstruct_phase13_trial(row) for row in memory_completed)
         reconstructed = (
             reconstruct_registered_sequence(memory_completed, base, packet.recurrence_lookback_h)
-            if registered_target_present
+            if memory_completed
             else ()
         )
     except Phase13ObservabilityError as error:

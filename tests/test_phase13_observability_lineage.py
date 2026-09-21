@@ -356,6 +356,70 @@ def test_archive_rejects_answer_span_that_contradicts_exact_lineage(
     assert getattr(raised.value.__cause__, "code", None) == "EXACT_LINEAGE_REQUIRED"
 
 
+@pytest.mark.parametrize("arm", ("clean", "correct", "irrelevant"))
+def test_archive_rejects_foreign_context_on_target_free_memory_arm(arm: str) -> None:
+    module = _module()
+    evidence = _evidence(module, retrieved=False, included=False, verified=1).model_copy(
+        update={
+            "trial": _trial(arm=arm),
+            "context": _context([]).model_copy(update={"trial_id": "foreign-trial"}),
+            "target_set": module.Phase13TargetSetEvidence(
+                target_set_id="targets-v1",
+                target_entry_ids=(),
+                answer_call_id="answer-1",
+            ),
+            "memory_before_ids": (),
+            "memory_after_ids": (),
+            "lineage": (),
+        }
+    )
+    packet_path = (
+        Path(__file__).resolve().parents[1]
+        / "data/phase13/observability/registration_packet_v1.json"
+    )
+    packet_raw = packet_path.read_bytes()
+    archive = ProductionObservabilityArchive(
+        schema_version="phase13_production_observability_archive_v1",
+        registration_packet_sha256=hashlib.sha256(packet_raw).hexdigest(),
+        u_t_status="NOT_REGISTERED_FOR_CURRENT_MAIN",
+        records=(
+            ProductionTrialRecord(
+                execution_template_id=f"adversarial-target-free-{arm}",
+                run_id="run-1",
+                session_id="session-1",
+                scientific_result=False,
+                ordered_sample_ids_sha256="a" * 64,
+                request=ProviderRequestRecord(
+                    api="OpenAI Responses API",
+                    model="gpt-5.6-luna",
+                    service_tier="default",
+                    reasoning_mode="standard",
+                    reasoning_effort="none",
+                    reasoning_context="current_turn",
+                    previous_response_id=None,
+                    store=False,
+                    timeout_seconds=180,
+                    retries_after_initial_attempt=0,
+                    semantic_invalid_generic_retry=False,
+                ),
+                parsed_answer="fixture",
+                method_calls=(),
+                evidence=evidence,
+            ),
+        ),
+    )
+
+    with pytest.raises(ProductionObservabilityError) as raised:
+        validate_production_archive(
+            archive,
+            ObservabilityRegistrationPacket.model_validate_json(packet_raw),
+            archive.registration_packet_sha256,
+        )
+
+    assert raised.value.code == "PRODUCTION_RECONSTRUCTION_FAILED"
+    assert getattr(raised.value.__cause__, "code", None) == "TRIAL_EVENT_IDENTITY_MISMATCH"
+
+
 def test_registered_derived_target_uses_recorded_parent_lineage() -> None:
     module = _module()
     evidence = _evidence(module, retrieved=False, included=False, verified=0)
