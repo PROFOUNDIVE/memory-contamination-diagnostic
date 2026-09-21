@@ -30,7 +30,7 @@
     },
     "sequence": {
       "path": "src/memcontam/evaluation/phase13_observability_sequence.py",
-      "sha256": "1417da9e1d87ea2aecf0570930829d32e03aacdabfd348ab7f4823dd0ab2b12e"
+      "sha256": "6f48b8b3b8ec1bef2e484d0180cbe1b0b40f8fe20cd8c61b094503a8a7fa9d40"
     }
   },
   "verifier_identities": {

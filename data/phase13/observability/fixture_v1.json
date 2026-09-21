@@ -2,7 +2,7 @@
   "schema_version": "phase13_observability_fixture_v1",
   "fixture_id": "phase13_main_disjoint_observability_fixture_v1",
   "provider_backed_calls": 0,
-  "registration_packet_sha256": "b2f9d7b5cced3b7bd4f33272b952d9a2270696a5348121608d13876bce02e454",
+  "registration_packet_sha256": "8edf92d502d6c4a65ca7d3e08de2575f29e8875bc7b41dacffc5fa897e7a3f1b",
   "concrete_seed_ids": [
     "fixture-game24-seed-0",
     "fixture-game24-seed-1",
