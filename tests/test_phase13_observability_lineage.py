@@ -356,6 +356,47 @@ def test_archive_rejects_answer_span_that_contradicts_exact_lineage(
     assert getattr(raised.value.__cause__, "code", None) == "EXACT_LINEAGE_REQUIRED"
 
 
+def test_registered_derived_target_uses_recorded_parent_lineage() -> None:
+    module = _module()
+    evidence = _evidence(module, retrieved=False, included=False, verified=0)
+    descendant = _span("root-b").model_copy(
+        update={
+            "entry_id": "child-b1",
+            "source_ids": ["child-b1"],
+            "lineage_id": "child-b1",
+            "contamination_class": "derived",
+            "injected_root_ids": ["root-b"],
+            "lineage_basis": "recorded_parent",
+            "direct_parent_ids": ["root-b"],
+        }
+    )
+    derived_target = evidence.model_copy(
+        update={
+            "context": _context(["child-b1"]),
+            "target_set": evidence.target_set.model_copy(
+                update={
+                    "target_entry_ids": ("root-b", "child-b1"),
+                    "answer_call_spans": (descendant,),
+                }
+            ),
+            "lineage": (
+                evidence.lineage[0],
+                module.Phase13LineageNode(
+                    entry_id="child-b1",
+                    lineage_status="exact",
+                    injected_root_ids=("root-b",),
+                    direct_parent_ids=("root-b",),
+                ),
+            ),
+        }
+    )
+
+    row = module.reconstruct_phase13_trial(derived_target)
+
+    assert row.descendant_entry_ids == ("child-b1",)
+    assert row.theory_exposure.value is True
+
+
 def test_historical_exact_hops_remain_traversable_for_a_current_write() -> None:
     module = _module()
     exact = _evidence(module, retrieved=True, included=True, verified=0)

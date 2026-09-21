@@ -71,7 +71,7 @@ def validate_evidence_joins(evidence: Phase13TrialEvidence) -> None:
         if node is None:
             raise Phase13ObservabilityError("FABRICATED_LINEAGE")
         claimed_roots = set(span.injected_root_ids)
-        direct_root = span.entry_id in target_ids
+        direct_root = span.entry_id in claimed_roots
         recorded_parents = set(node.direct_parent_ids)
         relationship_matches = (
             span.contamination_class == "injected"
