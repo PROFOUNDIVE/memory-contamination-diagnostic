@@ -26,6 +26,7 @@ from .phase13_main_live_evidence import (
 )
 from .phase13_main_preloaded_resources import PreloadedMainResources
 from .phase13_main_live_runtime import ProductionMainRuntime
+from .phase13_main_live_runtime_support import MainLiveRuntimeError
 from .phase13_main_production import ProductionObject
 from .phase13_main_production_backend import OrdinaryRuntimeRequest, _memory_baseline, _ordinary_arm
 from .phase13_main_request_client import MainRequestClientV3
@@ -306,11 +307,20 @@ class V3MainRun:
                 attempted += 1
                 continue
             except ProductionObservabilityError as error:
+                cause = (
+                    error.__cause__
+                    if error.code == "PRODUCTION_RECONSTRUCTION_FAILED"
+                    else error
+                )
+                journal.reconstruction(unit, cause)
                 if error.code == "PRODUCTION_RECONSTRUCTION_FAILED":
-                    journal.reconstruction(unit, error.__cause__)
-                raise
+                    raise
+                raise ProductionObservabilityError(
+                    "PRODUCTION_RECONSTRUCTION_FAILED"
+                ) from error
             except (
                 EntrypointError,
+                MainLiveRuntimeError,
                 MainEvidenceValidationError,
                 TerminalEvidenceError,
                 ValidationError,

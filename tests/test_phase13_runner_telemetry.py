@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import hashlib
+import shutil
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -9,14 +11,55 @@ import pytest
 from memcontam.evaluation.phase13_observability_models import Phase13ObservabilityError
 from memcontam.readiness.phase13_production_observability import ProductionObservabilityError
 from memcontam.readiness.phase13_production_runtime_models import ProductionRuntimeJoinError
+from memcontam.readiness.phase13_main_live_runtime_support import MainLiveRuntimeError
+from memcontam.readiness.phase13_main_checkpoint import CommonCheckpointRegistry
+from memcontam.readiness.phase13_main_production import _object
+from memcontam.readiness.phase13_main_resource_contract import RESOURCE_PATHS
+from memcontam.readiness.phase13_v3_entrypoint import SelectionRequest
 
 from .phase13_runner_safety_fixture import FakeProvider, open_run
+from .phase13_corrective_identity import corrective_identity
 from .test_phase13_runner_safety import entrypoint_bytes as entrypoint_bytes
 from .test_phase13_runner_safety import provider as provider
 from .test_phase13_runner_safety import entrypoint_fixture as entrypoint_fixture
 from .test_phase13_runner_safety import local_authority as local_authority
 from .test_phase13_runner_safety import source_selection as source_selection
+from .test_phase13_seed_zero_shadow import local_embedder as local_embedder
 from .test_phase13_v3_entrypoint_integration import deny_external as deny_external
+from .test_phase13_v3_entrypoint_fixture import (
+    REPAIR_ROOT,
+    build_entrypoint_bytes,
+    seal_fixture_closure,
+)
+
+
+@pytest.fixture
+def prefix_entrypoint_fixture(tmp_path: Path, local_authority: Path) -> SelectionRequest:
+    packet_path = REPAIR_ROOT / RESOURCE_PATHS["observability_packet"]
+    checkpoint_path = REPAIR_ROOT / RESOURCE_PATHS["common_checkpoint_registry"]
+    checkpoint = CommonCheckpointRegistry.model_validate_json(checkpoint_path.read_bytes())
+    unit = replace(
+        _object(0, "CLEAN_PREFIX", 0, "game24", "fh_bounded", "NOT_APPLICABLE", None),
+        execution_template_id="game24|fh_bounded|prefix",
+        ordered_sample_ids_sha256=checkpoint.tasks["game24"].seeds[0].suffix_sample_ids_sha256,
+        registration_packet_sha256=hashlib.sha256(packet_path.read_bytes()).hexdigest(),
+        checkpoint_registry_sha256=hashlib.sha256(checkpoint_path.read_bytes()).hexdigest(),
+    )
+    for path, raw in build_entrypoint_bytes((0,), production_units=(unit,)).items():
+        target = tmp_path / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(raw)
+    seal_fixture_closure(tmp_path)
+    authority_root = tmp_path / "authority"
+    shutil.copytree(local_authority, authority_root)
+    return SelectionRequest(
+        tmp_path,
+        tmp_path / "package.json",
+        tmp_path / "authorization.json",
+        authority_root,
+        tmp_path / "authorization.sha256",
+        corrective_identity().run_id,
+    )
 
 
 def test_reconstruction_failure_is_sanitized_durable_and_never_retried(
@@ -113,6 +156,105 @@ def test_archive_builder_failure_is_sanitized_after_provider_completion(
                 provider_factory=provider.factory,
             )
         assert (provider.constructors, len(provider.requests)) == (50, 50)
+    finally:
+        reopened.close()
+
+
+def test_direct_archive_validation_failure_is_sanitized_after_completion(
+    entrypoint_fixture, provider: FakeProvider, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import memcontam.readiness.phase13_main_live_runtime as runtime
+
+    def reject(*_args):
+        raise ProductionObservabilityError("PRODUCTION_REGISTRATION_PACKET_MISMATCH")
+
+    monkeypatch.setattr(runtime, "validate_production_archive", reject)
+    run = open_run(entrypoint_fixture, create=True)
+    try:
+        with pytest.raises(ProductionObservabilityError) as raised:
+            run.execute(
+                Path("unused"),
+                max_units=1,
+                tranche_ceiling_krw=450000,
+                provider_factory=provider.factory,
+            )
+        assert raised.value.code == "PRODUCTION_RECONSTRUCTION_FAILED"
+        with run.private.connect() as connection:
+            raw = connection.execute(
+                "SELECT raw FROM run_journal ORDER BY sequence DESC LIMIT 1"
+            ).fetchone()[0]
+        payload = json.loads(raw)
+        assert payload["inner_code"] == "UNREGISTERED_RECONSTRUCTION_CAUSE"
+        assert payload["provider_completed"] is True
+    finally:
+        run.close()
+    reopened = open_run(entrypoint_fixture, create=False)
+    try:
+        assert reopened.status().session_state == "RECONSTRUCTION_FAILED"
+        with pytest.raises(
+            ValueError, match="MAIN_RUN_IN_FLIGHT_RECONCILIATION_REQUIRED"
+        ):
+            reopened.execute(
+                Path("unused"),
+                max_units=1,
+                tranche_ceiling_krw=450000,
+                provider_factory=provider.factory,
+            )
+        assert (provider.constructors, len(provider.requests)) == (50, 50)
+    finally:
+        reopened.close()
+
+
+def test_failed_prefix_after_completion_is_sanitized_and_never_retried(
+    prefix_entrypoint_fixture,
+    provider: FakeProvider,
+    local_embedder,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import memcontam.readiness.phase13_main_live_runtime as runtime
+
+    original = runtime.ProductionMainRuntime.execute_prefix
+
+    def reject(instance, unit):
+        original(instance, unit)
+        raise MainLiveRuntimeError("MAIN_PREFIX_CHECKPOINT_INVALID")
+
+    monkeypatch.setattr(
+        runtime.ProductionMainRuntime, "_embedder", lambda _self: local_embedder
+    )
+    monkeypatch.setattr(runtime.ProductionMainRuntime, "execute_prefix", reject)
+    run = open_run(prefix_entrypoint_fixture, create=True)
+    try:
+        with pytest.raises(ProductionObservabilityError) as raised:
+            run.execute(
+                Path("unused"),
+                max_units=1,
+                tranche_ceiling_krw=450000,
+                provider_factory=provider.factory,
+            )
+        assert raised.value.code == "PRODUCTION_RECONSTRUCTION_FAILED"
+        with run.private.connect() as connection:
+            raw = connection.execute(
+                "SELECT raw FROM run_journal ORDER BY sequence DESC LIMIT 1"
+            ).fetchone()[0]
+        payload = json.loads(raw)
+        assert payload["inner_code"] == "UNREGISTERED_RECONSTRUCTION_CAUSE"
+        assert payload["provider_completed"] is True
+    finally:
+        run.close()
+    reopened = open_run(prefix_entrypoint_fixture, create=False)
+    try:
+        assert reopened.status().session_state == "RECONSTRUCTION_FAILED"
+        with pytest.raises(
+            ValueError, match="MAIN_RUN_IN_FLIGHT_RECONCILIATION_REQUIRED"
+        ):
+            reopened.execute(
+                Path("unused"),
+                max_units=1,
+                tranche_ceiling_krw=450000,
+                provider_factory=provider.factory,
+            )
+        assert (provider.constructors, len(provider.requests)) == (1, 1)
     finally:
         reopened.close()
 
