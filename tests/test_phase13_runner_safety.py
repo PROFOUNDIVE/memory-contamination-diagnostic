@@ -25,11 +25,19 @@ def entrypoint_bytes() -> dict[str, bytes]:
 
 @pytest.fixture(scope="session")
 def local_authority(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    from memcontam.readiness.phase13_authority_files import ROUTED_DOCUMENTS, PROVENANCE_FILENAME
+    from memcontam.readiness.phase13_authority_files import (
+        PROVENANCE_FILENAME,
+        REVISION_MANIFEST_FILENAME,
+        ROUTED_DOCUMENTS,
+    )
     from .test_phase13_v3_entrypoint_fixture import AUTHORITY
 
     root = tmp_path_factory.mktemp("safety-authority")
-    for filename in [*(name for _, name in ROUTED_DOCUMENTS), PROVENANCE_FILENAME]:
+    for filename in [
+        *(name for _, name in ROUTED_DOCUMENTS),
+        PROVENANCE_FILENAME,
+        REVISION_MANIFEST_FILENAME,
+    ]:
         shutil.copyfile(AUTHORITY / filename, root / filename)
     return root
 
@@ -141,6 +149,43 @@ def test_malformed_orphan_parent_file_fails_on_reopen_before_provider(
 
     with pytest.raises(ValueError, match="MAIN_PATH_UNSAFE|MAIN_AUTHORIZATION_BINDING_MISMATCH"):
         open_run(entrypoint_fixture, create=False)
+
+    assert (provider.constructors, len(provider.requests)) == (0, 0)
+
+
+def test_valid_published_parent_reconciles_null_sql_row_without_redispatch(
+    entrypoint_fixture, provider: FakeProvider
+) -> None:
+    run = open_run(entrypoint_fixture, create=True)
+    try:
+        assert run.execute(
+            Path("unused"),
+            max_units=1,
+            tranche_ceiling_krw=450000,
+            provider_factory=provider.factory,
+        ).completed_count == 1
+        unit_id = run.selected.package.production[0].unit_id
+        with run.private.connect() as connection:
+            connection.execute(
+                "UPDATE parents SET raw=NULL, sha256=NULL WHERE unit_id=?",
+                (unit_id,),
+            )
+    finally:
+        run.close()
+    provider.constructors = 0
+    provider.requests.clear()
+
+    reopened = open_run(entrypoint_fixture, create=False)
+    try:
+        assert reopened.status().completed_count == 1
+        with reopened.private.connect() as connection:
+            raw, checksum = connection.execute(
+                "SELECT raw, sha256 FROM parents WHERE unit_id=?", (unit_id,)
+            ).fetchone()
+        assert raw == reopened.private.read_record(f"{unit_id}.parent.json")
+        assert checksum == hashlib.sha256(raw).hexdigest()
+    finally:
+        reopened.close()
 
     assert (provider.constructors, len(provider.requests)) == (0, 0)
 

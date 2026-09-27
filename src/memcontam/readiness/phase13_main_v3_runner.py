@@ -47,6 +47,7 @@ from .phase13_v3_cost_actual import reconcile_actual
 from .phase13_v3_entrypoint import EntrypointError, SelectedExecutionV3
 from .phase13_v3_entrypoint_paths import PrivateLedger, private_ledger
 from .phase13_v3_request import PackageBindingV3, ParentTrajectoryV3, RequestKeyV3, Stage
+from memcontam.readiness.phase13_v3_retry import AUTHORITY_TO_STAGE, allocate_retry_entitlements
 from .phase13_v3_terminal_ledger import TerminalLedgerV3
 from .phase13_v3_terminal_models import (
     CompletedV3,
@@ -55,11 +56,7 @@ from .phase13_v3_terminal_models import (
     parse_event,
 )
 
-STAGE_NAMES: dict[str, Stage] = dict(zip(("FH_generation", "RAG_generation", "BoT_problem_distillation", "BoT_solve",
-    "BoT_thought_distillation", "Reflexion_actor_generation", "Reflexion_reflection", "DC_RS_generation",
-    "DC_RS_writer_synthesis", "NoMem_generation"), ("full_history_generate", "rag_generate", "bot_problem_distill",
-    "bot_instantiate_solve", "bot_thought_distill", "reflexion_generate", "reflexion_reflect", "dc_rs_generate",
-    "dc_rs_synthesize", "no_memory_generate"), strict=True))
+STAGE_NAMES: dict[str, Stage] = AUTHORITY_TO_STAGE
 _STAGE_ADAPTER: TypeAdapter[Stage] = TypeAdapter(Stage)
 _ROOT = Path(__file__).resolve().parents[3]
 
@@ -143,7 +140,10 @@ class V3MainRun:
             PackageBindingV3(identity=self.selected.package.identity,
                 package_sha256=self.selected.package_sha256, authorization_sha256=self.selected.authorization_sha256),
             tuple(ParentTrajectoryV3(parent_id=unit.unit_id, kind=unit.kind, prefix_parent_id=unit.prefix_unit_id)
-                  for unit in self.selected.package.production), provider_factory=checked_factory)
+                  for unit in self.selected.package.production), provider_factory=checked_factory,
+            retry_entitlements=allocate_retry_entitlements(
+                self.selected.package.production, self.selected.costs.resources.phase4.base,
+            ))
 
     def status(self) -> V3RunStatus:
         failed = self.dispatcher().terminal_parents
@@ -153,8 +153,19 @@ class V3MainRun:
         for unit_id, raw, checksum in parent_rows:
             exists = self.private.record_exists(f"{unit_id}.parent.json")
             if raw is None:
-                if checksum is not None or exists:
+                if checksum is not None:
                     raise EntrypointError("MAIN_AUTHORIZATION_BINDING_MISMATCH")
+                if exists:
+                    raw = self.private.read_record(f"{unit_id}.parent.json")
+                    checksum = hashlib.sha256(raw).hexdigest()
+                    self._load_parent(unit_id, raw, checksum)
+                    with self.private.connect() as connection:
+                        connection.execute(
+                            "UPDATE parents SET raw=?, sha256=? "
+                            "WHERE unit_id=? AND raw IS NULL AND sha256 IS NULL",
+                            (raw, checksum, unit_id),
+                        )
+                    completed += 1
                 continue
             if checksum is None or not exists:
                 raise EntrypointError("MAIN_AUTHORIZATION_BINDING_MISMATCH")

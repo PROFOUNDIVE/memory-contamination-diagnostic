@@ -125,6 +125,10 @@ def test_valid_v3_guarded_run_and_resume_without_calls(entrypoint_fixture, deny_
     assert isinstance(selected, SelectedExecutionV3)
     run = V3MainRun.open(selected, directory, create=True, seed=0)
     try:
+        entitlements = run.dispatcher().retry_entitlements
+        assert entitlements
+        assert entitlements == run.dispatcher().retry_entitlements
+        assert entitlements <= set(run.ledger.binding.unit_ids)
         assert run.execute(directory / "cache", max_units=0, tranche_ceiling_krw=450000).provider_calls_issued == 0
     finally:
         run.close()
