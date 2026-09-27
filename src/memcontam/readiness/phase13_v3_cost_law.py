@@ -47,8 +47,8 @@ def calculate(base: BaseCostInputsV3, order: tuple[str, ...] | None = None) -> t
                                    cache_write_tokens=group.cache_write_tokens)
             input_cost, output_cost = exact_request_cost(tokens, base.policy.rate_card)
             before_in, before_out = sums.get(group.stage_id, (Fraction(0), Fraction(0)))
-            after_in = before_in + input_cost * group.calls * base.policy.authority.registry.T
-            after_out = before_out + output_cost * group.calls * base.policy.authority.registry.T
+            after_in = before_in + input_cost * group.calls
+            after_out = before_out + output_cost * group.calls
             sums[group.stage_id] = after_in, after_out
             counts[group.stage_id] += group.calls
             if order is not None:
