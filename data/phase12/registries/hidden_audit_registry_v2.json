@@ -1,0 +1,28 @@
+{
+  "registry_id": "phase13-hidden-audit-registry-v2",
+  "schema_version": "phase13-hidden-audit-registry-v2",
+  "frozen_at": "2026-09-23T00:00:00Z",
+  "origins": [
+    {
+      "candidate_id": "candidate-game24-flat-precedence-v2",
+      "origin_class": "protocol_injected",
+      "source_reference": "Protocol revised-v9 Section 18.2",
+      "independent_of_outcomes": true,
+      "content_hash": "406cf7d00c47e90997137200da7e0768a0fc8823249f349a3caea97c08064d67"
+    },
+    {
+      "candidate_id": "candidate-meb-left-to-right-v1",
+      "origin_class": "protocol_injected",
+      "source_reference": "Protocol revised-v9 Section 19.2",
+      "independent_of_outcomes": true,
+      "content_hash": "356d612865981457c12533bd6abf5549edde7a87ca25922cfb49044bb54d1c0a"
+    },
+    {
+      "candidate_id": "candidate-word-final-char-v1",
+      "origin_class": "protocol_injected",
+      "source_reference": "Protocol revised-v9 Section 20.2",
+      "independent_of_outcomes": true,
+      "content_hash": "ebe1a20bf77350951e4225e621d640cd2e60f58ef16258224fef3b2eab57e49c"
+    }
+  ]
+}

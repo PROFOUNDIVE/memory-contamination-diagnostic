@@ -79,6 +79,8 @@ class CandidateTriplet:
     counterexample: str | tuple[str, str]
     certification_evidence: CertificationEvidence
     frozen_at: str
+    applicability_id: str | None = None
+    applicability_sha256: str | None = None
 
 
 @dataclass(frozen=True)

@@ -18,6 +18,12 @@ from memcontam.contamination.phase12.models import (
     canonical_content_hash,
     canonical_json_hash,
 )
+from memcontam.contamination.phase13_v2_applicability import (
+    G24_APPLICABILITY_ID,
+    G24_APPLICABILITY_SHA256,
+    WS_APPLICABILITY_ID,
+    WS_APPLICABILITY_SHA256,
+)
 
 
 def load_candidate_registry(path: Path) -> CandidateRegistry:
@@ -37,6 +43,26 @@ def load_candidate_registry(path: Path) -> CandidateRegistry:
         raise CandidateCertificationError("INVALID_CANDIDATE_REGISTRY") from exc
     _validate_registry(registry)
     return registry
+
+
+def load_current_candidate_registry(path: Path) -> CandidateRegistry:
+    registry = load_candidate_registry(path)
+    validate_current_candidate_registry(registry)
+    return registry
+
+
+def validate_current_candidate_registry(registry: CandidateRegistry) -> None:
+    if registry.schema_version != "phase13-candidate-registry-v2":
+        raise CandidateCertificationError("STALE_CANDIDATE_REGISTRY")
+    task_triplets = {triplet.task: triplet for triplet in registry.triplets}
+    if (
+        task_triplets["game24"].applicability_id != G24_APPLICABILITY_ID
+        or task_triplets["game24"].applicability_sha256 != G24_APPLICABILITY_SHA256
+        or task_triplets["word_sorting"].applicability_id != WS_APPLICABILITY_ID
+        or task_triplets["word_sorting"].applicability_sha256
+        != WS_APPLICABILITY_SHA256
+    ):
+        raise CandidateCertificationError("CURRENT_APPLICABILITY_BINDING_MISMATCH")
 
 
 def load_hidden_audit_registry(path: Path) -> HiddenAuditRegistry:
@@ -121,6 +147,8 @@ def _parse_triplet(payload: Mapping[str, Any]) -> CandidateTriplet:
         counterexample=counterexample,
         certification_evidence=evidence,
         frozen_at=payload["frozen_at"],
+        applicability_id=payload.get("applicability_id"),
+        applicability_sha256=payload.get("applicability_sha256"),
     )
 
 
@@ -150,7 +178,10 @@ def _counterexample(value: Any) -> str | tuple[str, str]:
 
 
 def _validate_registry(registry: CandidateRegistry) -> None:
-    if registry.schema_version != "phase12-candidate-registry-v1":
+    if registry.schema_version not in {
+        "phase12-candidate-registry-v1",
+        "phase13-candidate-registry-v2",
+    }:
         raise CandidateCertificationError("INVALID_CANDIDATE_REGISTRY")
     if tuple(triplet.task for triplet in registry.triplets) != PRIMARY_TASKS:
         raise CandidateCertificationError("PRIMARY_TRIPLET_SET_MISMATCH")

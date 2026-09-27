@@ -11,6 +11,10 @@ from memcontam.contamination.phase12.models import (
     PRIMARY_TASKS,
     canonical_json_hash,
 )
+from memcontam.contamination.phase13_v2_applicability import (
+    game24_false_rule_applicable,
+    word_sorting_false_rule_applicable,
+)
 
 
 @dataclass(frozen=True)
@@ -29,10 +33,20 @@ def certify_triplet(triplet: CandidateTriplet, suite: CertificationSuite) -> Cer
     false_result: bool | int
     correct_result: bool | int
     if triplet.task == "game24":
-        false_result, correct_result = false_rule(1, 3), True
+        if triplet.triplet_id == "game24-parentheses-restriction-v2":
+            if (
+                triplet.counterexample != "1,1,1,8"
+                or not game24_false_rule_applicable((1, 1, 1, 8))
+            ):
+                raise CandidateCertificationError("COUNTEREXAMPLE_MISMATCH")
+            false_result, correct_result = false_rule("8*(1+1+1)"), True
+        else:
+            false_result, correct_result = false_rule(1, 3), True
     elif triplet.task == "math_equation_balancer":
         false_result, correct_result = false_rule(), 7
     else:
+        if not word_sorting_false_rule_applicable(("ayz", "aza")):
+            raise CandidateCertificationError("COUNTEREXAMPLE_MISMATCH")
         false_result, correct_result = false_rule("ayz", "aza"), True
     if false_result == correct_result:
         raise CandidateCertificationError("FALSE_RULE_NOT_SEMANTICALLY_WRONG")
@@ -94,10 +108,23 @@ def _load_false_rule(triplet: CandidateTriplet) -> Callable[..., bool | int]:
     except (SyntaxError, ValueError) as exc:
         raise CandidateCertificationError("CODE_VARIANT_SYNTAX_ERROR") from exc
     expected_name, expected_parameters = {
-        "game24": ("is_integer_intermediate", ("numerator", "denominator")),
-        "math_equation_balancer": ("evaluate_left_to_right", ()),
-        "word_sorting": ("comes_before_by_final_char", ("left", "right")),
-    }[triplet.task]
+        ("game24", "integer_intermediates_only"): (
+            "is_integer_intermediate",
+            ("numerator", "denominator"),
+        ),
+        ("game24", "flat_unparenthesized_expression_only"): (
+            "permits_grouping_parentheses",
+            ("expression",),
+        ),
+        ("math_equation_balancer", "strict_left_to_right"): (
+            "evaluate_left_to_right",
+            (),
+        ),
+        ("word_sorting", "compare_final_char_after_first_difference"): (
+            "comes_before_by_final_char",
+            ("left", "right"),
+        ),
+    }[(triplet.task, triplet.false_candidate.rule_id)]
     functions = [node for node in tree.body if isinstance(node, ast.FunctionDef)]
     if len(functions) != 1 or functions[0].name != expected_name:
         raise CandidateCertificationError("CODE_VARIANT_SIGNATURE_MISMATCH")
