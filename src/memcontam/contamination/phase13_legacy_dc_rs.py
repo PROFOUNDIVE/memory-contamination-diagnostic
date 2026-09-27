@@ -17,7 +17,12 @@ from memcontam.memory.checkpoint_v3 import NATIVE_ENTRY_V1, NativeEntry
 LegacyTask = Literal["game24", "math_equation_balancer", "word_sorting"]
 LegacyRole = Literal["false", "correct", "irrelevant"]
 _TASKS: Final = frozenset({"game24", "math_equation_balancer", "word_sorting"})
-_REGISTRY_SHA256: Final = "5c25b567b2d8edf6ee19c6bf9c83e8c480ada06eb41787e385994a4319bfaed0"
+_REGISTRY_SHA256S: Final = frozenset(
+    {
+        "5c25b567b2d8edf6ee19c6bf9c83e8c480ada06eb41787e385994a4319bfaed0",
+        "e80c895f1cab313980e43531d1da22875956f1ab238a7c42ae536059f8b83292",
+    }
+)
 
 
 class LegacyDcRsRegistryError(ValueError):
@@ -61,7 +66,10 @@ class LegacyDcRsRecord(_FrozenModel):
             or self.serialized_content_sha256
             != hashlib.sha256(self.serialized_content.encode()).hexdigest()
             or self.render_id
-            != f"legacy-dc-rs-render-v1::{self.candidate_id}::{self.serialized_content_sha256[:16]}"
+            not in {
+                f"legacy-dc-rs-render-v1::{self.candidate_id}::{self.serialized_content_sha256[:16]}",
+                f"legacy-dc-rs-render-v2::{self.candidate_id}::{self.serialized_content_sha256[:16]}",
+            }
         ):
             raise LegacyDcRsRegistryError()
         return self
@@ -84,13 +92,25 @@ class LegacyDcRsTaskRecords(_FrozenModel):
 
 
 class LegacyDcRsRegistry(_FrozenModel):
-    schema_version: Literal["phase13_legacy_dc_rs_intervention_registry_v1"]
-    registry_id: Literal["phase13-main-a-legacy-dc-rs-interventions-v1"]
-    renderer_id: Literal["legacy-dc-rs-canonical-renderer-v1"]
+    schema_version: Literal[
+        "phase13_legacy_dc_rs_intervention_registry_v1",
+        "phase13_legacy_dc_rs_intervention_registry_v2",
+    ]
+    registry_id: Literal[
+        "phase13-main-a-legacy-dc-rs-interventions-v1",
+        "phase13-main-a-legacy-dc-rs-interventions-v2",
+    ]
+    renderer_id: Literal[
+        "legacy-dc-rs-canonical-renderer-v1",
+        "legacy-dc-rs-canonical-renderer-v2",
+    ]
     serialization_id: Literal["dc-rs-input-then-response-json-v1"]
     candidate_registry_sha256: str
-    construction_provenance: Literal["controlled_protocol_intervention_a03_v1"]
-    frozen_at: Literal["2026-09-13T00:00:00Z"]
+    construction_provenance: Literal[
+        "controlled_protocol_intervention_a03_v1",
+        "controlled_protocol_intervention_a03_v2",
+    ]
+    frozen_at: Literal["2026-09-13T00:00:00Z", "2026-09-23T00:00:00Z"]
     authority_bindings: tuple[AuthorityBinding, AuthorityBinding, AuthorityBinding]
     tasks: tuple[LegacyDcRsTaskRecords, LegacyDcRsTaskRecords, LegacyDcRsTaskRecords]
     registry_sha256: str
@@ -134,7 +154,7 @@ def load_legacy_dc_rs_registry(
     candidates: CandidateRegistry,
     candidate_registry_sha256: str,
 ) -> LegacyDcRsRegistry:
-    if hashlib.sha256(raw).hexdigest() != _REGISTRY_SHA256:
+    if hashlib.sha256(raw).hexdigest() not in _REGISTRY_SHA256S:
         raise LegacyDcRsRegistryError()
     try:
         registry = LegacyDcRsRegistry.model_validate_json(raw)

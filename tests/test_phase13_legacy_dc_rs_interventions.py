@@ -23,8 +23,8 @@ from .test_phase13_dc_rs_runtime import _EmbeddingProvider
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CANDIDATES = ROOT / "data/phase12/registries/candidate_registry_v1.json"
-INTERVENTIONS = ROOT / "data/phase13/main/legacy_dc_rs_intervention_registry_v1.json"
+CANDIDATES = ROOT / "data/phase12/registries/candidate_registry_v2.json"
+INTERVENTIONS = ROOT / "data/phase13/main/legacy_dc_rs_intervention_registry_v2.json"
 
 
 def _context() -> Game24RuntimeContext:
@@ -154,7 +154,7 @@ def test_controlled_dc_rs_root_is_not_misclassified_as_ordinary_history() -> Non
     )
 
     assert isinstance(restored, DcRsStateV3)
-    assert restored.injected_root_id == "candidate-game24-integer-intermediates-v1"
+    assert restored.injected_root_id == "candidate-game24-flat-precedence-v2"
 
 
 def test_controlled_dc_rs_root_rejects_self_consistent_forgery() -> None:
