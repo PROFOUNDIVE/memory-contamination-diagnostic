@@ -186,13 +186,13 @@ class TerminalLedgerV3:
                 event: EventV3 = NoRequestV3.model_validate({**common, "kind": "NO_REQUEST", "proof_hash": proof_hash})
             case "ATTEMPT_STARTED":
                 event = AmbiguousAttemptV3.model_validate({**common, "kind": "AMBIGUOUS_ATTEMPT", "proof_hash": proof_hash,
-                    "failure_code": "MAIN_AMBIGUOUS_ATTEMPT", "transport_attempts": 1,
+                    "failure_code": "MAIN_AMBIGUOUS_ATTEMPT", "transport_attempts": (state.attempt_index or 0) + 1,
                     "cost": {}, "realized_cost_krw": None})
             case "INPUT_ENVELOPE_OVERFLOW":
                 event = OverflowV3.model_validate({**common, "kind": "TERMINAL_TECHNICAL_MISSING",
                     "schema_version": "phase13_main_dispatch_evidence_v3", "transport_attempts": 0,
                     "failure_code": "MAIN_INPUT_ENVELOPE_EXCEEDED", "realized_cost_krw": 0})
-            case "PENDING" | "TERMINAL_TECHNICAL_MISSING" | "COMPLETED" | "ATTEMPTED_PROVIDER_FAILURE" | "AMBIGUOUS_ATTEMPT":
+            case "PENDING" | "RETRYABLE_ATTEMPT_FAILURE" | "TERMINAL_TECHNICAL_MISSING" | "COMPLETED" | "ATTEMPTED_PROVIDER_FAILURE" | "AMBIGUOUS_ATTEMPT":
                 raise TerminalEvidenceError()
             case unreachable:
                 assert_never(unreachable)
@@ -280,7 +280,7 @@ class TerminalLedgerV3:
 
     def _replace_state(self, unit_id: str, state: EvidenceState) -> None:
         previous = self._states[unit_id]
-        unresolved = {"DISPATCH_INTENT_PERSISTED", "REQUEST_COMPILED", "ATTEMPT_STARTED", "INPUT_ENVELOPE_OVERFLOW"}
+        unresolved = {"DISPATCH_INTENT_PERSISTED", "REQUEST_COMPILED", "ATTEMPT_STARTED", "RETRYABLE_ATTEMPT_FAILURE", "INPUT_ENVELOPE_OVERFLOW"}
         self._in_flight += int(state.kind in unresolved) - int(previous.kind in unresolved)
         self._unknown_costs.pop(unit_id, None)
         self._realized_costs.pop(unit_id, None)
@@ -302,7 +302,7 @@ class TerminalLedgerV3:
                     reconcile_actual(next(iter(self._unknown_costs.values())))
                 if self._in_flight:
                     raise TerminalEvidenceError()
-            case "REQUEST_COMPILED" | "ATTEMPT_STARTED" | "INPUT_ENVELOPE_OVERFLOW" | "TERMINAL_TECHNICAL_MISSING" | "NO_REQUEST" | "COMPLETED" | "ATTEMPTED_PROVIDER_FAILURE" | "AMBIGUOUS_ATTEMPT" | "COST_RECONCILED":
+            case "REQUEST_COMPILED" | "ATTEMPT_STARTED" | "RETRYABLE_ATTEMPT_FAILURE" | "INPUT_ENVELOPE_OVERFLOW" | "TERMINAL_TECHNICAL_MISSING" | "NO_REQUEST" | "COMPLETED" | "ATTEMPTED_PROVIDER_FAILURE" | "AMBIGUOUS_ATTEMPT" | "COST_RECONCILED":
                 return
             case unreachable:
                 assert_never(unreachable)

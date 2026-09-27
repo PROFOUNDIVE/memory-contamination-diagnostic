@@ -78,7 +78,7 @@ def recover_requests(ledger: TerminalLedgerV3) -> None:
         match state.kind:
             case "DISPATCH_INTENT_PERSISTED" | "REQUEST_COMPILED" | "ATTEMPT_STARTED" | "INPUT_ENVELOPE_OVERFLOW":
                 reopened.recover(unit_id, proof)
-            case "PENDING" | "COMPLETED" | "TERMINAL_TECHNICAL_MISSING" | "ATTEMPTED_PROVIDER_FAILURE" | "AMBIGUOUS_ATTEMPT":
+            case "PENDING" | "RETRYABLE_ATTEMPT_FAILURE" | "COMPLETED" | "TERMINAL_TECHNICAL_MISSING" | "ATTEMPTED_PROVIDER_FAILURE" | "AMBIGUOUS_ATTEMPT":
                 continue
             case unreachable:
                 assert_never(unreachable)

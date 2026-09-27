@@ -64,6 +64,15 @@ class RequestCompiledV3(DispatchIdentity):
 class AttemptStartedV3(DispatchIdentity):
     kind: Literal["ATTEMPT_STARTED"]
     compiled: CompiledRequestV3
+    attempt_index: Annotated[int, Field(ge=0, le=1)] = 0
+
+
+class RetryableAttemptFailureV3(DispatchIdentity):
+    kind: Literal["RETRYABLE_ATTEMPT_FAILURE"]
+    compiled: CompiledRequestV3
+    attempt_index: Literal[0]
+    failure_code: str = Field(min_length=1)
+    observation_hash: Sha256
 
 
 class OverflowV3(DispatchIdentity):
@@ -76,7 +85,7 @@ class OverflowV3(DispatchIdentity):
 
 class AttemptedEvidence(EventIdentity):
     compiled: CompiledRequestV3
-    transport_attempts: Annotated[int, Field(ge=1, le=1)]
+    transport_attempts: Annotated[int, Field(ge=1, le=2)]
     cost: ProviderCostEvidence
     realized_cost_krw: NonnegativeInt | None
 
@@ -133,12 +142,13 @@ class CostReconciledV3(AttemptedEvidence):
 
 
 EventV3 = Annotated[
-    DispatchIntentV3 | RequestCompiledV3 | AttemptStartedV3 | OverflowV3 | CompletedV3
+    DispatchIntentV3 | RequestCompiledV3 | AttemptStartedV3 | RetryableAttemptFailureV3 | OverflowV3 | CompletedV3
     | ProviderFailureV3 | NoRequestV3 | AmbiguousAttemptV3 | CostReconciledV3, Field(discriminator="kind"),
 ]
 EVENT_ADAPTER: Final[TypeAdapter[EventV3]] = TypeAdapter(EventV3)
 StateKind = Literal[
     "PENDING", "DISPATCH_INTENT_PERSISTED", "REQUEST_COMPILED", "ATTEMPT_STARTED",
+    "RETRYABLE_ATTEMPT_FAILURE",
     "INPUT_ENVELOPE_OVERFLOW", "TERMINAL_TECHNICAL_MISSING", "COMPLETED",
     "ATTEMPTED_PROVIDER_FAILURE", "AMBIGUOUS_ATTEMPT",
 ]
@@ -151,6 +161,7 @@ class EvidenceState:
     event_hash: str
     compiled: CompiledRequestV3 | None = None
     attempted_cost: ProviderCostEvidence | None = None
+    attempt_index: int | None = None
 
 
 def parse_event(raw: bytes) -> EventV3:
@@ -172,7 +183,14 @@ def advance(state: EvidenceState, event: EventV3) -> EvidenceState:
         case RequestCompiledV3():
             allowed, target = ("DISPATCH_INTENT_PERSISTED",), "REQUEST_COMPILED"
         case AttemptStartedV3():
-            allowed, target = ("REQUEST_COMPILED",), "ATTEMPT_STARTED"
+            allowed, target = (("REQUEST_COMPILED",) if event.attempt_index == 0
+                               else ("RETRYABLE_ATTEMPT_FAILURE",)), "ATTEMPT_STARTED"
+            if event.attempt_index == 1 and state.attempt_index != 0:
+                raise TerminalEvidenceError()
+        case RetryableAttemptFailureV3():
+            allowed, target = ("ATTEMPT_STARTED",), "RETRYABLE_ATTEMPT_FAILURE"
+            if state.attempt_index != event.attempt_index:
+                raise TerminalEvidenceError()
         case OverflowV3():
             match event.kind:
                 case "INPUT_ENVELOPE_OVERFLOW":
@@ -185,6 +203,8 @@ def advance(state: EvidenceState, event: EventV3) -> EvidenceState:
             allowed, target = ("DISPATCH_INTENT_PERSISTED", "REQUEST_COMPILED"), "PENDING"
         case CompletedV3() | ProviderFailureV3() | AmbiguousAttemptV3():
             allowed, target, cost = ("ATTEMPT_STARTED",), event.kind, event.cost
+            if event.transport_attempts != (state.attempt_index or 0) + 1:
+                raise TerminalEvidenceError()
         case CostReconciledV3():
             allowed = ("COMPLETED", "ATTEMPTED_PROVIDER_FAILURE", "AMBIGUOUS_ATTEMPT")
             target, cost = state.kind, event.cost
@@ -205,9 +225,10 @@ def advance(state: EvidenceState, event: EventV3) -> EvidenceState:
         case RequestCompiledV3():
             if state.compiled is not None and event.compiled != state.compiled:
                 raise TerminalEvidenceError()
-        case DispatchIntentV3() | AttemptStartedV3() | OverflowV3() | NoRequestV3() | CompletedV3() | ProviderFailureV3() | AmbiguousAttemptV3() | CostReconciledV3():
+        case DispatchIntentV3() | AttemptStartedV3() | RetryableAttemptFailureV3() | OverflowV3() | NoRequestV3() | CompletedV3() | ProviderFailureV3() | AmbiguousAttemptV3() | CostReconciledV3():
             if event.compiled != state.compiled:
                 raise TerminalEvidenceError()
         case unreachable:
             assert_never(unreachable)
-    return EvidenceState(target, event.revision, digest(event), event.compiled, cost)
+    attempt_index = event.attempt_index if isinstance(event, (AttemptStartedV3, RetryableAttemptFailureV3)) else state.attempt_index
+    return EvidenceState(target, event.revision, digest(event), event.compiled, cost, attempt_index)
