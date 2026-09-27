@@ -64,7 +64,19 @@ def build_entrypoint_bytes(
     authority = load_authority_v3(AUTHORITY, identity=execution_identity)
     identity = freeze_runtime_identity()
     generated_roles = {"activated_policy", "base_inputs", "cost_witness"}
-    repair_roles = {"legacy_dc_rs_intervention_registry", "observability_packet"}
+    repair_roles = {
+        "candidate_registry",
+        "legacy_dc_rs_intervention_registry",
+        "legacy_rag_manifest",
+        "legacy_rag_seal",
+        "observability_packet",
+        "rag_corpus_game24",
+        "rag_corpus_math_equation_balancer",
+        "rag_corpus_word_sorting",
+        "rag_index_game24",
+        "rag_index_math_equation_balancer",
+        "rag_index_word_sorting",
+    }
     resources = {row.binding.path: row.raw for row in read_files(RESOURCE_ROOT, tuple(
         path for role, path in RESOURCE_PATHS.items() if role not in generated_roles | repair_roles))}
     resources.update({row.binding.path: row.raw for row in read_files(

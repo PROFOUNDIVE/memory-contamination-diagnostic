@@ -10,10 +10,20 @@ import stat
 from uuid import uuid4
 
 from memcontam.readiness.phase13_v3_authority_models import (
-    PROVENANCE_FILENAME, ROUTED_DOCUMENTS, AuthoritySnapshotV3, DocumentBinding, V3Identity,
+    PROVENANCE_FILENAME,
+    REVISION_MANIFEST_FILENAME,
+    ROUTED_DOCUMENTS,
+    AuthoritySnapshotV3,
+    DocumentBinding,
+    V3Identity,
 )
 from memcontam.readiness.phase13_v3_authority_parser import (
-    parse_capacity, parse_registry, parse_terminal, validate_router,
+    parse_capacity,
+    parse_registry,
+    parse_retry,
+    parse_terminal,
+    parse_transport,
+    validate_router,
 )
 
 
@@ -95,12 +105,15 @@ def load_authority_v3(root: Path, expected: AuthoritySnapshotV3 | None = None, *
     with authority_directory(root) as directory:
         raw_documents = tuple(read_authority_at(directory, filename) for _, filename in ROUTED_DOCUMENTS)
         provenance_raw = read_authority_at(directory, PROVENANCE_FILENAME)
+        revision_manifest_raw = read_authority_at(directory, REVISION_MANIFEST_FILENAME)
     try:
         validate_router(raw_documents[6])
     except (ValueError, IndexError) as error:
         raise AuthorityFileError("MAIN_AUTHORITY_BINDING_MISMATCH") from error
     try:
         registry = parse_registry(raw_documents[4])
+        retry = parse_retry(raw_documents[4])
+        transport = parse_transport(raw_documents[4])
         terminal = parse_terminal(raw_documents[4])
         capacity = parse_capacity(raw_documents[6])
     except (ValueError, IndexError, KeyError) as error:
@@ -110,7 +123,17 @@ def load_authority_v3(root: Path, expected: AuthoritySnapshotV3 | None = None, *
         documents=tuple(DocumentBinding(filename=filename, role=role, size=len(raw), sha256=hashlib.sha256(raw).hexdigest())
                         for (role, filename), raw in zip(ROUTED_DOCUMENTS, raw_documents, strict=True)),
         provenance=DocumentBinding(filename=PROVENANCE_FILENAME, role="provenance_only", size=len(provenance_raw), sha256=hashlib.sha256(provenance_raw).hexdigest()),
-        registry=registry, terminal=terminal, capacity=capacity,
+        revision_manifest=DocumentBinding(
+            filename=REVISION_MANIFEST_FILENAME,
+            role="provenance_only",
+            size=len(revision_manifest_raw),
+            sha256=hashlib.sha256(revision_manifest_raw).hexdigest(),
+        ),
+        registry=registry,
+        retry=retry,
+        transport=transport,
+        terminal=terminal,
+        capacity=capacity,
     )
     if expected is not None and snapshot != expected:
         raise AuthorityFileError("MAIN_AUTHORITY_BINDING_MISMATCH")
