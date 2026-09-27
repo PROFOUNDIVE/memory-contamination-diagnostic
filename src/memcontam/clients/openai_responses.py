@@ -8,7 +8,7 @@ import time
 from typing import Any, Callable, Mapping, cast
 
 import httpx
-from openai import APIStatusError, APITimeoutError, OpenAI
+from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
 from openai.resources.responses.responses import Responses
 
 from memcontam.clients.base import LLMResponse
@@ -148,6 +148,10 @@ class OpenAIResponsesClient:
                 break
             except Exception as transport_error:
                 if not _is_retryable(transport_error) or attempts > retries_after_initial_attempt:
+                    if registered_cost_policy:
+                        retry_class = _phase13_retry_class(transport_error)
+                        if retry_class is not None:
+                            setattr(transport_error, "phase13_retry_class", retry_class)
                     setattr(transport_error, "provider_attempts_count", attempts)
                     setattr(transport_error, "provider_latency_ms", int((time.perf_counter() - start) * 1000))
                     setattr(transport_error, "provider_request_contract", request_contract)
@@ -293,6 +297,19 @@ def _is_retryable(error: Exception) -> bool:
         return error.status_code == 429 or error.status_code >= 500
     status_code = getattr(error, "status_code", None)
     return isinstance(status_code, int) and (status_code == 429 or status_code >= 500)
+
+
+def _phase13_retry_class(error: Exception) -> str | None:
+    if isinstance(error, (APITimeoutError, TimeoutError, httpx.TimeoutException)):
+        return "TIMEOUT_BEFORE_SEMANTIC_PAYLOAD"
+    status_code = getattr(error, "status_code", None)
+    if status_code == 429:
+        return "HTTP_429_BEFORE_SEMANTIC_PAYLOAD"
+    if isinstance(status_code, int) and 500 <= status_code <= 599:
+        return "REGISTERED_PROVIDER_5XX_BEFORE_SEMANTIC_PAYLOAD"
+    if isinstance(error, (APIConnectionError, ConnectionError, httpx.NetworkError)):
+        return "CONNECTION_FAILURE_BEFORE_SEMANTIC_PAYLOAD"
+    return None
 
 
 def _usage_dict(usage: object) -> dict[str, object] | None:

@@ -204,6 +204,7 @@ def test_luna_cost_policy_disables_transport_retry(monkeypatch) -> None:
         )
 
     assert caught.value.provider_attempts_count == 1
+    assert getattr(caught.value, "phase13_retry_class") == "REGISTERED_PROVIDER_5XX_BEFORE_SEMANTIC_PAYLOAD"
     assert len(_OpenAI.instance.responses.calls) == 1
 
 
