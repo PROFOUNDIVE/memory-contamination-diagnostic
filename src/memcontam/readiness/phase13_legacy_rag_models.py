@@ -12,10 +12,10 @@ Sha256 = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 MaterializationStatus = Literal[
     "TRACK2_LEGACY_RAG_MATERIALIZATION_COMPLETE", "TEST_ONLY_NOT_READY"
 ]
-TASKS = ("game24", "math_equation_balancer", "word_sorting")
+TASKS: tuple[TaskName, ...] = ("game24", "math_equation_balancer", "word_sorting")
 FEASIBLE_TASKS = TASKS
 MATERIALIZED_TASKS: tuple[FeasibleTaskName, ...] = TASKS
-BRANCHES = ("clean", "correct", "irrelevant", "contam")
+BRANCHES: tuple[BranchName, ...] = ("clean", "correct", "irrelevant", "contam")
 
 
 class _FrozenModel(BaseModel):

@@ -4,6 +4,7 @@ import hashlib
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import TypeAlias
 
 from memcontam.contamination.phase12.models import CandidateTriplet
 from memcontam.memory.embeddings import EmbeddingProvider, normalized_dot_top_k
@@ -27,10 +28,10 @@ from .phase13_legacy_rag_models import (
 )
 
 
-TRIPLET_REGISTRY_PATH = "data/phase12/registries/candidate_registry_v1.json"
+TRIPLET_REGISTRY_PATH = "data/phase12/registries/candidate_registry_v2.json"
 
 
-MetadataEmbeddingProvider = EmbeddingProvider
+MetadataEmbeddingProvider: TypeAlias = EmbeddingProvider
 
 
 @dataclass(frozen=True, slots=True)

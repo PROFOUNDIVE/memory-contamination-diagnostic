@@ -8,9 +8,7 @@ from memcontam.readiness.phase13_legacy_rag_validate import validate_legacy_rag_
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_published_track2_seal_binds_validated_three_task_package() -> None:
-    package = ROOT / "data/phase13/rag/legacy"
-    seal_path = ROOT / "data/phase13/rag/legacy_seal_v1.json"
+def _assert_seal(package: Path, seal_path: Path) -> tuple[str, str]:
     seal = json.loads(seal_path.read_text(encoding="utf-8"))
     unsigned = dict(seal)
     seal_hash = unsigned.pop("seal_sha256")
@@ -23,5 +21,24 @@ def test_published_track2_seal_binds_validated_three_task_package() -> None:
     assert seal_hash == hashlib.sha256(
         json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
-    report = validate_legacy_rag_package(package, ROOT, seal["manifest_sha256"])
-    assert report.package_status == seal["status"]
+    manifest_sha256 = seal["manifest_sha256"]
+    status = seal["status"]
+    assert isinstance(manifest_sha256, str)
+    assert isinstance(status, str)
+    return manifest_sha256, status
+
+
+def test_historical_track2_seal_remains_cryptographically_intact() -> None:
+    _assert_seal(
+        ROOT / "data/phase13/rag/legacy",
+        ROOT / "data/phase13/rag/legacy_seal_v1.json",
+    )
+
+
+def test_current_track2_seal_binds_validated_three_task_package() -> None:
+    package = ROOT / "data/phase13/rag/legacy_v2"
+    manifest_sha256, status = _assert_seal(
+        package, ROOT / "data/phase13/rag/legacy_seal_v2.json"
+    )
+    report = validate_legacy_rag_package(package, ROOT, manifest_sha256)
+    assert report.package_status == status

@@ -1,0 +1,9 @@
+{
+  "schema_version": "phase13_legacy_rag_package_seal_v2",
+  "status": "TRACK2_LEGACY_RAG_MATERIALIZATION_COMPLETE",
+  "package_root": "data/phase13/rag/legacy_v2",
+  "manifest_path": "data/phase13/rag/legacy_v2/manifest.json",
+  "manifest_sha256": "a1ecfdf3292c06c3ea31152ac577001e67196b954716efc921eb5444207d8b2d",
+  "tasks": ["game24", "math_equation_balancer", "word_sorting"],
+  "seal_sha256": "5181d2569d99a1d877821fed463b5716666785f414e5d7bb1d2a72387ac23d6b"
+}
