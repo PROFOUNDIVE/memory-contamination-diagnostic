@@ -78,23 +78,32 @@ def production_provider(binding: PackageBindingV3) -> CompiledProvider:
 
 class ProductionRequestDispatcherV3:
     def __init__(self, ledger: TerminalLedgerV3, binding: PackageBindingV3,
-                 parents: tuple[ParentTrajectoryV3, ...], *,
-                 provider_factory: Callable[[PackageBindingV3], CompiledProvider] = production_provider) -> None:
+                  parents: tuple[ParentTrajectoryV3, ...], *,
+                  provider_factory: Callable[[PackageBindingV3], CompiledProvider] = production_provider,
+                  retry_entitlements: frozenset[str] = frozenset()) -> None:
         if (ledger.binding.identity, ledger.binding.package_sha256, ledger.binding.authorization_sha256) != (
             binding.identity, binding.package_sha256, binding.authorization_sha256,
         ):
             raise TerminalEvidenceError("MAIN_AUTHORIZATION_BINDING_MISMATCH")
         self.ledger, self.binding, self.parents = ledger, binding, parents
         self._factory = provider_factory
+        if not retry_entitlements <= set(ledger.binding.unit_ids):
+            raise TerminalEvidenceError("MAIN_RETRY_ENTITLEMENT_INVALID")
+        self._retry_entitlements = retry_entitlements
         self._terminal_parents = terminal_parents(ledger, binding, parents)
         self._terminal_generation = ledger.generation()
         self._compiled: dict[str, CompiledProviderRequestV3] = {}
+        self._attempt_counts: dict[str, int] = {}
 
     @property
     def terminal_parents(self) -> frozenset[str]:
         with request_lock(self.ledger):
             self._refresh_terminal_parents()
             return self._terminal_parents
+
+    @property
+    def retry_entitlements(self) -> frozenset[str]:
+        return self._retry_entitlements
 
     def recover(self) -> None:
         with request_lock(self.ledger):
@@ -112,78 +121,101 @@ class ProductionRequestDispatcherV3:
             return self._dispatch(key, compile_material, parse_result)
 
     def _dispatch(self, key: RequestKeyV3, compile_material: Callable[[], RequestMaterialV3],
-                  parse_result: Callable[[LLMResponse], ResultT], *, defer_completion: bool = False) -> ResultT:
+                   parse_result: Callable[[LLMResponse], ResultT], *, defer_completion: bool = False) -> ResultT:
         if key.parent_id in self._terminal_parents:
             raise DispatchTechnicalFailureV3("MAIN_TRAJECTORY_TERMINAL", key.parent_id, None)
         if key.parent_id not in {parent.parent_id for parent in self.parents}:
             raise TerminalEvidenceError()
-        self.ledger.state(key.dispatch_id)
+        state = self.ledger.state(key.dispatch_id)
+        retrying = state.kind == "RETRYABLE_ATTEMPT_FAILURE"
+        if state.kind not in {"PENDING", "RETRYABLE_ATTEMPT_FAILURE"}:
+            raise TerminalEvidenceError("MAIN_RUN_IN_FLIGHT_RECONCILIATION_REQUIRED")
         receipt = RequestIdentityReceiptV3(binding=self.binding, parents=self.parents, key=key)
         self._publish_bytes(key, "identity", receipt.model_dump_json().encode() + b"\n")
-        self._append(key, "DISPATCH_INTENT")
+        if not retrying:
+            self._append(key, "DISPATCH_INTENT")
         material = compile_material()
         request_bytes = compile_request_bytes(key, material)
         count = count_prompt_tokens([message.model_dump() for message in material.messages], "o200k_base")
         compiled = CompiledProviderRequestV3(self.binding, key, material, request_bytes, count)
         self._compiled[key.dispatch_id] = compiled
         self._persist_compiled(compiled)
-        self._append(key, "REQUEST_COMPILED")
+        if retrying:
+            if state.compiled != compiled.evidence or key.dispatch_id not in self._retry_entitlements:
+                raise TerminalEvidenceError("MAIN_RETRY_ENTITLEMENT_INVALID")
+        else:
+            self._append(key, "REQUEST_COMPILED")
         if count > STAGES[key.stage][0]:
             for kind in ("INPUT_ENVELOPE_OVERFLOW", "TERMINAL_TECHNICAL_MISSING"):
                 self._append(key, kind, {"failure_code": "MAIN_INPUT_ENVELOPE_EXCEEDED",
                                         "transport_attempts": 0, "realized_cost_krw": 0})
             raise DispatchTechnicalFailureV3("MAIN_INPUT_ENVELOPE_EXCEEDED", key.parent_id, 0,
                 evidence_sha256=self.ledger.state(key.dispatch_id).event_hash)
-        provider = self._factory(self.binding)
-        response: LLMResponse | None = None
-        cost = ProviderCostEvidence()
-        attempt_ready = False
+        attempt_index = 1 if retrying else 0
+        while True:
+            provider = self._factory(self.binding)
+            response: LLMResponse | None = None
+            cost = ProviderCostEvidence()
+            attempt_ready = False
 
-        def start_attempt() -> None:
-            nonlocal attempt_ready
-            self._append(key, "ATTEMPT_STARTED")
-            attempt_ready = True
+            def start_attempt() -> None:
+                nonlocal attempt_ready
+                self._append(key, "ATTEMPT_STARTED", {"attempt_index": attempt_index})
+                attempt_ready = True
 
-        try:
-            response = provider.send_compiled_v3(compiled, start_attempt)
-            if response.raw.get("status") == "incomplete":
-                raise TerminalEvidenceError("MAIN_PROVIDER_INCOMPLETE")
-            cost = _response_cost(response)
-            realized = _realized(cost)
-            result = parse_result(response)
-            if result is None:
-                raise TerminalEvidenceError("MAIN_SEMANTIC_RESULT_UNAVAILABLE")
-        except Exception as error:
-            if not attempt_ready:
-                raise
-            observed = response or LLMResponse("", {
-                "usage": getattr(error, "provider_usage", None),
-                "authoritative_provider_cost_usd": getattr(error, "authoritative_provider_cost_usd", None),
-            }, {}, 0)
             try:
-                cost = _response_cost(observed)
+                response = provider.send_compiled_v3(compiled, start_attempt)
+                if response.raw.get("status") == "incomplete":
+                    raise TerminalEvidenceError("MAIN_PROVIDER_INCOMPLETE")
+                cost = _response_cost(response)
                 realized = _realized(cost)
-            except (KeyError, TypeError, ValueError):
-                cost, realized = ProviderCostEvidence(), None
-            observation = json.dumps({
-                "status": observed.raw.get("status", getattr(error, "provider_status", None)),
-                "incomplete_reason": observed.raw.get("incomplete_reason", getattr(error, "provider_incomplete_reason", None)),
-                "usage": observed.raw.get("usage"),
-                "provider_cost_usd": observed.raw.get("authoritative_provider_cost_usd"),
-                "failure_type": type(error).__name__,
-            }, sort_keys=True, separators=(",", ":")).encode() + b"\n"
-            self._publish_bytes(key, "observation", observation)
-            self._append(key, "ATTEMPTED_PROVIDER_FAILURE", {
-                "transport_attempts": 1, "cost": cost.model_dump(mode="json"),
-                "realized_cost_krw": realized,
-                "failure_code": str(getattr(error, "code", type(error).__name__)),
-                "observation_hash": hashlib.sha256(observation).hexdigest(),
-            })
-            raise DispatchTechnicalFailureV3("MAIN_ATTEMPTED_PROVIDER_FAILURE", key.parent_id, realized,
-                evidence_sha256=self.ledger.state(key.dispatch_id).event_hash) from error
+                result = parse_result(response)
+                if result is None:
+                    raise TerminalEvidenceError("MAIN_SEMANTIC_RESULT_UNAVAILABLE")
+            except Exception as error:
+                if not attempt_ready:
+                    raise
+                observed = response or LLMResponse("", {
+                    "usage": getattr(error, "provider_usage", None),
+                    "authoritative_provider_cost_usd": getattr(error, "authoritative_provider_cost_usd", None),
+                }, {}, 0)
+                try:
+                    cost = _response_cost(observed)
+                    realized = _realized(cost)
+                except (KeyError, TypeError, ValueError):
+                    cost, realized = ProviderCostEvidence(), None
+                observation = json.dumps({
+                    "status": observed.raw.get("status", getattr(error, "provider_status", None)),
+                    "incomplete_reason": observed.raw.get("incomplete_reason", getattr(error, "provider_incomplete_reason", None)),
+                    "usage": observed.raw.get("usage"),
+                    "provider_cost_usd": observed.raw.get("authoritative_provider_cost_usd"),
+                    "failure_type": type(error).__name__,
+                    "retry_class": getattr(error, "phase13_retry_class", None),
+                }, sort_keys=True, separators=(",", ":")).encode() + b"\n"
+                if (attempt_index == 0 and key.dispatch_id in self._retry_entitlements
+                        and _eligible_retry(error, response)):
+                    self._publish_bytes(key, "retry-observation-0", observation)
+                    self._append(key, "RETRYABLE_ATTEMPT_FAILURE", {
+                        "attempt_index": 0,
+                        "failure_code": str(getattr(error, "phase13_retry_class")),
+                        "observation_hash": hashlib.sha256(observation).hexdigest(),
+                    })
+                    attempt_index = 1
+                    continue
+                self._publish_bytes(key, "observation", observation)
+                self._append(key, "ATTEMPTED_PROVIDER_FAILURE", {
+                    "transport_attempts": attempt_index + 1, "cost": cost.model_dump(mode="json"),
+                    "realized_cost_krw": realized,
+                    "failure_code": str(getattr(error, "code", type(error).__name__)),
+                    "observation_hash": hashlib.sha256(observation).hexdigest(),
+                })
+                raise DispatchTechnicalFailureV3("MAIN_ATTEMPTED_PROVIDER_FAILURE", key.parent_id, realized,
+                    evidence_sha256=self.ledger.state(key.dispatch_id).event_hash) from error
+            break
+        self._attempt_counts[key.dispatch_id] = attempt_index + 1
         if not defer_completion:
             self._append(key, "COMPLETED", {
-                "transport_attempts": 1, "cost": cost.model_dump(mode="json"),
+                "transport_attempts": attempt_index + 1, "cost": cost.model_dump(mode="json"),
                 "realized_cost_krw": realized,
                 "result_hash": hashlib.sha256(response.content.encode()).hexdigest(),
             })
@@ -199,7 +231,8 @@ class ProductionRequestDispatcherV3:
             cost = _response_cost(response)
             realized = _realized(cost)
             fields: dict[str, JsonValue] = {
-                "transport_attempts": 1, "cost": cost.model_dump(mode="json"), "realized_cost_krw": realized,
+                "transport_attempts": self._attempt_counts.pop(key.dispatch_id, 1),
+                "cost": cost.model_dump(mode="json"), "realized_cost_krw": realized,
             }
             if semantic_success and realized is not None:
                 self._append(key, "COMPLETED", {**fields, "result_hash": hashlib.sha256(response.content.encode()).hexdigest()})
@@ -298,6 +331,20 @@ def _response_cost(response: LLMResponse | None) -> ProviderCostEvidence:
         "input_tokens": usage["input_tokens"], "output_tokens": usage["output_tokens"],
         "cached_input_tokens": usage.get("input_tokens_details", {}).get("cached_tokens", 0),
     }})
+
+
+def _eligible_retry(error: Exception, response: LLMResponse | None) -> bool:
+    return (
+        response is None
+        and getattr(error, "phase13_retry_class", None) in {
+            "TIMEOUT_BEFORE_SEMANTIC_PAYLOAD",
+            "CONNECTION_FAILURE_BEFORE_SEMANTIC_PAYLOAD",
+            "HTTP_429_BEFORE_SEMANTIC_PAYLOAD",
+            "REGISTERED_PROVIDER_5XX_BEFORE_SEMANTIC_PAYLOAD",
+        }
+        and getattr(error, "provider_usage", None) is None
+        and getattr(error, "authoritative_provider_cost_usd", None) is None
+    )
 
 
 def _realized(cost: ProviderCostEvidence) -> int | None:

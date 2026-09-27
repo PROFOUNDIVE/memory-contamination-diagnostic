@@ -39,15 +39,22 @@ class MainRequestClientV3:
     def __init__(self, dispatcher: ProductionRequestDispatcherV3, parent_id: str,
                  preflight: Callable[[], None]) -> None:
         self.dispatcher, self.parent_id, self.preflight = dispatcher, parent_id, preflight
-        self._ordinals: dict[Stage, int] = {}
+        self._trial_ordinals: dict[Stage, int] = {}
+        self._ordinal_base = 0
+        self._seen_keys: list[RequestKeyV3] = []
         self._native: Callable[[], bytes] | None = None
         self._pending: tuple[RequestKeyV3, LLMResponse] | None = None
         self._failure: ValueError | RuntimeError | OSError | None = None
 
-    def trial(self, execute: Callable[[], RuntimeTrialResult], native: Callable[[], bytes]) -> RuntimeTrialResult:
+    def trial(self, execute: Callable[[], RuntimeTrialResult], native: Callable[[], bytes],
+              *, ordinal_base: int = 0) -> RuntimeTrialResult:
         if self._native is not None:
             raise TerminalEvidenceError()
+        if type(ordinal_base) is not int or ordinal_base < 0:
+            raise TerminalEvidenceError("MAIN_REQUEST_ORDINAL_INVALID")
         self._native = native
+        self._ordinal_base = ordinal_base
+        self._trial_ordinals = {}
         try:
             result = execute()
             if self._failure is not None:
@@ -71,13 +78,11 @@ class MainRequestClientV3:
 
     def realized_cost_krw(self) -> int:
         total = 0
-        for stage, count in self._ordinals.items():
-            for ordinal in range(count):
-                key = RequestKeyV3(parent_id=self.parent_id, stage=stage, ordinal=ordinal)
-                cost = self.dispatcher.ledger.state(key.dispatch_id).attempted_cost
-                if cost is None:
-                    raise TerminalEvidenceError("MAIN_TERMINAL_COST_UNKNOWN")
-                total += reconcile_actual(cost).realized_krw
+        for key in self._seen_keys:
+            cost = self.dispatcher.ledger.state(key.dispatch_id).attempted_cost
+            if cost is None:
+                raise TerminalEvidenceError("MAIN_TERMINAL_COST_UNKNOWN")
+            total += reconcile_actual(cost).realized_krw
         return total
 
     def chat(self, messages: list[dict[str, str]], model: str, config: dict) -> LLMResponse:
@@ -93,9 +98,12 @@ class MainRequestClientV3:
         self.preflight()
         self._acknowledge(True)
         stage = _STAGE.validate_python(config.get("method_stage"), strict=True)
-        ordinal = self._ordinals.get(stage, 0)
+        local_ordinal = self._trial_ordinals.get(stage, 0)
+        ordinal = self._ordinal_base + local_ordinal
         key = RequestKeyV3(parent_id=self.parent_id, stage=stage, ordinal=ordinal)
-        self._ordinals[stage] = ordinal + 1
+        self._trial_ordinals[stage] = local_ordinal + 1
+        if key not in self._seen_keys:
+            self._seen_keys.append(key)
         native = self._native
         try:
             response = self.dispatcher.receive(key, lambda: RequestMaterialV3(

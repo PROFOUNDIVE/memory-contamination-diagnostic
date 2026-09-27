@@ -63,6 +63,138 @@ def call(client):
     return client.chat([{"role": "user", "content": "fixture"}], "gpt-5.6-luna", {"method_stage": "no_memory_generate"})
 
 
+class RetryableTimeout(TimeoutError):
+    phase13_retry_class = "TIMEOUT_BEFORE_SEMANTIC_PAYLOAD"
+
+
+class SimulatedCrash(BaseException):
+    pass
+
+
+def test_frozen_entitlement_retries_one_unambiguous_transport_failure(client_fixture):
+    client, ledger, keys, counts = client_fixture
+
+    class Provider:
+        def send_compiled_v3(self, compiled, before_request):
+            before_request()
+            counts["requests"] += 1
+            if counts["requests"] == 1:
+                raise RetryableTimeout()
+            return LLMResponse("final: 24", {"usage": {"input_tokens": 1, "output_tokens": 1}}, {}, 0)
+
+    def factory(_binding):
+        counts["constructor"] += 1
+        return Provider()
+
+    client.dispatcher = ProductionRequestDispatcherV3(
+        ledger, client.dispatcher.binding, client.dispatcher.parents,
+        provider_factory=factory, retry_entitlements=frozenset({keys[0].dispatch_id}),
+    )
+
+    def execute():
+        call(client)
+        return RuntimeTrialResult(BaselineExecutionOutcome("succeeded"), NOMEM_SINGLETON)
+
+    client.trial(execute, lambda: b"immutable native bytes")
+
+    events = [row.decode() for row in ledger.rows()]
+    assert sum('"kind":"ATTEMPT_STARTED"' in row for row in events) == 2
+    assert sum('"kind":"RETRYABLE_ATTEMPT_FAILURE"' in row for row in events) == 1
+    assert ledger.state(keys[0].dispatch_id).kind == "COMPLETED"
+    assert counts == {"constructor": 2, "requests": 2}
+
+
+def test_transport_failure_without_frozen_entitlement_is_not_retried(client_fixture):
+    client, ledger, keys, counts = client_fixture
+
+    class Provider:
+        def send_compiled_v3(self, compiled, before_request):
+            before_request()
+            counts["requests"] += 1
+            raise RetryableTimeout()
+
+    client.dispatcher._factory = lambda _binding: Provider()
+
+    with pytest.raises(DispatchTechnicalFailureV3, match="MAIN_ATTEMPTED_PROVIDER_FAILURE"):
+        client.trial(
+            lambda: (call(client), RuntimeTrialResult(BaselineExecutionOutcome("succeeded"), NOMEM_SINGLETON))[1],
+            lambda: b"immutable native bytes",
+        )
+
+    assert ledger.state(keys[0].dispatch_id).kind == "ATTEMPTED_PROVIDER_FAILURE"
+    assert counts["requests"] == 1
+
+
+def test_restart_after_durable_retryable_failure_issues_only_second_attempt(
+    client_fixture, monkeypatch: pytest.MonkeyPatch,
+):
+    client, ledger, keys, counts = client_fixture
+
+    class Provider:
+        def send_compiled_v3(self, compiled, before_request):
+            before_request()
+            counts["requests"] += 1
+            if counts["requests"] == 1:
+                raise RetryableTimeout()
+            return LLMResponse("final: 24", {"usage": {"input_tokens": 1, "output_tokens": 1}}, {}, 0)
+
+    def factory(_binding):
+        counts["constructor"] += 1
+        return Provider()
+
+    dispatcher = ProductionRequestDispatcherV3(
+        ledger, client.dispatcher.binding, client.dispatcher.parents,
+        provider_factory=factory, retry_entitlements=frozenset({keys[0].dispatch_id}),
+    )
+    client.dispatcher = dispatcher
+    append = dispatcher._append
+
+    def crash_after_retryable(key, kind, extra=None):
+        append(key, kind, extra)
+        if kind == "RETRYABLE_ATTEMPT_FAILURE":
+            raise SimulatedCrash()
+
+    monkeypatch.setattr(dispatcher, "_append", crash_after_retryable)
+    with pytest.raises(SimulatedCrash):
+        client.trial(
+            lambda: (call(client), RuntimeTrialResult(BaselineExecutionOutcome("succeeded"), NOMEM_SINGLETON))[1],
+            lambda: b"immutable native bytes",
+        )
+    assert ledger.state(keys[0].dispatch_id).kind == "RETRYABLE_ATTEMPT_FAILURE"
+
+    resumed = ProductionRequestDispatcherV3(
+        ledger, dispatcher.binding, dispatcher.parents,
+        provider_factory=factory, retry_entitlements=frozenset({keys[0].dispatch_id}),
+    )
+    resumed.recover()
+    client.dispatcher = resumed
+    client.trial(
+        lambda: (call(client), RuntimeTrialResult(BaselineExecutionOutcome("succeeded"), NOMEM_SINGLETON))[1],
+        lambda: b"immutable native bytes",
+    )
+
+    assert ledger.state(keys[0].dispatch_id).kind == "COMPLETED"
+    assert counts == {"constructor": 2, "requests": 2}
+
+
+def test_trial_ordinal_base_is_schedule_stable_after_skipped_occurrence(client_fixture):
+    client, ledger, keys, _counts = client_fixture
+
+    client.trial(
+        lambda: RuntimeTrialResult(BaselineExecutionOutcome("succeeded"), NOMEM_SINGLETON),
+        lambda: b"immutable native bytes", ordinal_base=0,
+    )
+
+    def execute():
+        call(client)
+        return RuntimeTrialResult(BaselineExecutionOutcome("succeeded"), NOMEM_SINGLETON)
+
+    client.trial(execute, lambda: b"immutable native bytes", ordinal_base=1)
+
+    assert ledger.state(keys[0].dispatch_id).kind == "PENDING"
+    assert ledger.state(keys[1].dispatch_id).kind == "COMPLETED"
+
+
 def test_semantic_failure_from_actual_baseline_outcome_is_terminal(client_fixture):
     client, ledger, keys, counts = client_fixture
 
