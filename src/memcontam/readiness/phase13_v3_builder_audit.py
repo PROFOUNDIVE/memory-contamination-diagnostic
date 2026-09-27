@@ -48,17 +48,31 @@ ALLOW: Final = (
     "data/phase13/common_capacity_corrected_v2.json",
     "data/phase13/common_capacity_status_corrected_v2.json",
     "data/phase13/observability/manifest_v1.json",
+    "data/phase13/observability/fixture_v1.json",
+    "data/phase13/observability/registration_packet_v1.json",
     "data/phase13/main/legacy_dc_rs_intervention_registry_v1.json",
+    "data/phase12/registries/candidate_registry_v2.json",
+    "data/phase12/registries/hidden_audit_registry_v2.json",
+    "data/phase13/main/legacy_dc_rs_intervention_registry_v2.json",
+    "data/phase13/rag/legacy_seal_v2.json",
+    "data/phase13/rag/legacy_v2/*",
     "src/memcontam/baselines/bot_phase12.py",
+    "src/memcontam/baselines/bot_runtime.py",
     "src/memcontam/baselines/bot_write.py",
     "src/memcontam/baselines/dynamic_cheatsheet_phase12.py",
     "src/memcontam/baselines/reflexion_adapter.py",
     "src/memcontam/baselines/reflexion_phase12.py",
     "src/memcontam/baselines/retrieval_rag_phase12.py",
     "src/memcontam/contamination/phase12/renderers.py",
+    "src/memcontam/contamination/phase12/certification.py",
+    "src/memcontam/contamination/phase12/models.py",
+    "src/memcontam/contamination/phase12/registry.py",
     "src/memcontam/contamination/phase13_legacy_dc_rs.py",
+    "src/memcontam/contamination/phase13_v2_applicability.py",
     "src/memcontam/evaluation/phase12_observables.py",
+    "src/memcontam/evaluation/phase13_observability.py",
     "src/memcontam/evaluation/phase13_observability_lineage.py",
+    "src/memcontam/evaluation/phase13_observability_sequence.py",
     "src/memcontam/experiment/phase12/branching.py",
     "src/memcontam/experiment/phase12/game24_runner.py",
     "src/memcontam/experiment/phase12/runtime_registry.py",
@@ -69,6 +83,8 @@ ALLOW: Final = (
     "tests/phase13_runner_safety_fixture.py",
     "tests/test_phase12_bot.py",
     "tests/test_phase12_reflexion.py",
+    "tests/test_bot_style.py",
+    "tests/provider_denial/sitecustomize.py",
 )
 
 
@@ -104,7 +120,8 @@ def audit_scope(repository: Path, output: Path, compare: Path | None) -> None:
     baseline_names = {row.path.removeprefix(PREFIX) for row in baseline if row.path.startswith(PREFIX)}
     actual = {path.relative_to(output).as_posix() for path in output.rglob("*") if not path.is_dir()}
     if actual != baseline_names | set(OUTPUT_PATHS) | {
-        "legacy_dc_rs_intervention_registry_v1.json"
+        "legacy_dc_rs_intervention_registry_v1.json",
+        "legacy_dc_rs_intervention_registry_v2.json",
     }:
         raise ArtifactError("MAIN_ARTIFACT_BINDING_MISMATCH")
     read_files(output, tuple(actual))

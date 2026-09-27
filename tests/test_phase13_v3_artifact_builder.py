@@ -20,7 +20,11 @@ AUTHORITY = Path("/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/Refer
 def builder_source(tmp_path_factory):
     from memcontam.readiness.phase13_v3_builder_inputs import STATIC_PATHS
     from memcontam.readiness.phase13_v3_resource_files import read_files
-    from memcontam.readiness.phase13_v3_authority_models import ROUTED_DOCUMENTS, PROVENANCE_FILENAME
+    from memcontam.readiness.phase13_v3_authority_models import (
+        PROVENANCE_FILENAME,
+        REVISION_MANIFEST_FILENAME,
+        ROUTED_DOCUMENTS,
+    )
     root = tmp_path_factory.mktemp("builder-source")
     subprocess.run(("git", "clone", "--local", "--quiet", str(ROOT), str(root)), check=True,
                    env={**os.environ, "GIT_MASTER": "1"})
@@ -29,15 +33,33 @@ def builder_source(tmp_path_factory):
         shutil.copyfile(ROOT / "scripts" / name, root / "scripts" / name)
     for name in ("artifact_builder", "mr_p4", "mr_p5", "mr_p6"):
         shutil.copyfile(ROOT / f"tests/test_phase13_v3_{name}.py", root / f"tests/test_phase13_v3_{name}.py")
-    repair_path = "data/phase13/main/legacy_dc_rs_intervention_registry_v1.json"
+    repair_paths = (
+        "data/phase12/registries/candidate_registry_v2.json",
+        "data/phase13/main/legacy_dc_rs_intervention_registry_v2.json",
+        "data/phase13/rag/legacy_seal_v2.json",
+        "data/phase13/rag/legacy_v2/game24/corpus.json",
+        "data/phase13/rag/legacy_v2/game24/indices.json",
+        "data/phase13/rag/legacy_v2/manifest.json",
+        "data/phase13/rag/legacy_v2/math_equation_balancer/corpus.json",
+        "data/phase13/rag/legacy_v2/math_equation_balancer/indices.json",
+        "data/phase13/rag/legacy_v2/word_sorting/corpus.json",
+        "data/phase13/rag/legacy_v2/word_sorting/indices.json",
+    )
     for resource in read_files(RESOURCE_ROOT, tuple(
-        path for path in STATIC_PATHS if path != repair_path
-    )) + read_files(REPAIR_ROOT, (repair_path,)):
+        path for path in STATIC_PATHS if path not in repair_paths
+    )) + read_files(REPAIR_ROOT, repair_paths):
         target = root / resource.binding.path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(resource.raw)
     authority = tmp_path_factory.mktemp("builder-authority")
-    for resource in read_files(AUTHORITY, (*tuple(name for _, name in ROUTED_DOCUMENTS), PROVENANCE_FILENAME)):
+    for resource in read_files(
+        AUTHORITY,
+        (
+            *tuple(name for _, name in ROUTED_DOCUMENTS),
+            PROVENANCE_FILENAME,
+            REVISION_MANIFEST_FILENAME,
+        ),
+    ):
         (authority / resource.binding.path).write_bytes(resource.raw)
     subprocess.run(("git", "-C", str(root), "add", "src", "scripts"), check=True, env={**os.environ, "GIT_MASTER": "1"})
     changes = subprocess.run(("git", "-C", str(root), "diff", "--cached", "--quiet"),
