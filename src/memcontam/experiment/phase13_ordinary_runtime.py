@@ -233,12 +233,14 @@ def execute_prospective_ordinary(run: ProspectiveOrdinaryRun) -> ProspectiveOrdi
         )
     }
     provenance_envelopes = {}
-    for context in contexts:
+    ordinal_stride = 2 if run.baseline == "reflexion_style" else 1
+    for trial_index, context in enumerate(contexts):
         state_before = entry.serialize_state(state)
         request_client = None if run.validated_resources is None else run.validated_resources.request_client
         result = (entry.execute_trial(context, state) if request_client is None else request_client.trial(
             partial(entry.execute_trial, context, state),
-            partial(native_state_bytes, entry.serialize_state, state)))
+            partial(native_state_bytes, entry.serialize_state, state),
+            ordinal_base=trial_index * ordinal_stride))
         state_after = entry.serialize_state(result.state)
         if not isinstance(state_before, NativeState) or not isinstance(state_after, NativeState):
             state_before = state_after = None

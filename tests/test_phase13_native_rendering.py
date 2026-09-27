@@ -22,7 +22,7 @@ from memcontam.rag.branch_index import build_branch_indices
 from memcontam.rag.phase12_corpus import CleanCorpus, build_branch_corpora
 from memcontam.tasks.base import TaskInstance
 
-REGISTRY_PATH = Path("data/phase12/registries/candidate_registry_v1.json")
+REGISTRY_PATH = Path("data/phase12/registries/candidate_registry_v2.json")
 LiveState = FullHistoryStateV3 | RagFrozenStateV3 | BoTStateV3 | ReflexionStateV3 | dc.DcRsStateV3
 
 
