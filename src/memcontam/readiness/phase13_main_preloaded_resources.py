@@ -10,6 +10,7 @@ from memcontam.contamination.phase12.registry import (
     _parse_triplet,
     _reject_selection_markers,
     _validate_registry,
+    validate_current_candidate_registry,
 )
 from memcontam.contamination.phase12.renderers import RendererRegistry
 from memcontam.evaluation.phase13_observability_registration import ObservabilityRegistrationPacket
@@ -67,6 +68,7 @@ class PreloadedMainResources:
             triplets=tuple(_parse_triplet(item) for item in payload["triplets"]),
         )
         _validate_registry(registry)
+        validate_current_candidate_registry(registry)
         return registry
 
     @property

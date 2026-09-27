@@ -19,7 +19,7 @@ from memcontam.memory.admission import AdmissionContext
 from memcontam.memory.checkpoint_v3 import NativeState, serialize_checkpoint
 from memcontam.tasks.base import TaskInstance
 
-REGISTRY_PATH = Path("data/phase12/registries/candidate_registry_v1.json")
+REGISTRY_PATH = Path("data/phase12/registries/candidate_registry_v2.json")
 
 
 class _Client:
@@ -43,7 +43,7 @@ class _Client:
                 input={"numbers": [1, 3, 4, 6]},
                 verifier_spec={"target": 24},
             ),
-            "game24-fraction-intermediate-v1",
+            "game24-parentheses-restriction-v2",
         ),
         (
             TaskInstance(

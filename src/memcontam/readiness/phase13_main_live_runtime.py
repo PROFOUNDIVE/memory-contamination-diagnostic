@@ -11,7 +11,7 @@ from memcontam.baselines.retrieval_rag_phase12 import RagFrozenStateV3
 from memcontam.clients.base import LLMClient
 from memcontam.clients.config import ProviderConfig
 from memcontam.clients.openai_responses import OpenAIResponsesClient
-from memcontam.contamination.phase12.registry import load_candidate_registry
+from memcontam.contamination.phase12.registry import load_current_candidate_registry
 from memcontam.contamination.phase12.renderers import RendererRegistry
 from memcontam.evaluation.phase13_observability_registration import ObservabilityRegistrationPacket
 from memcontam.experiment.phase12.game24_runner import (
@@ -122,12 +122,12 @@ class ProductionMainRuntime:
             repository_root / "data/phase13/observability/registration_packet_v1.json"
         ).read_bytes()
         self._packet = ObservabilityRegistrationPacket.model_validate_json(packet_raw)
-        self._candidate_registry = load_candidate_registry(
-            repository_root / "data/phase12/registries/candidate_registry_v1.json"
+        self._candidate_registry = load_current_candidate_registry(
+            repository_root / "data/phase12/registries/candidate_registry_v2.json"
         )
-        candidate_path = repository_root / "data/phase12/registries/candidate_registry_v1.json"
+        candidate_path = repository_root / "data/phase12/registries/candidate_registry_v2.json"
         self._renderers = RendererRegistry.governed(
-            (repository_root / "data/phase13/main/legacy_dc_rs_intervention_registry_v1.json").read_bytes(),
+            (repository_root / "data/phase13/main/legacy_dc_rs_intervention_registry_v2.json").read_bytes(),
             self._candidate_registry,
             hashlib.sha256(candidate_path.read_bytes()).hexdigest(),
         )
@@ -318,10 +318,10 @@ class ProductionMainRuntime:
         }
         if task not in _CORE_TASKS:
             seal = json.loads(self._resources.selected.resource("legacy_rag_seal")) if self._resources is not None else json.loads(
-                (self._root / "data/phase13/rag/legacy_seal_v1.json").read_text())
+                (self._root / "data/phase13/rag/legacy_seal_v2.json").read_text())
             states["rag_frozen"] = load_legacy_rag_state(
                 LegacyRagRuntimeRequest(
-                    self._root / "data/phase13/rag/legacy",
+                    self._root / "data/phase13/rag/legacy_v2",
                     self._root,
                     legacy_task_name(task),
                     "clean",
