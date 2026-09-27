@@ -13,25 +13,29 @@ ROOT: Final = Path("/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/Ref
 NAMES: Final = (
     "Phase 13 \u2014 THEORETICAL ARTIFACT revised-v1.md",
     "Phase 13-Compatible Baseline Memory and Filter Design revised-v5.md",
-    "Phase 13-Compatible Contamination Construction Intervention Timing and Sensitivity Protocol revised-v8.md",
-    "2026-08-24_Phase13_MainA_PostCutoff_Acceleration_Addendum_revised-v3.md",
-    "Phase 13-Compatible Pilot Main and Exploratory Experiment Design revised-v12.md",
+    "Phase 13-Compatible Contamination Construction Intervention Timing and Sensitivity Protocol revised-v9.md",
+    "2026-08-24_Phase13_MainA_PostCutoff_Acceleration_Addendum_revised-v5.md",
+    "Phase 13-Compatible Pilot Main and Exploratory Experiment Design revised-v14.md",
     "2026-09-03_Phase13_MainA_Corrective_Scientific_Decision_Authority.md",
     "AGENTS.md",
 )
 MANIFEST: Final = "2026-09-05_Phase13_Input_Envelope_Authority_Revision_Manifest.md"
+V2_MANIFEST: Final = "2026-09-23_Phase13_Game24_WS_Retry_Authority_Revision_Manifest.md"
 
 
 @pytest.fixture(scope="session")
 def authority_bytes() -> tuple[bytes, ...]:
-    return tuple(files.read_regular_nofollow(ROOT / name) for name in (*NAMES, MANIFEST))
+    return tuple(
+        files.read_regular_nofollow(ROOT / name)
+        for name in (*NAMES, MANIFEST, V2_MANIFEST)
+    )
 
 
 @pytest.fixture
 def authority_root(tmp_path: Path, authority_bytes: tuple[bytes, ...]) -> Path:
     root = tmp_path / "inputs"
     root.mkdir()
-    for name, raw in zip((*NAMES, MANIFEST), authority_bytes, strict=True):
+    for name, raw in zip((*NAMES, MANIFEST, V2_MANIFEST), authority_bytes, strict=True):
         (root / name).write_bytes(raw)
     return root
 
@@ -67,6 +71,8 @@ def test_snapshot_binds_exact_routed_stack(authority_root: Path) -> None:
         assert (row.size, row.sha256) == (len(raw), hashlib.sha256(raw).hexdigest())
     assert snapshot.provenance.filename == MANIFEST
     assert snapshot.provenance.role == "provenance_only"
+    assert snapshot.revision_manifest.filename == V2_MANIFEST
+    assert snapshot.revision_manifest.sha256 == "a123b5ce1076d78d12482617c26e3344c37449a07e622f620b66139d46012055"
 
 
 def test_registry_values_and_identities(authority_root: Path) -> None:
@@ -80,20 +86,30 @@ def test_registry_values_and_identities(authority_root: Path) -> None:
         ("DC_RS_generation", 512, 9212), ("DC_RS_writer_synthesis", 8192, 13521),
         ("NoMem_generation", 512, 1160),
     ]
-    assert snapshot.registry.sha256 == "f97e30aa81d71a76a3023792314de606073d9d9215cc612927e69050688269ee"
-    assert snapshot.terminal.sha256 == "9bbcdd9dd1686af034f7c0d2114ac86d5837a07de0cc6ba8fef7940bbc822b75"
-    assert (snapshot.registry.T, snapshot.registry.transport_retries, snapshot.capacity.B_mem_tokens) == (1, 0, 8192)
+    assert snapshot.registry.sha256 == "5796df90795ff7f753aad753abc1a70499c083fdb40dabb7a26afe011e58be38"
+    assert snapshot.registry.transport_contract_sha256 == "664e36f7fc74d74c640f3c41924e81d31ae01672f285fbdc18cff6f602bdc155"
+    assert snapshot.registry.retry_allocation_registry_sha256 == "0dcab38c3fb9efa55b1370e18dbea8544af28d3f09b330405b286809239cb1c9"
+    assert snapshot.terminal.sha256 == "599eb322efdfea397c227fdad25f2d9371c444392eb68ef943a04748467d16bd"
+    assert snapshot.retry.sha256 == "0dcab38c3fb9efa55b1370e18dbea8544af28d3f09b330405b286809239cb1c9"
+    assert snapshot.transport.sha256 == "664e36f7fc74d74c640f3c41924e81d31ae01672f285fbdc18cff6f602bdc155"
+    assert (
+        snapshot.registry.default_max_transport_attempts,
+        snapshot.registry.entitled_eligible_max_transport_attempts,
+        snapshot.registry.maximum_retries_after_initial_attempt,
+        snapshot.capacity.B_mem_tokens,
+    ) == (1, 2, 1, 8192)
     assert snapshot.identity == corrective_identity()
-    assert snapshot.predecessor_rag_input_tokens == 290
+    assert snapshot.predecessor_rag_input_tokens == 378
     assert snapshot.repository_344_status == "STALE_IMPLEMENTATION_HISTORY"
 
 
 @pytest.mark.parametrize("old,new", [
     (b"RAG_generation|512|378", b"RAG_generation|512|290"),
     (b"FH_generation|512|9330", b"FH_generation|512|9331"),
-    (b"T=1\n", b"T=2\n"), (b"transport_retries=0", b"transport_retries=1"),
-    (b"trigger=transport_failure_under_T_1", b"trigger=transport_failure_under_T_2"),
-    (b"END_CORE_EXECUTION_ENVELOPE_REGISTRY_V3", b"END_BROKEN"),
+    (b"default_max_transport_attempts=1", b"default_max_transport_attempts=2"),
+    (b"maximum_retries_after_initial_attempt=1", b"maximum_retries_after_initial_attempt=2"),
+    (b"terminal_trigger=UNCLASSIFIED_PROVIDER_FAILURE", b"terminal_trigger=UNKNOWN"),
+    (b"END_CORE_EXECUTION_ENVELOPE_REGISTRY_V4", b"END_BROKEN"),
 ])
 def test_altered_block_rejected(authority_root: Path, old: bytes, new: bytes) -> None:
     target = authority_root / NAMES[4]
@@ -161,13 +177,19 @@ def test_unstable_read_rejected(authority_root: Path, monkeypatch: pytest.Monkey
 
 
 def test_builder_emits_json_without_external_mutation(tmp_path: Path) -> None:
-    before = tuple(files.read_regular_nofollow(ROOT / name) for name in (*NAMES, MANIFEST))
+    before = tuple(
+        files.read_regular_nofollow(ROOT / name)
+        for name in (*NAMES, MANIFEST, V2_MANIFEST)
+    )
     snapshot = files.build_authority_v3(ROOT, tmp_path, corrective_identity())
     raw = (tmp_path / "current_authority_v3.json").read_bytes()
     assert json.loads(raw)["schema_version"] == "phase13_main_authority_snapshot_v3"
     assert raw.endswith(b"\n") and not raw.endswith(b"\n\n")
     assert files.load_authority_v3(ROOT, snapshot) == snapshot
-    assert tuple(files.read_regular_nofollow(ROOT / name) for name in (*NAMES, MANIFEST)) == before
+    assert tuple(
+        files.read_regular_nofollow(ROOT / name)
+        for name in (*NAMES, MANIFEST, V2_MANIFEST)
+    ) == before
 
 
 def test_publication_never_replaces(authority_root: Path, tmp_path: Path) -> None:
@@ -222,9 +244,9 @@ def test_self_rehashed_semantic_projection_rejected(authority_root: Path) -> Non
 def test_duplicate_block_rejected(authority_root: Path) -> None:
     target = authority_root / NAMES[4]
     raw = target.read_bytes()
-    begin = raw.index(b"\nBEGIN_CORE_EXECUTION_ENVELOPE_REGISTRY_V3\n")
-    end = raw.index(b"\nEND_CORE_EXECUTION_ENVELOPE_REGISTRY_V3\n", begin)
-    target.write_bytes(raw + raw[begin:end] + b"\nEND_CORE_EXECUTION_ENVELOPE_REGISTRY_V3\n")
+    begin = raw.index(b"\nBEGIN_CORE_EXECUTION_ENVELOPE_REGISTRY_V4\n")
+    end = raw.index(b"\nEND_CORE_EXECUTION_ENVELOPE_REGISTRY_V4\n", begin)
+    target.write_bytes(raw + raw[begin:end] + b"\nEND_CORE_EXECUTION_ENVELOPE_REGISTRY_V4\n")
     with pytest.raises(files.AuthorityFileError, match="MAIN_ENVELOPE_REGISTRY_MISMATCH"):
         files.load_authority_v3(authority_root, identity=corrective_identity())
 
