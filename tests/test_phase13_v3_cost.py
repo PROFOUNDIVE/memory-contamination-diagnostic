@@ -1,5 +1,4 @@
 import hashlib
-from .phase13_corrective_identity import corrective_identity
 import importlib
 import importlib.util
 import json
@@ -12,8 +11,10 @@ from typing import assert_never
 import pytest
 from pydantic import JsonValue
 
-from memcontam.readiness.phase13_cost_policy import _ceil, load_cost_policy_bundle
 from memcontam.readiness.phase13_authority_files import load_authority_v3
+from memcontam.readiness.phase13_cost_policy import _ceil, load_cost_policy_bundle
+
+from .phase13_corrective_identity import corrective_identity
 
 
 def test_baseline_historical_stage_costs() -> None:
@@ -60,6 +61,24 @@ def base(cost, authority):
 def _complete(cost, base):
     order = cost.FinalOrder(unit_ids=("c", "a", "b"), runtime_hash="1" * 64, request_hash="2" * 64, tokenizer_hash="3" * 64)
     return cost.freeze_complete(base, order)
+
+
+def test_entitled_retry_reservation_increases_prospective_witness_and_unit_proof(cost, base):
+    initial = cost.build_witness(base).totals
+    with_retry = cost.freeze_base(base.policy, base.bindings, base.units, retry_reservations=(
+        cost.RetryReservation(unit_id="a", dispatch_id="0" * 64,
+                              stage_id="RAG_generation", reservation_krw=2),
+    ))
+
+    witness = cost.build_witness(with_retry)
+    complete = _complete(cost, with_retry)
+    proof = cost.build_proof(complete, witness, "a" * 64)
+
+    assert witness.totals.semantic_calls == initial.semantic_calls
+    assert witness.totals.retry_reserve_krw == 2
+    assert witness.totals.cmax_main_krw == initial.cmax_main_krw + 2
+    assert sum(row.projected_krw for row in proof.projected_krw) == witness.totals.cmax_main_krw
+    assert next(row.projected_krw for row in proof.projected_krw if row.unit_id == "a") > 0
 
 
 @pytest.mark.parametrize("stage,tokens,calls,expected", [

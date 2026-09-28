@@ -7,8 +7,11 @@ from typing import Annotated, ClassVar, Final, Literal, Self, TypeVar
 from pydantic import BaseModel, Field, model_validator
 
 from memcontam.readiness.phase13_cost_policy_models import Budget, RateCard, Sha256
-from memcontam.readiness.phase13_v3_authority_models import AuthoritySnapshotV3, FrozenModel, IdentityComponent
-
+from memcontam.readiness.phase13_v3_authority_models import (
+    AuthoritySnapshotV3,
+    FrozenModel,
+    IdentityComponent,
+)
 
 RATE_CARD: Final = RateCard(
     input_usd_per_million="0.20", cached_input_usd_per_million="0.02",
@@ -114,12 +117,20 @@ class CostUnit(FrozenModel):
     stages: tuple[StageOccurrences, ...] = Field(min_length=1)
 
 
+class RetryReservation(FrozenModel):
+    unit_id: str = Field(min_length=1)
+    dispatch_id: Sha256
+    stage_id: str = Field(min_length=1)
+    reservation_krw: int = Field(gt=0)
+
+
 class BaseCostInputsV3(CostArtifact):
     hash_field: ClassVar[str] = "base_inputs_hash"
     schema_version: Literal["phase13_main_base_cost_inputs_v3"] = "phase13_main_base_cost_inputs_v3"
     policy: ActivatedPolicyV3
     bindings: PrefreezeBindings
     units: tuple[CostUnit, ...] = Field(min_length=1)
+    retry_reservations: tuple[RetryReservation, ...] = ()
     base_inputs_hash: Sha256
 
 
@@ -152,6 +163,7 @@ class ExactStageCost(FrozenModel):
 class CostTotals(FrozenModel):
     stage_costs: tuple[ExactStageCost, ...]
     semantic_calls: NonnegativeInt
+    retry_reserve_krw: NonnegativeInt = 0
     cmax_main_krw: NonnegativeInt
     core_authorization_gate_krw: Literal[450000] = 450000
     gate_margin_krw: int

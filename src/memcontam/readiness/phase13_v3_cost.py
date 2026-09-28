@@ -3,17 +3,65 @@ from __future__ import annotations
 from pydantic import ValidationError
 
 from memcontam.readiness.phase13_v3_authority_models import AuthoritySnapshotV3
-from .phase13_v3_cost_actual import reconcile_actual as reconcile_actual
-from .phase13_v3_cost_law import (
-    calculate, decimal_string as decimal_string, exact_request_cost as exact_request_cost,
-)
+
+from .phase13_v3_cost_actual import reconcile_actual
+from .phase13_v3_cost_law import calculate, decimal_string, exact_request_cost
 from .phase13_v3_cost_models import (
-    ActivatedPolicyV3, BaseCostInputsV3, CompleteCostInputsV3, CostError,
-    CostProofV3, CostUnit, CostWitnessV3, FinalOrder, PrefreezeBindings,
-    ProviderCostEvidence as ProviderCostEvidence, ProviderUsage as ProviderUsage,
-    RequestTokens as RequestTokens, StageOccurrences as StageOccurrences,
-    canonical_bytes as canonical_bytes, check_hash, digest, seal,
+    ActivatedPolicyV3,
+    BaseCostInputsV3,
+    CompleteCostInputsV3,
+    CostError,
+    CostProofV3,
+    CostUnit,
+    CostWitnessV3,
+    FinalOrder,
+    PrefreezeBindings,
+    ProviderCostEvidence,
+    ProviderUsage,
+    RequestTokens,
+    RetryReservation,
+    StageOccurrences,
+    canonical_bytes,
+    check_hash,
+    digest,
+    seal,
 )
+
+__all__ = [
+    "ActivatedPolicyV3",
+    "BaseCostInputsV3",
+    "CompleteCostInputsV3",
+    "CostError",
+    "CostProofV3",
+    "CostUnit",
+    "CostWitnessV3",
+    "FinalOrder",
+    "PrefreezeBindings",
+    "ProviderCostEvidence",
+    "ProviderUsage",
+    "RequestTokens",
+    "RetryReservation",
+    "StageOccurrences",
+    "activate_policy",
+    "build_proof",
+    "build_witness",
+    "calculate",
+    "canonical_bytes",
+    "check_hash",
+    "decimal_string",
+    "digest",
+    "exact_request_cost",
+    "freeze_base",
+    "freeze_complete",
+    "reconcile_actual",
+    "seal",
+    "validate_base",
+    "validate_complete",
+    "validate_policy",
+    "validate_policy_bytes",
+    "validate_proof",
+    "validate_witness",
+]
 
 
 def activate_policy(authority: AuthoritySnapshotV3) -> ActivatedPolicyV3:
@@ -34,10 +82,13 @@ def validate_policy_bytes(raw: bytes, authority: AuthoritySnapshotV3) -> Activat
     return validated
 
 
-def freeze_base(policy: ActivatedPolicyV3, bindings: PrefreezeBindings, units: tuple[CostUnit, ...]) -> BaseCostInputsV3:
+def freeze_base(policy: ActivatedPolicyV3, bindings: PrefreezeBindings, units: tuple[CostUnit, ...],
+                *, retry_reservations: tuple[RetryReservation, ...] = ()) -> BaseCostInputsV3:
     validate_policy(policy, policy.authority)
     result = seal(BaseCostInputsV3(policy=policy, bindings=bindings,
-                                  units=tuple(sorted(units, key=lambda unit: unit.unit_id)), base_inputs_hash="0" * 64))
+                                  units=tuple(sorted(units, key=lambda unit: unit.unit_id)),
+                                  retry_reservations=tuple(sorted(retry_reservations, key=lambda row: row.dispatch_id)),
+                                  base_inputs_hash="0" * 64))
     _validate_base(result)
     return result
 
@@ -52,6 +103,21 @@ def _validate_base(base: BaseCostInputsV3) -> None:
     for unit in base.units:
         used = tuple(group.stage_id for group in unit.stages)
         if not set(used) <= stage_ids:
+            raise CostError("MAIN_COST_PROOF_MISMATCH")
+    retries = base.retry_reservations
+    if (tuple(row.dispatch_id for row in retries) != tuple(sorted({row.dispatch_id for row in retries}))
+        or sum(row.reservation_krw for row in retries) > base.policy.authority.retry.retry_budget_krw):
+        raise CostError("MAIN_COST_PROOF_MISMATCH")
+    by_unit = {unit.unit_id: {stage.stage_id for stage in unit.stages} for unit in base.units}
+    from math import ceil
+    for row in retries:
+        if row.stage_id not in by_unit.get(row.unit_id, set()):
+            raise CostError("MAIN_COST_PROOF_MISMATCH")
+        envelope = next(stage for stage in base.policy.authority.registry.stages if stage.stage_id == row.stage_id)
+        input_cost, output_cost = exact_request_cost(RequestTokens(
+            input_tokens=envelope.maximum_input_tokens, output_tokens=envelope.maximum_output_tokens,
+        ), base.policy.rate_card)
+        if row.reservation_krw != ceil(input_cost) + ceil(output_cost):
             raise CostError("MAIN_COST_PROOF_MISMATCH")
 
 

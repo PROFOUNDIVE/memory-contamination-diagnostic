@@ -5,8 +5,14 @@ from fractions import Fraction
 from math import ceil
 
 from memcontam.readiness.phase13_cost_policy_models import RateCard
+
 from .phase13_v3_cost_models import (
-    RATE_CARD, BaseCostInputsV3, CostTotals, ExactStageCost, RequestTokens, UnitProjection,
+    RATE_CARD,
+    BaseCostInputsV3,
+    CostTotals,
+    ExactStageCost,
+    RequestTokens,
+    UnitProjection,
 )
 
 
@@ -38,6 +44,9 @@ def calculate(base: BaseCostInputsV3, order: tuple[str, ...] | None = None) -> t
     sums: dict[str, tuple[Fraction, Fraction]] = {}
     counts: Counter[str] = Counter()
     projections: list[UnitProjection] = []
+    retries_by_unit: Counter[str] = Counter()
+    for retry in base.retry_reservations:
+        retries_by_unit[retry.unit_id] += retry.reservation_krw
     for unit_id in units if order is None else order:
         projected = 0
         for group in units[unit_id].stages:
@@ -54,14 +63,16 @@ def calculate(base: BaseCostInputsV3, order: tuple[str, ...] | None = None) -> t
             if order is not None:
                 projected += ceil(after_in) - ceil(before_in) + ceil(after_out) - ceil(before_out)
         if order is not None:
+            projected += retries_by_unit[unit_id]
             projections.append(UnitProjection(unit_id=unit_id, projected_krw=projected))
     stages = tuple(ExactStageCost(stage_id=stage, semantic_calls=counts[stage],
                                  input_exact_krw=decimal_string(sums[stage][0]),
                                  output_exact_krw=decimal_string(sums[stage][1]),
                                  input_krw_ceiling=ceil(sums[stage][0]),
                                  output_krw_ceiling=ceil(sums[stage][1])) for stage in sorted(sums))
-    total = ceil(sum(stage.input_krw_ceiling + stage.output_krw_ceiling for stage in stages))
+    reserved = sum(retries_by_unit.values())
+    total = ceil(sum(stage.input_krw_ceiling + stage.output_krw_ceiling for stage in stages)) + reserved
     margin = base.policy.budget.core_authorization_gate_krw - total
-    return CostTotals(stage_costs=stages, semantic_calls=sum(counts.values()),
+    return CostTotals(stage_costs=stages, semantic_calls=sum(counts.values()), retry_reserve_krw=reserved,
                       cmax_main_krw=total, gate_margin_krw=margin,
                       gate_result="PASS" if margin >= 0 else "FAIL"), tuple(projections)
