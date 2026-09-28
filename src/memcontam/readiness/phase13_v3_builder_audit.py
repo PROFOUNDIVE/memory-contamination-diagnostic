@@ -50,6 +50,7 @@ ALLOW: Final = (
     "data/phase13/observability/manifest_v1.json",
     "data/phase13/observability/fixture_v1.json",
     "data/phase13/observability/registration_packet_v1.json",
+    "data/phase13/observability/registration_packet_v2.json",
     "data/phase13/main/legacy_dc_rs_intervention_registry_v1.json",
     "data/phase12/registries/candidate_registry_v2.json",
     "data/phase12/registries/hidden_audit_registry_v2.json",
@@ -72,6 +73,7 @@ ALLOW: Final = (
     "src/memcontam/evaluation/phase12_observables.py",
     "src/memcontam/evaluation/phase13_observability.py",
     "src/memcontam/evaluation/phase13_observability_lineage.py",
+    "src/memcontam/evaluation/phase13_observability_registration.py",
     "src/memcontam/evaluation/phase13_observability_sequence.py",
     "src/memcontam/experiment/phase12/branching.py",
     "src/memcontam/experiment/phase12/game24_runner.py",
@@ -84,6 +86,7 @@ ALLOW: Final = (
     "tests/test_phase12_bot.py",
     "tests/test_phase12_reflexion.py",
     "tests/test_bot_style.py",
+    "tests/test_openai_responses_client.py",
     "tests/provider_denial/sitecustomize.py",
 )
 

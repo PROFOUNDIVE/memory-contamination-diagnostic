@@ -1,15 +1,16 @@
 from __future__ import annotations
-from .phase13_corrective_identity import corrective_identity
 
 import importlib
 import json
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
+
+from .phase13_corrective_identity import corrective_identity
 from .test_phase13_v3_entrypoint_fixture import REPAIR_ROOT, RESOURCE_ROOT
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,13 +19,13 @@ AUTHORITY = Path("/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/Refer
 
 @pytest.fixture(scope="session")
 def builder_source(tmp_path_factory):
-    from memcontam.readiness.phase13_v3_builder_inputs import STATIC_PATHS
-    from memcontam.readiness.phase13_v3_resource_files import read_files
     from memcontam.readiness.phase13_v3_authority_models import (
         PROVENANCE_FILENAME,
         REVISION_MANIFEST_FILENAME,
         ROUTED_DOCUMENTS,
     )
+    from memcontam.readiness.phase13_v3_builder_inputs import STATIC_PATHS
+    from memcontam.readiness.phase13_v3_resource_files import read_files
     root = tmp_path_factory.mktemp("builder-source")
     subprocess.run(("git", "clone", "--local", "--quiet", str(ROOT), str(root)), check=True,
                    env={**os.environ, "GIT_MASTER": "1"})
@@ -34,6 +35,8 @@ def builder_source(tmp_path_factory):
     for name in ("artifact_builder", "mr_p4", "mr_p5", "mr_p6"):
         shutil.copyfile(ROOT / f"tests/test_phase13_v3_{name}.py", root / f"tests/test_phase13_v3_{name}.py")
     repair_paths = (
+        "data/phase13/observability/registration_packet_v2.json",
+        "data/phase13/main/track1_authority_state_sync_checkpoint_v1.json",
         "data/phase12/registries/candidate_registry_v2.json",
         "data/phase13/main/legacy_dc_rs_intervention_registry_v2.json",
         "data/phase13/rag/legacy_seal_v2.json",
@@ -83,6 +86,19 @@ def staged(tmp_path, builder_source):
 def publication():
     module = importlib.import_module("memcontam.readiness.phase13_v3_publication")
     return module.publish_artifacts
+
+
+def test_phase4_witness_reserves_frozen_retry_entitlements(staged):
+    from memcontam.readiness.phase13_v3_builder_inputs import phase4_costs
+
+    _module, root, output, _authority = staged
+    from memcontam.readiness.phase13_v3_builder import validate_mr_p4
+
+    costs = phase4_costs(validate_mr_p4(root, _authority, output))
+    assert costs.base.retry_reservations
+    assert costs.witness.totals.retry_reserve_krw == sum(
+        row.reservation_krw for row in costs.base.retry_reservations)
+    assert costs.witness.totals.retry_reserve_krw <= 40000
 
 
 def test_builder_publishes_complete_bytes_without_replacing_rename(tmp_path, monkeypatch):
@@ -175,7 +191,7 @@ def test_cli_exposes_exact_stages_without_implicit_execution(tmp_path):
     script = scripts / "build_phase13_corrected_main_closure.py"
     shutil.copyfile(ROOT / "scripts" / script.name, script)
     result = subprocess.run(("bash", "-c", 'source .omo/evidence/phase13_shell_contract.sh; phase13_python "$@"',
-        "--", str(script), "--help"), cwd=ROOT, capture_output=True, text=True)
+        "--", str(script), "--help"), cwd=ROOT, capture_output=True, text=True, check=False)
     assert result.returncode == 0
     assert "{mr-p4,mr-p5,mr-p6,validate,audit}" in result.stdout
 

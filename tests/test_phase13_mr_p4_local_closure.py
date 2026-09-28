@@ -17,10 +17,6 @@ from memcontam.readiness.phase13_main_readiness import (
     Phase13MainReadinessError,
     validate_main_readiness,
 )
-from memcontam.readiness.phase13_v3_builder import validate_mr_p4
-from memcontam.readiness.phase13_v3_builder_inputs import production
-from memcontam.readiness.phase13_v3_conformance import ConformanceV3
-from memcontam.readiness.phase13_v3_cost_models import canonical_bytes, digest
 from memcontam.readiness.phase13_observability_models import Phase13ObservabilityFixture
 from memcontam.readiness.phase13_production_observability import (
     ProductionObservabilityArchive,
@@ -28,7 +24,10 @@ from memcontam.readiness.phase13_production_observability import (
     ProviderRequestRecord,
     conformance_archive,
 )
-
+from memcontam.readiness.phase13_v3_builder import validate_mr_p4
+from memcontam.readiness.phase13_v3_builder_inputs import production
+from memcontam.readiness.phase13_v3_conformance import ConformanceV3
+from memcontam.readiness.phase13_v3_cost_models import canonical_bytes, digest
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "data/phase13/main/mr_p4"
@@ -78,8 +77,9 @@ def test_local_mr_p4_package_materializes_every_policy_fixed_registry(staged: St
     assert report.first_freeze.concrete_seed_ids == tuple(range(10))
     assert all(task.H_run == 50 for task in report.first_freeze.registry.tasks.values())
     assert all(predicate.passed for predicate in conformance.predicates)
-    assert report.authority.registry.transport_retries == 0
-    assert report.authority.registry.max_transport_attempts == 1
+    assert report.authority.registry.default_max_transport_attempts == 1
+    assert report.authority.registry.entitled_eligible_max_transport_attempts == 2
+    assert report.authority.registry.maximum_retries_after_initial_attempt == 1
     assert conformance.measured_trajectories == 0
     assert _conformance_archive().u_t_status == "NOT_REGISTERED_FOR_CURRENT_MAIN"
 
