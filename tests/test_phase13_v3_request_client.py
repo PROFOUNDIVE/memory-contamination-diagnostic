@@ -1,16 +1,15 @@
 from __future__ import annotations
-from .phase13_corrective_identity import corrective_identity
 
 import threading
 from typing import Never
 
 import pytest
-from pydantic import JsonValue
+from pydantic import JsonValue, TypeAdapter
 
 from memcontam.baselines.contracts import BaselineExecutionOutcome
 from memcontam.clients.base import LLMResponse
 from memcontam.experiment.phase12.runtime_registry import NOMEM_SINGLETON, RuntimeTrialResult
-from memcontam.readiness.phase13_main_request_client import MainRequestClientV3
+from memcontam.readiness.phase13_main_request_client import MainRequestClientV3, TerminalTrialV3
 from memcontam.readiness.phase13_main_request_dispatch import (
     DispatchTechnicalFailureV3,
     ProductionRequestDispatcherV3,
@@ -21,20 +20,24 @@ from memcontam.readiness.phase13_v3_request import (
     PackageBindingV3,
     ParentTrajectoryV3,
     RequestKeyV3,
+    Stage,
 )
 from memcontam.readiness.phase13_v3_terminal_ledger import TerminalLedgerV3
 from memcontam.readiness.phase13_v3_terminal_models import TerminalEvidenceError
+
+from .phase13_corrective_identity import corrective_identity
 
 ClientFixture = tuple[MainRequestClientV3, TerminalLedgerV3, tuple[RequestKeyV3, ...], dict[str, int]]
 
 
 @pytest.fixture
-def client_fixture(tmp_path, monkeypatch):
+def client_fixture(tmp_path, monkeypatch, request):
     import memcontam.readiness.phase13_main_request_dispatch as dispatch
 
     monkeypatch.setattr(dispatch, "count_prompt_tokens", lambda *_: 1)
     binding = PackageBindingV3(identity=corrective_identity(), package_sha256="b" * 64, authorization_sha256="c" * 64)
-    keys = tuple(RequestKeyV3(parent_id="a" * 64, stage="no_memory_generate", ordinal=index) for index in range(2))
+    stage = TypeAdapter(Stage).validate_python(getattr(request, "param", "no_memory_generate"))
+    keys = tuple(RequestKeyV3(parent_id="a" * 64, stage=stage, ordinal=index) for index in range(2))
     counts = {"constructor": 0, "requests": 0}
 
     class Provider:
@@ -104,6 +107,66 @@ def test_frozen_entitlement_retries_one_unambiguous_transport_failure(client_fix
     assert counts == {"constructor": 2, "requests": 2}
 
 
+def test_successful_retry_keeps_unknown_first_attempt_cost_until_reconciled(client_fixture):
+    from memcontam.readiness.phase13_v3_cost_models import CostError
+
+    client, ledger, keys, counts = client_fixture
+
+    class Provider:
+        def send_compiled_v3(self, compiled, before_request):
+            before_request()
+            counts["requests"] += 1
+            if counts["requests"] == 1:
+                raise RetryableTimeout()
+            return LLMResponse("final: 24", {"usage": {"input_tokens": 1, "output_tokens": 1}}, {}, 0)
+
+    client.dispatcher = ProductionRequestDispatcherV3(
+        ledger, client.dispatcher.binding, client.dispatcher.parents,
+        provider_factory=lambda _binding: Provider(),
+        retry_entitlements=frozenset({keys[0].dispatch_id}),
+    )
+
+    client.trial(lambda: (call(client), RuntimeTrialResult(
+        BaselineExecutionOutcome("succeeded"), NOMEM_SINGLETON))[1],
+        lambda: b"immutable native bytes")
+    state = ledger.state(keys[0].dispatch_id)
+    assert state.kind == "COMPLETED"
+    assert len(state.attempt_costs) == 2
+    with pytest.raises(TerminalEvidenceError, match="MAIN_TERMINAL_COST_UNKNOWN"):
+        client.realized_cost_krw()
+    with pytest.raises(CostError, match="MAIN_TERMINAL_COST_UNKNOWN"):
+        ledger.realized_cost_krw()
+    assert ledger.guard is not None
+    reopened = TerminalLedgerV3.open_guarded(ledger.guard, ledger.binding)
+    try:
+        assert len(reopened.state(keys[0].dispatch_id).attempt_costs) == 2
+        with pytest.raises(CostError, match="MAIN_TERMINAL_COST_UNKNOWN"):
+            reopened.realized_cost_krw()
+        reopened.reconcile_cost(keys[0].dispatch_id, {"usage": {"input_tokens": 2, "output_tokens": 1}},
+                                "f" * 64, attempt_index=0)
+        assert reopened.realized_cost_krw() > 0
+        assert client.realized_cost_krw() == reopened.realized_cost_krw()
+    finally:
+        reopened.close()
+
+
+def test_retryable_event_cannot_hide_observed_first_attempt_cost() -> None:
+    from memcontam.readiness.phase13_v3_terminal_models import RetryableAttemptFailureV3
+
+    with pytest.raises(ValueError, match="MAIN_RETRY_ENTITLEMENT_INVALID"):
+        RetryableAttemptFailureV3.model_validate({
+            "schema_version": "phase13_main_dispatch_evidence_v3", "kind": "RETRYABLE_ATTEMPT_FAILURE",
+            "unit_id": "a" * 64, "revision": 3, "previous_hash": "b" * 64,
+            "compiled": {"stage": "no_memory_generate", "token_count": 1,
+                         "compiled_request_hash": "c" * 64, "immutable_input_hash": "d" * 64,
+                         "native_state_hash": "e" * 64},
+            "attempt_index": 0, "failure_code": "TIMEOUT_BEFORE_SEMANTIC_PAYLOAD",
+            "observation_hash": "f" * 64,
+            "cost": {"usage": {"input_tokens": 1, "output_tokens": 1}},
+            "realized_cost_krw": None,
+        })
+
+
 def test_transport_failure_without_frozen_entitlement_is_not_retried(client_fixture):
     client, ledger, keys, counts = client_fixture
 
@@ -115,12 +178,44 @@ def test_transport_failure_without_frozen_entitlement_is_not_retried(client_fixt
 
     client.dispatcher._factory = lambda _binding: Provider()
 
-    with pytest.raises(DispatchTechnicalFailureV3, match="MAIN_ATTEMPTED_PROVIDER_FAILURE"):
-        client.trial(
-            lambda: (call(client), RuntimeTrialResult(BaselineExecutionOutcome("succeeded"), NOMEM_SINGLETON))[1],
-            lambda: b"immutable native bytes",
-        )
+    terminal = client.trial(
+        lambda: (call(client), RuntimeTrialResult(BaselineExecutionOutcome("succeeded"), NOMEM_SINGLETON))[1],
+        lambda: b"immutable native bytes",
+    )
 
+    assert isinstance(terminal, TerminalTrialV3)
+    assert terminal.result is None
+    assert terminal.failure.code == "MAIN_ATTEMPTED_PROVIDER_FAILURE"
+    assert ledger.state(keys[0].dispatch_id).kind == "ATTEMPTED_PROVIDER_FAILURE"
+    assert counts["requests"] == 1
+
+
+def test_provider_failure_preserves_actual_failed_baseline_result(client_fixture):
+    client, ledger, keys, counts = client_fixture
+
+    class Provider:
+        def send_compiled_v3(self, compiled, before_request):
+            before_request()
+            counts["requests"] += 1
+            raise RuntimeError("provider unavailable")
+
+    client.dispatcher._factory = lambda _binding: Provider()
+
+    def execute():
+        try:
+            call(client)
+        except DispatchTechnicalFailureV3:
+            return RuntimeTrialResult(BaselineExecutionOutcome("failed", error_type="ProviderCallFailure",
+                failure_disposition="provider_call_failed", scientific_ineligibility_reason="provider_call_failed"),
+                NOMEM_SINGLETON)
+        pytest.fail("provider did not fail")
+
+    terminal = client.trial(execute, lambda: b"immutable native bytes")
+
+    assert isinstance(terminal, TerminalTrialV3)
+    assert terminal.result is not None
+    assert terminal.result.outcome.failure_disposition == "provider_call_failed"
+    assert terminal.failure.code == "MAIN_ATTEMPTED_PROVIDER_FAILURE"
     assert ledger.state(keys[0].dispatch_id).kind == "ATTEMPTED_PROVIDER_FAILURE"
     assert counts["requests"] == 1
 
@@ -162,6 +257,11 @@ def test_restart_after_durable_retryable_failure_issues_only_second_attempt(
         )
     assert ledger.state(keys[0].dispatch_id).kind == "RETRYABLE_ATTEMPT_FAILURE"
 
+    ledger.reconcile_cost(keys[0].dispatch_id,
+        {"usage": {"input_tokens": 2, "output_tokens": 1}}, "f" * 64, attempt_index=0)
+    assert ledger.state(keys[0].dispatch_id).kind == "RETRYABLE_ATTEMPT_FAILURE"
+    ledger.require_known_costs()
+
     resumed = ProductionRequestDispatcherV3(
         ledger, dispatcher.binding, dispatcher.parents,
         provider_factory=factory, retry_entitlements=frozenset({keys[0].dispatch_id}),
@@ -175,6 +275,72 @@ def test_restart_after_durable_retryable_failure_issues_only_second_attempt(
 
     assert ledger.state(keys[0].dispatch_id).kind == "COMPLETED"
     assert counts == {"constructor": 2, "requests": 2}
+
+
+@pytest.mark.parametrize("client_fixture", (
+    "no_memory_generate", "full_history_generate", "rag_generate", "bot_problem_distill",
+    "bot_instantiate_solve", "bot_thought_distill", "reflexion_generate",
+    "reflexion_reflect", "dc_rs_generate", "dc_rs_synthesize",
+), indirect=True)
+def test_entitled_second_failure_exhausts_once_after_first_attempt_crash_and_reopen(
+    client_fixture, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, ledger, keys, counts = client_fixture
+    assert keys[0].stage == keys[1].stage
+    attempted_indices: list[int] = []
+
+    class Provider:
+        def send_compiled_v3(self, compiled, before_request):
+            before_request()
+            counts["requests"] += 1
+            attempted_indices.append(counts["requests"] - 1)
+            raise RetryableTimeout()
+
+    def factory(_binding):
+        return Provider()
+    dispatcher = ProductionRequestDispatcherV3(ledger, client.dispatcher.binding,
+        client.dispatcher.parents, provider_factory=factory,
+        retry_entitlements=frozenset({keys[0].dispatch_id}))
+    client.dispatcher = dispatcher
+    original_append = dispatcher._append
+
+    def crash_after_first(key, kind, extra=None):
+        original_append(key, kind, extra)
+        if kind == "RETRYABLE_ATTEMPT_FAILURE":
+            raise SimulatedCrash()
+
+    monkeypatch.setattr(dispatcher, "_append", crash_after_first)
+    messages = [{"role": "user", "content": "fixture"}]
+
+    def invoke():
+        return client.trial(lambda: (client.chat(messages, "gpt-5.6-luna",
+            {"method_stage": keys[0].stage}), RuntimeTrialResult(
+                BaselineExecutionOutcome("succeeded"), NOMEM_SINGLETON))[1],
+            lambda: b"immutable native bytes")
+
+    with pytest.raises(SimulatedCrash):
+        invoke()
+    assert attempted_indices == [0]
+    assert ledger.guard is not None
+    reopened = TerminalLedgerV3.open_guarded(ledger.guard, ledger.binding)
+    try:
+        reopened.reconcile_cost(keys[0].dispatch_id,
+            {"usage": {"input_tokens": 1, "output_tokens": 1}}, "f" * 64, attempt_index=0)
+        resumed = ProductionRequestDispatcherV3(reopened, dispatcher.binding, dispatcher.parents,
+            provider_factory=factory, retry_entitlements=frozenset({keys[0].dispatch_id}))
+        resumed.recover()
+        client.dispatcher = resumed
+        terminal = invoke()
+        assert isinstance(terminal, TerminalTrialV3)
+        assert terminal.failure.code == "MAIN_ATTEMPTED_PROVIDER_FAILURE"
+        assert reopened.state(keys[0].dispatch_id).kind == "ATTEMPTED_PROVIDER_FAILURE"
+        assert len(reopened.state(keys[0].dispatch_id).attempt_costs) == 2
+        assert attempted_indices == [0, 1]
+        assert sum(b'"kind":"ATTEMPT_STARTED"' in row for row in reopened.rows()) == 2
+        assert isinstance(invoke(), TerminalTrialV3)
+        assert attempted_indices == [0, 1]
+    finally:
+        reopened.close()
 
 
 def test_trial_ordinal_base_is_schedule_stable_after_skipped_occurrence(client_fixture):
@@ -204,8 +370,11 @@ def test_semantic_failure_from_actual_baseline_outcome_is_terminal(client_fixtur
         return RuntimeTrialResult(BaselineExecutionOutcome("failed", error_type="BaselineOutputError",
             failure_disposition="no_memory_invalid_final_answer", scientific_ineligibility_reason="invalid_final_answer"), NOMEM_SINGLETON)
 
-    with pytest.raises(RuntimeError, match="MAIN_ATTEMPTED_PROVIDER_FAILURE"):
-        client.trial(execute, lambda: b"immutable native bytes")
+    terminal = client.trial(execute, lambda: b"immutable native bytes")
+    assert isinstance(terminal, TerminalTrialV3)
+    assert terminal.result is not None
+    assert terminal.result.outcome.failure_disposition == "no_memory_invalid_final_answer"
+    assert terminal.failure.code == "MAIN_ATTEMPTED_PROVIDER_FAILURE"
     assert ledger.state(keys[0].dispatch_id).kind == "ATTEMPTED_PROVIDER_FAILURE"
     assert counts == {"constructor": 1, "requests": 1}
 

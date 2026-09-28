@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 # noqa: SIZE_OK — provider dispatch markers and failure finalization form one state machine.
-
 import hashlib
 import json
 import os
@@ -158,9 +157,9 @@ class ProductionRequestDispatcherV3:
             cost = ProviderCostEvidence()
             attempt_ready = False
 
-            def start_attempt() -> None:
+            def start_attempt(index: int = attempt_index) -> None:
                 nonlocal attempt_ready
-                self._append(key, "ATTEMPT_STARTED", {"attempt_index": attempt_index})
+                self._append(key, "ATTEMPT_STARTED", {"attempt_index": index})
                 attempt_ready = True
 
             try:
@@ -197,8 +196,9 @@ class ProductionRequestDispatcherV3:
                     self._publish_bytes(key, "retry-observation-0", observation)
                     self._append(key, "RETRYABLE_ATTEMPT_FAILURE", {
                         "attempt_index": 0,
-                        "failure_code": str(getattr(error, "phase13_retry_class")),
+                        "failure_code": str(getattr(error, "phase13_retry_class", None)),
                         "observation_hash": hashlib.sha256(observation).hexdigest(),
+                        "cost": cost.model_dump(mode="json"), "realized_cost_krw": None,
                     })
                     attempt_index = 1
                     continue

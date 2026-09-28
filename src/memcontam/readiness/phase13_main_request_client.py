@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import TypeVar
 
 from pydantic import TypeAdapter
@@ -11,11 +12,18 @@ from memcontam.memory.checkpoint_v3 import NativeState, serialize_checkpoint
 
 from .phase13_main_request_dispatch import DispatchTechnicalFailureV3, ProductionRequestDispatcherV3
 from .phase13_v3_cost_actual import reconcile_actual
+from .phase13_v3_cost_models import CostError
 from .phase13_v3_request import MessageV3, RequestKeyV3, RequestMaterialV3, Stage
 from .phase13_v3_terminal_models import TerminalEvidenceError
 
 StateT = TypeVar("StateT")
 _STAGE: TypeAdapter[Stage] = TypeAdapter(Stage)
+
+
+@dataclass(frozen=True, slots=True)
+class TerminalTrialV3:
+    failure: DispatchTechnicalFailureV3
+    result: RuntimeTrialResult | None
 
 
 def native_state_bytes(serialize: Callable[[StateT], StateT], state: StateT) -> bytes:
@@ -47,7 +55,7 @@ class MainRequestClientV3:
         self._failure: ValueError | RuntimeError | OSError | None = None
 
     def trial(self, execute: Callable[[], RuntimeTrialResult], native: Callable[[], bytes],
-              *, ordinal_base: int = 0) -> RuntimeTrialResult:
+              *, ordinal_base: int = 0) -> RuntimeTrialResult | TerminalTrialV3:
         if self._native is not None:
             raise TerminalEvidenceError()
         if type(ordinal_base) is not int or ordinal_base < 0:
@@ -58,9 +66,19 @@ class MainRequestClientV3:
         try:
             result = execute()
             if self._failure is not None:
+                if isinstance(self._failure, DispatchTechnicalFailureV3):
+                    return TerminalTrialV3(self._failure, result)
                 raise self._failure
-            self._acknowledge(result.outcome.status == "succeeded")
+            try:
+                self._acknowledge(result.outcome.status == "succeeded")
+            except DispatchTechnicalFailureV3 as error:
+                return TerminalTrialV3(error, result)
             return result
+        except DispatchTechnicalFailureV3 as error:
+            if not any(self.dispatcher.ledger.state(key.dispatch_id).kind == "ATTEMPTED_PROVIDER_FAILURE"
+                       for key in self._seen_keys):
+                raise
+            return TerminalTrialV3(error, None)
         except (ValueError, KeyError, TypeError) as error:
             try:
                 self._acknowledge(False)
@@ -76,13 +94,23 @@ class MainRequestClientV3:
             self._pending = None
             self.dispatcher.acknowledge(key, response, semantic_success=success)
 
+    @property
+    def request_keys(self) -> tuple[RequestKeyV3, ...]:
+        return tuple(self._seen_keys)
+
     def realized_cost_krw(self) -> int:
         total = 0
         for key in self._seen_keys:
-            cost = self.dispatcher.ledger.state(key.dispatch_id).attempted_cost
-            if cost is None:
+            costs = self.dispatcher.ledger.state(key.dispatch_id).attempt_costs
+            if not costs:
                 raise TerminalEvidenceError("MAIN_TERMINAL_COST_UNKNOWN")
-            total += reconcile_actual(cost).realized_krw
+            for cost in costs:
+                try:
+                    total += reconcile_actual(cost).realized_krw
+                except CostError as error:
+                    if error.code != "MAIN_TERMINAL_COST_UNKNOWN":
+                        raise
+                    raise TerminalEvidenceError("MAIN_TERMINAL_COST_UNKNOWN") from error
         return total
 
     def chat(self, messages: list[dict[str, str]], model: str, config: dict) -> LLMResponse:

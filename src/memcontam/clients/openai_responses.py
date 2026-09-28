@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-import inspect
+# ruff: noqa: B010
 import hashlib
+import inspect
 import json
 import os
 import time
-from typing import Any, Callable, Mapping, cast
+from collections.abc import Callable, Mapping
+from typing import Any, cast
 
 import httpx
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
@@ -16,7 +18,10 @@ from memcontam.clients.config import ProviderConfig
 from memcontam.clients.cost_guard import CostGuard
 from memcontam.readiness.phase13_readiness0_budget import BudgetedResponses, ResponsesResource
 from memcontam.readiness.phase13_v3_request import (
-    CompiledProviderRequestV3, PackageBindingV3, STAGES, compile_request_bytes,
+    STAGES,
+    CompiledProviderRequestV3,
+    PackageBindingV3,
+    compile_request_bytes,
 )
 
 
@@ -238,11 +243,11 @@ class OpenAIResponsesClient:
                 "temperature": compiled.material.temperature, "top_p": compiled.material.top_p,
                 "max_output_tokens": STAGES[compiled.key.stage][1],
                 "_phase13_maximum_transport_attempts": 1,
-                "_phase13_execution_envelope_id": "CORE_EXECUTION_ENVELOPE_REGISTRY_V3",
-                "_phase13_execution_envelope_sha256": "f97e30aa81d71a76a3023792314de606073d9d9215cc612927e69050688269ee",
+                "_phase13_execution_envelope_id": "CORE_EXECUTION_ENVELOPE_REGISTRY_V4",
+                "_phase13_execution_envelope_sha256": "5796df90795ff7f753aad753abc1a70499c083fdb40dabb7a26afe011e58be38",
                 "_phase13_maximum_input_tokens": STAGES[compiled.key.stage][0],
-                "_phase13_terminal_failure_contract_id": "CORE_TERMINAL_TECHNICAL_MISSINGNESS_V1",
-                "_phase13_terminal_failure_contract_sha256": "9bbcdd9dd1686af034f7c0d2114ac86d5837a07de0cc6ba8fef7940bbc822b75",
+                "_phase13_terminal_failure_contract_id": "CORE_TERMINAL_TECHNICAL_MISSINGNESS_V2",
+                "_phase13_terminal_failure_contract_sha256": "599eb322efdfea397c227fdad25f2d9371c444392eb68ef943a04748467d16bd",
                 "_phase13_compiled_v3": compiled, "_phase13_before_request": before_request,
             },
         )
