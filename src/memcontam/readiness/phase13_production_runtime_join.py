@@ -4,10 +4,21 @@ import hashlib
 import json
 from typing import TYPE_CHECKING
 
-from memcontam.baselines.contracts import BaselineExecutionOutcome
+from memcontam.baselines.bot_solve import parse_bot_solve_result
+from memcontam.baselines.common import parse_final_answer
+from memcontam.baselines.contracts import FAILURE_TAXONOMY, BaselineExecutionOutcome
+from memcontam.evaluation.phase13_observability_models import Phase13TrialEvidence
+from memcontam.evaluation.phase13_observability_registration import (
+    AUTHORITY_HASHES,
+    ObservabilityRegistrationPacket,
+    registered_failure_class,
+    registered_verifier_result,
+)
+from memcontam.experiment.phase12.runtime_registry import RuntimeTrialResult
 from memcontam.experiment.phase13_ordinary_runtime import (
     ProspectiveOrdinaryResult,
     ProspectiveOrdinaryRun,
+    _ordered_tasks,
 )
 from memcontam.logging.schema import MethodCall
 from memcontam.readiness.phase13_production_runtime_evidence import (
@@ -15,12 +26,14 @@ from memcontam.readiness.phase13_production_runtime_evidence import (
     trial_id,
 )
 from memcontam.readiness.phase13_production_runtime_models import (
+    ProductionNoMemTrialEvidence,
     ProductionOrdinaryRunIdentity,
     ProductionRuntimeJoinError,
 )
+from memcontam.tasks.base import TaskInstance
 
 if TYPE_CHECKING:
-    from memcontam.readiness.phase13_production_observability import (
+    from .phase13_production_observability import (
         ProductionObservabilityArchive,
     )
 
@@ -29,6 +42,21 @@ def production_archive_from_ordinary(
     run: ProspectiveOrdinaryRun,
     result: ProspectiveOrdinaryResult,
     identity: ProductionOrdinaryRunIdentity,
+) -> ProductionObservabilityArchive:
+    return _archive_from_ordinary(run, result, identity, partial=False)
+
+
+def production_archive_from_completed_prefix(
+    run: ProspectiveOrdinaryRun,
+    result: ProspectiveOrdinaryResult,
+    identity: ProductionOrdinaryRunIdentity,
+) -> ProductionObservabilityArchive:
+    return _archive_from_ordinary(run, result, identity, partial=True)
+
+
+def _archive_from_ordinary(
+    run: ProspectiveOrdinaryRun, result: ProspectiveOrdinaryResult,
+    identity: ProductionOrdinaryRunIdentity, *, partial: bool,
 ) -> ProductionObservabilityArchive:
     from memcontam.readiness.phase13_production_observability import (
         ProductionObservabilityArchive,
@@ -56,11 +84,14 @@ def production_archive_from_ordinary(
         result.task_name != run.task_name
         or result.baseline != run.baseline
         or result.arm != run.arm
-        or not result.trials
+        or (not result.trials and not partial)
         or len(result.trials) > len(result.sample_ids)
-        or (
+        or (partial and (result.terminal_failure is None or any(
+            trial.outcome.status != "succeeded" for trial in result.trials
+        )))
+        or (not partial and
             len(result.trials) < len(result.sample_ids)
-            and result.trials[-1].outcome.status != "failed"
+            and (not result.trials or result.trials[-1].outcome.status != "failed")
         )
     ):
         raise ProductionRuntimeJoinError("PRODUCTION_RESULT_IDENTITY_MISMATCH")
@@ -84,6 +115,9 @@ def production_archive_from_ordinary(
         retries_after_initial_attempt=0,
         semantic_invalid_generic_retry=False,
     )
+    queries = {task.sample_id: task for task in _ordered_tasks(run)}
+    if set(result.sample_ids) - set(queries):
+        raise ProductionRuntimeJoinError("PRODUCTION_SAMPLE_ORDER_MISMATCH")
     records = tuple(
         ProductionTrialRecord(
             execution_template_id=identity.execution_template_id,
@@ -93,6 +127,7 @@ def production_archive_from_ordinary(
             ordered_sample_ids_sha256=identity.ordered_sample_ids_sha256,
             request=request,
             parsed_answer=trial.outcome.parsed_answer,
+            task_instance=queries[sample_id],
             method_calls=tuple(
                 call for call in trial.outcome.method_calls if isinstance(call, MethodCall)
             ),
@@ -104,16 +139,12 @@ def production_archive_from_ordinary(
             terminal_provider_evidence=(
                 None
                 if trial.outcome.status == "succeeded"
-                else terminal_provider_evidence(_terminal_method_call(trial.outcome))
+                else terminal_provider_evidence(_terminal_method_call(trial.outcome),
+                                                trial.outcome.failure_disposition)
             ),
-            evidence=build_production_trial_evidence(
-                run,
-                trial,
-                identity,
-                sample_id,
-                suffix_order,
-                checkpoint_index,
-            ),
+            terminal_failure_code=(None if trial.outcome.status == "succeeded"
+                                   else trial.outcome.failure_disposition),
+            evidence=_classified_evidence(run, trial, identity, queries[sample_id], sample_id, suffix_order, checkpoint_index),
         )
         for suffix_order, (sample_id, trial) in enumerate(
             zip(result.sample_ids, result.trials, strict=False), start=1
@@ -127,11 +158,80 @@ def production_archive_from_ordinary(
     )
 
 
+def _classified_evidence(
+    run: ProspectiveOrdinaryRun, trial: RuntimeTrialResult, identity: ProductionOrdinaryRunIdentity,
+    task: TaskInstance, sample_id: str, suffix_order: int, checkpoint_index: int | None,
+) -> Phase13TrialEvidence | ProductionNoMemTrialEvidence:
+    evidence = build_production_trial_evidence(run, trial, identity, sample_id, suffix_order, checkpoint_index)
+    if evidence.verified_outcome is None or trial.outcome.parsed_answer is None:
+        return evidence
+    failure = registered_failure_class(task, trial.outcome.parsed_answer, evidence.verified_outcome)
+    return evidence.model_copy(update={"trial": evidence.trial.model_copy(update={"failure_class": failure})})
+
+
+def validate_classifier_joins(
+    archive: ProductionObservabilityArchive, packet: ObservabilityRegistrationPacket,
+    frozen_tasks: tuple[TaskInstance, ...] | None,
+) -> None:
+    from .phase13_production_observability import ProductionObservabilityError
+
+    if packet.authority_hashes != AUTHORITY_HASHES or archive.schema_version != "phase13_production_observability_archive_v2":
+        return
+    if frozen_tasks is None:
+        raise ProductionObservabilityError("PRODUCTION_CLASSIFIER_JOIN_MISMATCH")
+    source = {task.sample_id: task for task in frozen_tasks}
+    if len(source) != len(frozen_tasks) or any(
+        record.task_instance is None or not record.evidence.trial_id.endswith(f":{record.task_instance.sample_id}")
+        or record.task_instance.task_name != record.evidence.task
+        or record.task_instance != source.get(record.task_instance.sample_id) for record in archive.records
+    ):
+        raise ProductionObservabilityError("PRODUCTION_CLASSIFIER_JOIN_MISMATCH")
+    for record in archive.records:
+        if (isinstance(record.evidence, ProductionNoMemTrialEvidence)
+            and (len(record.method_calls) != 1 or record.method_calls[0].stage != "no_memory_generate")):
+            raise ProductionObservabilityError("PRODUCTION_CLASSIFIER_JOIN_MISMATCH")
+        if record.parsed_answer is None:
+            if record.evidence.trial.execution_status == "completed" or record.evidence.verified_outcome is not None:
+                raise ProductionObservabilityError("PRODUCTION_CLASSIFIER_JOIN_MISMATCH")
+            continue
+        answer_call_id = (record.evidence.target_set.answer_call_id
+                          if isinstance(record.evidence, Phase13TrialEvidence) else None)
+        answer_calls = tuple(call for call in record.method_calls if call.call_id == answer_call_id) if answer_call_id else record.method_calls[-1:]
+        if len(answer_calls) != 1 or answer_calls[0].raw_response is None:
+            raise ProductionObservabilityError("PRODUCTION_CLASSIFIER_JOIN_MISMATCH")
+        try:
+            raw_answer = answer_calls[0].raw_response
+            if record.evidence.baseline == "bot_style":
+                raw_answer = parse_bot_solve_result(raw_answer).final_answer
+            parsed = parse_final_answer(raw_answer)
+        except ValueError as error:
+            raise ProductionObservabilityError("PRODUCTION_CLASSIFIER_JOIN_MISMATCH") from error
+        if parsed != record.parsed_answer:
+            raise ProductionObservabilityError("PRODUCTION_CLASSIFIER_JOIN_MISMATCH")
+        if record.evidence.trial.execution_status == "failed":
+            expected_failure = next((kind for disposition, (kind, _reason) in FAILURE_TAXONOMY.items()
+                                     if disposition == record.terminal_failure_code), None)
+            if (record.evidence.verified_outcome is not None or expected_failure is None
+                or record.evidence.trial.failure_class != expected_failure
+                or record.terminal_provider_evidence is None
+                or record.terminal_provider_evidence.trigger_class != "post_response_semantic_failure"):
+                raise ProductionObservabilityError("PRODUCTION_CLASSIFIER_JOIN_MISMATCH")
+            continue
+        if record.task_instance is not None and (
+            record.evidence.verified_outcome != int(registered_verifier_result(record.task_instance, parsed).is_correct)
+        ):
+            raise ProductionObservabilityError("PRODUCTION_CLASSIFIER_JOIN_MISMATCH")
+        if (record.task_instance is not None and record.evidence.verified_outcome is not None
+            and record.evidence.trial.failure_class != registered_failure_class(
+                record.task_instance, parsed, record.evidence.verified_outcome
+            )):
+            raise ProductionObservabilityError("PRODUCTION_CLASSIFIER_JOIN_MISMATCH")
+
+
 def _terminal_method_call(outcome: BaselineExecutionOutcome) -> MethodCall:
     calls = tuple(call for call in outcome.method_calls if isinstance(call, MethodCall))
-    matching = tuple(call for call in calls if call.call_id == outcome.answer_call_id)
-    call = matching[-1] if matching else (calls[-1] if calls else None)
-    if call is None or call.error_type is None:
+    call = calls[-1] if calls else None
+    if call is None or (call.error_type is None and call.raw_response is None):
         raise ProductionRuntimeJoinError("PRODUCTION_TERMINAL_CALL_REQUIRED")
     return call
 
