@@ -3,8 +3,9 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_CEILING
+from decimal import ROUND_CEILING, Decimal
 from pathlib import Path
 from types import MappingProxyType
 from typing import Annotated, Final, Literal, TypeAlias, assert_never
@@ -13,17 +14,21 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError, m
 
 from memcontam.logging.schema import MethodCall
 from memcontam.readiness.phase13_cost_policy import load_cost_policy_bundle
+from memcontam.readiness.phase13_cost_policy_models import Sha256
 from memcontam.readiness.phase13_main_production import ProductionObject
 from memcontam.readiness.phase13_main_runner_models import InFlightEvidence
 from memcontam.readiness.phase13_production_observability import (
     ProductionObservabilityArchive,
     ProviderRequestRecord,
 )
+from memcontam.readiness.phase13_production_runtime_models import ProductionOrdinaryRunIdentity
 from memcontam.readiness.phase13_readiness0_evidence_models import (
     ProviderAuthorityContract,
     ProviderRequestContract,
 )
-from memcontam.readiness.phase13_production_runtime_models import ProductionOrdinaryRunIdentity
+from memcontam.readiness.phase13_v3_cost_actual import reconcile_actual
+from memcontam.readiness.phase13_v3_cost_models import ActivatedPolicyV3, ProviderCostEvidence
+from memcontam.readiness.phase13_v3_retry import AUTHORITY_TO_STAGE
 
 
 class MainEvidenceValidationError(ValueError):
@@ -34,6 +39,16 @@ class MainEvidenceValidationError(ValueError):
 
 class _FrozenModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+
+class MainMethodCall(MethodCall):
+    dispatch_id: Sha256
+
+
+RecordedMethodCall: TypeAlias = Annotated[
+    MainMethodCall | MethodCall,
+    Field(union_mode="left_to_right"),
+]
 
 
 class MainRuntimeEvidence(_FrozenModel):
@@ -108,7 +123,7 @@ class MainUnitEvidence(_FrozenModel):
     memory_baseline: str | None
     arm: str = Field(min_length=1)
     evidence: UnitEvidence
-    provider_calls: tuple[MethodCall, ...]
+    provider_calls: tuple[RecordedMethodCall, ...]
     realized_cost_krw: int = Field(ge=0)
 
 
@@ -128,6 +143,40 @@ class DispatchEvidenceInput:
     evidence: JsonValue
     provider_calls: tuple[MethodCall, ...]
     claimed_cost_krw: int
+    current_policy: ActivatedPolicyV3 | None = None
+    attempt_costs: tuple[tuple[str, tuple[ProviderCostEvidence, ...]], ...] = ()
+
+
+class CurrentProviderAuthorityContract(_FrozenModel):
+    maximum_input_tokens: int = Field(gt=0)
+    maximum_output_tokens: int = Field(gt=0)
+    execution_envelope_id: str = Field(min_length=1)
+    execution_envelope_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    failure_contract_id: str = Field(min_length=1)
+    failure_contract_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    terminal_failure_contract_id: str = Field(min_length=1)
+    terminal_failure_contract_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    rate_card_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+def current_stage_authority(policy: ActivatedPolicyV3, stage: str) -> tuple[int, dict[str, int | str]]:
+    authority = policy.authority
+    stage_id = next(name for name, native in AUTHORITY_TO_STAGE.items() if native == stage)
+    envelope = next(row for row in authority.registry.stages if row.stage_id == stage_id)
+    rate_hash = hashlib.sha256(json.dumps(
+        policy.rate_card.model_dump(mode="json"), sort_keys=True, separators=(",", ":"),
+    ).encode()).hexdigest()
+    return envelope.maximum_output_tokens, {
+        "maximum_input_tokens": envelope.maximum_input_tokens,
+        "maximum_output_tokens": envelope.maximum_output_tokens,
+        "execution_envelope_id": authority.registry.registry_id,
+        "execution_envelope_sha256": authority.registry.sha256,
+        "failure_contract_id": authority.transport.contract_id,
+        "failure_contract_sha256": authority.transport.sha256,
+        "terminal_failure_contract_id": authority.terminal.contract_id,
+        "terminal_failure_contract_sha256": authority.terminal.sha256,
+        "rate_card_sha256": rate_hash,
+    }
 
 
 _BASELINE_STAGES: Final = MappingProxyType(
@@ -140,7 +189,7 @@ _BASELINE_STAGES: Final = MappingProxyType(
             "bot_thought_distill",
         ),
         "reflexion_style": ("reflexion_generate", "reflexion_reflect"),
-        "dc_rs": ("dc_rs_generate", "dc_rs_synthesize"),
+        "dc_rs": ("dc_rs_synthesize", "dc_rs_generate"),
     }
 )
 _ROOT: Final = Path(__file__).resolve().parents[3]
@@ -157,18 +206,20 @@ def validate_dispatch_evidence(
         any(not call_id for call_id in call_ids)
         or len(call_ids) != len(set(call_ids))
         or not _stages_valid(unit, calls, evidence)
-        or any(not _completed_call(call, evidence.runtime_evidence.request) for call in calls)
+        or any(not _completed_call(call, evidence.runtime_evidence.request, supplied.current_policy) for call in calls)
         or any(not _reconciled_cost(call) for call in calls)
     ):
         raise MainEvidenceValidationError("MAIN_UNIT_PROVIDER_CALLS_INVALID")
-    realized = sum(
-        int(
-            (Decimal(str(call.provider_cost_usd)) * Decimal(1600)).to_integral_value(
-                rounding=ROUND_CEILING
-            )
-        )
-        for call in calls
-    )
+    if supplied.current_policy is not None:
+        by_id = dict(supplied.attempt_costs)
+        if (len(by_id) != len(calls)
+            or any(not isinstance(call, MainMethodCall) or call.dispatch_id not in by_id
+                   or not 1 <= len(by_id[call.dispatch_id]) <= 2 for call in calls)):
+            raise MainEvidenceValidationError("MAIN_UNIT_PROVIDER_CALLS_INVALID")
+        realized = sum(reconcile_actual(cost).realized_krw for costs in by_id.values() for cost in costs)
+    else:
+        realized = sum(int((Decimal(str(call.provider_cost_usd)) * Decimal(1600)).to_integral_value(
+            rounding=ROUND_CEILING)) for call in calls)
     if supplied.claimed_cost_krw != realized:
         raise MainEvidenceValidationError("MAIN_UNIT_REALIZED_COST_MISMATCH")
     return evidence, realized
@@ -179,9 +230,32 @@ def _stages_valid(
     calls: tuple[MethodCall, ...],
     evidence: UnitEvidence,
 ) -> bool:
+    archive = evidence.runtime_evidence.production_observability_archive
+    terminal_records = archive.records if (
+        archive is not None and unit.kind != "CLEAN_PREFIX"
+        and 0 < len(archive.records) <= 50
+        and archive.records[-1].evidence.trial.execution_status == "failed"
+    ) else ()
+    if terminal_records:
+        archived_calls = tuple(call for record in terminal_records for call in record.method_calls)
+        if tuple(call.call_id for call in calls) != tuple(call.call_id for call in archived_calls):
+            return False
     if unit.memory_baseline == "reflexion_style":
-        expected_trials = 1 if unit.kind == "CLEAN_PREFIX" else 50
-        archive = evidence.runtime_evidence.production_observability_archive
+        if terminal_records:
+            completed = terminal_records[:-1]
+            failed = terminal_records[-1]
+            return (
+                _reflexion_stage_sequences_valid(
+                    tuple(call for row in completed for call in row.method_calls), len(completed), unit.kind,
+                    tuple(row.evidence.trial_id for row in completed))
+                and tuple(call.stage for call in failed.method_calls) in {
+                    ("reflexion_generate",),
+                    ("reflexion_generate", "reflexion_reflect"),
+                    ("reflexion_generate", "reflexion_reflect", "reflexion_generate"),
+                    ("reflexion_generate", "reflexion_reflect", "reflexion_generate", "reflexion_reflect"),
+                }
+            )
+        expected_trials = 1 if unit.kind == "CLEAN_PREFIX" else (len(terminal_records) if terminal_records else 50)
         trial_ids = (
             None
             if archive is None
@@ -191,6 +265,12 @@ def _stages_valid(
             calls, expected_trials, unit.kind, trial_ids
         )
     stages = tuple(call.stage for call in calls)
+    if terminal_records:
+        expected = ("no_memory_generate",) if unit.memory_baseline is None else _BASELINE_STAGES[unit.memory_baseline]
+        return (all(tuple(call.stage for call in record.method_calls) == expected for record in terminal_records[:-1])
+                and 0 < len(terminal_records[-1].method_calls) <= len(expected)
+                and tuple(call.stage for call in terminal_records[-1].method_calls)
+                == expected[:len(terminal_records[-1].method_calls)])
     return Counter(stages) == _expected_stages(unit)
 
 
@@ -292,12 +372,33 @@ def load_durable_reconciliation_evidence(
     return record
 
 
-def _completed_call(call: MethodCall, runtime_request: ProviderRequestRecord) -> bool:
+def _completed_call(call: MethodCall, runtime_request: ProviderRequestRecord,
+                    current_policy: ActivatedPolicyV3 | None) -> bool:
+    authority: ProviderAuthorityContract | CurrentProviderAuthorityContract
+    expected_authority: Mapping[str, int | str]
     try:
         request = ProviderRequestContract.model_validate(call.provider_request_contract)
-        authority = ProviderAuthorityContract.model_validate(call.provider_authority_contract)
-        bundle = load_cost_policy_bundle(_ROOT)
-        stage = next(row for row in bundle.registry.stages if row.semantic_stage_id == call.stage)
+        if current_policy is None:
+            authority = ProviderAuthorityContract.model_validate(call.provider_authority_contract)
+            bundle = load_cost_policy_bundle(_ROOT)
+            stage = next(row for row in bundle.registry.stages if row.semantic_stage_id == call.stage)
+            maximum_output_tokens = stage.maximum_output_tokens
+            expected_authority = {
+                "maximum_input_tokens": stage.maximum_input_tokens,
+                "maximum_output_tokens": stage.maximum_output_tokens,
+                "execution_envelope_id": bundle.registry.registry_id,
+                "execution_envelope_sha256": bundle.registry.registry_hash,
+                "failure_contract_id": bundle.retry.contract_id,
+                "failure_contract_sha256": bundle.retry.contract_hash,
+                "terminal_failure_contract_id": bundle.retry.terminal_failure_contract_id,
+                "terminal_failure_contract_sha256": bundle.retry.terminal_failure_contract_sha256,
+                "rate_card_sha256": hashlib.sha256(json.dumps(
+                    bundle.proof.rate_card.model_dump(mode="json"), sort_keys=True, separators=(",", ":"),
+                ).encode()).hexdigest(),
+            }
+        else:
+            authority = CurrentProviderAuthorityContract.model_validate(call.provider_authority_contract)
+            maximum_output_tokens, expected_authority = current_stage_authority(current_policy, call.stage)
     except (StopIteration, ValidationError, ValueError):
         return False
     expected_input_sha256 = hashlib.sha256(
@@ -306,13 +407,6 @@ def _completed_call(call: MethodCall, runtime_request: ProviderRequestRecord) ->
             sort_keys=True,
             separators=(",", ":"),
             ensure_ascii=False,
-        ).encode()
-    ).hexdigest()
-    expected_rate_card_sha256 = hashlib.sha256(
-        json.dumps(
-            bundle.proof.rate_card.model_dump(mode="json"),
-            sort_keys=True,
-            separators=(",", ":"),
         ).encode()
     ).hexdigest()
     return (
@@ -342,17 +436,8 @@ def _completed_call(call: MethodCall, runtime_request: ProviderRequestRecord) ->
         and request.service_tier == runtime_request.service_tier
         and request.store == runtime_request.store
         and tuple(request.tools) == runtime_request.tools
-        and request.max_output_tokens == stage.maximum_output_tokens
-        and authority.maximum_input_tokens == stage.maximum_input_tokens
-        and authority.maximum_output_tokens == stage.maximum_output_tokens
-        and authority.execution_envelope_id == bundle.registry.registry_id
-        and authority.execution_envelope_sha256 == bundle.registry.registry_hash
-        and authority.failure_contract_id == bundle.retry.contract_id
-        and authority.failure_contract_sha256 == bundle.retry.contract_hash
-        and authority.terminal_failure_contract_id == bundle.retry.terminal_failure_contract_id
-        and authority.terminal_failure_contract_sha256
-        == bundle.retry.terminal_failure_contract_sha256
-        and authority.rate_card_sha256 == expected_rate_card_sha256
+        and request.max_output_tokens == maximum_output_tokens
+        and authority.model_dump(mode="json") == expected_authority
     )
 
 
@@ -372,6 +457,7 @@ def _reconciled_cost(call: MethodCall) -> bool:
 
 
 def _parse_evidence(unit: ProductionObject, value: JsonValue) -> UnitEvidence:
+    evidence: UnitEvidence
     try:
             match unit.kind:
                 case "CLEAN_PREFIX":
@@ -466,16 +552,16 @@ def _expected_stages(unit: ProductionObject) -> Counter[str]:
 
 __all__ = [
     "DispatchEvidenceInput",
-    "MainRuntimeEvidence",
-    "MainReconciliationEvidence",
     "MainEvidenceValidationError",
+    "MainReconciliationEvidence",
+    "MainRuntimeEvidence",
     "MainUnitEvidence",
     "MemoryUnitEvidence",
     "NoMemUnitEvidence",
     "PrefixCheckpointState",
     "PrefixUnitEvidence",
     "UnitEvidence",
-    "load_durable_unit_evidence",
     "load_durable_reconciliation_evidence",
+    "load_durable_unit_evidence",
     "validate_dispatch_evidence",
 ]
