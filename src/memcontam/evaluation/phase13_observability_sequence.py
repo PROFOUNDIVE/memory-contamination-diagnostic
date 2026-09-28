@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from itertools import pairwise
 from typing import Literal
 
 from memcontam.evaluation.phase13_observability_models import (
@@ -9,6 +10,7 @@ from memcontam.evaluation.phase13_observability_models import (
     Phase13TrialAnalysis,
     Phase13TrialEvidence,
 )
+
 from .phase13_observability_registration import classify_registered_failure
 
 
@@ -54,12 +56,13 @@ def reconstruct_registered_sequence(
     evidence_rows: tuple[Phase13TrialEvidence, ...],
     rows: tuple[Phase13TrialAnalysis, ...],
     lookback: int,
+    failure_classes: Mapping[str, str],
 ) -> tuple[Phase13TrialAnalysis, ...]:
     if len(evidence_rows) != len(rows) or not rows:
         raise Phase13ObservabilityError("SEQUENCE_EVIDENCE_MISMATCH")
     _validate_continuity(evidence_rows)
     failures = tuple(
-        classify_registered_failure(row.task, row.verified_outcome, evidence.trial.failure_class)
+        classify_registered_failure(row.task, row.verified_outcome, evidence.trial.failure_class, failure_classes)
         for evidence, row in zip(evidence_rows, rows, strict=True)
     )
     classes = tuple(metric.value if isinstance(metric.value, str) else None for metric in failures)
@@ -68,7 +71,17 @@ def reconstruct_registered_sequence(
     descendants_by_row = _cumulative_descendants(rows)
     registered_roots = {root_id for row_roots in roots for root_id in row_roots}
     if not registered_roots:
-        return rows
+        return tuple(row.model_copy(update={
+            "failure_class": failures[index],
+            "generic_recurrence": _indicator(has_registered_recurrence(classes[:index + 1], lookback), classes[index]),
+            "exact_lineage_recurrence": MetricValue(status="not_applicable", reason="NO_REGISTERED_TARGET_ROOT"),
+            "exposure_conditioned_recurrence": MetricValue(status="not_applicable", reason="NO_REGISTERED_TARGET_ROOT"),
+            "post_eviction_recurrence": MetricValue(status="not_applicable", reason="NO_REGISTERED_TARGET_ROOT"),
+            "root_retention_duration": MetricValue(status="not_applicable", reason="NO_REGISTERED_TARGET_ROOT"),
+            "prompt_retention_duration": MetricValue(status="not_applicable", reason="NO_REGISTERED_TARGET_ROOT"),
+            "descendant_retention_duration": MetricValue(status="not_applicable", reason="NO_REGISTERED_TARGET_ROOT"),
+        })
+                     for index, row in enumerate(rows))
     if len(registered_roots) != 1:
         raise Phase13ObservabilityError("FIXTURE_EXACTLY_ONE_REGISTERED_ROOT_REQUIRED")
     registered_root = next(iter(registered_roots))
@@ -102,7 +115,9 @@ def reconstruct_registered_sequence(
             and bool(exposed_roots[prior] & exposed_roots[index])
             for prior in range(prior_start, index)
         ) if classes[index] is not None else False
-        post_eviction = _post_eviction(index, classes, exposed_roots, evictions, lookback)
+        post_eviction = (MetricValue(status="not_applicable", reason="BASELINE_HAS_NO_EXACT_ROOT_EVICTION")
+                         if row.baseline == "rag_frozen" else
+                         _post_eviction(index, classes, exposed_roots, evictions, lookback))
         result.append(
             row.model_copy(
                 update={
@@ -172,7 +187,7 @@ def _validate_continuity(rows: tuple[Phase13TrialEvidence, ...]) -> None:
     trial_ids = {row.trial_id for row in rows}
     if len(trial_ids) != len(rows):
         raise Phase13ObservabilityError("ORDINARY_SEQUENCE_CONTINUITY_MISMATCH")
-    for previous, current in zip(rows, rows[1:]):
+    for previous, current in pairwise(rows):
         if (
             (
                 current.task,

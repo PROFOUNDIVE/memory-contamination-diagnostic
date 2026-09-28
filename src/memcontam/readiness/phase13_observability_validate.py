@@ -8,18 +8,19 @@ from typing import Final
 
 from pydantic import ValidationError
 
+from memcontam.evaluation.phase13_aggregate import summarize_sequence_diagnostics
 from memcontam.evaluation.phase13_observability import (
     Phase13ObservabilityError,
     aggregate_phase13,
     reconstruct_phase13_trial,
     reconstruct_registered_sequence,
 )
-from memcontam.evaluation.phase13_aggregate import summarize_sequence_diagnostics
 from memcontam.evaluation.phase13_observability_registration import (
     BoundIdentity,
     ObservabilityRegistrationPacket,
 )
 from memcontam.readiness.phase13_authority_files import AuthorityFileError, read_regular_nofollow
+
 from .phase13_observability_models import (
     ArtifactIdentity,
     Phase13ObservabilityFixture,
@@ -164,7 +165,7 @@ def reconstruct_fixture(
 ) -> Phase13Reconstruction:
     base_trials = tuple(reconstruct_phase13_trial(trial) for trial in fixture.trials)
     trials = reconstruct_registered_sequence(
-        fixture.trials, base_trials, packet.recurrence_lookback_h
+        fixture.trials, base_trials, packet.recurrence_lookback_h, packet.failure_classes
     )
     sequence_summary = summarize_sequence_diagnostics(trials)
     aggregate_rows = tuple(
