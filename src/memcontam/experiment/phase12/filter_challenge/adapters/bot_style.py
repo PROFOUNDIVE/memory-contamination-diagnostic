@@ -165,9 +165,12 @@ def _run(
 def _as_memory_entry(entry: NativeEntry) -> MemoryEntry:
     return MemoryEntry(
         entry_id=entry.entry_id,
-        content=entry.content,
+        content=entry.template_body or entry.content,
         memory_type="thought_template",
-        metadata={"description": entry.content, "category": "procedure-based"},
+        metadata={
+            "description": entry.retrieval_description or entry.content,
+            "category": entry.category or "procedure-based",
+        },
     )
 
 

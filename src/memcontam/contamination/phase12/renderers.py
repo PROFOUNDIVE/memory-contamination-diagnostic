@@ -74,6 +74,9 @@ def _render(beta: str, candidate: CandidateVariant, checkpoint: Phase12Checkpoin
         content_hash=content_hash,
         direct_parent_ids=(),
         render_id=render_id,
+        retrieval_description=candidate.content if beta == "bot_style" else None,
+        template_body=content if beta == "bot_style" else None,
+        category="procedure-based" if beta == "bot_style" else None,
     )
 
 
