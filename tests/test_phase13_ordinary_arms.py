@@ -10,6 +10,12 @@ import pytest
 from memcontam.baselines.full_history_phase12 import FullHistoryStateV3
 from memcontam.clients.base import LLMResponse
 from memcontam.contamination.phase12.registry import load_candidate_registry
+from memcontam.evaluation.phase13_observability_models import Phase13TrialEvidence
+from memcontam.evaluation.phase13_observability_registration import (
+    ObservabilityRegistrationPacket,
+)
+from memcontam.experiment import phase13_ordinary_runtime as ordinary_runtime
+from memcontam.experiment.phase12.filter_challenge.mft_state_models import JsonValue
 from memcontam.experiment.phase12.game24_runner import Game24RuntimeContext, RuntimeIdentities
 from memcontam.experiment.phase12.live_branch import build_live_reduced_main_branches
 from memcontam.experiment.phase12.runtime_registry import PHASE13_CORE_BASELINE_REGISTRY
@@ -18,12 +24,6 @@ from memcontam.experiment.phase13_ordinary_runtime import (
     ProspectiveOrdinaryRun,
     execute_prospective_ordinary,
 )
-from memcontam.experiment import phase13_ordinary_runtime as ordinary_runtime
-from memcontam.evaluation.phase13_observability_registration import (
-    ObservabilityRegistrationPacket,
-)
-from memcontam.evaluation.phase13_observability_models import Phase13TrialEvidence
-from memcontam.experiment.phase12.filter_challenge.mft_state_models import JsonValue
 from memcontam.memory.checkpoint_v3 import NativeState, serialize_checkpoint
 from memcontam.readiness.phase13_production_observability import validate_production_archive
 from memcontam.readiness.phase13_production_runtime_join import (
@@ -33,15 +33,16 @@ from memcontam.readiness.phase13_production_runtime_join import (
 )
 from memcontam.tasks.base import TaskInstance
 
-
 ARMS: tuple[OrdinaryArm, ...] = ("clean", "correct", "irrelevant", "contam")
 
 
 class _Client:
-    def __init__(self, fail_at: int | None = None, failure: Exception | None = None) -> None:
+    def __init__(self, fail_at: int | None = None, failure: Exception | None = None,
+                 response: str = "final: (6 / (1 - 3 / 4))") -> None:
         self.configs: list[dict[str, JsonValue]] = []
         self.fail_at = fail_at
         self.failure = failure or TimeoutError("terminal provider failure")
+        self.response = response
 
     def chat(
         self,
@@ -54,7 +55,7 @@ class _Client:
         if len(self.configs) == self.fail_at:
             raise self.failure
         return LLMResponse(
-            content="final: (6 / (1 - 3 / 4))",
+            content=self.response,
             raw={"replay": True, "attempts": 1},
             token_usage={"prompt_tokens": 1, "completion_tokens": 1},
             latency_ms=0,
@@ -190,7 +191,7 @@ def test_production_archive_reconstructs_an_ordinary_contamination_trial(
         trajectory_seed=1,
     )
     result = execute_prospective_ordinary(run)
-    packet_raw = Path("data/phase13/observability/registration_packet_v1.json").read_bytes()
+    packet_raw = Path("data/phase13/observability/registration_packet_v2.json").read_bytes()
     packet = ObservabilityRegistrationPacket.model_validate_json(packet_raw)
     packet_sha256 = hashlib.sha256(packet_raw).hexdigest()
 
@@ -216,7 +217,17 @@ def test_production_archive_reconstructs_an_ordinary_contamination_trial(
         ),
     )
 
-    assert validate_production_archive(clean_archive, packet, packet_sha256).status == "PASS"
+    assert validate_production_archive(clean_archive, packet, packet_sha256, frozen_tasks=clean_run.tasks).status == "PASS"
+    from memcontam.evaluation.phase13_observability import reconstruct_phase13_trial
+    from memcontam.evaluation.phase13_observability_sequence import reconstruct_registered_sequence
+    clean_evidence = clean_archive.records[0].evidence
+    assert isinstance(clean_evidence, Phase13TrialEvidence)
+    clean_analysis = reconstruct_registered_sequence(
+        (clean_evidence,), (reconstruct_phase13_trial(clean_evidence),),
+        packet.recurrence_lookback_h, packet.failure_classes,
+    )
+    assert clean_analysis[0].failure_class.status == "supported"
+    assert clean_analysis[0].generic_recurrence.status == "not_applicable"
 
     with pytest.raises(
         ProductionRuntimeJoinError,
@@ -265,10 +276,77 @@ def test_production_archive_reconstructs_an_ordinary_contamination_trial(
             scientific_result=True,
         ),
     )
-    report = validate_production_archive(archive, packet, packet_sha256)
+    report = validate_production_archive(archive, packet, packet_sha256, frozen_tasks=run.tasks)
 
     assert report.status == "PASS"
+    missing_answer = archive.model_copy(update={"records": (
+        archive.records[0].model_copy(update={"parsed_answer": None}),
+    )})
+    with pytest.raises(ValueError, match="PRODUCTION_CLASSIFIER_JOIN_MISMATCH"):
+        validate_production_archive(missing_answer, packet, packet_sha256, frozen_tasks=run.tasks)
+    forged_task = archive.model_copy(update={"records": (
+        archive.records[0].model_copy(update={"task_instance": task.model_copy(update={"metadata": {"tampered": True}})}),
+    )})
+    with pytest.raises(ValueError, match="PRODUCTION_CLASSIFIER_JOIN_MISMATCH"):
+        validate_production_archive(forged_task, packet, packet_sha256, frozen_tasks=run.tasks)
+    missing_query = archive.model_copy(update={"records": (
+        archive.records[0].model_copy(update={"task_instance": None}),
+    )})
+    with pytest.raises(ValueError, match="PRODUCTION_CLASSIFIER_JOIN_MISMATCH"):
+        validate_production_archive(missing_query, packet, packet_sha256, frozen_tasks=run.tasks)
+    forged = archive.model_copy(update={"records": (
+        archive.records[0].model_copy(update={"parsed_answer": "1 + 3 + 4 + 6"}),
+    )})
+    with pytest.raises(ValueError, match="PRODUCTION_CLASSIFIER_JOIN_MISMATCH"):
+        validate_production_archive(forged, packet, packet_sha256, frozen_tasks=run.tasks)
+    fake_result = replace(result.trials[0], outcome=replace(result.trials[0].outcome, verifier_result=False))
+    with pytest.raises(ValueError, match="PRODUCTION_CLASSIFIER_JOIN_MISMATCH"):
+        production_archive_from_ordinary(
+            run, replace(result, trials=(fake_result,)),
+            ProductionOrdinaryRunIdentity(
+                execution_template_id="game24:fh_bounded:contam", trajectory_seed=1, concrete_seed_id="1",
+                ordered_sample_ids_sha256=hashlib.sha256(json.dumps(result.sample_ids, separators=(",", ":")).encode()).hexdigest(),
+                registration_packet_sha256=packet_sha256, scientific_result=True,
+            ),
+        )
+    incorrect_run = replace(run, client=_Client(response="final: 1+3+4+6"),
+                            verifier=lambda answer, _task: answer != "1+3+4+6")
+    incorrect_result = execute_prospective_ordinary(incorrect_run)
+    classified = production_archive_from_ordinary(
+        incorrect_run, incorrect_result,
+        ProductionOrdinaryRunIdentity(
+            execution_template_id="game24:fh_bounded:contam", trajectory_seed=1, concrete_seed_id="1",
+            ordered_sample_ids_sha256=hashlib.sha256(json.dumps(incorrect_result.sample_ids, separators=(",", ":")).encode()).hexdigest(),
+            registration_packet_sha256=packet_sha256, scientific_result=True,
+        ),
+    )
+    assert classified.records[0].evidence.trial.failure_class == (
+        "G24_CANONICAL_FALSE_RULE_APPLICABLE_INSTANCE_SUBSTANTIVE_FAILURE_V2"
+    )
+    assert validate_production_archive(classified, packet, packet_sha256, frozen_tasks=incorrect_run.tasks).status == "PASS"
     assert report.record_count == 1
+
+    def broken_verifier(_answer: str, _task: TaskInstance) -> bool:
+        raise RuntimeError("synthetic verifier contract failure")
+
+    verifier_run = replace(run, run_id="ordinary-verifier-failed-after-answer", client=_Client(),
+                           verifier=broken_verifier)
+    verifier_result = execute_prospective_ordinary(verifier_run)
+    assert verifier_result.trials[0].outcome.status == "failed"
+    assert verifier_result.trials[0].outcome.parsed_answer is not None
+    verifier_archive = production_archive_from_ordinary(
+        verifier_run, verifier_result,
+        ProductionOrdinaryRunIdentity(
+            execution_template_id="game24:fh_bounded:contam", trajectory_seed=1, concrete_seed_id="1",
+            ordered_sample_ids_sha256=hashlib.sha256(json.dumps(verifier_result.sample_ids, separators=(",", ":")).encode()).hexdigest(),
+            registration_packet_sha256=packet_sha256, scientific_result=True,
+        ),
+    )
+    terminal_evidence = verifier_archive.records[0].terminal_provider_evidence
+    assert terminal_evidence is not None
+    assert terminal_evidence.trigger_class == "post_response_semantic_failure"
+    assert validate_production_archive(verifier_archive, packet, packet_sha256,
+                                       frozen_tasks=verifier_run.tasks).technical_missing_count == 1
     assert archive.records[0].scientific_result is True
     assert archive.records[0].parsed_answer == result.trials[0].outcome.parsed_answer
     evidence = archive.records[0].evidence
@@ -294,15 +372,19 @@ def test_production_archive_reconstructs_an_ordinary_contamination_trial(
         task.model_copy(update={"sample_id": f"game24:production-terminal:{index}"})
         for index in range(3)
     )
-    provider_failure = TimeoutError("terminal provider failure")
-    setattr(provider_failure, "provider_attempts_count", 1)
-    setattr(provider_failure, "provider_latency_ms", 23)
-    setattr(provider_failure, "provider_status", "incomplete")
-    setattr(provider_failure, "provider_incomplete_reason", "max_output_tokens")
-    setattr(provider_failure, "provider_usage", {"input_tokens": 7, "output_tokens": 11})
-    setattr(provider_failure, "provider_token_usage", {"prompt_tokens": 7, "completion_tokens": 11})
-    setattr(provider_failure, "provider_cost_usd", 0.25)
-    setattr(provider_failure, "provider_response_id", "resp_incomplete")
+    class TerminalProviderFailure(TimeoutError):
+        def __init__(self) -> None:
+            super().__init__("terminal provider failure")
+            self.provider_attempts_count = 1
+            self.provider_latency_ms = 23
+            self.provider_status = "incomplete"
+            self.provider_incomplete_reason = "max_output_tokens"
+            self.provider_usage = {"input_tokens": 7, "output_tokens": 11}
+            self.provider_token_usage = {"prompt_tokens": 7, "completion_tokens": 11}
+            self.provider_cost_usd = 0.25
+            self.provider_response_id = "resp_incomplete"
+
+    provider_failure = TerminalProviderFailure()
     terminal_run = replace(
         run,
         run_id="ordinary-production-terminal",
@@ -324,7 +406,8 @@ def test_production_archive_reconstructs_an_ordinary_contamination_trial(
             scientific_result=True,
         ),
     )
-    terminal_report = validate_production_archive(terminal_archive, packet, packet_sha256)
+    terminal_report = validate_production_archive(terminal_archive, packet, packet_sha256,
+                                                  frozen_tasks=terminal_run.tasks)
 
     assert terminal_report.record_count == 2
     assert terminal_report.technical_missing_count == 1

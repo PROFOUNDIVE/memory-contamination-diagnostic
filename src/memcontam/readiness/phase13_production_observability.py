@@ -11,13 +11,14 @@ from memcontam.evaluation.phase13_observability_models import (
     Phase13ObservabilityError,
     Phase13TrialEvidence,
 )
-from memcontam.evaluation.phase13_observability_registration import (
-    ObservabilityRegistrationPacket,
-)
+from memcontam.evaluation.phase13_observability_registration import ObservabilityRegistrationPacket
 from memcontam.evaluation.phase13_observability_sequence import reconstruct_registered_sequence
+from memcontam.logging.schema import MethodCall
 from memcontam.readiness.phase13_observability_models import Phase13ObservabilityFixture
 from memcontam.readiness.phase13_production_runtime_models import ProductionNoMemTrialEvidence
-from memcontam.logging.schema import MethodCall
+from memcontam.tasks.base import TaskInstance
+
+from .phase13_production_runtime_join import validate_classifier_joins
 
 
 class ProductionObservabilityError(ValueError):
@@ -46,7 +47,7 @@ class ProviderRequestRecord(_FrozenModel):
 
 
 class TerminalProviderEvidence(_FrozenModel):
-    trigger_class: Literal["provider_call_failure", "input_envelope_violation"]
+    trigger_class: Literal["provider_call_failure", "input_envelope_violation", "post_response_semantic_failure"]
     failure_code: str | None = None
     attempts_count: int = Field(ge=0)
     latency_ms: int | None = Field(default=None, ge=0)
@@ -66,10 +67,12 @@ class ProductionTrialRecord(_FrozenModel):
     ordered_sample_ids_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     request: ProviderRequestRecord
     parsed_answer: str | None
+    task_instance: TaskInstance | None = None
     method_calls: tuple[MethodCall, ...]
     evidence: Phase13TrialEvidence | ProductionNoMemTrialEvidence
     terminal_method_call: MethodCall | None = None
     terminal_provider_evidence: TerminalProviderEvidence | None = None
+    terminal_failure_code: str | None = None
 
     @model_validator(mode="after")
     def _runtime_identity(self) -> ProductionTrialRecord:
@@ -87,10 +90,10 @@ class ProductionTrialRecord(_FrozenModel):
         failed = self.evidence.trial.execution_status == "failed"
         if failed != (self.terminal_method_call is not None) or failed != (
             self.terminal_provider_evidence is not None
-        ):
+        ) or failed != (self.terminal_failure_code is not None):
             raise ProductionObservabilityError("TERMINAL_PROVIDER_EVIDENCE_MISMATCH")
         if self.terminal_method_call is not None and self.terminal_provider_evidence != (
-            terminal_provider_evidence(self.terminal_method_call)
+            terminal_provider_evidence(self.terminal_method_call, self.terminal_failure_code)
         ):
             raise ProductionObservabilityError("TERMINAL_PROVIDER_EVIDENCE_MISMATCH")
         if self.terminal_method_call is not None and self.terminal_method_call not in self.method_calls:
@@ -177,9 +180,11 @@ def validate_production_archive(
     archive: ProductionObservabilityArchive,
     packet: ObservabilityRegistrationPacket,
     packet_sha256: str,
+    *, frozen_tasks: tuple[TaskInstance, ...] | None = None,
 ) -> ProductionObservabilityReport:
     if archive.registration_packet_sha256 != packet_sha256:
         raise ProductionObservabilityError("PRODUCTION_REGISTRATION_PACKET_MISMATCH")
+    validate_classifier_joins(archive, packet, frozen_tasks)
     evidence = tuple(record.evidence for record in archive.records)
     technical = tuple(
         row for row in evidence if row.trial.execution_status == "failed"
@@ -203,7 +208,7 @@ def validate_production_archive(
     try:
         base = tuple(reconstruct_phase13_trial(row) for row in memory_completed)
         reconstructed = (
-            reconstruct_registered_sequence(memory_completed, base, packet.recurrence_lookback_h)
+            reconstruct_registered_sequence(memory_completed, base, packet.recurrence_lookback_h, packet.failure_classes)
             if memory_completed
             else ()
         )
@@ -226,16 +231,19 @@ def validate_production_archive(
     )
 
 
-def terminal_provider_evidence(call: MethodCall) -> TerminalProviderEvidence:
-    if call.error_type is None:
+def terminal_provider_evidence(call: MethodCall, failure_code: str | None = None) -> TerminalProviderEvidence:
+    if call.error_type is None and (failure_code is None or call.raw_response is None):
         raise ProductionObservabilityError("TERMINAL_PROVIDER_CALL_INVALID")
     return TerminalProviderEvidence(
         trigger_class=(
+            "post_response_semantic_failure"
+            if call.error_type is None
+            else
             "input_envelope_violation"
             if call.failure_code == "INPUT_ENVELOPE_EXCEEDED"
             else "provider_call_failure"
         ),
-        failure_code=call.failure_code,
+        failure_code=failure_code if call.error_type is None else call.failure_code,
         attempts_count=call.transport_attempts,
         latency_ms=call.latency_ms,
         status=call.provider_status,
@@ -254,7 +262,7 @@ __all__ = [
     "ProductionTrialRecord",
     "ProviderRequestRecord",
     "TerminalProviderEvidence",
-    "terminal_provider_evidence",
     "conformance_archive",
+    "terminal_provider_evidence",
     "validate_production_archive",
 ]

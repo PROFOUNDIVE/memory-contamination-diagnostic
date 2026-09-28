@@ -31,7 +31,8 @@ from memcontam.readiness.phase13_cost_activation import (
 )
 from memcontam.readiness.phase13_cost_policy import bind_cost_policy_client
 from memcontam.readiness.phase13_execution_contract import CORE_MAIN_REGISTRY
-from memcontam.readiness.phase13_main_request_client import native_state_bytes
+from memcontam.readiness.phase13_main_request_client import TerminalTrialV3, native_state_bytes
+from memcontam.readiness.phase13_main_request_dispatch import DispatchTechnicalFailureV3
 from memcontam.readiness.phase13_production_runtime_models import ProductionOrdinaryRunIdentity
 from memcontam.readiness.phase13_route_capacity import (
     bind_capacity_configs,
@@ -209,6 +210,7 @@ class ProspectiveOrdinaryResult:
     arm: OrdinaryArm
     sample_ids: tuple[str, ...]
     trials: tuple[RuntimeTrialResult, ...]
+    terminal_failure: DispatchTechnicalFailureV3 | None = None
 
 
 def execute_prospective_ordinary(run: ProspectiveOrdinaryRun) -> ProspectiveOrdinaryResult:
@@ -234,13 +236,21 @@ def execute_prospective_ordinary(run: ProspectiveOrdinaryRun) -> ProspectiveOrdi
     }
     provenance_envelopes = {}
     ordinal_stride = 2 if run.baseline == "reflexion_style" else 1
+    terminal_failure = None
     for trial_index, context in enumerate(contexts):
         state_before = entry.serialize_state(state)
         request_client = None if run.validated_resources is None else run.validated_resources.request_client
-        result = (entry.execute_trial(context, state) if request_client is None else request_client.trial(
+        trial = (entry.execute_trial(context, state) if request_client is None else request_client.trial(
             partial(entry.execute_trial, context, state),
             partial(native_state_bytes, entry.serialize_state, state),
             ordinal_base=trial_index * ordinal_stride))
+        if isinstance(trial, TerminalTrialV3):
+            terminal_failure = trial.failure
+            if trial.result is None:
+                break
+            result = trial.result
+        else:
+            result = trial
         state_after = entry.serialize_state(result.state)
         if not isinstance(state_before, NativeState) or not isinstance(state_after, NativeState):
             state_before = state_after = None
@@ -266,6 +276,7 @@ def execute_prospective_ordinary(run: ProspectiveOrdinaryRun) -> ProspectiveOrdi
         run.arm,
         tuple(task.sample_id for task in tasks),
         tuple(results),
+        terminal_failure,
     )
 
 
