@@ -26,9 +26,12 @@ class NativeEntry:
     content_hash: str
     direct_parent_ids: tuple[str, ...] = ()
     render_id: str | None = None
+    retrieval_description: str | None = None
+    template_body: str | None = None
+    category: str | None = None
 
     def to_mapping(self) -> dict[str, Any]:
-        return {
+        value = {
             "content": self.content,
             "content_hash": self.content_hash,
             "direct_parent_ids": list(self.direct_parent_ids),
@@ -38,6 +41,13 @@ class NativeEntry:
             "schema_version": self.schema_version,
             "semantic_kind": self.semantic_kind,
         }
+        if self.retrieval_description is not None:
+            value["retrieval_description"] = self.retrieval_description
+        if self.template_body is not None:
+            value["template_body"] = self.template_body
+        if self.category is not None:
+            value["category"] = self.category
+        return value
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> NativeEntry:
@@ -50,6 +60,9 @@ class NativeEntry:
             content_hash=value["content_hash"],
             direct_parent_ids=tuple(value.get("direct_parent_ids", ())),
             render_id=value.get("render_id"),
+            retrieval_description=value.get("retrieval_description"),
+            template_body=value.get("template_body"),
+            category=value.get("category"),
         )
 
 

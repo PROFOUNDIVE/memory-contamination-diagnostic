@@ -224,9 +224,12 @@ def _as_memory_entry(entry: MemoryEntry | NativeEntry) -> MemoryEntry:
         raise BoTContractError("INVALID_NATIVE_TEMPLATE")
     return MemoryEntry(
         entry_id=entry.entry_id,
-        content=entry.content,
+        content=entry.template_body or entry.content,
         memory_type="thought_template",
-        metadata={"description": entry.content, "category": "procedure-based"},
+        metadata={
+            "description": entry.retrieval_description or entry.content,
+            "category": entry.category or "procedure-based",
+        },
     )
 
 
@@ -341,6 +344,12 @@ def _native_write(
             }
         }
     )
+    description = normalized.metadata.get("description")
+    category = normalized.metadata.get("category")
+    if not isinstance(description, str) or not description.strip():
+        raise BoTContractError("NATIVE_TEMPLATE_DESCRIPTION_MISSING")
+    if not isinstance(category, str) or not category.strip():
+        raise BoTContractError("NATIVE_TEMPLATE_CATEGORY_MISSING")
     native = NativeEntry(
         entry_id=normalized.entry_id,
         semantic_kind="thought_template",
@@ -349,6 +358,9 @@ def _native_write(
         content=normalized.content,
         content_hash=canonical_content_hash(normalized.content),
         direct_parent_ids=exact_parents,
+        retrieval_description=description,
+        template_body=normalized.content,
+        category=category,
     )
     envelope = MemoryCardEnvelopeV3(
         entry_id=native.entry_id,

@@ -319,6 +319,9 @@ def _native_entry(entry: MemoryEntry | NativeEntry, semantic_kind: str, componen
     parents = entry.metadata.get("direct_parent_ids", [])
     if not isinstance(parents, list) or any(not isinstance(item, str) for item in parents):
         parents = []
+    is_thought_template = semantic_kind == "thought_template"
+    description = entry.metadata.get("description")
+    category = entry.metadata.get("category")
     return NativeEntry(
         entry_id=entry.entry_id,
         semantic_kind=semantic_kind,
@@ -327,6 +330,17 @@ def _native_entry(entry: MemoryEntry | NativeEntry, semantic_kind: str, componen
         content=entry.content,
         content_hash=canonical_content_hash(entry.content),
         direct_parent_ids=tuple(parents),
+        retrieval_description=(
+            description
+            if is_thought_template and isinstance(description, str) and description.strip()
+            else entry.content if is_thought_template else None
+        ),
+        template_body=entry.content if is_thought_template else None,
+        category=(
+            category
+            if is_thought_template and isinstance(category, str) and category.strip()
+            else "procedure-based" if is_thought_template else None
+        ),
     )
 
 
