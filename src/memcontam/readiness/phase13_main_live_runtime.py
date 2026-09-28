@@ -25,6 +25,7 @@ from memcontam.experiment.phase13_ordinary_runtime import (
     ProspectiveOrdinaryRun,
     execute_prospective_ordinary,
 )
+from memcontam.logging.schema import MethodCall
 from memcontam.memory.checkpoint_v3 import NativeState, serialize_checkpoint
 from memcontam.memory.embeddings import BgeM3EmbeddingProvider, EmbeddingProvider
 from memcontam.readiness.phase13_core_datasets import load_core_task
@@ -54,7 +55,10 @@ from memcontam.readiness.phase13_production_observability import (
     ProductionObservabilityError,
     validate_production_archive,
 )
-from memcontam.readiness.phase13_production_runtime_join import production_archive_from_ordinary
+from memcontam.readiness.phase13_production_runtime_join import (
+    production_archive_from_completed_prefix,
+    production_archive_from_ordinary,
+)
 from memcontam.readiness.phase13_production_runtime_models import ProductionRuntimeJoinError
 from memcontam.readiness.phase13_route_capacity import bind_capacity_configs
 from memcontam.tasks.base import TaskInstance
@@ -67,7 +71,8 @@ from .phase13_main_new_mcq_runtime import (
     load_new_mcq_runtime_registry,
 )
 from .phase13_main_preloaded_resources import PreloadedMainResources
-from .phase13_main_request_client import MainRequestClientV3, native_state_bytes
+from .phase13_main_request_client import MainRequestClientV3, TerminalTrialV3, native_state_bytes
+from .phase13_main_terminal_partial import TerminalPartialDispatch
 
 _CORE_TASKS: Final = frozenset({"mmlu_pro_engineering", "mmlu_pro_physics"})
 
@@ -119,7 +124,7 @@ class ProductionMainRuntime:
             .read_bytes()
         )
         packet_raw = (
-            repository_root / "data/phase13/observability/registration_packet_v1.json"
+            repository_root / "data/phase13/observability/registration_packet_v2.json"
         ).read_bytes()
         self._packet = ObservabilityRegistrationPacket.model_validate_json(packet_raw)
         self._candidate_registry = load_current_candidate_registry(
@@ -166,7 +171,9 @@ class ProductionMainRuntime:
         entry = PHASE13_CORE_BASELINE_REGISTRY[unit.memory_baseline]
         state = entry.initial_state(context)
         result = (self._client.trial(lambda: entry.execute_trial(context, state), lambda: native_state_bytes(entry.serialize_state, state))
-                  if isinstance(self._client, MainRequestClientV3) else entry.execute_trial(context, state))
+                   if isinstance(self._client, MainRequestClientV3) else entry.execute_trial(context, state))
+        if isinstance(result, TerminalTrialV3):
+            raise result.failure
         if unit.memory_baseline == "reflexion_style" and result.outcome.status != "succeeded":
             raise MainLiveRuntimeError("MAIN_PREFIX_EXECUTION_FAILED")
         snapshot = entry.serialize_state(result.state)
@@ -195,7 +202,7 @@ class ProductionMainRuntime:
             },
         )
 
-    def execute_ordinary(self, request: OrdinaryRuntimeRequest) -> MainUnitDispatchOutput:
+    def execute_ordinary(self, request: OrdinaryRuntimeRequest) -> MainUnitDispatchOutput | TerminalPartialDispatch:
         unit = request.unit
         tasks = self._tasks(unit.task, unit.seed, prefix=False)
         identity = production_identity(unit)
@@ -250,10 +257,30 @@ class ProductionMainRuntime:
             validated_resources=None if self._resources is None else self._resources.ordinary(self._client),
         )
         result = execute_prospective_ordinary(run)
+        if result.terminal_failure is not None and (
+            not result.trials or result.trials[-1].outcome.status != "failed"
+            or any(call.error_type is not None for call in result.trials[-1].outcome.method_calls)
+        ):
+            completed = result.trials if not result.trials or result.trials[-1].outcome.status == "succeeded" else result.trials[:-1]
+            prefix = replace(result, trials=completed)
+            archive = production_archive_from_completed_prefix(run, prefix, identity)
+            if archive.records:
+                validate_production_archive(archive, self._packet, identity.registration_packet_sha256,
+                    frozen_tasks=(self._resources.tasks(unit.task) if self._resources is not None else run.tasks))
+            if not isinstance(self._client, MainRequestClientV3):
+                raise result.terminal_failure
+            calls = tuple(call for trial in completed for call in trial.outcome.method_calls
+                          if isinstance(call, MethodCall))
+            keys = self._client.request_keys
+            if len(keys) <= len(calls):
+                raise ProductionObservabilityError("PRODUCTION_RECONSTRUCTION_FAILED")
+            return TerminalPartialDispatch(archive, calls, keys,
+                result.sample_ids[len(completed)], result.terminal_failure)
         try:
             archive = production_archive_from_ordinary(run, result, identity)
             validate_production_archive(
-                archive, self._packet, identity.registration_packet_sha256
+                archive, self._packet, identity.registration_packet_sha256,
+                frozen_tasks=(self._resources.tasks(unit.task) if self._resources is not None else run.tasks),
             )
         except ProductionRuntimeJoinError as error:
             raise ProductionObservabilityError(
