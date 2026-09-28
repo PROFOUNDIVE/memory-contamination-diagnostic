@@ -1,19 +1,20 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from memcontam.evaluation.phase13_observability_lineage import recorded_path
 from memcontam.evaluation.phase13_observability_models import (
     Phase13LineageNode,
     Phase13TargetSetEvidence,
     Phase13TrialEvidence,
 )
-from memcontam.evaluation.phase13_observability_lineage import recorded_path
 from memcontam.experiment.phase12.filter_challenge.mft_state_models import JsonValue
 from memcontam.experiment.phase12.runtime_registry import RuntimeTrialResult
 from memcontam.experiment.phase13_ordinary_runtime import ProspectiveOrdinaryRun
-from memcontam.logging.schema import MethodCall, PromptSourceSpan
+from memcontam.logging.schema import MethodCall, PromptSourceSpan, VerifierResult
 from memcontam.logging.schema_v3 import (
     ContextEvent,
     MemoryArmExecutionKey,
@@ -22,8 +23,8 @@ from memcontam.logging.schema_v3 import (
     NoMemTrialLog,
     RetrievalEvent,
 )
-from memcontam.memory.checkpoint_v3 import NativeEntry, NativeState
 from memcontam.memory.cards_v3 import MemoryCardEnvelopeV3
+from memcontam.memory.checkpoint_v3 import NativeEntry, NativeState
 from memcontam.readiness.phase13_production_runtime_memory import production_memory_events
 from memcontam.readiness.phase13_production_runtime_models import (
     ProductionNoMemTrialEvidence,
@@ -174,11 +175,7 @@ def build_production_trial_evidence(
             ),
             source_package_manifest_sha256=identity.source_package_manifest_sha256,
         ),
-        verified_outcome=(
-            None
-            if result.outcome.status == "failed"
-            else (1 if result.outcome.verifier_result is True else 0)
-        ),
+        verified_outcome=_verified_outcome(result),
         memory_before_ids=before_ids,
         memory_after_ids=after_ids,
         new_entry_ids=new_ids,
@@ -224,17 +221,25 @@ def _build_nomem_trial_evidence(
             trial_kind="nomem_singleton",
             execution_key=NoMemExecutionKey(kind="nomem_singleton", key="*"),
         ),
-        verified_outcome=(
-            None
-            if not succeeded
-            else (1 if result.outcome.verifier_result is True else 0)
-        ),
+        verified_outcome=_verified_outcome(result),
     )
 
 
 def trial_id(run: ProspectiveOrdinaryRun, sample_id: str, suffix_order: int) -> str:
     arm = "" if run.arm == "clean" else f":{run.arm}"
     return f"{run.run_id}{arm}:trial:{suffix_order}:{sample_id}"
+
+
+def _verified_outcome(result: RuntimeTrialResult) -> Literal[0, 1] | None:
+    if result.outcome.status == "failed":
+        return None
+    match result.outcome.verifier_result:
+        case VerifierResult(is_correct=correct):
+            return 1 if correct else 0
+        case bool() as correct:
+            return 1 if correct else 0
+        case _:
+            raise ProductionRuntimeJoinError("PRODUCTION_VERIFIER_RESULT_MISSING")
 
 
 def _entries(rows: Sequence[Mapping[str, JsonValue]]) -> tuple[_RuntimeMemoryEntry, ...]:
