@@ -21,7 +21,6 @@ from memcontam.readiness.phase13_v3_resource_files import read_files
 from .phase13_runner_safety_fixture import FakeProvider, open_run
 from .test_phase13_v3_entrypoint_fixture import (
     REPAIR_ROOT,
-    RESOURCE_ROOT,
     STATIC_PATHS,
     build_entrypoint_bytes,
     seal_fixture_closure,
@@ -128,9 +127,8 @@ def test_seed_zero_shadow_commits_every_production_unit_without_external_access(
 ) -> None:
     del deny_external
     source_root = tmp_path / "source"
-    repair_path = "data/phase13/main/legacy_dc_rs_intervention_registry_v1.json"
     for path in STATIC_PATHS:
-        source = (REPAIR_ROOT if path == repair_path else RESOURCE_ROOT) / path
+        source = REPAIR_ROOT / path
         target = source_root / path
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, target)
