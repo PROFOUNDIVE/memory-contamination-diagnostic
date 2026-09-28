@@ -21,7 +21,7 @@ LEGACY: Final = TASKS[:3]
 RESOURCE_PATHS: Final = {
     "common_checkpoint_registry": "data/phase13/main/mr_p4/main_a_common_checkpoint_registry_v1.json",
     "task_seed_orders": "data/phase13/main/mr_p4/task_seed_orders_v1.json",
-    "observability_packet": "data/phase13/observability/registration_packet_v1.json",
+    "observability_packet": "data/phase13/observability/registration_packet_v2.json",
     "candidate_registry": "data/phase12/registries/candidate_registry_v2.json",
     "legacy_dc_rs_intervention_registry": "data/phase13/main/legacy_dc_rs_intervention_registry_v2.json",
     "main_new_mcq_authority_selection": "data/phase13/rag/new_mcq/authority_selection_v1.json",

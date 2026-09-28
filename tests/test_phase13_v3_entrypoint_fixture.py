@@ -14,6 +14,7 @@ from memcontam.readiness.phase13_main_checkpoint import CommonCheckpointRegistry
 from memcontam.readiness.phase13_main_production import ProductionObject, _stages
 from memcontam.readiness.phase13_main_resource_contract import RESOURCE_PATHS
 from memcontam.readiness.phase13_v3_authority_models import V3Identity
+from memcontam.readiness.phase13_v3_builder_inputs import PREFIX, STAGES, STATIC_PATHS
 from memcontam.readiness.phase13_v3_cost import activate_policy, build_witness, freeze_base
 from memcontam.readiness.phase13_v3_cost_binding import MRP4Costs, bind_package_costs
 from memcontam.readiness.phase13_v3_cost_models import (
@@ -31,7 +32,6 @@ from memcontam.readiness.phase13_v3_entrypoint_models import (
     MainExecutionPackageV3,
     MainLiveContractV3,
 )
-from memcontam.readiness.phase13_v3_builder_inputs import PREFIX, STATIC_PATHS, STAGES
 from memcontam.readiness.phase13_v3_publication import P4_PATHS, P5_PATHS
 from memcontam.readiness.phase13_v3_resource_files import FileBinding, read_files
 from memcontam.readiness.phase13_v3_runtime_identity import ROOT, freeze_runtime_identity
@@ -93,11 +93,17 @@ def build_entrypoint_bytes(
     else:
         units = production_units
         unit_ids = tuple(unit.unit_id for unit in units)
-    base = freeze_base(activate_policy(authority), PrefreezeBindings(**{
+    policy = activate_policy(authority)
+    bindings = PrefreezeBindings(**{
         name: hashlib.sha256(name.encode()).hexdigest() for name in PrefreezeBindings.model_fields
-    }), tuple(CostUnit(unit_id=unit.unit_id, stages=tuple(
+    })
+    cost_units = tuple(CostUnit(unit_id=unit.unit_id, stages=tuple(
         StageOccurrences(stage_id=STAGES[stage], calls=calls) for stage, calls in _stages(unit)
-    )) for unit in units))
+    )) for unit in units)
+    from memcontam.readiness.phase13_v3_retry import allocate_retry_reservations
+    initial = freeze_base(policy, bindings, cost_units)
+    base = freeze_base(policy, bindings, cost_units,
+                       retry_reservations=allocate_retry_reservations(units, initial))
     phase4 = MRP4Costs(policy=base.policy, base=base, witness=build_witness(base))
     for role, model in (("activated_policy", base.policy), ("base_inputs", base), ("cost_witness", phase4.witness)):
         resources[RESOURCE_PATHS[role]] = canonical_bytes(model)
@@ -158,14 +164,18 @@ def entrypoint_fixture(tmp_path, entrypoint_bytes):
 
 
 def seal_fixture_closure(root: Path) -> None:
+    packet = json.loads((ROOT / RESOURCE_PATHS["observability_packet"]).read_bytes())
+    identities = (*packet["implementation_identities"].values(), *packet["verifier_identities"].values(),
+                  *packet["applicability_identities"].values())
     governed = (
         "pyproject.toml",
         "scripts/build_phase13_corrected_main_closure.py",
         "scripts/diagnose_phase13_mr_p5_closure.py",
         "scripts/build_phase13_main_registries.py",
         "src/memcontam/__init__.py",
+        *(row["path"] for row in identities if row["path"].startswith("src/memcontam/")),
     )
-    for path in governed:
+    for path in set(governed):
         target = root / path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes((ROOT / path).read_bytes() if (ROOT / path).is_file() else b"")
@@ -184,7 +194,7 @@ def seal_fixture_closure(root: Path) -> None:
         if target.exists():
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
-        source = RESOURCE_ROOT / path
+        source = ROOT / path if path == "data/phase13/main/track1_authority_state_sync_checkpoint_v1.json" else RESOURCE_ROOT / path
         target.write_bytes(source.read_bytes() if source.is_file() else b"fixture\n")
     inventory = freeze_governed(root, commit)
     manifest_path = PREFIX + P4_PATHS[-1]

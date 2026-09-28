@@ -13,7 +13,10 @@ from memcontam.contamination.phase12.registry import (
     validate_current_candidate_registry,
 )
 from memcontam.contamination.phase12.renderers import RendererRegistry
-from memcontam.evaluation.phase13_observability_registration import ObservabilityRegistrationPacket
+from memcontam.evaluation.phase13_observability_registration import (
+    AUTHORITY_HASHES,
+    ObservabilityRegistrationPacket,
+)
 from memcontam.tasks.base import TaskInstance
 from memcontam.tasks.game24 import build_instance as game24
 from memcontam.tasks.math_equation_balancer import build_instance as equation
@@ -55,7 +58,21 @@ class PreloadedMainResources:
 
     @property
     def packet(self) -> ObservabilityRegistrationPacket:
-        return ObservabilityRegistrationPacket.model_validate_json(self.selected.resource("observability_packet"))
+        raw = self.selected.resource("observability_packet")
+        packet = ObservabilityRegistrationPacket.model_validate_json(raw)
+        if (hashlib.sha256(raw).hexdigest() != self.selected.resource_binding("observability_packet").sha256
+            or packet.authority_hashes != AUTHORITY_HASHES):
+            raise EntrypointError("MAIN_AUTHORIZATION_BINDING_MISMATCH")
+        source = self.selected.package.governed_source
+        if source is None:
+            raise EntrypointError("MAIN_AUTHORIZATION_BINDING_MISMATCH")
+        selected_hashes = {row.path: row.sha256 for row in source.rows}
+        selected_hashes.update({row.binding.path: row.binding.sha256 for row in self.selected.resources})
+        identities = (*packet.implementation_identities.values(), *packet.verifier_identities.values(),
+                      *packet.applicability_identities.values())
+        if any(selected_hashes.get(identity.path) != identity.sha256 for identity in identities):
+            raise EntrypointError("MAIN_AUTHORIZATION_BINDING_MISMATCH")
+        return packet
 
     @property
     def candidate_registry(self) -> CandidateRegistry:
