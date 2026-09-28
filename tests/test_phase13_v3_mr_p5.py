@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import importlib
 import os
-from pathlib import Path
 import subprocess
+from pathlib import Path
 from types import ModuleType
 from typing import Literal, assert_never
 
 import pytest
+
 from memcontam.readiness import phase13_v3_builder as builders
 from memcontam.readiness.phase13_v3_publication import P4_PATHS, P5_PATHS
 
@@ -23,6 +24,15 @@ def test_mr_p5_requires_validated_mr_p4(tmp_path):
 def test_mr_p5_has_acyclic_proof_and_separate_inventories(staged):
     module, root, output, authority = staged
     package = module.build_mr_p5(root, authority, output)
+    from memcontam.readiness.phase13_v3_builder_inputs import phase4_costs
+    from memcontam.readiness.phase13_v3_cost import build_proof, build_witness, freeze_complete
+    from memcontam.readiness.phase13_v3_retry import allocate_retry_reservations
+    manifest = module.validate_mr_p4(root, authority, output)
+    costs = phase4_costs(manifest)
+    assert costs.base.retry_reservations == allocate_retry_reservations(package.production, costs.base)
+    proof = build_proof(freeze_complete(costs.base, package.final_order), build_witness(costs.base), package.package_core_hash)
+    assert proof.totals.retry_reserve_krw == sum(row.reservation_krw for row in costs.base.retry_reservations)
+    assert proof.totals.cmax_main_krw <= 450000
     assert package.governed_source is not None
     assert package.generated_closure is not None
     assert all("mr_p5/" not in row.path and "mr_p6/" not in row.path for row in package.generated_closure.rows)

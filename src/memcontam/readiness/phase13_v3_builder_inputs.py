@@ -9,19 +9,32 @@ from typing import Final, TypeVar
 from pydantic import BaseModel, ValidationError
 
 from .phase13_execution_contract import CORE_MAIN_REGISTRY
-from .phase13_main_checkpoint import CommonCheckpointRegistry, TaskSeedOrders, _expected_registry, _canonical_hash
-from .phase13_main_production import ProductionObject, _object, _execution_template_id, _stages
+from .phase13_main_checkpoint import (
+    CommonCheckpointRegistry,
+    TaskSeedOrders,
+    _canonical_hash,
+    _expected_registry,
+)
+from .phase13_main_production import ProductionObject, _execution_template_id, _object, _stages
 from .phase13_main_resource_contract import RESOURCE_PATHS
 from .phase13_v3_builder_models import FirstFreeze, MRP4Manifest
 from .phase13_v3_cost import activate_policy, build_witness, freeze_base
 from .phase13_v3_cost_binding import MRP4Costs
-from .phase13_v3_cost_models import CostUnit, PrefreezeBindings, StageOccurrences, canonical_bytes, digest
-from .phase13_v3_publication import ArtifactError, OUTPUT_PATHS
+from .phase13_v3_cost_models import (
+    CostUnit,
+    PrefreezeBindings,
+    StageOccurrences,
+    canonical_bytes,
+    digest,
+)
+from .phase13_v3_publication import OUTPUT_PATHS, ArtifactError
 from .phase13_v3_resource_files import ClosureError, FileBinding, read_files
+from .phase13_v3_retry import allocate_retry_reservations
 from .phase13_v3_source_closure import ResourceClosure, _rows_hash
 
 PREFIX: Final = "data/phase13/main/"
 STATIC_PATHS: Final = tuple(sorted({path for role, path in RESOURCE_PATHS.items() if role not in {"activated_policy", "base_inputs", "cost_witness"}} | {
+    "data/phase13/main/track1_authority_state_sync_checkpoint_v1.json",
     "src/memcontam/readiness/data/mmlu_pro_dc_selection_v1.json",
     *(PREFIX + "mr_p4/corrected_v1/" + name for name in ("common_task_spec_contract_v1.json", "answer_payload_contract_v1.json", "game24_task_prompt_v1.txt", "meb_task_prompt_v1.txt", "word_sorting_task_prompt_v1.txt", "mmlu_task_prompt_v1.txt")),
 }))
@@ -130,7 +143,9 @@ def phase4_costs(manifest: MRP4Manifest) -> MRP4Costs:
         serializer_hash=source_hash(("src/memcontam/readiness/phase13_v3_cost_models.py",)),
         tokenizer_hash=hashlib.sha256((dict(manifest.runtime_identity.versions)["tiktoken"] + runtime).encode()).hexdigest())
     policy = activate_policy(manifest.authority)
-    base = freeze_base(policy, bindings, cost_units)
+    initial = freeze_base(policy, bindings, cost_units)
+    base = freeze_base(policy, bindings, cost_units,
+                       retry_reservations=allocate_retry_reservations(units, initial))
     return MRP4Costs(policy=policy, base=base, witness=build_witness(base))
 
 

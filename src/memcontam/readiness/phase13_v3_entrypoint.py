@@ -209,6 +209,9 @@ def _select_v3(request: SelectionRequest, package_resource: ValidatedResource, l
         ))
     except (KeyError, ValidationError) as error:
         raise EntrypointError("MAIN_COST_PROOF_MISMATCH") from error
+    from .phase13_v3_retry import allocate_retry_reservations
+    if phase4.base.retry_reservations != allocate_retry_reservations(package.production, phase4.base):
+        raise EntrypointError("MAIN_COST_PROOF_MISMATCH")
     if (any(by_path[path].raw != canonical_bytes(model) for path, model in (
             (additional[0], costs.resources.complete), (additional[1], costs.resources.proof)))
         or any(by_role[role] != canonical_bytes(model) for role, model in (

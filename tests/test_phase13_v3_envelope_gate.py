@@ -1,5 +1,4 @@
 from __future__ import annotations
-from .phase13_corrective_identity import corrective_identity
 
 import hashlib
 import importlib.util
@@ -12,6 +11,7 @@ import pytest
 from memcontam.clients.base import LLMResponse
 from memcontam.readiness.phase13_v3_terminal_ledger import TerminalLedgerV3
 
+from .phase13_corrective_identity import corrective_identity
 
 MODULE = "memcontam.readiness.phase13_main_request_dispatch"
 
@@ -233,10 +233,12 @@ def test_bound_openai_v3_sends_exact_compiled_bytes_once(api, monkeypatch, stage
         response = provider.send_compiled_v3(compiled, lambda: seen.append("marker"))
         assert response.raw["attempts"] == 1
         assert response.raw["cost_usd"] is None
+        assert response.raw["authority_contract"]["execution_envelope_id"] == "CORE_EXECUTION_ENVELOPE_REGISTRY_V4"
+        assert response.raw["authority_contract"]["terminal_failure_contract_id"] == "CORE_TERMINAL_TECHNICAL_MISSINGNESS_V2"
     else:
         with pytest.raises((TimeoutError, openai_responses.LunaContractError)) as failure:
             provider.send_compiled_v3(compiled, lambda: seen.append("marker"))
-        assert getattr(failure.value, "provider_attempts_count") == 1
+        assert getattr(failure.value, "provider_attempts_count", None) == 1
     assert seen[0][1]["max_retries"] == 0
     assert seen[-1] == json.loads(compiled.request_bytes)
     assert seen[-1]["max_output_tokens"] == cap
@@ -279,7 +281,7 @@ def test_partial_provider_usage_terminalizes_with_unknown_cost(rig):
 
 def test_unbound_v3_registry_string_cannot_enable_new_limits(monkeypatch):
     from memcontam.clients.config import ProviderConfig
-    from memcontam.clients.openai_responses import OpenAIResponsesClient, LunaContractError
+    from memcontam.clients.openai_responses import LunaContractError, OpenAIResponsesClient
 
     client = OpenAIResponsesClient.__new__(OpenAIResponsesClient)
     client._config = ProviderConfig(provider="openai_responses", live_calls_enabled=True,
