@@ -108,7 +108,22 @@ def new_mcq_native_entries(
                 "input": payload["query"],
                 "raw_output": payload["response"],
             }
-        content = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+        retrieval_description = None
+        template_body = None
+        category = None
+        if baseline == "bot_style" and isinstance(payload, dict):
+            description_value = payload.get("retrieval_description")
+            body_value = payload.get("procedural_body")
+            if not isinstance(description_value, str) or not isinstance(body_value, str):
+                raise NewMcqRuntimeError("MAIN_NEW_MCQ_BOT_PAYLOAD_INVALID")
+            retrieval_description = description_value
+            template_body = body_value
+            category = "procedure-based"
+        content = (
+            template_body
+            if template_body is not None
+            else json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+        )
         render = render_config(
             RenderInput(
                 treatments.selected_candidate_id,
@@ -136,6 +151,9 @@ def new_mcq_native_entries(
             content=content,
             content_hash=canonical_content_hash(content),
             render_id=render_id,
+            retrieval_description=retrieval_description,
+            template_body=template_body,
+            category=category,
         )
     return entries
 
