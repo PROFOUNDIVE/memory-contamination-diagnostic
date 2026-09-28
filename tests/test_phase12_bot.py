@@ -51,7 +51,7 @@ _SOLVED_WITH_FALLBACK = json.dumps(
 
 class _EmbeddingProvider:
     def encode_query(self, text: str) -> list[float]:
-        return [1.0, 0.0] if text.startswith("{") else [0.0, 1.0]
+        return [1.0, 0.0] if text.startswith("Key information:\n") else [0.0, 1.0]
 
     def encode_document(self, text: str) -> list[float]:
         del text
