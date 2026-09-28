@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -78,7 +77,11 @@ def distill_problem(
 
 
 def build_distilled_query(problem: DistilledProblem) -> str:
-    return json.dumps(problem.model_dump(), sort_keys=True, separators=(",", ":"))
+    return (
+        f"Key information:\n{problem.key_information}\n\n"
+        f"Restrictions:\n{problem.restrictions}\n\n"
+        f"Distilled task:\n{problem.distilled_task}"
+    )
 
 
 def retrieve_top_template(

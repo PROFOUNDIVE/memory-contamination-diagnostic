@@ -85,8 +85,66 @@ def test_retrieval_decision_matches_at_threshold_and_embeds_only_description() -
     assert result.matched_entry.entry_id == "template-1"
     assert result.top_similarity == pytest.approx(0.7)
     assert result.threshold == pytest.approx(0.7)
-    assert provider.queries == [bot_read.build_distilled_query(_problem())]
+    expected_query = """Key information:
+numbers = [1, 2, 3, 4], target = 24
+
+Restrictions:
+Use every number exactly once.
+
+Distilled task:
+Construct an expression equal to 24."""
+    assert bot_read.build_distilled_query(_problem()) == expected_query
+    assert provider.queries == [expected_query]
     assert provider.documents == ["Combine factor pairs before the final arithmetic step."]
+
+
+def test_retrieval_geometry_uses_distilled_text_and_description_not_containers() -> None:
+    bot_read = importlib.import_module("memcontam.baselines.bot_read")
+    expected_query = """Key information:
+registered semantic query
+
+Restrictions:
+preserve semantic geometry
+
+Distilled task:
+match the registered retrieval description"""
+    entry = MemoryEntry(
+        entry_id="semantic-template",
+        content="template body points along the wrong embedding axis",
+        memory_type="thought_template",
+        metadata={
+            "description": "registered retrieval description",
+            "category": "procedure-based",
+        },
+    )
+
+    class SurfaceSensitiveProvider:
+        def __init__(self) -> None:
+            self.metadata: dict[str, object] = {}
+            self.queries: list[str] = []
+            self.documents: list[str] = []
+
+        def encode_query(self, text: str) -> list[float]:
+            self.queries.append(text)
+            return [1.0, 0.0] if text == expected_query else [0.0, 1.0]
+
+        def encode_document(self, text: str) -> list[float]:
+            self.documents.append(text)
+            return [1.0, 0.0] if text == "registered retrieval description" else [0.0, 1.0]
+
+    provider = SurfaceSensitiveProvider()
+    problem = bot_read.DistilledProblem(
+        key_information="registered semantic query",
+        restrictions="preserve semantic geometry",
+        distilled_task="match the registered retrieval description",
+    )
+
+    result = bot_read.retrieve_top_template(problem, [entry], provider)
+
+    assert result.decision == "matched"
+    assert result.matched_entry == entry
+    assert provider.queries == [expected_query]
+    assert provider.documents == ["registered retrieval description"]
 
 
 def test_retrieval_decision_returns_miss_below_threshold() -> None:
