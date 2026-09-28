@@ -7,6 +7,7 @@ from typing import Final
 import pytest
 
 from memcontam.readiness import phase13_authority_files as files
+
 from .phase13_corrective_identity import corrective_identity
 
 ROOT: Final = Path("/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts")
@@ -132,6 +133,14 @@ def test_wrong_whole_file_hash_rejected(authority_root: Path) -> None:
     target.write_bytes(target.read_bytes() + b"\n")
     with pytest.raises(files.AuthorityFileError, match="MAIN_AUTHORITY_BINDING_MISMATCH"):
         files.load_authority_v3(authority_root, expected)
+
+
+@pytest.mark.parametrize("name", (*NAMES, MANIFEST, V2_MANIFEST))
+def test_rehashed_authority_with_unchanged_registry_is_not_current(authority_root: Path, name: str) -> None:
+    target = authority_root / name
+    target.write_bytes(target.read_bytes() + b"\n")
+    with pytest.raises(files.AuthorityFileError, match="MAIN_AUTHORITY_BINDING_MISMATCH"):
+        files.load_authority_v3(authority_root, identity=corrective_identity())
 
 
 def test_altered_router_target_rejected(authority_root: Path) -> None:

@@ -3,10 +3,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import stat
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
-import stat
 from uuid import uuid4
 
 from memcontam.readiness.phase13_v3_authority_models import (
@@ -24,6 +24,18 @@ from memcontam.readiness.phase13_v3_authority_parser import (
     parse_terminal,
     parse_transport,
     validate_router,
+)
+
+_REVIEWED_SHA256 = (
+    "34f63f37a49e92607c78ced038c4c70b4c9d5e3fa8fc57d6e97de1ee79db59a8",
+    "0bacce62718a93c14ce4da0c1b426e3823b75cf70b362f8f9a0632e83f4166c1",
+    "618320f7129a6b4eccfd66246e54ce8023ca14ede2ae6355677651c70bbbd08e",
+    "40866ef5f876ac5ae0242fb2756c0cd2d0c0dbfe780a5200918116ce5a7bb867",
+    "293b71dcd0907d6eb5df4a4bb5a80e4b37c0a62a851b851f42ed3deeaaf0865f",
+    "c74fa77540fdbf4ab37cd1c646dc1e720717ca36607ac9c2bd753eb1f38f0dc4",
+    "0b49dc4807a0370c875d19dbc453718a9f62073b3c685056e061af208dbdfdce",
+    "67c78926a4d71add9cff1af97a84e52a3dc2b2515148884b200c23e998a310e9",
+    "a123b5ce1076d78d12482617c26e3344c37449a07e622f620b66139d46012055",
 )
 
 
@@ -118,6 +130,8 @@ def load_authority_v3(root: Path, expected: AuthoritySnapshotV3 | None = None, *
         capacity = parse_capacity(raw_documents[6])
     except (ValueError, IndexError, KeyError) as error:
         raise AuthorityFileError("MAIN_ENVELOPE_REGISTRY_MISMATCH") from error
+    if tuple(hashlib.sha256(raw).hexdigest() for raw in (*raw_documents, provenance_raw, revision_manifest_raw)) != _REVIEWED_SHA256:
+        raise AuthorityFileError("MAIN_AUTHORITY_BINDING_MISMATCH")
     snapshot = AuthoritySnapshotV3(
         identity=selected_identity,
         documents=tuple(DocumentBinding(filename=filename, role=role, size=len(raw), sha256=hashlib.sha256(raw).hexdigest())
