@@ -41,7 +41,7 @@ InnerCode = Literal[
     "MAIN_TERMINAL_EVIDENCE_CONFLICT", "MAIN_TERMINAL_COST_UNKNOWN",
     "MAIN_PARENT_FINALIZATION_FAILED",
 ]
-_INNER = TypeAdapter(InnerCode)
+_INNER: TypeAdapter[InnerCode] = TypeAdapter(InnerCode)
 
 
 class CompletionReferenceV3(FrozenModel):
@@ -78,7 +78,7 @@ class ReconstructionFailureV3(RunJournalBaseV3):
 
 
 JournalEvent = Annotated[RunPauseV3 | ReconstructionFailureV3, Field(discriminator="kind")]
-_EVENT = TypeAdapter(JournalEvent)
+_EVENT: TypeAdapter[JournalEvent] = TypeAdapter(JournalEvent)
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,7 +138,9 @@ class RunJournalV3:
                 continue
             receipt = RequestIdentityReceiptV3.model_validate_json(self.ledger.read_record(f"{request_id}.identity.json"))
             if receipt.key.parent_id == unit.unit_id:
-                references.append(CompletionReferenceV3(key=receipt.key, event_hash=state.event_hash))
+                if state.completion_hash is None:
+                    raise TerminalEvidenceError()
+                references.append(CompletionReferenceV3(key=receipt.key, event_hash=state.completion_hash))
         if not references:
             return
         inner: InnerCode = "UNREGISTERED_RECONSTRUCTION_CAUSE"

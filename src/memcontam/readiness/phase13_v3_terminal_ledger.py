@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 # noqa: SIZE_OK — append-only writes and incremental replay share one transaction invariant.
-
 import hashlib
 import json
 import os
@@ -198,7 +197,8 @@ class TerminalLedgerV3:
                 assert_never(unreachable)
         self.append(event.model_dump(mode="json"))
 
-    def reconcile_cost(self, unit_id: str, supplied: Mapping[str, JsonValue], proof_hash: str) -> None:
+    def reconcile_cost(self, unit_id: str, supplied: Mapping[str, JsonValue], proof_hash: str,
+                       *, attempt_index: int = 0) -> None:
         cost = ProviderCostEvidence.model_validate_json(json.dumps(dict(supplied)))
         realized = reconcile_actual(cost).realized_krw
         state = self.state(unit_id)
@@ -206,7 +206,8 @@ class TerminalLedgerV3:
             "schema_version": "phase13_main_reconciliation_v3", "kind": "COST_RECONCILED",
             "unit_id": unit_id, "revision": state.revision + 1, "previous_hash": state.event_hash,
             "compiled": None if state.compiled is None else state.compiled.model_dump(mode="json"),
-            "transport_attempts": 1, "cost": cost.model_dump(mode="json"),
+            "transport_attempts": len(state.attempt_costs), "attempt_index": attempt_index,
+            "cost": cost.model_dump(mode="json"),
             "realized_cost_krw": realized, "proof_hash": proof_hash,
         })
 
@@ -282,17 +283,18 @@ class TerminalLedgerV3:
         previous = self._states[unit_id]
         unresolved = {"DISPATCH_INTENT_PERSISTED", "REQUEST_COMPILED", "ATTEMPT_STARTED", "RETRYABLE_ATTEMPT_FAILURE", "INPUT_ENVELOPE_OVERFLOW"}
         self._in_flight += int(state.kind in unresolved) - int(previous.kind in unresolved)
-        self._unknown_costs.pop(unit_id, None)
-        self._realized_costs.pop(unit_id, None)
-        if state.attempted_cost is not None:
+        for index in range(len(previous.attempt_costs)):
+            self._unknown_costs.pop(f"{unit_id}:{index}", None)
+            self._realized_costs.pop(f"{unit_id}:{index}", None)
+        for index, attempt in enumerate(state.attempt_costs):
             try:
-                realized = reconcile_actual(state.attempted_cost).realized_krw
+                realized = reconcile_actual(attempt).realized_krw
             except CostError as error:
                 if error.code != "MAIN_TERMINAL_COST_UNKNOWN":
                     raise
-                self._unknown_costs[unit_id] = state.attempted_cost
+                self._unknown_costs[f"{unit_id}:{index}"] = attempt
             else:
-                self._realized_costs[unit_id] = realized
+                self._realized_costs[f"{unit_id}:{index}"] = realized
         self._states[unit_id] = state
 
     def _dispatch_gate(self, states: Mapping[str, EvidenceState], event: EventV3) -> None:
