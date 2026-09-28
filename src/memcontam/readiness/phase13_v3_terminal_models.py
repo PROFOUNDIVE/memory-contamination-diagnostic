@@ -73,6 +73,14 @@ class RetryableAttemptFailureV3(DispatchIdentity):
     attempt_index: Literal[0]
     failure_code: str = Field(min_length=1)
     observation_hash: Sha256
+    cost: ProviderCostEvidence
+    realized_cost_krw: None
+
+    @model_validator(mode="after")
+    def unknown_first_cost(self) -> Self:
+        if self.cost.usage is not None or self.cost.monetary_cost is not None:
+            raise TerminalEvidenceError("MAIN_RETRY_ENTITLEMENT_INVALID")
+        return self
 
 
 class OverflowV3(DispatchIdentity):
@@ -133,6 +141,7 @@ class CostReconciledV3(AttemptedEvidence):
     schema_version: Literal["phase13_main_reconciliation_v3"]
     kind: Literal["COST_RECONCILED"]
     proof_hash: Sha256
+    attempt_index: Annotated[int, Field(ge=0, le=1)] = 0
 
     @model_validator(mode="after")
     def known_cost(self) -> Self:
@@ -162,6 +171,8 @@ class EvidenceState:
     compiled: CompiledRequestV3 | None = None
     attempted_cost: ProviderCostEvidence | None = None
     attempt_index: int | None = None
+    attempt_costs: tuple[ProviderCostEvidence, ...] = ()
+    completion_hash: str | None = None
 
 
 def parse_event(raw: bytes) -> EventV3:
@@ -177,6 +188,7 @@ def advance(state: EvidenceState, event: EventV3) -> EvidenceState:
     target: StateKind
     allowed: tuple[str, ...]
     cost: ProviderCostEvidence | None = None
+    attempt_costs = state.attempt_costs
     match event:
         case DispatchIntentV3():
             allowed, target = ("PENDING",), "DISPATCH_INTENT_PERSISTED"
@@ -191,6 +203,9 @@ def advance(state: EvidenceState, event: EventV3) -> EvidenceState:
             allowed, target = ("ATTEMPT_STARTED",), "RETRYABLE_ATTEMPT_FAILURE"
             if state.attempt_index != event.attempt_index:
                 raise TerminalEvidenceError()
+            if state.attempt_costs or event.realized_cost_krw is not None:
+                raise TerminalEvidenceError()
+            attempt_costs = (event.cost,)
         case OverflowV3():
             match event.kind:
                 case "INPUT_ENVELOPE_OVERFLOW":
@@ -205,18 +220,24 @@ def advance(state: EvidenceState, event: EventV3) -> EvidenceState:
             allowed, target, cost = ("ATTEMPT_STARTED",), event.kind, event.cost
             if event.transport_attempts != (state.attempt_index or 0) + 1:
                 raise TerminalEvidenceError()
+            if len(state.attempt_costs) != event.transport_attempts - 1:
+                raise TerminalEvidenceError()
+            attempt_costs = (*state.attempt_costs, event.cost)
         case CostReconciledV3():
-            allowed = ("COMPLETED", "ATTEMPTED_PROVIDER_FAILURE", "AMBIGUOUS_ATTEMPT")
-            target, cost = state.kind, event.cost
-            if state.attempted_cost is None:
+            allowed = ("RETRYABLE_ATTEMPT_FAILURE", "COMPLETED", "ATTEMPTED_PROVIDER_FAILURE", "AMBIGUOUS_ATTEMPT")
+            target = state.kind
+            if event.attempt_index >= len(state.attempt_costs) or event.transport_attempts != len(state.attempt_costs):
                 raise TerminalEvidenceError()
             try:
-                reconcile_actual(state.attempted_cost)
+                reconcile_actual(state.attempt_costs[event.attempt_index])
             except CostError as error:
                 if error.code != "MAIN_TERMINAL_COST_UNKNOWN":
                     raise
             else:
                 raise TerminalEvidenceError()
+            attempt_costs = tuple(event.cost if index == event.attempt_index else value
+                                  for index, value in enumerate(state.attempt_costs))
+            cost = attempt_costs[-1]
         case unreachable:
             assert_never(unreachable)
     if state.kind not in allowed:
@@ -231,4 +252,6 @@ def advance(state: EvidenceState, event: EventV3) -> EvidenceState:
         case unreachable:
             assert_never(unreachable)
     attempt_index = event.attempt_index if isinstance(event, (AttemptStartedV3, RetryableAttemptFailureV3)) else state.attempt_index
-    return EvidenceState(target, event.revision, digest(event), event.compiled, cost, attempt_index)
+    completion_hash = digest(event) if isinstance(event, CompletedV3) else state.completion_hash
+    return EvidenceState(target, event.revision, digest(event), event.compiled, cost, attempt_index,
+                         attempt_costs, completion_hash)
