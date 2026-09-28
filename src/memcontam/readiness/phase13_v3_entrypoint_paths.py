@@ -166,24 +166,72 @@ class PrivateLedger:
         finally:
             os.close(descriptor)
 
-    def read_record(self, name: str) -> bytes:
+    def parent_receipts(self, names: set[str]) -> dict[str, str]:
+        self.check()
+        entries = os.listdir(self.directory_fd)
+        if any(name.endswith(".parent.json") and name not in names for name in entries):
+            raise EntrypointPathError()
+        receipts = [name for name in entries if name.startswith(".receipt-")]
+        result: dict[str, str] = {}
+        for receipt in receipts:
+            if re.fullmatch(r"\.receipt-[0-9a-f]{32}", receipt) is None:
+                raise EntrypointPathError()
+            info = os.stat(receipt, dir_fd=self.directory_fd, follow_symlinks=False)
+            matches = []
+            for name in names.intersection(entries):
+                parent = os.stat(name, dir_fd=self.directory_fd, follow_symlinks=False)
+                if (parent.st_dev, parent.st_ino) == (info.st_dev, info.st_ino):
+                    matches.append(name)
+            if (info.st_uid != os.getuid() or info.st_mode != stat.S_IFREG | 0o600
+                or info.st_nlink != 2 or len(matches) != 1 or matches[0] in result):
+                raise EntrypointPathError()
+            result[matches[0]] = receipt
+        self.check()
+        return result
+
+    def _receipt_info(self, name: str, receipt: str) -> os.stat_result:
+        parent = os.stat(name, dir_fd=self.directory_fd, follow_symlinks=False)
+        linked = os.stat(receipt, dir_fd=self.directory_fd, follow_symlinks=False)
+        if (re.fullmatch(r"\.receipt-[0-9a-f]{32}", receipt) is None
+            or parent.st_uid != os.getuid() or parent.st_mode != stat.S_IFREG | 0o600
+            or parent.st_nlink != 2 or (parent.st_dev, parent.st_ino) != (linked.st_dev, linked.st_ino)):
+            raise EntrypointPathError()
+        return parent
+
+    def read_record(self, name: str, *, receipt: str | None = None) -> bytes:
         self.check()
         try:
+            before = self._receipt_info(name, receipt) if receipt is not None else None
             raw = read_authority_at(self.directory_fd, name)
-        except AuthorityFileError as error:
+            if receipt is not None:
+                after = self._receipt_info(name, receipt)
+                fields = ("st_dev", "st_ino", "st_uid", "st_mode", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")
+                if any(getattr(before, field) != getattr(after, field) for field in fields):
+                    raise EntrypointPathError()
+        except (OSError, AuthorityFileError) as error:
             raise EntrypointPathError() from error
         self.check()
         return raw
 
-    def record_exists(self, name: str) -> bool:
+    def record_exists(self, name: str, *, receipt: str | None = None) -> bool:
         self.check()
         try:
             info = os.stat(name, dir_fd=self.directory_fd, follow_symlinks=False)
         except FileNotFoundError:
             return False
-        _require(info)
+        if receipt is None:
+            _require(info)
+        elif self._receipt_info(name, receipt) != info:
+            raise EntrypointPathError()
         self.check()
         return True
+
+    def finish_parent_receipt(self, name: str, receipt: str) -> None:
+        self.check()
+        self._receipt_info(name, receipt)
+        os.unlink(receipt, dir_fd=self.directory_fd)
+        os.fsync(self.directory_fd)
+        self.check()
 
     def publish_record(self, name: str, raw: bytes) -> None:
         if not name or "/" in name or name in {".", ".."}:
