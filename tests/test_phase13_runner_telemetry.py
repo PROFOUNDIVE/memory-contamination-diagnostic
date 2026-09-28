@@ -67,7 +67,7 @@ def test_reconstruction_failure_is_sanitized_durable_and_never_retried(
 ) -> None:
     import memcontam.readiness.phase13_main_live_runtime as runtime
 
-    def reject(*_args):
+    def reject(*_args, **_kwargs):
         inner = Phase13ObservabilityError("ORDINARY_SEQUENCE_CONTINUITY_MISMATCH")
         inner.args = ("SECRET-response-credential-environment",)
         raise ProductionObservabilityError("PRODUCTION_RECONSTRUCTION_FAILED") from inner
@@ -165,7 +165,7 @@ def test_direct_archive_validation_failure_is_sanitized_after_completion(
 ) -> None:
     import memcontam.readiness.phase13_main_live_runtime as runtime
 
-    def reject(*_args):
+    def reject(*_args, **_kwargs):
         raise ProductionObservabilityError("PRODUCTION_REGISTRATION_PACKET_MISMATCH")
 
     monkeypatch.setattr(runtime, "validate_production_archive", reject)
@@ -357,7 +357,7 @@ def test_reconstruction_sink_failure_leaves_completed_requests_unrepeatable(
     import sqlite3
     import memcontam.readiness.phase13_main_live_runtime as runtime
 
-    def reject(*_args):
+    def reject(*_args, **_kwargs):
         raise ProductionObservabilityError("PRODUCTION_RECONSTRUCTION_FAILED") from Phase13ObservabilityError("SECRET")
 
     monkeypatch.setattr(runtime, "validate_production_archive", reject)

@@ -5,16 +5,21 @@ import importlib
 import json
 import os
 import socket
+import sqlite3
 import sys
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
 from memcontam.readiness.phase13_v3_entrypoint import SelectedExecutionV3
-from .phase13_corrective_identity import corrective_identity
 
-from .test_phase13_v3_entrypoint_fixture import entrypoint_bytes as entrypoint_bytes
-from .test_phase13_v3_entrypoint_fixture import entrypoint_fixture as entrypoint_fixture
+from .phase13_corrective_identity import corrective_identity
+from .test_phase13_v3_entrypoint_fixture import (
+    AUTHORITY, build_entrypoint_bytes, entrypoint_bytes, entrypoint_fixture, seal_fixture_closure,
+)
+
+__all__ = ["entrypoint_bytes", "entrypoint_fixture"]
 
 
 @pytest.fixture
@@ -126,6 +131,7 @@ def test_valid_v3_guarded_run_and_resume_without_calls(entrypoint_fixture, deny_
     run = V3MainRun.open(selected, directory, create=True, seed=0)
     try:
         entitlements = run.dispatcher().retry_entitlements
+        assert {row.dispatch_id for row in selected.costs.resources.phase4.base.retry_reservations} == entitlements
         assert entitlements
         assert entitlements == run.dispatcher().retry_entitlements
         assert entitlements <= set(run.ledger.binding.unit_ids)
@@ -139,6 +145,53 @@ def test_valid_v3_guarded_run_and_resume_without_calls(entrypoint_fixture, deny_
         assert resumed.status().pending_count == 1
     finally:
         resumed.close()
+
+
+def test_current_selected_resources_reject_historical_observability_packet(entrypoint_fixture, deny_external):
+    from memcontam.readiness.phase13_main_preloaded_resources import PreloadedMainResources
+    from memcontam.readiness.phase13_v3_entrypoint import EntrypointError, select_execution
+
+    selected = select_execution(entrypoint_fixture, "validate")
+    assert isinstance(selected, SelectedExecutionV3)
+    try:
+        historical = (Path(__file__).resolve().parents[1]
+                      / "data/phase13/observability/registration_packet_v1.json").read_bytes()
+        role = selected.resource_binding("observability_packet")
+        tampered = replace(selected, resources=tuple(
+            replace(row, raw=historical) if row.binding.path == role.path else row
+            for row in selected.resources))
+
+        with pytest.raises(EntrypointError, match="MAIN_AUTHORIZATION_BINDING_MISMATCH"):
+            PreloadedMainResources(tampered)
+    finally:
+        selected.close()
+
+
+@pytest.mark.parametrize("role,key", (("implementation_identities", "registration"),
+                                     ("applicability_identities", "game24"),
+                                     ("implementation_identities", "authority_state")))
+def test_rehashed_current_packet_cannot_forge_bound_identity(entrypoint_fixture, deny_external, role, key):
+    from memcontam.readiness.phase13_main_preloaded_resources import PreloadedMainResources
+    from memcontam.readiness.phase13_v3_entrypoint import EntrypointError, select_execution
+
+    selected = select_execution(entrypoint_fixture, "validate")
+    assert isinstance(selected, SelectedExecutionV3)
+    try:
+        payload = json.loads(selected.resource("observability_packet"))
+        payload[role][key]["sha256"] = "0" * 64
+        raw = json.dumps(payload).encode()
+        bound = selected.resource_binding("observability_packet")
+        changed = bound.model_copy(update={"sha256": hashlib.sha256(raw).hexdigest(), "size": len(raw)})
+        package = selected.package.model_copy(update={"resources": tuple(
+            changed if row.role == "observability_packet" else row for row in selected.package.resources)})
+        resources = tuple(replace(row, binding=row.binding.model_copy(update={
+            "sha256": changed.sha256, "size": changed.size}), raw=raw)
+            if row.binding.path == bound.path else row for row in selected.resources)
+
+        with pytest.raises(EntrypointError, match="MAIN_AUTHORIZATION_BINDING_MISMATCH"):
+            PreloadedMainResources(replace(selected, package=package, resources=resources))
+    finally:
+        selected.close()
 
 
 @pytest.mark.parametrize("change", ["bytes", "symlink"])
@@ -201,8 +254,193 @@ def test_v3_execution_uses_guarded_requests_and_real_ordinary_runtime(entrypoint
         assert report.provider_calls_issued == 50
         assert len(set(calls)) == 50
         assert all(state.kind == "COMPLETED" for state in run.ledger.states().values())
+        parent_id = selected.package.production[0].unit_id
+        parent = json.loads(run.ledger.read_record(f"{parent_id}.parent.json"))
+        authority_contract = parent["unit_evidence"]["provider_calls"][0]["provider_authority_contract"]
+        assert authority_contract["execution_envelope_id"] == selected.package.authority.registry.registry_id
+        assert authority_contract["execution_envelope_sha256"] == selected.package.authority.registry.sha256
+        assert authority_contract["terminal_failure_contract_id"] == selected.package.authority.terminal.contract_id
     finally:
         run.close()
+
+    original = (entrypoint_fixture.repository_root / "fake-run" / f"{parent_id}.parent.json").read_bytes()
+    parent_path = entrypoint_fixture.repository_root / "fake-run" / f"{parent_id}.parent.json"
+    database = entrypoint_fixture.repository_root / "fake-run" / "main_run_ledger_v3.sqlite3"
+    source = json.loads(original)
+    records = source["unit_evidence"]["evidence"]["runtime_evidence"]["production_observability_archive"]["records"]
+    assert len(records) == 50
+    for mutation in ("schema", "method_call", "sample_order", "omitted_record", "identity"):
+        changed = json.loads(original)
+        archive = changed["unit_evidence"]["evidence"]["runtime_evidence"]["production_observability_archive"]
+        rows = archive["records"]
+        if mutation == "schema":
+            archive["schema_version"] = "phase13_production_observability_archive_v1"
+            for row in rows:
+                row["scientific_result"] = False
+        elif mutation == "method_call":
+            rows[0]["method_calls"][0]["call_id"] = "invented-archive-call"
+        elif mutation == "sample_order":
+            rows[0], rows[1] = rows[1], rows[0]
+        elif mutation == "omitted_record":
+            rows.pop()
+        else:
+            rows[0]["execution_template_id"] = "invented-template"
+        raw = json.dumps(changed, sort_keys=True, allow_nan=False).encode()
+        parent_path.write_bytes(raw)
+        with sqlite3.connect(database) as connection:
+            connection.execute("UPDATE parents SET raw=?, sha256=? WHERE unit_id=?",
+                               (raw, hashlib.sha256(raw).hexdigest(), parent_id))
+        try:
+            selected = select_execution(entrypoint_fixture, "resume")
+            assert isinstance(selected, SelectedExecutionV3)
+            with pytest.raises(ValueError, match="MAIN_AUTHORIZATION_BINDING_MISMATCH"):
+                reopened = V3MainRun.open(selected, entrypoint_fixture.repository_root / "fake-run", create=False, seed=0)
+                reopened.close()
+        finally:
+            parent_path.write_bytes(original)
+            with sqlite3.connect(database) as connection:
+                connection.execute("UPDATE parents SET raw=?, sha256=? WHERE unit_id=?",
+                                   (original, hashlib.sha256(original).hexdigest(), parent_id))
+
+    selected = select_execution(entrypoint_fixture, "resume")
+    assert isinstance(selected, SelectedExecutionV3)
+    reopened = V3MainRun.open(selected, entrypoint_fixture.repository_root / "fake-run", create=False, seed=0)
+    reopened.close()
+
+
+def test_runner_parent_calls_preserve_sparse_scheduled_request_keys(entrypoint_fixture, deny_external):
+    from memcontam.baselines.contracts import BaselineExecutionOutcome
+    from memcontam.clients.base import LLMResponse
+    from memcontam.experiment.phase12.runtime_registry import NOMEM_SINGLETON, RuntimeTrialResult
+    from memcontam.logging.schema import MethodCall
+    from memcontam.readiness.phase13_main_request_client import MainRequestClientV3
+    from memcontam.readiness.phase13_main_v3_runner import V3MainRun
+    from memcontam.readiness.phase13_v3_entrypoint import select_execution
+    from memcontam.readiness.phase13_v3_request import RequestKeyV3
+
+    class EligibleTimeout(TimeoutError):
+        phase13_retry_class = "TIMEOUT_BEFORE_SEMANTIC_PAYLOAD"
+
+    attempts = 0
+
+    class Provider:
+        def send_compiled_v3(self, compiled, before_request):
+            nonlocal attempts
+            before_request()
+            attempts += 1
+            if attempts == 1:
+                raise EligibleTimeout()
+            return LLMResponse("final: 0", {"status": "completed", "usage": {"input_tokens": 1,
+                "output_tokens": 0}, "authoritative_provider_cost_usd": "0.0000002", "currency": "USD"}, {}, 0)
+
+    selected = select_execution(entrypoint_fixture, "run")
+    assert isinstance(selected, SelectedExecutionV3)
+    run = V3MainRun.open(selected, entrypoint_fixture.repository_root / "sparse-run", create=True, seed=0)
+    try:
+        parent_id = selected.package.production[0].unit_id
+        client = MainRequestClientV3(run.dispatcher(lambda _binding: Provider()), parent_id,
+                                     lambda: selected.preflight(selected.repository_root))
+        messages = [{"role": "user", "content": "fixture"}]
+
+        def execute():
+            client.chat(messages, "gpt-5.6-luna", {"method_stage": "no_memory_generate"})
+            return RuntimeTrialResult(BaselineExecutionOutcome("succeeded"), NOMEM_SINGLETON)
+
+        client.trial(execute, lambda: b"{}", ordinal_base=0)
+        first_key = RequestKeyV3(parent_id=parent_id, stage="no_memory_generate", ordinal=0)
+        run.ledger.reconcile_cost(first_key.dispatch_id,
+            {"usage": {"input_tokens": 1, "output_tokens": 0}}, "f" * 64, attempt_index=0)
+        client.trial(execute, lambda: b"{}", ordinal_base=2)
+        calls = tuple(MethodCall(call_id=f"sparse:trial:{index}:call:1", stage="no_memory_generate",
+                                 messages=messages, raw_response="final: 0", model="gpt-5.6-luna",
+                                 temperature=0.0, top_p=1.0)
+                      for index in (1, 2))
+
+        enriched = run._strict_calls(client, calls)
+
+        assert tuple(call.dispatch_id for call in enriched) == tuple(RequestKeyV3(
+            parent_id=parent_id, stage="no_memory_generate", ordinal=ordinal).dispatch_id
+            for ordinal in (0, 2))
+        run._validate_parent_calls(parent_id, enriched)
+        from memcontam.readiness.phase13_v3_terminal_ledger import TerminalLedgerV3
+        replayed = TerminalLedgerV3.open_guarded(run.private, run.ledger.binding)
+        try:
+            state = replayed.state(first_key.dispatch_id)
+            assert state.kind == "COMPLETED" and state.completion_hash != state.event_hash
+            replace(run, ledger=replayed)._validate_parent_calls(parent_id, enriched)
+        finally:
+            replayed.close()
+    finally:
+        run.close()
+
+
+def test_runner_reconciles_crashed_retry_before_parent_publication(entrypoint_fixture, deny_external, monkeypatch):
+    import memcontam.readiness.phase13_main_request_dispatch as dispatch
+    from memcontam.clients.base import LLMResponse
+    from memcontam.readiness.phase13_main_v3_runner import V3MainRun
+    from memcontam.readiness.phase13_v3_entrypoint import select_execution
+    from memcontam.readiness.phase13_v3_request import RequestKeyV3
+
+    class EligibleTimeout(TimeoutError):
+        phase13_retry_class = "TIMEOUT_BEFORE_SEMANTIC_PAYLOAD"
+
+    class Crash(BaseException):
+        pass
+
+    requests: list[str] = []
+
+    class Provider:
+        def send_compiled_v3(self, compiled, before_request):
+            before_request()
+            requests.append(compiled.key.dispatch_id)
+            if len(requests) == 1:
+                raise EligibleTimeout()
+            return LLMResponse("final: 0", {
+                "usage": {"input_tokens": 1, "output_tokens": 1},
+                "attempts": 1,
+                "authoritative_provider_cost_usd": "0.0000014", "currency": "USD",
+                "status": "completed", "response_id": f"fake-{len(requests)}",
+                "model": "gpt-5.6-luna", "service_tier": "default",
+            }, {"prompt_tokens": 1, "completion_tokens": 1}, 0)
+
+    monkeypatch.setattr(dispatch, "count_prompt_tokens", lambda *_args: 1)
+    selected = select_execution(entrypoint_fixture, "run")
+    assert isinstance(selected, SelectedExecutionV3)
+    directory = selected.repository_root / "retry-crash-run"
+    first = V3MainRun.open(selected, directory, create=True, seed=0)
+    parent_id = selected.package.production[0].unit_id
+    original = dispatch.ProductionRequestDispatcherV3._append
+
+    def crash_after_retryable(self, key, kind, extra=None):
+        original(self, key, kind, extra)
+        if kind == "RETRYABLE_ATTEMPT_FAILURE":
+            raise Crash()
+
+    try:
+        with monkeypatch.context() as patch:
+            patch.setattr(dispatch.ProductionRequestDispatcherV3, "_append", crash_after_retryable)
+            with pytest.raises(Crash):
+                first.execute(selected.repository_root / "cache", max_units=1,
+                              tranche_ceiling_krw=450000, provider_factory=lambda _: Provider())
+    finally:
+        first.close()
+    selected = select_execution(entrypoint_fixture, "resume")
+    assert isinstance(selected, SelectedExecutionV3)
+    reopened = V3MainRun.open(selected, directory, create=False, seed=0)
+    try:
+        assert len(requests) == 1
+        key = RequestKeyV3(parent_id=parent_id, stage="no_memory_generate", ordinal=0)
+        assert reopened.ledger.state(key.dispatch_id).kind == "RETRYABLE_ATTEMPT_FAILURE"
+        reopened.ledger.reconcile_cost(key.dispatch_id,
+            {"usage": {"input_tokens": 1, "output_tokens": 1}}, "f" * 64, attempt_index=0)
+        report = reopened.execute(selected.repository_root / "cache", max_units=1,
+                                  tranche_ceiling_krw=450000, provider_factory=lambda _: Provider())
+        assert report.completed_count == 1
+        assert report.provider_calls_issued == len(requests) == 51
+        parent = json.loads(reopened.ledger.read_record(f"{parent_id}.parent.json"))
+        assert parent["unit_evidence"]["realized_cost_krw"] == reopened.ledger.realized_cost_krw()
+    finally:
+        reopened.close()
 
 
 def _seal(payload, field):
@@ -279,3 +517,66 @@ def test_proof_bytes_must_be_canonical_not_just_semantically_equal(entrypoint_fi
         selected = select_execution(entrypoint_fixture, "validate")
         assert isinstance(selected, SelectedExecutionV3)
         selected.close()
+
+
+def test_live_cli_resume_enforces_cumulative_tranche_then_continues_without_redispatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], deny_external,
+) -> None:
+    from memcontam.clients.base import LLMResponse
+    from memcontam.readiness import phase13_main_live_cli
+    from memcontam.readiness.phase13_main_v3_runner import V3MainRun
+
+    for path, raw in build_entrypoint_bytes((0, 1)).items():
+        target = tmp_path / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(raw)
+    seal_fixture_closure(tmp_path)
+    package = json.loads((tmp_path / "package.json").read_bytes())
+    first, second = package["production"]
+    calls: list[str] = []
+
+    class Provider:
+        def send_compiled_v3(self, compiled, before_request):
+            before_request()
+            calls.append(compiled.key.dispatch_id)
+            return LLMResponse("final: 0", {
+                "usage": {"input_tokens": 1, "output_tokens": 1}, "attempts": 1,
+                "authoritative_provider_cost_usd": "0.0000014", "currency": "USD",
+                "status": "completed", "response_id": f"fake-{len(calls)}",
+                "model": "gpt-5.6-luna", "service_tier": "default",
+            }, {"prompt_tokens": 1, "completion_tokens": 1}, 0)
+
+    original_execute = V3MainRun.execute
+
+    def fake_execute(self, cache, *, max_units, tranche_ceiling_krw):
+        return original_execute(self, cache, max_units=max_units,
+            tranche_ceiling_krw=tranche_ceiling_krw, provider_factory=lambda _binding: Provider())
+
+    monkeypatch.setattr(V3MainRun, "execute", fake_execute)
+    arguments = ["--repository-root", str(tmp_path), "--package", str(tmp_path / "package.json"),
+        "--authorization", str(tmp_path / "authorization.json"), "--authority-root", str(AUTHORITY),
+        "--expected-authorization-sha256-file", str(tmp_path / "authorization.sha256"),
+        "--run-root", str(tmp_path), "--run-id", corrective_identity().run_id,
+        "--cache-root", str(tmp_path / "cache"), "--max-units", "1", "--allow-live-calls"]
+
+    def invoke(command: str, seed: int, ceiling: int) -> dict:
+        monkeypatch.setattr(sys, "argv", ["phase13-main-a-live", command, *arguments,
+            "--seed", str(seed), "--tranche-ceiling-krw", str(ceiling)])
+        phase13_main_live_cli.main()
+        return json.loads(capsys.readouterr().out)
+
+    completed = invoke("run", 0, 450000)
+    assert completed["completed_count"] == 1
+    assert len(calls) == 50
+    paused = invoke("resume", 1, second["projected_cost_krw"] - 1)
+    assert paused["session_state"] == "PAUSED_BEFORE_DISPATCH"
+    database = tmp_path / corrective_identity().run_id / "main_run_ledger_v3.sqlite3"
+    with sqlite3.connect(database) as connection:
+        last_event = connection.execute("SELECT raw FROM run_journal ORDER BY sequence DESC LIMIT 1").fetchone()[0]
+    assert json.loads(last_event)["outer_code"] == "MAIN_TRANCHE_CEILING_EXCEEDED"
+    assert paused["provider_calls_issued"] == 50
+    assert len(calls) == 50
+    continued = invoke("resume", 1, 450000)
+    assert continued["completed_count"] == 2
+    assert continued["provider_calls_issued"] == len(calls) == len(set(calls)) == 100
+    assert first["unit_id"] != second["unit_id"]
