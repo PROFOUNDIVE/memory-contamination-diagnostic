@@ -12,7 +12,6 @@ import pytest
 from memcontam.readiness.phase13_cli import add_parser, run
 from memcontam.readiness.phase13_observability_models import Phase13ObservabilityFixture
 
-
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "data/phase13/observability"
 
@@ -25,26 +24,10 @@ def _manifest_sha256(root: Path = PACKAGE) -> str:
     return hashlib.sha256((root / "manifest_v1.json").read_bytes()).hexdigest()
 
 
-def test_published_observability_package_is_deterministic_and_track2_5_complete() -> None:
-    report = _validator().validate_phase13_observability_package(
-        PACKAGE,
-        ROOT,
-        _manifest_sha256(),
-    )
-
-    assert report.track2_5_status == "TRACK2_5_NOVELTY_OBSERVABILITY_COMPLETE"
-    assert report.evidence_scope == "synthetic_contract_fixture_only"
-    assert report.mr_p4_prerequisite_status == "OBSERVABILITY_PREREQUISITE_MET"
-    assert report.mr_p5_handoff_status == "MEASUREMENT_IDENTITY_HANDOFF_CLOSED"
-    assert report.u_t_status == "NOT_REGISTERED_FOR_CURRENT_MAIN"
-    assert report.main_a_measured_scientific_execution_count == 0
-    assert report.reconstructed_trial_count == 5
-    assert report.reconstruction_sha256 == report.repeat_reconstruction_sha256
-    assert report.downstream_blockers == ()
-    assert report.mr_p4_closure_claimed is False
-    assert report.mr_p5_closure_claimed is False
-    assert report.main_execution_authorized is False
-    _validator().require_mr_p4_observability(report)
+def test_historical_observability_packet_rejects_changed_current_source() -> None:
+    with pytest.raises(_validator().Phase13ObservabilityValidationError,
+                       match="OBSERVABILITY_ARTIFACT_HASH_MISMATCH"):
+        _validator().validate_phase13_observability_package(PACKAGE, ROOT, _manifest_sha256())
 
 
 def test_observability_package_fails_closed_when_runtime_evidence_is_tampered(
@@ -171,7 +154,7 @@ def test_fixture_is_bound_to_the_registration_packet_and_unique_trial_sequence()
         _validator().reconstruct_fixture(duplicate, packet)
 
 
-def test_phase13_cli_exposes_observability_validation(capsys: pytest.CaptureFixture[str]) -> None:
+def test_phase13_cli_rejects_historical_observability_source_drift() -> None:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
     add_parser(subparsers)
@@ -188,10 +171,5 @@ def test_phase13_cli_exposes_observability_validation(capsys: pytest.CaptureFixt
         ]
     )
 
-    run(args)
-
-    payload = json.loads(capsys.readouterr().out)
-    assert payload["track2_5_status"] == "TRACK2_5_NOVELTY_OBSERVABILITY_COMPLETE"
-    assert payload["mr_p4_prerequisite_status"] == "OBSERVABILITY_PREREQUISITE_MET"
-    assert payload["mr_p5_handoff_status"] == "MEASUREMENT_IDENTITY_HANDOFF_CLOSED"
-    assert payload["main_a_measured_scientific_execution_count"] == 0
+    with pytest.raises(SystemExit, match="OBSERVABILITY_ARTIFACT_HASH_MISMATCH"):
+        run(args)
