@@ -260,7 +260,9 @@ def _snapshot_entries(
     if snapshot is None:
         return _entries(fallback)
     return tuple(
-        _entry_from_native(entry) if isinstance(entry, NativeEntry) else _RuntimeMemoryEntry(entry_id=entry)
+        _entry_from_native(entry)
+        if isinstance(entry, NativeEntry)
+        else _RuntimeMemoryEntry(entry_id=entry)
         for entry in snapshot.entries
     )
 
@@ -289,9 +291,9 @@ def _context(
         )
         if not answer_calls:
             return None
-        final_entry_ids = list(dict.fromkeys(
-            span.entry_id for span in answer_calls[-1].source_spans
-        ))
+        final_entry_ids = list(
+            dict.fromkeys(span.entry_id for span in answer_calls[-1].source_spans)
+        )
         removed_entry_ids = []
     return ContextEvent(
         record_type="context_event",
@@ -335,10 +337,7 @@ def _target_spans(
                 if (
                     node is None
                     or node.lineage_status != "exact"
-                    or (
-                        direct_root
-                        and node.injected_root_ids != (span.entry_id,)
-                    )
+                    or (direct_root and node.injected_root_ids != (span.entry_id,))
                     or (
                         span.injected_root_ids
                         and set(node.injected_root_ids) != set(span.injected_root_ids)
@@ -349,17 +348,27 @@ def _target_spans(
                     )
                 ):
                     raise ProductionRuntimeJoinError("PRODUCTION_TARGET_LINEAGE_INVALID")
-                spans.append(span.model_copy(update={
-                    "parent_call_id": call.call_id,
-                    "clean_or_contaminated": "contaminated",
-                    "contamination_class": "injected" if direct_root else "derived",
-                    "injected_root_ids": list(matched_roots),
-                    "lineage_status": "exact",
-                    "lineage_basis": "seed" if direct_root else "recorded_source",
-                    "direct_parent_ids": list(node.direct_parent_ids),
-                    "target_set_id": target_set_id,
-                    "is_target_contamination": True,
-                }))
+                spans.append(
+                    span.model_copy(
+                        update={
+                            "parent_call_id": call.call_id,
+                            "clean_or_contaminated": "contaminated",
+                            "contamination_class": "injected" if direct_root else "derived",
+                            "injected_root_ids": list(matched_roots),
+                            "lineage_status": "exact",
+                            "lineage_basis": (
+                                "seed"
+                                if direct_root
+                                else "recorded_source"
+                                if node.direct_parent_ids
+                                else "version_edge"
+                            ),
+                            "direct_parent_ids": list(node.direct_parent_ids),
+                            "target_set_id": target_set_id,
+                            "is_target_contamination": True,
+                        }
+                    )
+                )
     return tuple(spans)
 
 
@@ -376,9 +385,7 @@ def _lineage(
     for entry in by_id.values():
         envelope = by_envelope.get(entry.entry_id)
         parent_ids = (
-            entry.metadata.source_entry_ids
-            if envelope is None
-            else envelope.direct_parent_ids
+            entry.metadata.source_entry_ids if envelope is None else envelope.direct_parent_ids
         )
         predecessor_id = None if envelope is None else envelope.version_predecessor_id
         if entry.entry_id in new_ids and (
@@ -420,9 +427,7 @@ def _lineage(
         Phase13LineageNode(
             entry_id=entry.entry_id,
             lineage_status="exact",
-            injected_root_ids=(
-                injected_roots(entry.entry_id)
-            ),
+            injected_root_ids=(injected_roots(entry.entry_id)),
             direct_parent_ids=(
                 by_envelope[entry.entry_id].direct_parent_ids
                 if entry.entry_id in by_envelope

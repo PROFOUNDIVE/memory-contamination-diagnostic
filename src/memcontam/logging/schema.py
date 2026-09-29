@@ -666,7 +666,7 @@ def _validate_phase11_lineage_fields(value: Any) -> None:
     if value.lineage_status == "exact" and value.lineage_basis == "signature":
         raise ValueError("signature basis cannot claim exact lineage")
     if value.contamination_class == "derived" and value.lineage_status == "exact":
-        if not value.direct_parent_ids:
+        if not value.direct_parent_ids and value.lineage_basis != "version_edge":
             raise ValueError("exact derived lineage requires direct_parent_ids")
         if not value.injected_root_ids:
             raise ValueError("exact derived lineage requires injected_root_ids")
