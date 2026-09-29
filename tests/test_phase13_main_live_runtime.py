@@ -20,6 +20,7 @@ from memcontam.memory.checkpoint_v3 import NativeState, deserialize_checkpoint, 
 from memcontam.readiness.phase13_main_execution_models import MainExecutionFreeze
 from memcontam.readiness.phase13_main_live_dispatch import (
     DurableMainDispatch,
+    MainUnitDispatchOutput,
     summarize_telemetry,
 )
 from memcontam.readiness.phase13_main_live_runtime import (
@@ -32,7 +33,10 @@ from memcontam.readiness.phase13_main_new_mcq_runtime import (
     new_mcq_native_entries,
 )
 from memcontam.readiness.phase13_main_production import ProductionObject
-from memcontam.readiness.phase13_main_production_backend import MainProductionBackend
+from memcontam.readiness.phase13_main_production_backend import (
+    MainProductionBackend,
+    OrdinaryRuntimeRequest,
+)
 from memcontam.readiness.phase13_main_runner import (
     MainRunBinding,
     MainRunLedger,
@@ -47,6 +51,15 @@ CACHE_ROOT = Path.home() / ".cache/huggingface/hub"
 INTERVENTIONS = InterventionRegistry.model_validate_json(
     (ROOT / "data/phase13/rag/new_mcq/intervention_registry_v1.json").read_bytes()
 )
+
+
+def _complete_ordinary(
+    runtime: ProductionMainRuntime,
+    request: OrdinaryRuntimeRequest,
+) -> MainUnitDispatchOutput:
+    output = runtime.execute_ordinary(request)
+    assert isinstance(output, MainUnitDispatchOutput)
+    return output
 
 
 class _ProviderFreeClient:
@@ -153,7 +166,6 @@ class _ProviderFreeClient:
     ("baseline", "kind", "semantic_kind", "native_component", "payload_keys"),
     (
         ("fh_bounded", "raw_interaction", "full_history_transcript", "history", {"kind", "query", "response"}),
-        ("bot_style", "thought_template", "thought_template", "buffer", {"kind", "procedural_body", "retrieval_description"}),
         ("reflexion_style", "reflection", "verbal_reflection", "reflections", {"kind", "lesson"}),
         ("dc_rs", "raw_interaction", "dc_rs_io_pair", "archive", {"kind", "query", "response"}),
     ),
@@ -172,6 +184,18 @@ def test_new_mcq_treatments_use_each_baseline_native_carrier(
     assert {entry.native_component for entry in entries.values()} == {native_component}
     payloads = [json.loads(entry.content) for entry in entries.values()]
     assert all(payload_keys <= set(payload) and payload["kind"] == kind for payload in payloads)
+    assert len({entry.content_hash for entry in entries.values()}) == 3
+    assert all(entry.render_id for entry in entries.values())
+
+
+def test_new_mcq_bot_treatments_use_native_template_fields() -> None:
+    entries = new_mcq_native_entries("mmlu_pro_engineering", "bot_style", INTERVENTIONS)
+
+    assert set(entries) == {"correct", "irrelevant", "contam"}
+    assert {entry.semantic_kind for entry in entries.values()} == {"thought_template"}
+    assert {entry.native_component for entry in entries.values()} == {"buffer"}
+    assert all(entry.content == entry.template_body for entry in entries.values())
+    assert all(entry.retrieval_description for entry in entries.values())
     assert len({entry.content_hash for entry in entries.values()}) == 3
     assert all(entry.render_id for entry in entries.values())
 
@@ -328,7 +352,7 @@ def test_nonzero_ledger_dispatch_completes_real_production_prefix_without_networ
     backend = MainProductionBackend(
         evidence_root,
         runtime.execute_prefix,
-        runtime.execute_ordinary,
+        lambda request: _complete_ordinary(runtime, request),
         ledger.completed_evidence_sha256,
     )
 
@@ -357,7 +381,11 @@ def test_durable_rag_prefix_reconciles_frozen_decoding_without_network(
         if row.kind == "CLEAN_PREFIX" and row.memory_baseline == "rag_frozen" and row.seed == 0
     )
     runtime = ProductionMainRuntime(ROOT, CACHE_ROOT, client=_ProviderFreeClient())
-    backend = MainProductionBackend(tmp_path, runtime.execute_prefix, runtime.execute_ordinary)
+    backend = MainProductionBackend(
+        tmp_path,
+        runtime.execute_prefix,
+        lambda request: _complete_ordinary(runtime, request),
+    )
 
     completed = DurableMainDispatch(tmp_path, backend)(unit)
 

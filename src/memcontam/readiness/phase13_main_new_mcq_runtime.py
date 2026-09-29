@@ -182,19 +182,30 @@ def build_new_mcq_live_branches(
         checkpoints[arm] = append_native_entry(prefix, root)
     triplet_id = f"phase13-new-mcq::{task}::{registry.tasks[task].selected_candidate_id}"
     branches: dict[Arm, LiveArmBranch] = {
-        arm: LiveArmBranch(
+        "clean": LiveArmBranch(
+            "clean",
+            prefix.identity.checkpoint_id,
+            checkpoints["clean"].identity.checkpoint_id,
+            checkpoints["clean"],
+            states["clean"],
+            0,
+            None,
+            None,
+            None,
+        )
+    }
+    for arm in _TREATMENT_ARMS:
+        branches[arm] = LiveArmBranch(
             arm,
             prefix.identity.checkpoint_id,
             checkpoints[arm].identity.checkpoint_id,
             checkpoints[arm],
             states[arm],
-            0 if arm == "clean" else 1,
-            None if arm == "clean" else roots[arm].entry_id,
-            None if arm == "clean" else triplet_id,
-            None if arm == "clean" else roots[arm].render_id,
+            1,
+            roots[arm].entry_id,
+            triplet_id,
+            roots[arm].render_id,
         )
-        for arm in _ARMS
-    }
     events = tuple(
         LiveBranchEvent(
             "branch_constructed",
