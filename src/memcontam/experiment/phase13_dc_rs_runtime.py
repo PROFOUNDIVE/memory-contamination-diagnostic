@@ -149,9 +149,12 @@ def serialize(state: Any) -> NativeState:
         "dc_rs",
         (*archive, *strategies),
         {
-            "archive": [dc._archive_entry(entry).model_dump(mode="json") for entry in state.archive],
+            "archive": [
+                dc._archive_entry(entry).model_dump(mode="json") for entry in state.archive
+            ],
             "injected_root_id": state.injected_root_id,
             "strategy_ids": [entry.entry_id for entry in strategies],
+            "strategy_history": [entry.to_mapping() for entry in state.strategy_history],
             "allow_unparented_strategies": state.allow_unparented_strategies,
         },
     )
@@ -167,17 +170,20 @@ def restore(snapshot: Any, context: Any) -> dc.DcRsStateV3:
             "archive",
             "injected_root_id",
             "strategy_ids",
+            "strategy_history",
             "allow_unparented_strategies",
         }
     ):
         raise DcRsRuntimeError("INVALID_DC_RS_SNAPSHOT")
     archive_rows = snapshot.native_state.get("archive")
     strategy_ids = snapshot.native_state.get("strategy_ids")
+    strategy_history_rows = snapshot.native_state.get("strategy_history")
     allow_unparented = snapshot.native_state.get("allow_unparented_strategies")
     injected_root_id = snapshot.native_state.get("injected_root_id")
     if (
         not isinstance(archive_rows, list)
         or not isinstance(strategy_ids, list)
+        or not isinstance(strategy_history_rows, list)
         or not all(isinstance(item, str) for item in strategy_ids)
         or allow_unparented is not True
         or not (injected_root_id is None or isinstance(injected_root_id, str))
@@ -185,9 +191,8 @@ def restore(snapshot: Any, context: Any) -> dc.DcRsStateV3:
     ):
         raise DcRsRuntimeError("INVALID_DC_RS_SNAPSHOT")
     try:
-        archive: list[MemoryEntry] = [
-            MemoryEntry.model_validate(row) for row in archive_rows
-        ]
+        archive: list[MemoryEntry] = [MemoryEntry.model_validate(row) for row in archive_rows]
+        strategy_history = [NativeEntry.from_mapping(row) for row in strategy_history_rows]
     except ValueError as error:
         raise DcRsRuntimeError("INVALID_DC_RS_SNAPSHOT") from error
     archive_ids = [entry.entry_id for entry in archive]
@@ -210,8 +215,15 @@ def restore(snapshot: Any, context: Any) -> dc.DcRsStateV3:
     if (
         [entry.entry_id for entry in strategies] != strategy_ids
         or any(
+            entry.native_component != "strategy"
+            or canonical_content_hash(entry.content) != entry.content_hash
+            for entry in strategy_history
+        )
+        or len({entry.entry_id for entry in (*strategy_history, *strategies)})
+        != len((*strategy_history, *strategies))
+        or any(
             not set(entry.direct_parent_ids).issubset(archive_ids)
-            for entry in strategies
+            for entry in (*strategy_history, *strategies)
         )
         or (injected_root_id is not None and injected_root_id not in archive_ids)
     ):
@@ -221,6 +233,7 @@ def restore(snapshot: Any, context: Any) -> dc.DcRsStateV3:
     restored = dc.DcRsStateV3(
         archive=archive_state,
         strategies=strategy_state,
+        strategy_history=strategy_history,
         injected_root_id=injected_root_id,
         allow_unparented_strategies=allow_unparented,
     )

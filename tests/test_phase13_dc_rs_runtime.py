@@ -172,9 +172,7 @@ def test_dc_rs_runtime_is_first_class_text_only_retrieve_synthesize_generate() -
     assert result.outcome.verifier_result is True
     assert isinstance(result.state, DcRsStateV3)
     archive_entry = _memory_entry(result.state.archive[-1])
-    assert archive_entry.metadata["generated_output"] == (
-        "visible current reasoning\nfinal: B"
-    )
+    assert archive_entry.metadata["generated_output"] == ("visible current reasoning\nfinal: B")
     assert archive_entry.metadata["parsed_answer"] == "B"
     assert result.native_entries[0].native_component == "archive"
     assert result.write_envelopes[0].writer_stage == "dc_rs_generate"
@@ -197,9 +195,7 @@ def test_dc_rs_generation_and_archive_share_exact_strategy_ancestry(
             }
         },
     )
-    context.initial_states["dc_rs"].archive[0].metadata["render_id"] = (
-        "controlled-dc-rs-root-v1"
-    )
+    context.initial_states["dc_rs"].archive[0].metadata["render_id"] = "controlled-dc-rs-root-v1"
     context.initial_states["dc_rs"].archive[0].source_trial_id = None
     context.initial_states["dc_rs"].injected_root_id = "archive-root"
     context = replace(
@@ -225,7 +221,9 @@ def test_dc_rs_generation_and_archive_share_exact_strategy_ancestry(
     strategy = next(item for item in result.native_entries if item.native_component == "strategy")
     archive = next(item for item in result.native_entries if item.native_component == "archive")
     answer_call = next(
-        call for call in result.outcome.method_calls if call.call_id == result.outcome.answer_call_id
+        call
+        for call in result.outcome.method_calls
+        if call.call_id == result.outcome.answer_call_id
     )
     answer_span = answer_call.source_spans[0]
     assert answer_span.entry_id == strategy.entry_id
@@ -426,15 +424,35 @@ def test_dc_rs_persists_archive_before_rewritten_strategy() -> None:
 def test_dc_rs_runtime_checkpoint_round_trip_preserves_full_visible_responses() -> None:
     entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
     context = _context()
-    executed = entry.execute_trial(context, entry.initial_state(context))
+    first = entry.execute_trial(context, entry.initial_state(context))
+    second_context = replace(
+        context,
+        identities=RuntimeIdentities(
+            "run-1",
+            "run-1:trial:3:mmlu_pro_engineering:11775",
+            3,
+            "dc_rs",
+        ),
+    )
+    second = entry.execute_trial(second_context, first.state)
+    third_context = replace(
+        context,
+        identities=RuntimeIdentities(
+            "run-1",
+            "run-1:trial:4:mmlu_pro_engineering:11775",
+            4,
+            "dc_rs",
+        ),
+    )
+    executed = entry.execute_trial(third_context, second.state)
 
     snapshot = entry.serialize_state(executed.state)
     next_context = replace(
         context,
         identities=RuntimeIdentities(
             "run-1",
-            "run-1:trial:3:mmlu_pro_engineering:next",
-            3,
+            "run-1:trial:5:mmlu_pro_engineering:next",
+            5,
             "dc_rs",
         ),
     )
@@ -446,9 +464,20 @@ def test_dc_rs_runtime_checkpoint_round_trip_preserves_full_visible_responses() 
     assert [_memory_entry(row).metadata["generated_output"] for row in restored.archive] == [
         "full prior reasoning\nfinal: A",
         "visible current reasoning\nfinal: B",
+        "visible current reasoning\nfinal: B",
+        "visible current reasoning\nfinal: B",
     ]
     assert isinstance(executed.state, DcRsStateV3)
     assert restored.archive == executed.state.archive
+    assert len(restored.strategies or ()) == 1
+    assert len(restored.strategy_history) == 2
+    active_strategy_ids = {
+        row.entry_id
+        for row in snapshot.entries
+        if isinstance(row, NativeEntry) and row.native_component == "strategy"
+    }
+    assert active_strategy_ids == {cast(NativeEntry, (restored.strategies or [])[0]).entry_id}
+    assert restored.strategy_history[0].entry_id not in active_strategy_ids
 
 
 @pytest.mark.parametrize("mutation", ["stale_hash", "reordered", "extra_component"])
@@ -601,9 +630,7 @@ def test_dc_rs_runtime_rejects_invalid_initial_state_before_llm(mutation: str) -
     context = replace(
         _context(),
         client=client,
-        initial_states={
-            "dc_rs": state
-        },
+        initial_states={"dc_rs": state},
     )
     entry = PHASE13_CORE_BASELINE_REGISTRY["dc_rs"]
 
@@ -746,8 +773,7 @@ def test_dc_rs_rejects_source_alias_that_was_not_offered() -> None:
             responses_by_sample={
                 task.sample_id: {
                     "dc_rs_synthesize": (
-                        "<cheatsheet>unsupported rewrite</cheatsheet>"
-                        "<source_ids>src04</source_ids>"
+                        "<cheatsheet>unsupported rewrite</cheatsheet><source_ids>src04</source_ids>"
                     ),
                     "dc_rs_generate": "final: B",
                 }
@@ -774,9 +800,7 @@ def test_dc_rs_rejects_rewrite_over_registered_writer_output_budget() -> None:
         client=ReplayClient(
             responses_by_sample={
                 task.sample_id: {
-                    "dc_rs_synthesize": (
-                        f"<cheatsheet>{' '.join(['x'] * 8193)}</cheatsheet>"
-                    ),
+                    "dc_rs_synthesize": (f"<cheatsheet>{' '.join(['x'] * 8193)}</cheatsheet>"),
                     "dc_rs_generate": "final: B",
                 }
             }
