@@ -5,6 +5,7 @@ import json
 from dataclasses import dataclass, replace
 from typing import Any, Literal, Mapping, Sequence
 
+from memcontam.baselines.bot_read import DistilledProblem, build_distilled_query
 from memcontam.baselines.bot_runtime import BotRuntime
 from memcontam.baselines.contracts import BaselineExecutionOutcome
 from memcontam.clients.base import LLMClient
@@ -255,9 +256,12 @@ def _prompt_events(
     distilled_problem = outcome.metadata.get("distilled_problem", {})
     if not isinstance(distilled_problem, Mapping):
         raise BoTContractError("DISTILLED_PROBLEM_INVALID")
-    query_hash = hashlib.sha256(
-        json.dumps(distilled_problem, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
+    query_text = (
+        build_distilled_query(DistilledProblem.model_validate(distilled_problem))
+        if distilled_problem
+        else json.dumps(distilled_problem, sort_keys=True, separators=(",", ":"))
+    )
+    query_hash = hashlib.sha256(query_text.encode("utf-8")).hexdigest()
     retrieval = RetrievalEvent(
         record_type="retrieval_event",
         event_id=f"{trial.trial_id}:retrieval",

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import json
+from dataclasses import replace
 from typing import Literal
 
 import pytest
@@ -10,6 +12,7 @@ from memcontam.baselines.bot_phase12 import (
     BoTStateV3,
     BoTTrialContextV3,
 )
+from memcontam.baselines.bot_read import DistilledProblem, build_distilled_query
 from memcontam.clients.replay import ReplayClient
 from memcontam.memory.admission import AdmissionContext
 from memcontam.memory.cards_v3 import MEMORY_CARD_V3, MemoryCardEnvelopeV3, canonical_content_hash
@@ -160,6 +163,32 @@ def test_isolated_treatment_template_executes_without_synthetic_competitors() ->
 
     assert result.outcome.status == "succeeded"
     assert result.prompt_decision.decision == "matched"
+
+
+def test_retrieval_event_hash_tracks_embedded_distilled_query() -> None:
+    class RecordingEmbeddingProvider(_EmbeddingProvider):
+        def __init__(self) -> None:
+            self.queries: list[str] = []
+
+        def encode_query(self, text: str) -> list[float]:
+            self.queries.append(text)
+            return super().encode_query(text)
+
+    provider = RecordingEmbeddingProvider()
+    trial = _trial(branch="contam", used_ids=["false-template"], verifier=lambda _answer: True)
+    trial = replace(trial, config={"embedding_provider": provider})
+
+    result = BoTPhase12Adapter().execute(
+        trial,
+        BoTStateV3(entries=[_native_template("false-template", "Use rational values.")]),
+    )
+
+    assert provider.queries[0] == build_distilled_query(
+        DistilledProblem.model_validate_json(_DISTILLED)
+    )
+    assert result.retrieval_event.query_hash == hashlib.sha256(
+        provider.queries[0].encode("utf-8")
+    ).hexdigest()
 
 
 def test_empty_bot_state_uses_native_fallback_and_writes_first_template() -> None:
