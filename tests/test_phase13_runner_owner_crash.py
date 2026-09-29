@@ -28,7 +28,9 @@ def test_owner_covers_completed_requests_through_parent_commit(entrypoint_fixtur
         with selectors.DefaultSelector() as ready:
             ready.register(owner.stdout, selectors.EVENT_READ)
             assert ready.select(timeout=240), "fake runner failed to reach pre-commit barrier"
-        assert owner.stdout.readline().strip() == "COMPLETED 50 50"
+        output = owner.stdout.readline().strip()
+        assert owner.stderr is not None
+        assert output == "COMPLETED 50 50", owner.stderr.read()
         second = subprocess.run(command, input="\n", capture_output=True, text=True, timeout=120)
         assert second.returncode == 0, second.stderr
         assert second.stdout.strip() == "MAIN_RUN_ALREADY_OWNED"

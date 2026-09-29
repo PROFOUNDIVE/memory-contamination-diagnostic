@@ -62,8 +62,8 @@ def launcher(root: Path, *, execute: bool = False) -> None:
             fake = FakeProvider()
             original = runtime.validate_production_archive
 
-            def barrier(*args):
-                result = original(*args)
+            def barrier(*args, **kwargs):
+                result = original(*args, **kwargs)
                 print(f"COMPLETED {fake.constructors} {len(fake.requests)}", flush=True)
                 input()
                 return result
