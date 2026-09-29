@@ -15,12 +15,15 @@ from pydantic import JsonValue
 
 from memcontam.readiness.phase13_main_request_recovery import recover_requests
 from memcontam.readiness.phase13_main_v3_runner import V3MainRun, V3RunStatus
+from memcontam.readiness.phase13_v3_builder_inputs import first_freeze, production
+from memcontam.readiness.phase13_v3_resource_files import read_files
 from memcontam.readiness.phase13_v3_terminal_ledger import TerminalLedgerV3
 
 from .test_phase13_v3_envelope_gate import api as api
 from .test_phase13_v3_envelope_gate import rig as rig
 from .test_phase13_v3_entrypoint_fixture import entrypoint_bytes as entrypoint_bytes
 from .test_phase13_v3_entrypoint_fixture import entrypoint_fixture as entrypoint_fixture
+from .test_phase13_v3_entrypoint_fixture import REPAIR_ROOT, STATIC_PATHS, build_entrypoint_bytes
 from .test_phase13_v3_entrypoint_integration import deny_external as deny_external
 
 
@@ -322,6 +325,9 @@ def test_t06_global_status_completes_only_after_seed_nine(
         def connect(self):
             yield StatusConnection()
 
+        def parent_receipts(self, _excluded: set[str]) -> dict[str, bytes]:
+            return {}
+
     run = object.__new__(V3MainRun)
     object.__setattr__(run, "selected", selected)
     object.__setattr__(run, "private", StatusPrivate())
@@ -343,13 +349,11 @@ def test_t06_package_rejects_seed_outside_exact_seed_zero_partition(
 ) -> None:
     from memcontam.readiness.phase13_v3_entrypoint_models import MainExecutionPackageV3
 
-    path = Path("data/phase13/main/mr_p5/execution_package_v3.json")
-    payload = json.loads(path.read_bytes())
-    identity = corrective_identity()
-    payload["identity"] = identity.model_dump(mode="json")
-    payload["authority"]["identity"] = identity.model_dump(mode="json")
-    payload["package_id"] = identity.package_id
-    payload["tranche_unit_count"] = 120
+    bindings = tuple(row.binding for row in read_files(REPAIR_ROOT, STATIC_PATHS))
+    units = production(first_freeze(REPAIR_ROOT), bindings)
+    payload = json.loads(
+        build_entrypoint_bytes(tuple(range(10)), production_units=units)["package.json"]
+    )
     payload["production"][sequence]["seed"] = seed
 
     with pytest.raises(ValueError, match="MAIN_AUTHORIZATION_BINDING_MISMATCH"):
