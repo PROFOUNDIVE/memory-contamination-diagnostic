@@ -51,12 +51,12 @@
     "collision_policy": "duplicate_source_ids_unknown_aliases_and_duplicate_aliases_fail_closed",
     "canonical_provenance_preserved": true,
     "runtime_bound": true,
-    "implementation_sha256": "e0b76ccda1aae3fdd5efba14ee00d425b4ed1b07a7d303a1904536174700ae44"
+    "implementation_sha256": "314f4f840443f43dc3f96edcdb7c0adbc52342d1be73db02080b9febff8e5e97"
   },
   "production_builder_hashes": {
     "measurement_implementation_sha256": "a6e895dcc9599e19889066da1647f92f41f021435af8ca0311d17f68641166a1",
-    "dc_rs_runtime_builder_sha256": "5455c5f40e5b5d0d3fceb1ece833ba0443613c3ca970012f75f8349610e1bd07",
-    "dc_rs_prompt_builder_sha256": "e0b76ccda1aae3fdd5efba14ee00d425b4ed1b07a7d303a1904536174700ae44",
+    "dc_rs_runtime_builder_sha256": "3e697d0f02565af603fc2d19cfb7ba2b939aefb9c352bebb206ff0639fd809ce",
+    "dc_rs_prompt_builder_sha256": "314f4f840443f43dc3f96edcdb7c0adbc52342d1be73db02080b9febff8e5e97",
     "ordinary_runtime_builder_sha256": "05492b3ff486e101536243597e2d5b07a00d984dbbcdd49152905f45c847859c"
   },
   "runtime_implementation": {
@@ -79,7 +79,7 @@
   },
   "capacity_artifact": {
     "path": "data/phase13/common_capacity_corrected_v2.json",
-    "sha256": "887137651d2695cc6e64d8d323575a4a833ababb062eeb4223f4cb72370ddf69"
+    "sha256": "2351978149c44c552c98303690d7d086159209110913d523d68841c31a317649"
   },
   "validator": {
     "path": "src/memcontam/readiness/phase13_capacity_realization.py",
