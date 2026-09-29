@@ -38,9 +38,7 @@ class OrdinaryHistoryIdentity:
 
 
 def configured_budget(context: Any) -> int:
-    budget = context.baseline_configs.get("dc_rs", {}).get(
-        "serialized_cheatsheet_budget_tokens"
-    )
+    budget = context.baseline_configs.get("dc_rs", {}).get("serialized_cheatsheet_budget_tokens")
     if budget != COMMON_VISIBLE_MEMORY_TOKENS:
         raise DcRsRuntimeError("DC_RS_CHEATSHEET_BUDGET_REQUIRED")
     return budget
@@ -87,10 +85,7 @@ def validate_state(
                 archive_entry.source_trial_id is not None
                 or native.content_hash != canonical_content_hash(native.content)
                 or native.render_id is None
-                or (
-                    normalized_expected is not None
-                    and native != normalized_expected
-                )
+                or (normalized_expected is not None and native != normalized_expected)
             ):
                 raise DcRsRuntimeError(code)
         else:
@@ -98,7 +93,7 @@ def validate_state(
         archive_ids.append(archive_entry.entry_id)
         archive_parent_ids.append(native.direct_parent_ids)
     strategy_ids: list[str] = []
-    for raw_entry in state.strategies or ():
+    for raw_entry in (*state.strategy_history, *(state.strategies or ())):
         try:
             strategy_entry = dc._strategy_entry(raw_entry, allow_unparented=True)
         except dc.DcRsContractError as error:
@@ -114,10 +109,7 @@ def validate_state(
     if (
         len(set(all_ids)) != len(all_ids)
         or any(not set(parent_ids).issubset(strategy_ids) for parent_ids in archive_parent_ids)
-        or (
-            state.injected_root_id is not None
-            and state.injected_root_id not in archive_ids
-        )
+        or (state.injected_root_id is not None and state.injected_root_id not in archive_ids)
     ):
         raise DcRsRuntimeError(code)
 
@@ -157,7 +149,11 @@ def _trajectory_index(trial_id: str, run_id: str) -> int:
     prefix = f"{run_id}:trial:"
     if not trial_id.startswith(f"{run_id}:"):
         raise DcRsRuntimeError("DC_RS_ORDINARY_HISTORY_UNPROVEN")
-    tail = trial_id.removeprefix(prefix) if trial_id.startswith(prefix) else trial_id.partition(":trial:")[2]
+    tail = (
+        trial_id.removeprefix(prefix)
+        if trial_id.startswith(prefix)
+        else trial_id.partition(":trial:")[2]
+    )
     raw_index, separator, _suffix = tail.partition(":")
     if not separator:
         raise DcRsRuntimeError("DC_RS_ORDINARY_HISTORY_UNPROVEN")
@@ -180,8 +176,7 @@ def _validate_archive_input(content: str, code: str) -> str:
     task_name = payload["task_name"]
     if task_name in CORE_TASKS and (
         set(payload) != {"input", "task_name"}
-        or json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
-        != content
+        or json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True) != content
     ):
         raise DcRsRuntimeError(code)
     if task_name in CORE_TASKS:
@@ -192,8 +187,7 @@ def _validate_archive_input(content: str, code: str) -> str:
         or not payload["sample_id"]
         or not isinstance(payload.get("input"), dict)
         or not isinstance(payload.get("metadata"), dict)
-        or json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
-        != content
+        or json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True) != content
     ):
         raise DcRsRuntimeError(code)
     return task_name

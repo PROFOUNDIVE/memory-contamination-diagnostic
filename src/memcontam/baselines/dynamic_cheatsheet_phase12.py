@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import hashlib
 import re
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal, Mapping, Sequence
 
 from memcontam.baselines import dynamic_cheatsheet_optional as legacy_dc
@@ -138,6 +138,7 @@ class DcRsTrialContextV3:
 class DcRsStateV3:
     archive: list[MemoryEntry | NativeEntry]
     strategies: list[MemoryEntry | NativeEntry] | None = None
+    strategy_history: list[NativeEntry] = field(default_factory=list)
     injected_root_id: str | None = None
     filter_state: FilteredCheckpoint | None = None
     admission_context: AdmissionContext | None = None
@@ -153,7 +154,9 @@ class DcRsStateV3:
             ).entry_id
             for entry in self.strategies
         ]
-        if len(set((*archive_ids, *strategy_ids))) != len((*archive_ids, *strategy_ids)):
+        history_ids = [entry.entry_id for entry in self.strategy_history]
+        all_ids = (*archive_ids, *strategy_ids, *history_ids)
+        if len(set(all_ids)) != len(all_ids):
             raise DcRsContractError("DUPLICATE_COMPONENT")
         if (self.filter_state is None) != (self.admission_context is None):
             raise DcRsContractError("FILTER_ADMISSION_CONTEXT_REQUIRED")
@@ -256,8 +259,7 @@ class DcRsPhase12Adapter:
         canonical_task = (
             canonical_core_task_json(trial.task)
             if _baseline_id(trial) == "dc_rs"
-            and trial.task.task_name
-            in {"mmlu_pro_engineering", "mmlu_pro_physics", "gpqa_diamond"}
+            and trial.task.task_name in {"mmlu_pro_engineering", "mmlu_pro_physics", "gpqa_diamond"}
             else canonical_task_json(trial.task)
         )
         retrieved_records = retriever._retrieve_pairs(
@@ -266,12 +268,8 @@ class DcRsPhase12Adapter:
         archive_by_id = {entry.entry_id: entry for entry in active_archive}
         retrieved_archive = [archive_by_id[record.document_id] for record in retrieved_records]
         core_dc_rs = _baseline_id(trial) == "dc_rs"
-        model_visible_task = (
-            render_model_visible_task(trial.task) if core_dc_rs else canonical_task
-        )
-        recorder = MethodCallRecorder(
-            trial.client, trial_context={"trial_id": trial.trial_id}
-        )
+        model_visible_task = render_model_visible_task(trial.task) if core_dc_rs else canonical_task
+        recorder = MethodCallRecorder(trial.client, trial_context={"trial_id": trial.trial_id})
         call_config = {**dict(trial.config), "sample_id": trial.task.sample_id}
         if core_dc_rs:
             curation_message, curation_spans, source_aliases = core_synthesis_message(
@@ -300,18 +298,16 @@ class DcRsPhase12Adapter:
             model=trial.model,
             config={
                 **_curator_call_config(call_config),
-                **(
-                    {"max_output_tokens": 8192}
-                    if _baseline_id(trial) == "dc_rs"
-                    else {}
-                ),
+                **({"max_output_tokens": 8192} if _baseline_id(trial) == "dc_rs" else {}),
                 "method_stage": "dc_rs_synthesize",
                 "source_spans": curation_spans,
             },
         )
-        if core_dc_rs and count_text_tokens(
-            curated.content, _REGISTERED_TOKEN_ENCODING
-        ) > _REGISTERED_PERSISTED_RAW_ANSWER_CEILING:
+        if (
+            core_dc_rs
+            and count_text_tokens(curated.content, _REGISTERED_TOKEN_ENCODING)
+            > _REGISTERED_PERSISTED_RAW_ANSWER_CEILING
+        ):
             raise DcRsContractError("DC_RS_WRITER_OUTPUT_BUDGET_EXCEEDED")
         if _is_tool_action(curated.content):
             raise DcRsToolContractError("CURATOR_TOOL_FORBIDDEN")
@@ -362,16 +358,18 @@ class DcRsPhase12Adapter:
             trial.config.get("_logging_target_set_id"),
         )
         if strategy_entry is not None:
-            strategy_roots = tuple(dict.fromkeys(
-                root_id
-                for entry in retrieved_archive
-                if entry.entry_id in strategy_entry.direct_parent_ids
-                for root_id in (
-                    _metadata_ids(entry, "injected_root_ids")
-                    if "injected_root_ids" in entry.metadata
-                    else ()
+            strategy_roots = tuple(
+                dict.fromkeys(
+                    root_id
+                    for entry in retrieved_archive
+                    if entry.entry_id in strategy_entry.direct_parent_ids
+                    for root_id in (
+                        _metadata_ids(entry, "injected_root_ids")
+                        if "injected_root_ids" in entry.metadata
+                        else ()
+                    )
                 )
-            ))
+            )
             generation_spans = [
                 span.model_copy(
                     update={
@@ -385,12 +383,14 @@ class DcRsPhase12Adapter:
                             if strategy_entry.direct_parent_ids
                             else span.lineage_basis
                         ),
-                        "injected_root_ids": list(dict.fromkeys(
-                            (
-                                *span.injected_root_ids,
-                                *strategy_roots,
+                        "injected_root_ids": list(
+                            dict.fromkeys(
+                                (
+                                    *span.injected_root_ids,
+                                    *strategy_roots,
+                                )
                             )
-                        )),
+                        ),
                     }
                 )
                 for span in generation_spans
@@ -412,23 +412,23 @@ class DcRsPhase12Adapter:
             tool_trace = _canonical_tool_trace(recorder, tool_events, generated_output)
         else:
             generated_output = generated.content
-        if core_dc_rs and count_text_tokens(
-            generated_output, _REGISTERED_TOKEN_ENCODING
-        ) > _REGISTERED_PERSISTED_RAW_ANSWER_CEILING:
+        if (
+            core_dc_rs
+            and count_text_tokens(generated_output, _REGISTERED_TOKEN_ENCODING)
+            > _REGISTERED_PERSISTED_RAW_ANSWER_CEILING
+        ):
             raise DcRsContractError("DC_RS_RAW_ANSWER_BUDGET_EXCEEDED")
         archive_entry = _archive_write(
             generated_output,
             canonical_task,
             trial,
             tool_trace=tool_trace,
-            parent_strategy_id=(
-                None if strategy_entry is None else strategy_entry.entry_id
+            parent_strategy_id=(None if strategy_entry is None else strategy_entry.entry_id),
+            injected_root_ids=tuple(
+                dict.fromkeys(
+                    root_id for span in generation_spans for root_id in span.injected_root_ids
+                )
             ),
-            injected_root_ids=tuple(dict.fromkeys(
-                root_id
-                for span in generation_spans
-                for root_id in span.injected_root_ids
-            )),
         )
         state.archive.append(archive_entry)
         archive_envelope = _archive_envelope(archive_entry, trial)
@@ -437,7 +437,9 @@ class DcRsPhase12Adapter:
         )
         if core_dc_rs and strategy_entry is not None:
             assert state.strategies is not None
-            state.strategies.append(strategy_entry)
+            if prior_strategy is not None:
+                state.strategy_history.append(prior_strategy)
+            state.strategies[:] = [strategy_entry]
 
         try:
             parsed_answer = parse_final_answer(generated_output)
@@ -510,9 +512,7 @@ def core_synthesis_message(
     prior_strategy: MemoryEntry | None,
     retrieved_archive: Sequence[MemoryEntry],
 ) -> tuple[dict[str, str], list[Any], SourceAliasTable]:
-    aliases = SourceAliasTable.from_source_ids(
-        tuple(entry.entry_id for entry in retrieved_archive)
-    )
+    aliases = SourceAliasTable.from_source_ids(tuple(entry.entry_id for entry in retrieved_archive))
     message, spans = legacy_dc._synthesis_message_with_sources(
         canonical_task,
         [] if prior_strategy is None else [prior_strategy],
