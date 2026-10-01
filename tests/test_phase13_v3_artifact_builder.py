@@ -88,6 +88,14 @@ def publication():
     return module.publish_artifacts
 
 
+def test_builder_source_uses_current_candidate_for_every_static_role(builder_source):
+    from memcontam.readiness.phase13_v3_builder_inputs import STATIC_PATHS
+
+    root, _commit, _authority = builder_source
+    for path in STATIC_PATHS:
+        assert (root / path).read_bytes() == (REPAIR_ROOT / path).read_bytes(), path
+
+
 def test_phase4_witness_reserves_frozen_retry_entitlements(staged):
     from memcontam.readiness.phase13_v3_builder_inputs import phase4_costs
 
