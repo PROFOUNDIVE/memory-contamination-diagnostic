@@ -23,6 +23,20 @@ def test_runtime_root_is_current_source_not_retired_checkout() -> None:
     assert ROOT == Path(__file__).resolve().parents[1]
 
 
+def test_disposable_package_uses_current_candidate_resources(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from . import test_phase13_v3_entrypoint_fixture as fixture
+    from memcontam.readiness.phase13_main_resource_contract import RESOURCE_PATHS
+
+    monkeypatch.setattr(fixture, "RESOURCE_ROOT", tmp_path, raising=False)
+    package_bytes = fixture.build_entrypoint_bytes((0,))
+    candidate = fixture.REPAIR_ROOT
+    for role, path in RESOURCE_PATHS.items():
+        if role not in {"activated_policy", "base_inputs", "cost_witness"}:
+            assert package_bytes[path] == (candidate / path).read_bytes()
+
+
 @pytest.mark.parametrize("generation", ["disposable-alpha", "disposable-beta"])
 def test_fresh_identity_serializes_when_generation_is_explicit(generation: str) -> None:
     identity = corrective_identity(generation)

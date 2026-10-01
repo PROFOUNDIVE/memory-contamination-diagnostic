@@ -45,7 +45,6 @@ from memcontam.readiness.phase13_v3_source_closure import (
 from .phase13_corrective_identity import corrective_identity
 
 AUTHORITY = Path("/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts")
-RESOURCE_ROOT = Path("/home/hyunwoo/git/memory-contamination-diagnostic-phase13-main-execution-entrypoint-closure")
 REPAIR_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -64,23 +63,8 @@ def build_entrypoint_bytes(
     authority = load_authority_v3(AUTHORITY, identity=execution_identity)
     identity = freeze_runtime_identity()
     generated_roles = {"activated_policy", "base_inputs", "cost_witness"}
-    repair_roles = {
-        "candidate_registry",
-        "legacy_dc_rs_intervention_registry",
-        "legacy_rag_manifest",
-        "legacy_rag_seal",
-        "observability_packet",
-        "rag_corpus_game24",
-        "rag_corpus_math_equation_balancer",
-        "rag_corpus_word_sorting",
-        "rag_index_game24",
-        "rag_index_math_equation_balancer",
-        "rag_index_word_sorting",
-    }
-    resources = {row.binding.path: row.raw for row in read_files(RESOURCE_ROOT, tuple(
-        path for role, path in RESOURCE_PATHS.items() if role not in generated_roles | repair_roles))}
-    resources.update({row.binding.path: row.raw for row in read_files(
-        REPAIR_ROOT, tuple(RESOURCE_PATHS[role] for role in repair_roles))})
+    resources = {row.binding.path: row.raw for row in read_files(
+        REPAIR_ROOT, tuple(path for role, path in RESOURCE_PATHS.items() if role not in generated_roles))}
     if production_units is None:
         unit_ids = tuple(hashlib.sha256(json.dumps(["phase13-main-a-disjoint-unit-id-v1", "NO_MEMORY_SINGLETON",
             seed, "game24", None, "NOT_APPLICABLE"], separators=(",", ":")).encode()).hexdigest() for seed in seeds)
@@ -194,8 +178,8 @@ def seal_fixture_closure(root: Path) -> None:
         if target.exists():
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
-        source = ROOT / path if path == "data/phase13/main/track1_authority_state_sync_checkpoint_v1.json" else RESOURCE_ROOT / path
-        target.write_bytes(source.read_bytes() if source.is_file() else b"fixture\n")
+        source = REPAIR_ROOT / path
+        target.write_bytes(source.read_bytes())
     inventory = freeze_governed(root, commit)
     manifest_path = PREFIX + P4_PATHS[-1]
     manifest, = tuple(row for row in freeze_resources(root, expected).rows if row.path == manifest_path)
