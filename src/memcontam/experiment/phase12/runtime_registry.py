@@ -479,6 +479,10 @@ def _reflexion_serialize(state: object) -> NativeState:
             "first_injected_eviction_trial_id": state.first_injected_eviction_trial_id,
             "injected_root_id": state.injected_root_id,
             "reflections": [_entry_id(entry) for entry in state.reflections],
+            "evicted_reflections": [
+                _native_entry(entry, "verbal_reflection", "reflections").to_mapping()
+                for entry in state.evicted_reflections
+            ],
         },
     )
 
@@ -488,11 +492,21 @@ def _reflexion_restore(snapshot: object, context: Any) -> ReflexionStateV3:
     state = _native_state(snapshot, "reflexion_style")
     if not all(isinstance(entry, NativeEntry) for entry in state.entries):
         raise RuntimeStateError("REFLEXION_SNAPSHOT_INVALID")
+    evicted = state.native_state.get("evicted_reflections", [])
+    if not isinstance(evicted, list) or any(not isinstance(entry, dict) for entry in evicted):
+        raise RuntimeStateError("REFLEXION_SNAPSHOT_INVALID")
+    try:
+        evicted_entries: list[MemoryEntry | NativeEntry] = [
+            NativeEntry.from_mapping(entry) for entry in evicted
+        ]
+    except (KeyError, TypeError, ValueError) as error:
+        raise RuntimeStateError("REFLEXION_SNAPSHOT_INVALID") from error
     return ReflexionStateV3(
         reflections=[entry for entry in state.entries if isinstance(entry, NativeEntry)],
         injected_root_id=state.native_state.get("injected_root_id"),
         active_capacity=state.native_state.get("active_capacity"),
         first_injected_eviction_trial_id=state.native_state.get("first_injected_eviction_trial_id"),
+        evicted_reflections=evicted_entries,
     )
 
 

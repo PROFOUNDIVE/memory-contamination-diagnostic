@@ -21,6 +21,7 @@ from memcontam.memory.checkpoint_v3 import (
     NATIVE_ENTRY_V1,
     NativeEntry,
     NativeState,
+    deserialize_checkpoint,
     serialize_checkpoint,
 )
 from memcontam.memory.filtered_state import partition_native_checkpoint
@@ -325,6 +326,8 @@ def test_target_set_lineage_does_not_erase_explicit_reflection_parent() -> None:
 
 
 def test_active_capacity_evicts_the_oldest_reflection_after_a_new_write() -> None:
+    from memcontam.experiment.phase12.runtime_registry import PHASE13_CORE_BASELINE_REGISTRY
+
     injected = _reflection("injected-reflection", "Reflection: Controlled guidance.")
     trial = _trial(
         branch="contam",
@@ -345,6 +348,114 @@ def test_active_capacity_evicts_the_oldest_reflection_after_a_new_write() -> Non
     assert [entry.entry_id for entry in state.reflections] == [
         result.native_reflections[-1].entry_id
     ]
+    registry = PHASE13_CORE_BASELINE_REGISTRY["reflexion_style"]
+    snapshot = registry.serialize_state(state)
+    assert isinstance(snapshot, NativeState)
+    restored = registry.restore_state(
+        deserialize_checkpoint(serialize_checkpoint(snapshot)), None
+    )
+    assert isinstance(restored, ReflexionStateV3)
+    assert restored.injected_root_id == injected.entry_id
+    assert restored.first_injected_eviction_trial_id == trial.trial_id
+    assert [entry.entry_id for entry in restored.reflections] == [result.native_reflections[-1].entry_id]
+
+
+def test_injected_reflection_survives_two_ordinary_writes_and_native_restore() -> None:
+    from memcontam.experiment.phase12.runtime_registry import PHASE13_CORE_BASELINE_REGISTRY
+
+    registry = PHASE13_CORE_BASELINE_REGISTRY["reflexion_style"]
+    root = _reflection("injected-reflection", "Reflection: Controlled guidance.")
+    state = ReflexionStateV3(reflections=[root], injected_root_id=root.entry_id)
+    for index, parent in enumerate((root.entry_id, "ordinary-reflection-0")):
+        trial = replace(
+            _trial(
+                branch="correct", max_attempts=1,
+                responses={
+                    "reflexion_generate": "final: wrong",
+                    "reflexion_reflect": _corrective_reflection("Use the prior guidance.", [parent]),
+                },
+            ),
+            trial_id=f"reflexion:ordinary:{index}",
+            order_key=index + 2,
+            config={"max_attempts": 1, "_deterministic_memory_entry_id": f"ordinary-reflection-{index}"},
+        )
+        result = ReflexionPhase12Adapter().execute(trial, state)
+        assert result.write_envelope is not None
+        assert result.write_envelope.direct_parent_ids == (parent,)
+        checkpoint = serialize_checkpoint(registry.serialize_state(state))
+        restored = registry.restore_state(deserialize_checkpoint(checkpoint), None)
+        assert isinstance(restored, ReflexionStateV3)
+        state = restored
+        assert [entry.entry_id for entry in state.reflections] == [
+            root.entry_id, *(f"ordinary-reflection-{n}" for n in range(index + 1))
+        ]
+        assert state.injected_root_id == root.entry_id
+
+
+def test_reflexion_restore_rejects_missing_root_without_eviction_and_false_eviction() -> None:
+    from memcontam.experiment.phase12.runtime_registry import PHASE13_CORE_BASELINE_REGISTRY
+
+    registry = PHASE13_CORE_BASELINE_REGISTRY["reflexion_style"]
+    root = _reflection("injected-reflection", "Reflection: Controlled guidance.")
+    state = ReflexionStateV3(reflections=[root], injected_root_id=root.entry_id)
+    snapshot = registry.serialize_state(state)
+    assert isinstance(snapshot, NativeState)
+    missing = NativeState("reflexion_style", (), snapshot.native_state)
+    with pytest.raises(ReflexionContractError, match="INJECTED_REFLECTION_NOT_NEWEST"):
+        registry.restore_state(missing, None)
+    false_eviction = NativeState(
+        "reflexion_style", snapshot.entries,
+        {**snapshot.native_state, "first_injected_eviction_trial_id": "trial:fake"},
+    )
+    with pytest.raises(ReflexionContractError, match="INJECTED_REFLECTION_NOT_NEWEST"):
+        registry.restore_state(false_eviction, None)
+
+
+def test_reflexion_restores_descendant_after_root_capacity_eviction() -> None:
+    from memcontam.experiment.phase12.runtime_registry import PHASE13_CORE_BASELINE_REGISTRY
+
+    root = _reflection("injected-reflection", "Reflection: Controlled guidance.")
+    state = ReflexionStateV3(reflections=[root], injected_root_id=root.entry_id, active_capacity=1)
+    trial = replace(
+        _trial(
+            branch="contam", max_attempts=1,
+            responses={
+                "reflexion_generate": "final: wrong",
+                "reflexion_reflect": _corrective_reflection("Use the controlled guidance.", [root.entry_id]),
+            },
+        ),
+        config={"max_attempts": 1, "_deterministic_memory_entry_id": "ordinary-descendant"},
+    )
+    result = ReflexionPhase12Adapter().execute(trial, state)
+    assert result.native_reflections[-1].direct_parent_ids == (root.entry_id,)
+    registry = PHASE13_CORE_BASELINE_REGISTRY["reflexion_style"]
+    snapshot = registry.serialize_state(state)
+    assert isinstance(snapshot, NativeState)
+    restored = registry.restore_state(deserialize_checkpoint(serialize_checkpoint(snapshot)), None)
+    assert isinstance(restored, ReflexionStateV3)
+    assert [entry.entry_id for entry in restored.reflections] == ["ordinary-descendant"]
+    assert restored.injected_root_id == root.entry_id
+    assert [entry.entry_id for entry in restored.evicted_reflections] == [root.entry_id]
+    missing_catalog = NativeState(
+        "reflexion_style", snapshot.entries,
+        {**snapshot.native_state, "evicted_reflections": []},
+    )
+    with pytest.raises(ReflexionContractError, match="FUTURE_REFLECTION_ACCESS"):
+        registry.restore_state(missing_catalog, None)
+    orphan = NativeState(
+        "reflexion_style", (),
+        {**snapshot.native_state, "evicted_reflections": []},
+    )
+    with pytest.raises(ReflexionContractError, match="INJECTED_REFLECTION_NOT_NEWEST"):
+        registry.restore_state(orphan, None)
+    forged = NativeState(
+        "reflexion_style", snapshot.entries,
+        {**snapshot.native_state, "evicted_reflections": [
+            {**snapshot.native_state["evicted_reflections"][0], "content_hash": "0" * 64}
+        ]},
+    )
+    with pytest.raises(ReflexionContractError, match="INVALID_NATIVE_REFLECTION"):
+        registry.restore_state(forged, None)
 
 
 def test_rejects_future_access_capacity_error_and_visible_parent_union() -> None:

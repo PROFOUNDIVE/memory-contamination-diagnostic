@@ -89,10 +89,16 @@ class ReflexionStateV3:
             raise ReflexionContractError("INVALID_ACTIVE_CAPACITY")
         if (self.filter_state is None) != (self.admission_context is None):
             raise ReflexionContractError("FILTER_ADMISSION_CONTEXT_REQUIRED")
-        _validate_reflection_order(self.reflections)
+        for entry in self.evicted_reflections:
+            _as_reflection(entry)
+        _validate_reflection_order((*self.evicted_reflections, *self.reflections))
         if self.injected_root_id is not None:
             reflection_ids = _entry_ids(self.reflections)
-            if not reflection_ids or reflection_ids[-1] != self.injected_root_id:
+            root_present = self.injected_root_id in reflection_ids
+            evicted_root_present = self.injected_root_id in _entry_ids(self.evicted_reflections)
+            if root_present != (self.first_injected_eviction_trial_id is None) or (
+                not root_present and not evicted_root_present
+            ):
                 raise ReflexionContractError("INJECTED_REFLECTION_NOT_NEWEST")
         if (
             self.active_capacity is not None
@@ -214,7 +220,7 @@ def _as_reflection(entry: MemoryEntry | NativeEntry) -> MemoryEntry:
         entry.semantic_kind,
         entry.schema_version,
         entry.native_component,
-    ) != ("verbal_reflection", NATIVE_ENTRY_V1, "reflections"):
+    ) != ("verbal_reflection", NATIVE_ENTRY_V1, "reflections") or entry.content_hash != canonical_content_hash(entry.content):
         raise ReflexionContractError("INVALID_NATIVE_REFLECTION")
     return MemoryEntry(
         entry_id=entry.entry_id,
