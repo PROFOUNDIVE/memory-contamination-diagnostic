@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, replace
 from typing import Any, Callable, Mapping, TypeVar
 
@@ -31,6 +32,8 @@ from memcontam.readiness.phase13_cost_policy import (
     Phase13ProviderCallError,
 )
 from memcontam.clients.recording import MethodCallRecorder
+from memcontam.logging.schema_v3 import RetrievalEvent
+from memcontam.tasks.dispatch import canonical_core_task_json, canonical_task_json
 
 
 class RuntimeStateError(ValueError):
@@ -284,9 +287,26 @@ def _dc_execute(context: Any, state: object) -> RuntimeTrialResult:
         for envelope in (result.archive_envelope, result.strategy_envelope)
         if envelope is not None
     )
+    query = (
+        canonical_core_task_json(context.task)
+        if context.task.task_name in {"mmlu_pro_engineering", "mmlu_pro_physics", "gpqa_diamond"}
+        else canonical_task_json(context.task)
+    )
+    retrieval = RetrievalEvent(
+        record_type="retrieval_event",
+        event_id=f"{context.identities.trial_id}:retrieval",
+        run_id=context.identities.run_id,
+        trial_id=context.identities.trial_id,
+        event_seq=0,
+        retrieval_id=f"{context.identities.trial_id}:retrieval",
+        query_hash=hashlib.sha256(query.encode("utf-8")).hexdigest(),
+        retrieved_entry_ids=[row["entry_id"] for row in result.outcome.retrieved_memory],
+        retrieved_scores=list(result.outcome.retrieved_scores),
+    )
     return RuntimeTrialResult(
         result.outcome,
         execution.state,
+        retrieval_event=retrieval,
         native_entries=native_entries,
         write_envelopes=envelopes,
     )

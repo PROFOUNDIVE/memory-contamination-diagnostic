@@ -26,6 +26,7 @@ from memcontam.experiment import phase13_ordinary_runtime as ordinary_runtime
 from memcontam.memory.checkpoint_v3 import NativeEntry, NativeState, serialize_checkpoint
 from memcontam.memory.cards_v3 import canonical_content_hash
 from memcontam.memory.stores import MemoryEntry
+from memcontam.logging.schema_v3 import RetrievalEvent
 from memcontam.evaluation.phase13_observability import reconstruct_phase13_trial
 from memcontam.experiment.phase13_ordinary_runtime import ProspectiveOrdinaryRun
 from memcontam.readiness.phase13_production_runtime_evidence import (
@@ -158,6 +159,9 @@ def test_dc_rs_runtime_is_first_class_text_only_retrieve_synthesize_generate() -
 
     result = entry.execute_trial(_context(), state)
 
+    assert isinstance(result.retrieval_event, RetrievalEvent)
+    assert result.retrieval_event.retrieved_entry_ids == ["archive-root"]
+    assert result.retrieval_event.retrieved_scores == [1.0]
     assert [call.stage for call in result.outcome.method_calls] == [
         "dc_rs_synthesize",
         "dc_rs_generate",
@@ -369,6 +373,9 @@ def test_dc_rs_first_trial_generates_from_transient_whole_cheatsheet() -> None:
 
     result = entry.execute_trial(context, entry.initial_state(context))
 
+    assert isinstance(result.retrieval_event, RetrievalEvent)
+    assert result.retrieval_event.retrieved_entry_ids == []
+    assert result.retrieval_event.retrieved_scores == []
     generation_prompt = result.outcome.method_calls[1].messages[0]["content"]
     assert "first-trial rewritten guide" in generation_prompt
     assert isinstance(result.state, DcRsStateV3)

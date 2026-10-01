@@ -23,7 +23,10 @@ from memcontam.experiment.phase13_ordinary_runtime import (
 from memcontam.memory.checkpoint_v3 import NativeEntry, NativeState, serialize_checkpoint
 from memcontam.memory.embeddings import BgeM3EmbeddingProvider
 from memcontam.readiness.phase13_main_live_runtime import ProductionMainRuntime
-from memcontam.readiness.phase13_production_observability import validate_production_archive
+from memcontam.readiness.phase13_production_observability import (
+    ProductionObservabilityError,
+    validate_production_archive,
+)
 from memcontam.readiness.phase13_production_runtime_join import (
     ProductionOrdinaryRunIdentity,
     production_archive_from_ordinary,
@@ -428,6 +431,46 @@ def test_native_trial_reaches_current_archive_validator(
         assert isinstance(first, Phase13TrialEvidence)
         assert isinstance(second, Phase13TrialEvidence)
         assert first.new_entry_ids
+        assert first.retrievals
+        assert first.retrievals[0].retrieved_entry_ids == [
+            row["entry_id"] for row in result.trials[0].outcome.retrieved_memory
+        ]
+        retrieved = result.trials[1].outcome.retrieved_memory
+        assert retrieved
+        assert [row["rank"] for row in retrieved] == list(range(1, len(retrieved) + 1))
+        assert len(second.retrievals) == 1
+        assert second.trial.retrieval_event_ids == [second.retrievals[0].event_id]
+        assert second.retrievals[0].retrieved_entry_ids == [row["entry_id"] for row in retrieved]
+        assert second.retrievals[0].retrieved_scores == [row["score"] for row in retrieved]
+        assert second.context is not None
+        assert all(
+            row["entry_id"] not in second.context.final_entry_ids
+            for row in retrieved
+        )
+        forged = archive.model_copy(
+            update={
+                "records": (
+                    archive.records[0],
+                    archive.records[1].model_copy(
+                        update={
+                            "evidence": second.model_copy(
+                                update={
+                                    "retrievals": (
+                                        second.retrievals[0].model_copy(
+                                            update={"event_id": "forged-retrieval"}
+                                        ),
+                                    )
+                                }
+                            )
+                        }
+                    ),
+                )
+            }
+        )
+        with pytest.raises(ProductionObservabilityError, match="PRODUCTION_RECONSTRUCTION_FAILED"):
+            validate_production_archive(
+                forged, packet, identity.registration_packet_sha256, frozen_tasks=run.tasks
+            )
         first_state_after = result.trials[0].state_after
         second_state_after = result.trials[1].state_after
         assert isinstance(first_state_after, NativeState)
