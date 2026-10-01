@@ -46,6 +46,8 @@ from .phase13_corrective_identity import corrective_identity
 
 AUTHORITY = Path("/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts")
 REPAIR_ROOT = Path(__file__).resolve().parents[1]
+# Historical v2 tests read frozen artifacts; current disposable packages use REPAIR_ROOT.
+RESOURCE_ROOT = Path("/home/hyunwoo/git/memory-contamination-diagnostic-phase13-main-execution-entrypoint-closure")
 
 
 @pytest.fixture(scope="session")
