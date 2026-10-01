@@ -13,7 +13,6 @@ from pydantic import JsonValue
 from memcontam.baselines.prompt_budget import count_prompt_tokens
 from memcontam.clients.base import LLMClient, LLMResponse
 from memcontam.clients.config import ProviderConfig
-from memcontam.clients.openai_responses import OpenAIResponsesClient
 from memcontam.readiness.phase13_authority_files import read_regular_nofollow
 from memcontam.readiness.phase13_main_request_recovery import (
     RequestIdentityReceiptV3,
@@ -67,6 +66,8 @@ class DispatchTechnicalFailureV3(RuntimeError):
 
 
 def production_provider(binding: PackageBindingV3) -> CompiledProvider:
+    from memcontam.clients.openai_responses import OpenAIResponsesClient
+
     return OpenAIResponsesClient(ProviderConfig(
         provider="openai_responses", timeout_seconds=180, live_calls_enabled=True,
         retries_after_initial_attempt=0, max_output_tokens=512,
