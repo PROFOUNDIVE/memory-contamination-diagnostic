@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import shutil
 from collections.abc import Callable
 from pathlib import Path
 from typing import assert_never
@@ -12,7 +11,12 @@ import pytest
 from memcontam.clients.base import LLMResponse
 from memcontam.memory.embeddings import BgeM3EmbeddingProvider, EmbeddingProvider
 from memcontam.readiness.phase13_main_live_runtime import ProductionMainRuntime
-from memcontam.readiness.phase13_v3_builder_inputs import first_freeze, production
+from memcontam.readiness.phase13_v3_builder import build_mr_p4, build_mr_p5, validate_mr_p5, _authorization
+from memcontam.readiness.phase13_v3_builder_inputs import PREFIX, STATIC_PATHS, phase4_costs
+from memcontam.readiness.phase13_v3_cost_models import CostError, canonical_bytes, digest
+from memcontam.readiness.phase13_v3_entrypoint import SelectionRequest, SelectedExecutionV3, select_execution, EntrypointError
+from memcontam.readiness.phase13_v3_entrypoint_models import MainAuthorizationV3, MainExecutionPackageV3
+from memcontam.readiness.phase13_v3_publication import P4_PATHS, P5_PATHS
 from memcontam.readiness.phase13_v3_request import (
     CompiledProviderRequestV3,
     PackageBindingV3,
@@ -21,14 +25,10 @@ from memcontam.readiness.phase13_v3_resource_files import read_files
 from memcontam.readiness.phase13_v3_terminal_ledger import TerminalLedgerV3
 
 from .phase13_runner_safety_fixture import FakeProvider, open_run
-from .test_phase13_v3_entrypoint_fixture import (
-    REPAIR_ROOT,
-    STATIC_PATHS,
-    build_entrypoint_bytes,
-    seal_fixture_closure,
-)
+from .test_phase13_v3_entrypoint_fixture import REPAIR_ROOT
+from .test_phase13_v3_artifact_builder import builder_source as builder_source
+from .phase13_corrective_identity import corrective_identity
 from .test_phase13_v3_entrypoint_integration import deny_external as deny_external
-from .test_phase13_runner_safety import local_authority as local_authority
 
 
 @pytest.fixture(scope="session")
@@ -135,44 +135,82 @@ class ShadowPrePayloadTimeout(TimeoutError):
     phase13_retry_class = "TIMEOUT_BEFORE_SEMANTIC_PAYLOAD"
 
 
+def staging_shadow_request(tmp_path: Path, builder_source) -> SelectionRequest:
+    root, commit, authority = builder_source
+    output = tmp_path / "staging-output"
+    output.mkdir()
+    manifest = build_mr_p4(root, authority, output, governed_source_commit=commit,
+                           identity=corrective_identity())
+    package = build_mr_p5(root, authority, output)
+    assert validate_mr_p5(root, authority, output) == package
+    for path in (*P4_PATHS, *P5_PATHS):
+        target = root / PREFIX / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((output / path).read_bytes())
+    # Disposable selection fixture only; no MR-P6 publication or live authorization.
+    authorization = _authorization(package)
+    auth_path = root / "staging-shadow-authorization.json"
+    auth_path.write_bytes(canonical_bytes(authorization))
+    sidecar = root / "staging-shadow-authorization.sha256"
+    sidecar.write_text(digest(authorization) + "\n")
+    assert phase4_costs(manifest).base.bindings.request_compiler_hash == package.final_order.request_hash
+    return SelectionRequest(root, root / PREFIX / P5_PATHS[-1], auth_path, authority,
+                            sidecar, package.identity.run_id)
+
+
+def test_shadow_package_uses_candidate_governed_prefreeze(tmp_path: Path, builder_source) -> None:
+    request = staging_shadow_request(tmp_path, builder_source)
+    root, commit, _authority = builder_source
+    selected = select_execution(request, "run")
+    assert isinstance(selected, SelectedExecutionV3)
+    assert selected.package.governed_source is not None
+    assert selected.package.governed_source.governed_source_commit == commit
+    assert selected.package.final_order.request_hash != "c" * 64
+    assert selected.package.final_order.tokenizer_hash != "d" * 64
+    assert all(row.binding.sha256 == hashlib.sha256((REPAIR_ROOT / row.binding.path).read_bytes()).hexdigest()
+               for row in read_files(root, STATIC_PATHS))
+    selected.close()
+    target = root / "data/phase13/main/legacy_dc_rs_intervention_registry_v2.json"
+    original = target.read_bytes()
+    target.write_bytes(original + b" ")
+    with pytest.raises(EntrypointError, match="MAIN_AUTHORIZATION_BINDING_MISMATCH"):
+        select_execution(request, "run")
+    target.write_bytes(original)
+    package = MainExecutionPackageV3.model_validate_json(request.package_path.read_bytes())
+    package = package.model_copy(update={"final_order": package.final_order.model_copy(
+        update={"request_hash": "c" * 64})})
+    package = package.model_copy(update={"package_hash": digest(package, "package_hash")})
+    request.package_path.write_bytes(canonical_bytes(package))
+    auth = MainAuthorizationV3.model_validate_json(request.authorization_path.read_bytes())
+    auth = auth.model_copy(update={"execution_package_sha256": digest(package),
+                                   "execution_package_hash": package.package_hash})
+    auth = auth.model_copy(update={"authorization_hash": digest(auth, "authorization_hash")})
+    request.authorization_path.write_bytes(canonical_bytes(auth))
+    assert request.expected_authorization_sha256_file is not None
+    request.expected_authorization_sha256_file.write_text(digest(auth) + "\n")
+    with pytest.raises(CostError, match="MAIN_COST_PROOF_MISMATCH"):
+        select_execution(request, "run")
+
+
 @pytest.mark.parametrize("bounded", [True, False], ids=["first-entitled-unit", "full-seed-zero"])
 def test_seed_zero_shadow_commits_every_production_unit_without_external_access(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     deny_external: dict[str, int],
-    local_authority: Path,
+    builder_source,
     local_embedder: EmbeddingProvider,
     bounded: bool,
 ) -> None:
     del deny_external
-    source_root = tmp_path / "source"
-    for path in STATIC_PATHS:
-        source = REPAIR_ROOT / path
-        target = source_root / path
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source, target)
-    source_rows = read_files(source_root, STATIC_PATHS)
-    all_units = production(first_freeze(source_root), tuple(row.binding for row in source_rows))
-    seed_zero_units = tuple(unit for unit in all_units if unit.seed == 0)
-    entrypoint_bytes = build_entrypoint_bytes(tuple(range(10)), production_units=all_units)
-    for path, raw in entrypoint_bytes.items():
-        target = tmp_path / path
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(raw)
-    shutil.copytree(local_authority, tmp_path / "authority")
-    seal_fixture_closure(tmp_path)
-    from memcontam.readiness.phase13_v3_entrypoint import SelectionRequest
-
-    from .phase13_corrective_identity import corrective_identity
-
-    request = SelectionRequest(
-        tmp_path,
-        tmp_path / "package.json",
-        tmp_path / "authorization.json",
-        tmp_path / "authority",
-        tmp_path / "authorization.sha256",
-        corrective_identity().run_id,
-    )
+    request = staging_shadow_request(tmp_path, builder_source)
+    source_rows = read_files(request.repository_root, STATIC_PATHS)
+    selected = select_execution(request, "run")
+    assert isinstance(selected, SelectedExecutionV3)
+    try:
+        production_units = selected.package.production
+    finally:
+        selected.close()
+    seed_zero_units = tuple(unit for unit in production_units if unit.seed == 0)
     monkeypatch.setattr(ProductionMainRuntime, "_embedder", lambda _self: local_embedder)
     provider = SeedZeroShadowProvider()
     run = open_run(request, create=True)
@@ -224,7 +262,7 @@ def test_seed_zero_shadow_commits_every_production_unit_without_external_access(
         )
         assert status.completed_count == (limit or len(seed_zero_units))
         assert status.terminal_technical_missing_count == 0
-        assert status.pending_count == len(all_units) - (limit or len(seed_zero_units))
+        assert status.pending_count == len(production_units) - (limit or len(seed_zero_units))
         assert len(provider.requests) == expected_dispatches + 1
         assert len(set(provider.requests)) == expected_dispatches
         assert status.provider_calls_issued == len(provider.requests)
@@ -281,7 +319,7 @@ def test_seed_zero_shadow_commits_every_production_unit_without_external_access(
         reopened.close()
     later_seed = open_run(request, create=False, seed=1)
     try:
-        assert later_seed.status().pending_count == len(all_units) - (limit or len(seed_zero_units))
+        assert later_seed.status().pending_count == len(production_units) - (limit or len(seed_zero_units))
         assert tuple(provider.requests) == before_resume
     finally:
         later_seed.close()
