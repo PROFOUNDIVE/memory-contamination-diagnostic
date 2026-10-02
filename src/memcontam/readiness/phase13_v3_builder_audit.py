@@ -83,6 +83,7 @@ ALLOW: Final = (
     "src/memcontam/experiment/phase13_dc_rs_runtime.py",
     "src/memcontam/experiment/phase13_dc_rs_validation.py",
     "src/memcontam/logging/schema.py",
+    "src/memcontam/memory/cards_v3.py",
     "src/memcontam/memory/checkpoint_v3.py",
     "tests/phase13_corrective_identity.py",
     "tests/phase13_runner_safety_fixture.py",
