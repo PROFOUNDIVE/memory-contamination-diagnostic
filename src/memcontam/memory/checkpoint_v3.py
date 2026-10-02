@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping
 
 
 CHECKPOINT_V3 = "checkpoint_v3"
@@ -29,6 +29,7 @@ class NativeEntry:
     retrieval_description: str | None = None
     template_body: str | None = None
     category: str | None = None
+    lineage_status: Literal["exact", "approximate", "unavailable"] = "exact"
 
     def to_mapping(self) -> dict[str, Any]:
         value = {
@@ -47,10 +48,14 @@ class NativeEntry:
             value["template_body"] = self.template_body
         if self.category is not None:
             value["category"] = self.category
+        if self.lineage_status != "exact":
+            value["lineage_status"] = self.lineage_status
         return value
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> NativeEntry:
+        if value.get("lineage_status", "exact") not in {"exact", "approximate", "unavailable"}:
+            raise CheckpointError("INVALID_LINEAGE_STATUS")
         return cls(
             entry_id=value["entry_id"],
             semantic_kind=value["semantic_kind"],
@@ -63,6 +68,7 @@ class NativeEntry:
             retrieval_description=value.get("retrieval_description"),
             template_body=value.get("template_body"),
             category=value.get("category"),
+            lineage_status=value.get("lineage_status", "exact"),
         )
 
 

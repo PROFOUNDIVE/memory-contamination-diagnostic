@@ -375,9 +375,7 @@ class DcRsPhase12Adapter:
                     update={
                         "entry_id": strategy_entry.entry_id,
                         "direct_parent_ids": list(strategy_entry.direct_parent_ids),
-                        "lineage_status": (
-                            "exact" if strategy_entry.direct_parent_ids else span.lineage_status
-                        ),
+                        "lineage_status": strategy_entry.lineage_status,
                         "lineage_basis": (
                             "recorded_source"
                             if strategy_entry.direct_parent_ids
@@ -773,6 +771,7 @@ def _admit_strategy(
         content=candidate.content,
         content_hash=canonical_content_hash(candidate.content),
         direct_parent_ids=candidate.explicit_source_ids,
+        lineage_status=lineage_status,
     )
     envelope = MemoryCardEnvelopeV3(
         entry_id=entry.entry_id,
@@ -793,6 +792,7 @@ def _admit_strategy(
         native_component=entry.native_component,
         content=entry.content,
         content_hash=entry.content_hash,
+        lineage_status=lineage_status,
     )
     if not persist:
         if lineage_status == "approximate":
@@ -1043,7 +1043,8 @@ def _strategy_memory(entry: NativeEntry) -> MemoryEntry:
         entry_id=entry.entry_id,
         content=entry.content,
         memory_type="dynamic_cheatsheet",
-        metadata={"direct_parent_ids": list(entry.direct_parent_ids)},
+        metadata={"direct_parent_ids": list(entry.direct_parent_ids),
+                  "source_lineage_status": entry.lineage_status},
     )
 
 

@@ -199,6 +199,21 @@ def validate_classifier_joins(
         answer_calls = tuple(call for call in record.method_calls if call.call_id == answer_call_id) if answer_call_id else record.method_calls[-1:]
         if len(answer_calls) != 1 or answer_calls[0].raw_response is None:
             raise ProductionObservabilityError("PRODUCTION_CLASSIFIER_JOIN_MISMATCH")
+        if isinstance(record.evidence, Phase13TrialEvidence) and record.evidence.baseline == "dc_rs":
+            from memcontam.baselines.dynamic_cheatsheet_phase12 import curate_pre_generation
+
+            nodes = {node.entry_id: node for node in record.evidence.lineage}
+            synthesis_calls = tuple(call for call in record.method_calls if call.stage == "dc_rs_synthesize")
+            unavailable_source = bool(synthesis_calls) and curate_pre_generation(
+                synthesis_calls[-1].raw_response or "", fallback_strategy="",
+                retrieved_archive_ids=(), strict_whole_response=True,
+            ).lineage_status == "unavailable"
+            if any(
+                (unavailable_source or span.lineage_status in {"unavailable", "approximate"})
+                and (span.entry_id not in nodes or nodes[span.entry_id].lineage_status == "exact")
+                for span in answer_calls[0].source_spans
+            ):
+                raise ProductionObservabilityError("PRODUCTION_LINEAGE_STATUS_MISMATCH")
         try:
             raw_answer = answer_calls[0].raw_response
             if record.evidence.baseline == "bot_style":

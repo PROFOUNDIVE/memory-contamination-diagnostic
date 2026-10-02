@@ -106,8 +106,13 @@ def reconstruct_registered_sequence(
         tuple(bool(descendant_ids & set(evidence.memory_after_ids)) for evidence in evidence_rows),
         rows[0].analysis_window_id,
     )
+    unavailable = MetricValue(status="unavailable", reason="LINEAGE_UNAVAILABLE")
+    exposure_complete = all(row.theory_exposure.status != "unavailable" for row in rows)
+    descendants_complete = all(row.descendant_storage_persistence.status != "unavailable" for row in rows)
     result = []
     for index, (evidence, row) in enumerate(zip(evidence_rows, rows, strict=True)):
+        uncertain_exposure = any(item.theory_exposure.status == "unavailable" for item in rows[:index + 1])
+        uncertain_descendants = any(item.descendant_storage_persistence.status == "unavailable" for item in rows[:index + 1])
         generic = has_registered_recurrence(classes[: index + 1], lookback)
         prior_start = max(0, index - lookback)
         exact = any(
@@ -125,18 +130,18 @@ def reconstruct_registered_sequence(
                     "descendant_entry_ids": descendants_by_row[index],
                     "descendant_storage_persistence": _descendant_metric(
                         descendants_by_row[index], evidence.memory_after_ids
-                    ),
+                    ) if not uncertain_descendants or set(descendants_by_row[index]).intersection(evidence.memory_after_ids) else unavailable,
                     "descendant_prompt_visibility": _descendant_metric(
                         descendants_by_row[index],
                         () if evidence.context is None else tuple(evidence.context.final_entry_ids),
-                    ),
+                    ) if not uncertain_descendants or (evidence.context is not None and set(descendants_by_row[index]).intersection(evidence.context.final_entry_ids)) else unavailable,
                     "generic_recurrence": _indicator(generic, classes[index]),
-                    "exact_lineage_recurrence": _indicator(exact, classes[index]),
+                    "exact_lineage_recurrence": _indicator(exact, classes[index]) if not uncertain_exposure or exact else unavailable,
                     "exposure_conditioned_recurrence": _exposure_indicator(row, generic, classes[index]),
-                    "post_eviction_recurrence": post_eviction,
+                    "post_eviction_recurrence": post_eviction if not uncertain_exposure else unavailable,
                     "root_retention_duration": root_retention,
-                    "prompt_retention_duration": exposure_retention,
-                    "descendant_retention_duration": descendant_retention,
+                    "prompt_retention_duration": exposure_retention if exposure_complete else unavailable,
+                    "descendant_retention_duration": descendant_retention if descendants_complete else unavailable,
                 }
             )
         )

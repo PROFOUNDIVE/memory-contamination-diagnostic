@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Iterable
+from typing import TYPE_CHECKING, Iterable, Literal
 
 if TYPE_CHECKING:
     from memcontam.memory.writer_registry import WriterRegistry
@@ -38,6 +38,7 @@ class MemoryCardEnvelopeV3:
     native_component: str
     content: str
     content_hash: str
+    lineage_status: Literal["exact", "approximate", "unavailable"] = "exact"
 
 
 @dataclass(frozen=True)
@@ -102,6 +103,8 @@ def _unwrap(entry: MemoryCardEnvelopeV3 | ValidatedEnvelope) -> MemoryCardEnvelo
 
 
 def _validate_schema(envelope: MemoryCardEnvelopeV3) -> None:
+    if envelope.lineage_status not in {"exact", "approximate", "unavailable"}:
+        raise MemoryEnvelopeError("INVALID_SCHEMA")
     if envelope.schema_version != MEMORY_CARD_V3:
         raise MemoryEnvelopeError("INVALID_SCHEMA")
     if not all(

@@ -10,6 +10,7 @@ from memcontam.baselines.reflexion_phase12 import ReflexionStateV3
 from memcontam.clients.base import LLMResponse
 from memcontam.contamination.phase12.registry import load_candidate_registry
 from memcontam.contamination.phase12.renderers import RendererRegistry
+from memcontam.evaluation.phase13_observability import reconstruct_phase13_trial
 from memcontam.evaluation.phase13_observability_models import Phase13TrialEvidence
 from memcontam.evaluation.phase13_observability_registration import ObservabilityRegistrationPacket
 from memcontam.experiment.phase12.game24_runner import Game24RuntimeContext, RuntimeIdentities
@@ -431,6 +432,8 @@ def test_native_trial_reaches_current_archive_validator(
         assert isinstance(first, Phase13TrialEvidence)
         assert isinstance(second, Phase13TrialEvidence)
         assert first.new_entry_ids
+        assert first.target_set.answer_call_spans
+        assert all(span.lineage_status == "exact" for span in first.target_set.answer_call_spans)
         assert first.retrievals
         assert first.retrievals[0].retrieved_entry_ids == [
             row["entry_id"] for row in result.trials[0].outcome.retrieved_memory
@@ -492,6 +495,10 @@ def test_native_trial_reaches_current_archive_validator(
         assert {span.lineage_basis for span in second.target_set.answer_call_spans} == {
             "version_edge"
         }
+        second_strategy = next(node for node in second.lineage if node.entry_id == second_strategy_ids[0])
+        assert second_strategy.lineage_status == "unavailable"
+        assert second_strategy.version_predecessor_id == first_strategy_ids[0]
+        assert reconstruct_phase13_trial(second).theory_exposure.value is True
         assert any(node.entry_id == first_strategy_ids[0] for node in second.lineage)
 
 

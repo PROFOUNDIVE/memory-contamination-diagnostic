@@ -37,6 +37,8 @@ def _blocked(reason: str) -> MetricValue:
 
 
 def reconstruct_phase13_trial(evidence: Phase13TrialEvidence) -> Phase13TrialAnalysis:
+    if evidence.verified_outcome is None:
+        raise Phase13ObservabilityError("TECHNICAL_MISSINGNESS_NOT_SCIENTIFIC_OUTCOME")
     _validate_evidence_joins(evidence)
     target = evidence.target_set
     observables = compute_observables(
@@ -90,6 +92,11 @@ def reconstruct_phase13_trial(evidence: Phase13TrialEvidence) -> Phase13TrialAna
     retrieval = observables.retrieval.is_target_retrieved
     inclusion = observables.final_context.is_target_included
     exposure = observables.exposure.is_exposed
+    uncertain_final = any(nodes[entry_id].lineage_status != "exact" for entry_id in final_ids)
+    uncertain_store = any(nodes[entry_id].lineage_status != "exact" for entry_id in evidence.memory_after_ids)
+    if uncertain_final and inclusion is not True:
+        inclusion = None
+        exposure = None
     return Phase13TrialAnalysis(
         evidence_scope=evidence.evidence_scope,
         task=evidence.task,
@@ -127,11 +134,11 @@ def reconstruct_phase13_trial(evidence: Phase13TrialEvidence) -> Phase13TrialAna
         ),
         descendant_storage_persistence=_applicable_descendant_metric(
             applicable, descendants, evidence.memory_after_ids
-        ),
+        ) if not applicable or not uncertain_store or set(descendants).intersection(evidence.memory_after_ids) else _blocked("LINEAGE_UNAVAILABLE"),
         root_prompt_visibility=_applicable_presence_metric(applicable, roots, final_ids),
         descendant_prompt_visibility=_applicable_descendant_metric(
             applicable, descendants, final_ids
-        ),
+        ) if not applicable or not uncertain_final or set(descendants).intersection(final_ids) else _blocked("LINEAGE_UNAVAILABLE"),
         root_retention_duration=_blocked("RETENTION_DURATION_ENDPOINT_NOT_REGISTERED"),
         prompt_retention_duration=_blocked("RETENTION_DURATION_ENDPOINT_NOT_REGISTERED"),
         descendant_retention_duration=_blocked("RETENTION_DURATION_ENDPOINT_NOT_REGISTERED"),
@@ -215,7 +222,7 @@ def _propagation(
                 if set(node.injected_root_ids).intersection(evidence.target_set.target_entry_ids):
                     if not exposed_target_ids:
                         raise Phase13ObservabilityError("PROPAGATION_REQUIRES_EXPOSURE")
-                    if node.lineage_status != "exact":
+                    if node.lineage_status == "approximate":
                         raise Phase13ObservabilityError("EXACT_LINEAGE_REQUIRED")
                     path = _recorded_path(
                         node, nodes, exposed_target_ids, writer_parents, set()
@@ -227,6 +234,8 @@ def _propagation(
                             reason="RECORDED_EXACT_LINEAGE_DESCENDANT",
                             path=path,
                         )
+            if any(nodes[entry_id].lineage_status == "unavailable" for entry_id in changed):
+                return _blocked("LINEAGE_UNAVAILABLE")
             if exposed_target_ids:
                 return MetricValue(
                     status="supported",

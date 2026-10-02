@@ -89,7 +89,7 @@ def validate_evidence_joins(evidence: Phase13TrialEvidence) -> None:
         )
         if (
             span.lineage_status != "exact"
-            or node.lineage_status != "exact"
+            or node.lineage_status == "approximate"
             or claimed_roots != set(node.injected_root_ids)
             or set(span.direct_parent_ids) != recorded_parents
             or not relationship_matches
@@ -178,7 +178,7 @@ def recorded_path(
 ) -> tuple[str, ...]:
     if node.entry_id in seen:
         raise Phase13ObservabilityError("LINEAGE_CYCLE")
-    if node.lineage_status != "exact":
+    if node.lineage_status == "approximate":
         raise Phase13ObservabilityError("EXACT_LINEAGE_REQUIRED")
     if node.entry_id in target_ids:
         return (node.entry_id,)

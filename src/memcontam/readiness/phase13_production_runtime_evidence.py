@@ -37,6 +37,7 @@ class _RuntimeEntryMetadata(BaseModel):
     model_config = ConfigDict(extra="ignore", frozen=True)
 
     source_entry_ids: tuple[str, ...] = ()
+    source_lineage_status: Literal["exact", "approximate", "unavailable"] = "exact"
 
 
 class _RuntimeMemoryEntry(BaseModel):
@@ -249,7 +250,8 @@ def _entries(rows: Sequence[Mapping[str, JsonValue]]) -> tuple[_RuntimeMemoryEnt
 def _entry_from_native(entry: NativeEntry) -> _RuntimeMemoryEntry:
     return _RuntimeMemoryEntry(
         entry_id=entry.entry_id,
-        metadata=_RuntimeEntryMetadata(source_entry_ids=entry.direct_parent_ids),
+        metadata=_RuntimeEntryMetadata(source_entry_ids=entry.direct_parent_ids,
+                                       source_lineage_status=entry.lineage_status),
     )
 
 
@@ -336,7 +338,7 @@ def _target_spans(
                 direct_root = span.entry_id in target
                 if (
                     node is None
-                    or node.lineage_status != "exact"
+                    or node.lineage_status == "approximate"
                     or (direct_root and node.injected_root_ids != (span.entry_id,))
                     or (
                         span.injected_root_ids
@@ -382,8 +384,12 @@ def _lineage(
     by_id = {entry.entry_id: entry for entry in entries}
     by_envelope = {envelope.entry_id: envelope for envelope in envelopes}
     references: dict[str, tuple[str, ...]] = {}
+    statuses: dict[str, Literal["exact", "approximate", "unavailable"]] = {}
     for entry in by_id.values():
         envelope = by_envelope.get(entry.entry_id)
+        if envelope is not None and envelope.lineage_status != entry.metadata.source_lineage_status:
+            raise ProductionRuntimeJoinError("PRODUCTION_LINEAGE_STATUS_MISMATCH")
+        statuses[entry.entry_id] = entry.metadata.source_lineage_status
         parent_ids = (
             entry.metadata.source_entry_ids if envelope is None else envelope.direct_parent_ids
         )
@@ -423,10 +429,24 @@ def _lineage(
         memo[entry_id] = result
         return result
 
+    status_memo: dict[str, Literal["exact", "approximate", "unavailable"]] = {}
+
+    def ancestry_status(entry_id: str) -> Literal["exact", "approximate", "unavailable"]:
+        if entry_id not in status_memo:
+            inherited = {statuses[entry_id], *(ancestry_status(parent) for parent in references[entry_id])}
+            status_memo[entry_id] = (
+                "unavailable" if "unavailable" in inherited
+                else "approximate" if "approximate" in inherited else "exact"
+            )
+        return status_memo[entry_id]
+
+    for entry_id in by_id:
+        injected_roots(entry_id)
+
     return tuple(
         Phase13LineageNode(
             entry_id=entry.entry_id,
-            lineage_status="exact",
+            lineage_status=ancestry_status(entry.entry_id),
             injected_root_ids=(injected_roots(entry.entry_id)),
             direct_parent_ids=(
                 by_envelope[entry.entry_id].direct_parent_ids
