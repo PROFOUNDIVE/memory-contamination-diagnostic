@@ -168,6 +168,7 @@ def test_current_selected_resources_reject_historical_observability_packet(entry
 
 
 @pytest.mark.parametrize("role,key", (("implementation_identities", "registration"),
+                                      ("implementation_identities", "sequence"),
                                      ("applicability_identities", "game24"),
                                      ("implementation_identities", "authority_state")))
 def test_rehashed_current_packet_cannot_forge_bound_identity(entrypoint_fixture, deny_external, role, key):
