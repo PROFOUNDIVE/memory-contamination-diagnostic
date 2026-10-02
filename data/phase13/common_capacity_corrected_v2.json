@@ -44,7 +44,7 @@
     "measurement_implementation_sha256": "a6e895dcc9599e19889066da1647f92f41f021435af8ca0311d17f68641166a1",
     "openai_client_sha256": "bb83936fdc4534f7588061dd6b436083ab60400cd1cee2ace0d033aeded4f73b",
     "full_history_builder_sha256": "68e79b446b30708bf974610ce9f848f41738f752b02f256ab94a1d4d6df657e9",
-    "dc_rs_builder_sha256": "314f4f840443f43dc3f96edcdb7c0adbc52342d1be73db02080b9febff8e5e97",
+    "dc_rs_builder_sha256": "0e957652b0cd2834e51bd64097b628aeb901378e7a54f1c099f91bd8d25b5375",
     "dc_rs_runtime_builder_sha256": "3e697d0f02565af603fc2d19cfb7ba2b939aefb9c352bebb206ff0639fd809ce",
     "ordinary_runtime_builder_sha256": "05492b3ff486e101536243597e2d5b07a00d984dbbcdd49152905f45c847859c"
   },
