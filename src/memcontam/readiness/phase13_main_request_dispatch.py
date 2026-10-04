@@ -12,7 +12,6 @@ from pydantic import JsonValue
 
 from memcontam.baselines.prompt_budget import count_prompt_tokens
 from memcontam.clients.base import LLMClient, LLMResponse
-from memcontam.clients.config import ProviderConfig
 from memcontam.readiness.phase13_authority_files import read_regular_nofollow
 from memcontam.readiness.phase13_main_request_recovery import (
     RequestIdentityReceiptV3,
@@ -34,6 +33,7 @@ from .phase13_v3_request import (
     ParentTrajectoryV3,
     RequestKeyV3,
     RequestMaterialV3,
+    Stage,
     compile_request_bytes,
     input_bytes,
 )
@@ -65,15 +65,10 @@ class DispatchTechnicalFailureV3(RuntimeError):
         super().__init__(code)
 
 
-def production_provider(binding: PackageBindingV3) -> CompiledProvider:
-    from memcontam.clients.openai_responses import OpenAIResponsesClient
-
-    return OpenAIResponsesClient(ProviderConfig(
-        provider="openai_responses", timeout_seconds=180, live_calls_enabled=True,
-        retries_after_initial_attempt=0, max_output_tokens=512,
-        input_per_million_usd=0.20, cached_input_per_million_usd=0.02,
-        output_per_million_usd=1.20,
-    ), allow_live_calls=True, v3_binding=binding)
+def production_provider(_binding: PackageBindingV3) -> CompiledProvider:
+    # No finite bound between the local role/content count and provider input
+    # is registered; historical 374 local -> 380 provider already exceeded 378.
+    raise TerminalEvidenceError("MAIN_INPUT_ACCOUNTING_BOUND_UNAVAILABLE")
 
 
 class ProductionRequestDispatcherV3:
@@ -165,8 +160,7 @@ class ProductionRequestDispatcherV3:
 
             try:
                 response = provider.send_compiled_v3(compiled, start_attempt)
-                if response.raw.get("status") == "incomplete":
-                    raise TerminalEvidenceError("MAIN_PROVIDER_INCOMPLETE")
+                _validate_received_response(response, key.stage)
                 cost = _response_cost(response)
                 realized = _realized(cost)
                 result = parse_result(response)
@@ -185,6 +179,9 @@ class ProductionRequestDispatcherV3:
                 except (KeyError, TypeError, ValueError):
                     cost, realized = ProviderCostEvidence(), None
                 observation = json.dumps({
+                    "response_id": observed.raw.get("response_id", getattr(error, "provider_response_id", None)),
+                    "model": observed.raw.get("model", getattr(error, "provider_returned_model", None)),
+                    "service_tier": observed.raw.get("service_tier", getattr(error, "provider_service_tier", None)),
                     "status": observed.raw.get("status", getattr(error, "provider_status", None)),
                     "incomplete_reason": observed.raw.get("incomplete_reason", getattr(error, "provider_incomplete_reason", None)),
                     "usage": observed.raw.get("usage"),
@@ -332,6 +329,24 @@ def _response_cost(response: LLMResponse | None) -> ProviderCostEvidence:
         "input_tokens": usage["input_tokens"], "output_tokens": usage["output_tokens"],
         "cached_input_tokens": usage.get("input_tokens_details", {}).get("cached_tokens", 0),
     }})
+
+
+def _validate_received_response(response: LLMResponse, stage: Stage) -> None:
+    raw = response.raw
+    if raw.get("status") == "incomplete":
+        raise TerminalEvidenceError("MAIN_PROVIDER_INCOMPLETE")
+    if (raw.get("status") != "completed" or raw.get("model") != "gpt-5.6-luna"
+            or raw.get("service_tier") != "default"):
+        raise TerminalEvidenceError("MAIN_PROVIDER_RESPONSE_CONTRACT_MISMATCH")
+    usage = raw.get("usage")
+    if not isinstance(usage, dict):
+        raise TerminalEvidenceError("MAIN_PROVIDER_USAGE_UNAVAILABLE")
+    input_tokens, output_tokens = usage.get("input_tokens"), usage.get("output_tokens")
+    if (type(input_tokens) is not int or type(output_tokens) is not int
+            or input_tokens < 0 or output_tokens < 0):
+        raise TerminalEvidenceError("MAIN_PROVIDER_USAGE_UNAVAILABLE")
+    if input_tokens > STAGES[stage][0] or output_tokens > STAGES[stage][1]:
+        raise TerminalEvidenceError("MAIN_PROVIDER_ENVELOPE_EXCEEDED")
 
 
 def _eligible_retry(error: Exception, response: LLMResponse | None) -> bool:

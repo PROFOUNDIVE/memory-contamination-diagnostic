@@ -41,7 +41,7 @@ def rig(api, tmp_path: Path, monkeypatch):
         "identity": binding.identity.model_dump(mode="json"),
         "package_sha256": binding.package_sha256, "authorization_sha256": binding.authorization_sha256,
     })
-    seen = SimpleNamespace(constructors=0, requests=0, count=378, outcome="ok", trace=[])
+    seen = SimpleNamespace(constructors=0, requests=0, count=378, outcome="ok", trace=[], override={})
     real_sync = TerminalLedgerV3._sync
 
     def sync(instance):
@@ -60,10 +60,12 @@ def rig(api, tmp_path: Path, monkeypatch):
             if seen.outcome == "transport":
                 raise TimeoutError("synthetic transport failure")
             return LLMResponse("{}" if seen.outcome == "parse" else "final: 24", {
+                "model": "gpt-5.6-luna", "service_tier": "default",
                 "status": "incomplete" if seen.outcome in ("max_output_tokens", "unknown") else "completed",
                 "incomplete_reason": seen.outcome,
-                "usage": ({"input_tokens": 0, "output_tokens": 0} if seen.outcome == "ok"
+                "usage": ({"input_tokens": 1, "output_tokens": 1} if seen.outcome == "ok"
                           else {"output_tokens": 0} if seen.outcome == "partial" else None),
+                **seen.override,
             }, {}, 0)
 
     def factory(bound):
@@ -203,6 +205,7 @@ def test_ledger_binding_mismatch_prevents_provider_construction(rig):
 @pytest.mark.parametrize("outcome", ["ok", "transport", "max_output_tokens", "unknown"])
 def test_bound_openai_v3_sends_exact_compiled_bytes_once(api, monkeypatch, stage, cap, outcome):
     from memcontam.clients import openai_responses
+    from memcontam.clients.config import ProviderConfig
     from memcontam.readiness import phase13_v3_request as request_api
 
     seen = []
@@ -228,7 +231,12 @@ def test_bound_openai_v3_sends_exact_compiled_bytes_once(api, monkeypatch, stage
     material = api.RequestMaterialV3(messages=({"role": "user", "content": "input"},), native_state=b"state")
     compiled = request_api.CompiledProviderRequestV3(binding, key, material,
         request_api.compile_request_bytes(key, material), 1)
-    provider = api.production_provider(binding)
+    provider = openai_responses.OpenAIResponsesClient(ProviderConfig(
+        provider="openai_responses", timeout_seconds=180, live_calls_enabled=True,
+        retries_after_initial_attempt=0, max_output_tokens=512,
+        input_per_million_usd=0.20, cached_input_per_million_usd=0.02,
+        output_per_million_usd=1.20,
+    ), allow_live_calls=True, v3_binding=binding)
     if outcome == "ok":
         response = provider.send_compiled_v3(compiled, lambda: seen.append("marker"))
         assert response.raw["attempts"] == 1
@@ -255,6 +263,19 @@ def test_production_runtime_defers_provider_construction(monkeypatch):
     runtime.ProductionMainRuntime(Path(__file__).resolve().parents[1], Path("unused-offline-cache"))
 
 
+def test_unproven_provider_input_bound_blocks_real_provider_construction(api, monkeypatch):
+    from memcontam.clients import openai_responses
+
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("unsafe input accounting constructed a real provider")
+
+    monkeypatch.setattr(openai_responses, "OpenAIResponsesClient", forbidden)
+    binding = api.PackageBindingV3(identity=corrective_identity(), package_sha256="b" * 64,
+                                   authorization_sha256="c" * 64)
+    with pytest.raises(api.TerminalEvidenceError, match="MAIN_INPUT_ACCOUNTING_BOUND_UNAVAILABLE"):
+        api.production_provider(binding)
+
+
 @pytest.mark.parametrize("boundary", ["semantic", "marker"])
 def test_marker_interruption_and_missing_semantic_result_have_distinct_evidence(rig, monkeypatch, boundary):
     if boundary == "marker":
@@ -277,6 +298,27 @@ def test_partial_provider_usage_terminalizes_with_unknown_cost(rig):
         rig.dispatcher.dispatch(rig.keys[0], rig.material, rig.semantic)
     assert failure.value.realized_cost_krw is None
     assert rig.ledger.state(rig.keys[0].dispatch_id).kind == "ATTEMPTED_PROVIDER_FAILURE"
+
+
+@pytest.mark.parametrize("override", [
+    {"usage": {"input_tokens": 379, "output_tokens": 1}},
+    {"usage": {"input_tokens": 1, "output_tokens": 513}},
+    {"model": "wrong-model"}, {"service_tier": "flex"}, {"status": "queued"},
+    {"usage": None},
+])
+def test_received_contract_violation_is_terminal_before_semantic_use(rig, override):
+    rig.seen.override = override
+    parsed = []
+    with pytest.raises(rig.api.DispatchTechnicalFailureV3):
+        rig.dispatcher.dispatch(rig.keys[0], rig.material, lambda response: parsed.append(response.content))
+    assert parsed == []
+    assert rig.ledger.state(rig.keys[0].dispatch_id).kind == "ATTEMPTED_PROVIDER_FAILURE"
+    assert rig.seen.requests == 1
+    reopened = TerminalLedgerV3.open(rig.ledger.path, rig.ledger.binding)
+    try:
+        assert reopened.state(rig.keys[0].dispatch_id).kind == "ATTEMPTED_PROVIDER_FAILURE"
+    finally:
+        reopened.close()
 
 
 def test_unbound_v3_registry_string_cannot_enable_new_limits(monkeypatch):

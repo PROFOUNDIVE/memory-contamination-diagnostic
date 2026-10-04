@@ -45,7 +45,8 @@ def client_fixture(tmp_path, monkeypatch, request):
             assert compiled.native_state == b"immutable native bytes"
             before_request()
             counts["requests"] += 1
-            return LLMResponse("not a final answer", {"usage": {"input_tokens": 1, "output_tokens": 1}}, {}, 0)
+            return LLMResponse("not a final answer", {"status": "completed", "model": "gpt-5.6-luna",
+                "service_tier": "default", "usage": {"input_tokens": 1, "output_tokens": 1}}, {}, 0)
 
     def factory(_binding):
         counts["constructor"] += 1
@@ -83,7 +84,8 @@ def test_frozen_entitlement_retries_one_unambiguous_transport_failure(client_fix
             counts["requests"] += 1
             if counts["requests"] == 1:
                 raise RetryableTimeout()
-            return LLMResponse("final: 24", {"usage": {"input_tokens": 1, "output_tokens": 1}}, {}, 0)
+            return LLMResponse("final: 24", {"status": "completed", "model": "gpt-5.6-luna",
+                "service_tier": "default", "usage": {"input_tokens": 1, "output_tokens": 1}}, {}, 0)
 
     def factory(_binding):
         counts["constructor"] += 1
@@ -118,7 +120,8 @@ def test_successful_retry_keeps_unknown_first_attempt_cost_until_reconciled(clie
             counts["requests"] += 1
             if counts["requests"] == 1:
                 raise RetryableTimeout()
-            return LLMResponse("final: 24", {"usage": {"input_tokens": 1, "output_tokens": 1}}, {}, 0)
+            return LLMResponse("final: 24", {"status": "completed", "model": "gpt-5.6-luna",
+                "service_tier": "default", "usage": {"input_tokens": 1, "output_tokens": 1}}, {}, 0)
 
     client.dispatcher = ProductionRequestDispatcherV3(
         ledger, client.dispatcher.binding, client.dispatcher.parents,
@@ -231,7 +234,8 @@ def test_restart_after_durable_retryable_failure_issues_only_second_attempt(
             counts["requests"] += 1
             if counts["requests"] == 1:
                 raise RetryableTimeout()
-            return LLMResponse("final: 24", {"usage": {"input_tokens": 1, "output_tokens": 1}}, {}, 0)
+            return LLMResponse("final: 24", {"status": "completed", "model": "gpt-5.6-luna",
+                "service_tier": "default", "usage": {"input_tokens": 1, "output_tokens": 1}}, {}, 0)
 
     def factory(_binding):
         counts["constructor"] += 1
@@ -392,6 +396,30 @@ def test_next_call_acknowledges_previous_semantic_success(client_fixture):
     client.trial(execute, lambda: b"immutable native bytes")
     assert ledger.state(keys[1].dispatch_id).kind == "COMPLETED"
     assert counts == {"constructor": 2, "requests": 2}
+
+
+def test_invalid_receipt_stops_native_path_before_next_request(client_fixture):
+    client, ledger, keys, counts = client_fixture
+
+    class Provider:
+        def send_compiled_v3(self, compiled, before_request):
+            before_request()
+            counts["requests"] += 1
+            return LLMResponse("final: 24", {"status": "completed", "model": "wrong-model",
+                "service_tier": "default", "usage": {"input_tokens": 1, "output_tokens": 1}}, {}, 0)
+
+    client.dispatcher._factory = lambda _binding: Provider()
+
+    def execute():
+        call(client)
+        call(client)
+        return RuntimeTrialResult(BaselineExecutionOutcome("succeeded"), NOMEM_SINGLETON)
+
+    terminal = client.trial(execute, lambda: b"immutable native bytes")
+    assert isinstance(terminal, TerminalTrialV3)
+    assert ledger.state(keys[0].dispatch_id).kind == "ATTEMPTED_PROVIDER_FAILURE"
+    assert ledger.state(keys[1].dispatch_id).kind == "PENDING"
+    assert counts["requests"] == 1
 
 
 def test_crash_before_semantic_ack_is_ambiguous_and_never_redispatched(client_fixture):
