@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import ast
-import math
 from collections import Counter
+from fractions import Fraction
 from typing import Any
 
 from memcontam.logging.schema import VerifierResult
@@ -11,13 +11,13 @@ MAX_EXPRESSION_LENGTH = 500
 MAX_AST_NODES = 64
 
 
-def _evaluate(node: ast.AST) -> float:
+def _evaluate(node: ast.AST) -> Fraction:
     if isinstance(node, ast.Expression):
         return _evaluate(node.body)
     if isinstance(node, ast.Constant) and isinstance(node.value, bool):
         raise ValueError
-    if isinstance(node, ast.Constant) and isinstance(node.value, int | float):
-        return float(node.value)
+    if isinstance(node, ast.Constant) and isinstance(node.value, int):
+        return Fraction(node.value)
     if isinstance(node, ast.BinOp):
         left = _evaluate(node.left)
         right = _evaluate(node.right)
@@ -40,9 +40,7 @@ def _numbers_used(node: ast.AST) -> list[int]:
         if isinstance(child, ast.Constant) and isinstance(child.value, int):
             numbers.append(child.value)
         elif isinstance(child, ast.Constant) and isinstance(child.value, float):
-            if not child.value.is_integer():
-                raise ValueError
-            numbers.append(int(child.value))
+            raise ValueError
     return numbers
 
 
@@ -85,17 +83,17 @@ def verify_expression(expression: str, numbers: list[int], target: int = 24) -> 
             reason="unsupported_expression",
         )
 
-    if not math.isclose(value, target, rel_tol=0, abs_tol=1e-9):
+    if value != target:
         return VerifierResult(
             is_correct=False,
             parsed_answer=expression,
             reason="value_does_not_match_target",
-            metadata={"value": value, "target": target},
+            metadata={"value": str(value), "target": target},
         )
 
     return VerifierResult(
         is_correct=True,
         parsed_answer=expression,
         reason="ok",
-        metadata={"value": int(value) if value.is_integer() else value, "target": target},
+        metadata={"value": int(value), "target": target},
     )
