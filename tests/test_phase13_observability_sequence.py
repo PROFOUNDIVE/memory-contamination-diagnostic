@@ -201,6 +201,19 @@ def test_sequence_continuity_rejects_identity_and_inclusion_drift(
         sequence._validate_continuity(tuple(rows))
 
 
+def test_manual_mismatched_memory_carriers_still_fail_continuity() -> None:
+    sequence = importlib.import_module("memcontam.evaluation.phase13_observability_sequence")
+    models = importlib.import_module("memcontam.readiness.phase13_observability_models")
+    fixture = models.Phase13ObservabilityFixture.model_validate_json(
+        Path("data/phase13/observability/fixture_v1.json").read_bytes()
+    )
+    rows = list(fixture.trials)
+    rows[1] = rows[1].model_copy(update={"memory_before_ids": ("different-retrieval",)})
+
+    with pytest.raises(sequence.Phase13ObservabilityError, match="ORDINARY_SEQUENCE_CONTINUITY_MISMATCH"):
+        sequence._validate_continuity(tuple(rows))
+
+
 def test_unrelated_self_root_is_excluded_from_target_root_scope() -> None:
     registration = importlib.import_module(
         "memcontam.evaluation.phase13_observability_registration"

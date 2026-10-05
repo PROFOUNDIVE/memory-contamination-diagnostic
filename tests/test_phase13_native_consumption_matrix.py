@@ -22,8 +22,10 @@ from memcontam.readiness.phase13_main_new_mcq_runtime import build_new_mcq_live_
 
 from .test_phase13_native_rendering import _clean_state, _Embedder
 from .test_phase13_readiness0_production_dry_run import _ContractFakeEmbeddingProvider
+from .test_phase13_v3_entrypoint_integration import deny_external as deny_external
 
 ROOT = Path(__file__).resolve().parents[1]
+pytestmark = pytest.mark.usefixtures("deny_external")
 PACKAGE = MainExecutionFreeze.model_validate_json(
     (ROOT / "data/phase13/main/mr_p5/execution_package_v1.json").read_bytes()
 )

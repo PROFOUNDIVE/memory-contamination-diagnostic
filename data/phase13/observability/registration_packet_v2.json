@@ -36,7 +36,7 @@
   "verifier_identities": {
     "game24": {
       "path": "src/memcontam/verifiers/game24.py",
-      "sha256": "ae343911d957d763ce2e43742362e557afa0415c841f9be8c7299f0929778d3e"
+      "sha256": "82b094938c551e801de0cff90d80a5d3a2b3cc959185e3a74b9e1c62c587f0b3"
     },
     "math_equation_balancer": {
       "path": "src/memcontam/verifiers/math_equation_balancer.py",
