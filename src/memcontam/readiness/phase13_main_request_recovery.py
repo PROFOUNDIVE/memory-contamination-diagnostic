@@ -7,6 +7,7 @@ from contextlib import ExitStack, contextmanager
 from typing import assert_never
 
 from .phase13_v3_authority_models import FrozenModel
+from .phase13_v3_count import count_recovery_gate
 from .phase13_v3_request import STAGES, PackageBindingV3, ParentTrajectoryV3, RequestKeyV3
 from .phase13_v3_terminal_ledger import TerminalLedgerV3
 from .phase13_v3_terminal_models import TerminalEvidenceError
@@ -58,6 +59,7 @@ def terminal_parents(
 
 
 def recover_requests(ledger: TerminalLedgerV3) -> None:
+    count_recovery_gate(ledger)
     reopened = (TerminalLedgerV3.open(ledger.path, ledger.binding) if ledger.guard is None
                 else TerminalLedgerV3.open_guarded(ledger.guard, ledger.binding))
     proof = hashlib.sha256(b"phase13-restart-v3\n" + b"\n".join(reopened.rows())).hexdigest()

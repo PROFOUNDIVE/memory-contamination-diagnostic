@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from typing import Annotated, Final, Literal, Self, assert_never
 
@@ -65,6 +66,17 @@ class AttemptStartedV3(DispatchIdentity):
     kind: Literal["ATTEMPT_STARTED"]
     compiled: CompiledRequestV3
     attempt_index: Annotated[int, Field(ge=0, le=1)] = 0
+    attempt_id: Sha256 | None = None
+
+    @model_validator(mode="after")
+    def bind_attempt_id(self) -> Self:
+        if self.attempt_id is not None and self.attempt_id != attempt_identity(self.unit_id, self.attempt_index):
+            raise TerminalEvidenceError("MAIN_RETRY_ATTEMPT_IDENTITY_MISMATCH")
+        return self
+
+
+def attempt_identity(dispatch_id: str, attempt_index: int) -> str:
+    return hashlib.sha256(f"phase13-attempt-v1\0{dispatch_id}\0{attempt_index}".encode()).hexdigest()
 
 
 class RetryableAttemptFailureV3(DispatchIdentity):

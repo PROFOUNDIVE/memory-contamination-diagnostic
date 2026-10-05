@@ -137,15 +137,50 @@ class TerminalLedgerV3:
     def read_record(self, name: str) -> bytes:
         return read_regular_nofollow(self.path.parent / name) if self.guard is None else self.guard.read_record(name)
 
+    def count_record(self, unit_id: str, role: str) -> bytes | None:
+        with self.connection() as connection:
+            if connection.execute("SELECT 1 FROM sqlite_master WHERE name='provider_counts_v1'").fetchone() is None:
+                return None
+            row = connection.execute("SELECT raw FROM provider_counts_v1 WHERE unit_id=? AND role=?",
+                                     (unit_id, role)).fetchone()
+            return None if row is None else bytes(row[0])
+
+    def count_records(self, role: str) -> tuple[tuple[str, bytes], ...]:
+        with self.connection() as connection:
+            if connection.execute("SELECT 1 FROM sqlite_master WHERE name='provider_counts_v1'").fetchone() is None:
+                return ()
+            return tuple((str(unit_id), bytes(raw)) for unit_id, raw in connection.execute(
+                "SELECT unit_id, raw FROM provider_counts_v1 WHERE role=? ORDER BY unit_id", (role,)))
+
+    def append_count_record(self, unit_id: str, role: str, raw: bytes) -> None:
+        if unit_id not in self.binding.unit_ids or role not in {"count-started", "count-receipt", "count-failure"}:
+            raise TerminalEvidenceError("MAIN_COUNT_REQUEST_BINDING_MISMATCH")
+        with self.connection() as connection:
+            connection.execute("CREATE TABLE IF NOT EXISTS provider_counts_v1 "
+                "(unit_id TEXT NOT NULL, role TEXT NOT NULL, raw BLOB NOT NULL, "
+                "PRIMARY KEY(unit_id, role))")
+            existing = connection.execute("SELECT raw FROM provider_counts_v1 WHERE unit_id=? AND role=?",
+                                          (unit_id, role)).fetchone()
+            if existing is not None:
+                raise TerminalEvidenceError("MAIN_COUNT_DUPLICATE_OPERATION")
+            connection.execute("INSERT INTO provider_counts_v1 VALUES (?, ?, ?)", (unit_id, role, raw))
+        self._sync()
+        self._data_version = self._observed_version()
+
     def require_known_costs(self) -> None:
+        from .phase13_v3_count import count_costs_krw
+
+        count_costs_krw(self)
         with self.connection() as connection:
             self._snapshot(connection)
         if self._unknown_costs:
             reconcile_actual(next(iter(self._unknown_costs.values())))
 
     def realized_cost_krw(self) -> int:
+        from .phase13_v3_count import count_costs_krw
+
         self.require_known_costs()
-        return sum(self._realized_costs.values())
+        return sum(self._realized_costs.values()) + count_costs_krw(self)
 
     def append(self, supplied: Mapping[str, JsonValue]) -> None:
         event = parse_event(json.dumps(dict(supplied), allow_nan=False).encode())
