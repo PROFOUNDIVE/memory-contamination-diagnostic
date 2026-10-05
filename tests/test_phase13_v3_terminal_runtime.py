@@ -131,7 +131,7 @@ def test_overflow_restart_allows_only_independent_progress(rig, monkeypatch, poi
     for key in rig.keys[:4]:
         with pytest.raises(rig.api.DispatchTechnicalFailureV3):
             resumed.dispatch(key, rig.material, rig.semantic)
-    assert rig.seen.requests == rig.seen.constructors == 0
+    assert (rig.seen.constructors, rig.seen.requests) == (1, 0)
     rig.seen.count = 378
     assert resumed.dispatch(rig.keys[4], rig.material, rig.semantic) == "final: 24"
     assert rig.seen.requests == 1
@@ -229,7 +229,8 @@ def test_known_attempted_cost_allows_independent_runner_progress(rig):
 
     with pytest.raises(rig.api.DispatchTechnicalFailureV3) as failure:
         rig.dispatcher.dispatch(rig.keys[0], rig.material, semantic)
-    assert failure.value.realized_cost_krw == 0
+    assert failure.value.realized_cost_krw == 1
+    assert rig.ledger.realized_cost_krw() == 3
     resumed = restart(rig)
     completed = run_pending_requests_v3(resumed, rig.keys, lambda key: resumed.dispatch(
         key, rig.material, rig.semantic,

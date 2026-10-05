@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from collections.abc import Callable
+from dataclasses import replace
 from tempfile import NamedTemporaryFile
 from typing import Protocol, TypeVar
 
@@ -20,9 +21,13 @@ from memcontam.readiness.phase13_main_request_recovery import (
     terminal_parents,
 )
 from memcontam.readiness.phase13_v3_cost_actual import reconcile_actual
+from memcontam.readiness.phase13_v3_count import (
+    CountIdentityV3, CountReceiptV3, count_failure_bytes, count_operation,
+    count_recovery_gate, read_count_record, receipt_bytes, validate_count_receipt,
+)
 from memcontam.readiness.phase13_v3_cost_models import CostError, ProviderCostEvidence
 from memcontam.readiness.phase13_v3_terminal_ledger import TerminalLedgerV3
-from memcontam.readiness.phase13_v3_terminal_models import TerminalEvidenceError
+from memcontam.readiness.phase13_v3_terminal_models import TerminalEvidenceError, attempt_identity
 
 from .phase13_v3_cost_binding import LiveCosts, TableKey
 from .phase13_v3_cost_models import digest
@@ -42,6 +47,11 @@ ResultT = TypeVar("ResultT")
 
 
 class CompiledProvider(Protocol):
+    def count_identity_v3(self) -> CountIdentityV3: ...
+
+    def count_compiled_v3(self, compiled: CompiledProviderRequestV3,
+                         before_count: Callable[[], None]) -> CountReceiptV3: ...
+
     def send_compiled_v3(self, compiled: CompiledProviderRequestV3,
                          before_request: Callable[[], None]) -> LLMResponse: ...
 
@@ -66,9 +76,7 @@ class DispatchTechnicalFailureV3(RuntimeError):
 
 
 def production_provider(_binding: PackageBindingV3) -> CompiledProvider:
-    # No finite bound between the local role/content count and provider input
-    # is registered; historical 374 local -> 380 provider already exceeded 378.
-    raise TerminalEvidenceError("MAIN_INPUT_ACCOUNTING_BOUND_UNAVAILABLE")
+    raise TerminalEvidenceError("MAIN_COUNT_PRICING_NOT_FROZEN")
 
 
 class ProductionRequestDispatcherV3:
@@ -122,6 +130,7 @@ class ProductionRequestDispatcherV3:
         if key.parent_id not in {parent.parent_id for parent in self.parents}:
             raise TerminalEvidenceError()
         state = self.ledger.state(key.dispatch_id)
+        count_recovery_gate(self.ledger)
         retrying = state.kind == "RETRYABLE_ATTEMPT_FAILURE"
         if state.kind not in {"PENDING", "RETRYABLE_ATTEMPT_FAILURE"}:
             raise TerminalEvidenceError("MAIN_RUN_IN_FLIGHT_RECONCILIATION_REQUIRED")
@@ -140,22 +149,56 @@ class ProductionRequestDispatcherV3:
                 raise TerminalEvidenceError("MAIN_RETRY_ENTITLEMENT_INVALID")
         else:
             self._append(key, "REQUEST_COMPILED")
-        if count > STAGES[key.stage][0]:
-            for kind in ("INPUT_ENVELOPE_OVERFLOW", "TERMINAL_TECHNICAL_MISSING"):
-                self._append(key, kind, {"failure_code": "MAIN_INPUT_ENVELOPE_EXCEEDED",
-                                        "transport_attempts": 0, "realized_cost_krw": 0})
-            raise DispatchTechnicalFailureV3("MAIN_INPUT_ENVELOPE_EXCEEDED", key.parent_id, 0,
-                evidence_sha256=self.ledger.state(key.dispatch_id).event_hash)
         attempt_index = 1 if retrying else 0
+        provider = self._factory(self.binding)
+        count_method = getattr(provider, "count_compiled_v3", None)
+        if count_method is None:
+            raise TerminalEvidenceError("MAIN_COUNT_PROVIDER_UNAVAILABLE")
+        operation = count_operation(compiled, provider.count_identity_v3())
+
+        def start_count() -> None:
+            self._publish_bytes(key, "count-started", receipt_bytes(operation))
+
+        try:
+            saved_count = read_count_record(self.ledger, key.dispatch_id, "count-receipt")
+            if saved_count is None:
+                counted = count_method(compiled, start_count)
+                self._publish_bytes(key, "count-receipt", receipt_bytes(counted))
+            else:
+                counted = CountReceiptV3.model_validate_json(saved_count)
+            validate_count_receipt(compiled, counted, provider.count_identity_v3())
+        except Exception as error:
+            self._publish_bytes(key, "count-failure", count_failure_bytes(
+                str(getattr(error, "code", type(error).__name__))))
+            if getattr(error, "code", None) == "MAIN_INPUT_ENVELOPE_EXCEEDED":
+                for kind in ("INPUT_ENVELOPE_OVERFLOW", "TERMINAL_TECHNICAL_MISSING"):
+                    self._append(key, kind, {"failure_code": "MAIN_INPUT_ENVELOPE_EXCEEDED",
+                        "transport_attempts": 0, "realized_cost_krw": 0})
+                raise DispatchTechnicalFailureV3("MAIN_INPUT_ENVELOPE_EXCEEDED", key.parent_id, None) from error
+            raise TerminalEvidenceError("MAIN_COUNT_FAILED_RECONCILIATION_REQUIRED") from error
+        def verify_durable_count(started: bool) -> None:
+            state = self.ledger.state(key.dispatch_id)
+            if state.kind not in ({"ATTEMPT_STARTED"} if started else {
+                    "REQUEST_COMPILED", "RETRYABLE_ATTEMPT_FAILURE", "ATTEMPT_STARTED"}):
+                raise TerminalEvidenceError("MAIN_COUNT_RECEIPT_REPLAY_REJECTED")
+            if read_count_record(self.ledger, key.dispatch_id, "count-started") != receipt_bytes(operation):
+                raise TerminalEvidenceError("MAIN_COUNT_RECEIPT_REQUIRED")
+            if read_count_record(self.ledger, key.dispatch_id, "count-receipt") != receipt_bytes(counted):
+                raise TerminalEvidenceError("MAIN_COUNT_RECEIPT_REQUIRED")
+            validate_count_receipt(compiled, counted, provider.count_identity_v3())
+
+        compiled = replace(compiled, count_receipt=counted, verify_durable_count=verify_durable_count)
+        self._compiled[key.dispatch_id] = compiled
         while True:
-            provider = self._factory(self.binding)
             response: LLMResponse | None = None
             cost = ProviderCostEvidence()
             attempt_ready = False
 
             def start_attempt(index: int = attempt_index) -> None:
                 nonlocal attempt_ready
-                self._append(key, "ATTEMPT_STARTED", {"attempt_index": index})
+                verify_durable_count(False)
+                self._append(key, "ATTEMPT_STARTED", {"attempt_index": index,
+                    "attempt_id": attempt_identity(key.dispatch_id, index)})
                 attempt_ready = True
 
             try:
@@ -199,6 +242,7 @@ class ProductionRequestDispatcherV3:
                         "cost": cost.model_dump(mode="json"), "realized_cost_krw": None,
                     })
                     attempt_index = 1
+                    provider = self._factory(self.binding)
                     continue
                 self._publish_bytes(key, "observation", observation)
                 self._append(key, "ATTEMPTED_PROVIDER_FAILURE", {
@@ -280,6 +324,8 @@ class ProductionRequestDispatcherV3:
         self._publish_bytes(compiled.key, "compiled", raw)
 
     def _publish_bytes(self, key: RequestKeyV3, role: str, raw: bytes) -> None:
+        if role in {"count-started", "count-receipt", "count-failure"}:
+            self.ledger.append_count_record(key.dispatch_id, role, raw)
         if self.ledger.guard is not None:
             self.ledger.guard.publish_record(f"{key.dispatch_id}.{role}.json", raw)
             return
@@ -360,6 +406,9 @@ def _eligible_retry(error: Exception, response: LLMResponse | None) -> bool:
         }
         and getattr(error, "provider_usage", None) is None
         and getattr(error, "authoritative_provider_cost_usd", None) is None
+        and getattr(error, "provider_response_id", None) is None
+        and getattr(error, "provider_status", None) is None
+        and getattr(error, "provider_failure_acknowledged", False) is True
     )
 
 

@@ -10,6 +10,7 @@ import pytest
 
 from memcontam.clients.base import LLMResponse
 from memcontam.readiness.phase13_v3_terminal_ledger import TerminalLedgerV3
+from memcontam.readiness.phase13_v3_count import CountIdentityV3, CountReceiptV3, count_operation
 
 from .phase13_corrective_identity import corrective_identity
 
@@ -51,6 +52,16 @@ def rig(api, tmp_path: Path, monkeypatch):
     monkeypatch.setattr(TerminalLedgerV3, "_sync", sync)
 
     class Provider:
+        def count_identity_v3(self):
+            return CountIdentityV3(base_url="https://fake.invalid/v1", sdk_version="fake",
+                account_sha256="1" * 64, runtime_sha256="2" * 64,
+                source_sha256="3" * 64, schema_sha256="4" * 64)
+
+        def count_compiled_v3(self, compiled, before_count):
+            before_count()
+            return CountReceiptV3(operation=count_operation(compiled, self.count_identity_v3()),
+                object="response.input_tokens", input_tokens=seen.count, monetary_cost_usd="0.001")
+
         def send_compiled_v3(self, compiled, before_request):
             assert ledger.state(compiled.key.dispatch_id).kind == "REQUEST_COMPILED"
             before_request()
@@ -106,7 +117,7 @@ def test_accepted_rag_compiles_before_one_constructor_and_request(rig, count):
     assert rig.seen.trace.index("count") < rig.seen.trace.index("constructor")
 
 
-def test_rag_379_terminalizes_after_intent_before_provider_construction(rig):
+def test_provider_count_379_terminalizes_after_count_before_generation(rig):
     rig.seen.count = 379
     with pytest.raises(rig.api.DispatchTechnicalFailureV3, match="MAIN_INPUT_ENVELOPE_EXCEEDED"):
         rig.dispatcher.dispatch(rig.keys[0], rig.material, rig.semantic)
@@ -115,7 +126,7 @@ def test_rag_379_terminalizes_after_intent_before_provider_construction(rig):
                                              "INPUT_ENVELOPE_OVERFLOW", "TERMINAL_TECHNICAL_MISSING"]
     assert rows[1]["compiled"] == rows[2]["compiled"] == rows[3]["compiled"]
     assert rows[3]["transport_attempts"] == rows[3]["realized_cost_krw"] == 0
-    assert (rig.seen.constructors, rig.seen.requests) == (0, 0)
+    assert (rig.seen.constructors, rig.seen.requests) == (1, 0)
     assert rig.dispatcher.terminal_parents == frozenset({"a" * 64, "d" * 64})
     saved = rig.dispatcher.compiled_request(rig.keys[0])
     assert saved.native_state == b"immutable native state"
@@ -133,7 +144,7 @@ def test_nonprefix_overflow_does_not_fan_out(rig):
         rig.dispatcher.dispatch(rig.keys[2], rig.material, rig.semantic)
     assert rig.dispatcher.terminal_parents == frozenset({"d" * 64})
     assert rig.ledger.state(rig.keys[0].dispatch_id).kind == "PENDING"
-    assert (rig.seen.constructors, rig.seen.requests) == (0, 0)
+    assert (rig.seen.constructors, rig.seen.requests) == (1, 0)
 
 
 @pytest.mark.parametrize("outcome", ["transport", "max_output_tokens", "parse", "unknown"])
@@ -203,7 +214,7 @@ def test_ledger_binding_mismatch_prevents_provider_construction(rig):
     ("no_memory_generate", 512),
 ])
 @pytest.mark.parametrize("outcome", ["ok", "transport", "max_output_tokens", "unknown"])
-def test_bound_openai_v3_sends_exact_compiled_bytes_once(api, monkeypatch, stage, cap, outcome):
+def test_bound_openai_v3_sends_exact_compiled_bytes_once(api, monkeypatch, tmp_path, stage, cap, outcome):
     from memcontam.clients import openai_responses
     from memcontam.clients.config import ProviderConfig
     from memcontam.readiness import phase13_v3_request as request_api
@@ -213,14 +224,21 @@ def test_bound_openai_v3_sends_exact_compiled_bytes_once(api, monkeypatch, stage
     class SDK:
         def __init__(self, **options):
             seen.append(("constructor", options))
+            self.base_url = "https://fake.invalid/v1"
+            self.api_key = options["api_key"]
+            self.organization = self.project = None
             self.responses = self
+            self.input_tokens = self
+
+        def count(self, **request):
+            return SimpleNamespace(object="response.input_tokens", input_tokens=1, cost_usd="0.001")
 
         def create(self, **request):
-            assert seen[-1] == "marker"
             seen.append(request)
             if outcome == "transport":
                 raise TimeoutError("synthetic timeout")
-            return SimpleNamespace(output_text="final: 24", usage=None,
+            return SimpleNamespace(output_text="final: 24", usage={"input_tokens": 1, "output_tokens": 1},
+                model="gpt-5.6-luna", service_tier="default",
                 status="completed" if outcome == "ok" else "incomplete",
                 incomplete_details=SimpleNamespace(reason=outcome))
 
@@ -237,20 +255,29 @@ def test_bound_openai_v3_sends_exact_compiled_bytes_once(api, monkeypatch, stage
         input_per_million_usd=0.20, cached_input_per_million_usd=0.02,
         output_per_million_usd=1.20,
     ), allow_live_calls=True, v3_binding=binding)
+    ledger = TerminalLedgerV3.create(tmp_path / "counted.sqlite3", {
+        "schema_version": "phase13_main_run_ledger_v3", "unit_ids": [key.dispatch_id],
+        "identity": binding.identity.model_dump(mode="json"),
+        "package_sha256": binding.package_sha256, "authorization_sha256": binding.authorization_sha256,
+    })
+    dispatcher = api.ProductionRequestDispatcherV3(ledger, binding,
+        (api.ParentTrajectoryV3(parent_id=key.parent_id, kind="NO_MEMORY_SINGLETON"),),
+        provider_factory=lambda _: provider)
     if outcome == "ok":
-        response = provider.send_compiled_v3(compiled, lambda: seen.append("marker"))
+        response = dispatcher.receive(key, lambda: material)
         assert response.raw["attempts"] == 1
-        assert response.raw["cost_usd"] is None
+        assert response.raw["cost_usd"] is not None
         assert response.raw["authority_contract"]["execution_envelope_id"] == "CORE_EXECUTION_ENVELOPE_REGISTRY_V4"
         assert response.raw["authority_contract"]["terminal_failure_contract_id"] == "CORE_TERMINAL_TECHNICAL_MISSINGNESS_V2"
     else:
-        with pytest.raises((TimeoutError, openai_responses.LunaContractError)) as failure:
-            provider.send_compiled_v3(compiled, lambda: seen.append("marker"))
-        assert getattr(failure.value, "provider_attempts_count", None) == 1
+        with pytest.raises(api.DispatchTechnicalFailureV3):
+            dispatcher.receive(key, lambda: material)
+        assert ledger.state(key.dispatch_id).kind == "ATTEMPTED_PROVIDER_FAILURE"
     assert seen[0][1]["max_retries"] == 0
     assert seen[-1] == json.loads(compiled.request_bytes)
     assert seen[-1]["max_output_tokens"] == cap
-    assert len(seen) == 3
+    assert len(seen) == 2
+    ledger.close()
 
 
 def test_production_runtime_defers_provider_construction(monkeypatch):
@@ -263,16 +290,17 @@ def test_production_runtime_defers_provider_construction(monkeypatch):
     runtime.ProductionMainRuntime(Path(__file__).resolve().parents[1], Path("unused-offline-cache"))
 
 
-def test_unproven_provider_input_bound_blocks_real_provider_construction(api, monkeypatch):
+def test_missing_count_pricing_blocks_real_provider_construction_before_credentials(api, monkeypatch):
     from memcontam.clients import openai_responses
 
     def forbidden(*_args, **_kwargs):
-        pytest.fail("unsafe input accounting constructed a real provider")
+        pytest.fail("SDK constructed without credentials")
 
-    monkeypatch.setattr(openai_responses, "OpenAIResponsesClient", forbidden)
+    monkeypatch.setattr(openai_responses, "OpenAI", forbidden)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     binding = api.PackageBindingV3(identity=corrective_identity(), package_sha256="b" * 64,
                                    authorization_sha256="c" * 64)
-    with pytest.raises(api.TerminalEvidenceError, match="MAIN_INPUT_ACCOUNTING_BOUND_UNAVAILABLE"):
+    with pytest.raises(ValueError, match="MAIN_COUNT_PRICING_NOT_FROZEN"):
         api.production_provider(binding)
 
 
@@ -338,17 +366,19 @@ def test_unbound_v3_registry_string_cannot_enable_new_limits(monkeypatch):
 
 
 @pytest.mark.parametrize("tokens", [377, 378, 379])
-def test_real_pinned_tokenizer_drives_the_rag_gate(rig, monkeypatch, tokens):
+def test_real_pinned_tokenizer_is_recorded_but_provider_count_drives_gate(rig, monkeypatch, tokens):
     from memcontam.baselines.prompt_budget import count_prompt_tokens
 
     monkeypatch.setattr(rig.api, "count_prompt_tokens", count_prompt_tokens)
     material = rig.api.RequestMaterialV3(
         messages=({"role": "user", "content": "x " * (tokens - 3)},), native_state=b"state",
     )
+    rig.seen.count = tokens
     if tokens == 379:
         with pytest.raises(rig.api.DispatchTechnicalFailureV3, match="MAIN_INPUT_ENVELOPE_EXCEEDED"):
             rig.dispatcher.dispatch(rig.keys[0], lambda: material, rig.semantic)
     else:
         rig.dispatcher.dispatch(rig.keys[0], lambda: material, rig.semantic)
     assert rig.dispatcher.compiled_request(rig.keys[0]).token_count == tokens
-    assert rig.seen.constructors == rig.seen.requests == int(tokens <= 378)
+    assert rig.seen.constructors == 1
+    assert rig.seen.requests == int(tokens <= 378)
