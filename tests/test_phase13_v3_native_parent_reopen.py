@@ -10,6 +10,8 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+import httpx
+from openai import OpenAI, AsyncOpenAI
 
 from memcontam.clients.base import LLMResponse
 from memcontam.evaluation.phase13_observability_models import Phase13TrialEvidence
@@ -27,6 +29,7 @@ from memcontam.readiness.phase13_v3_terminal_models import TerminalEvidenceError
 from memcontam.readiness.phase13_v3_entrypoint import EntrypointError
 
 from .phase13_corrective_identity import corrective_identity
+from .phase13_count_fake import CountedProvider
 from .test_phase13_readiness0_production_dry_run import _ContractFakeEmbeddingProvider
 from .test_phase13_v3_entrypoint_fixture import (
     AUTHORITY,
@@ -37,7 +40,7 @@ from .test_phase13_v3_entrypoint_fixture import (
 )
 
 
-class NativeProvider:
+class NativeProvider(CountedProvider):
     def send_compiled_v3(self, compiled, before_request):
         before_request()
         content = {
@@ -71,20 +74,25 @@ class NativeProvider:
         }, {"prompt_tokens": 1, "completion_tokens": 1}, 0)
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def deny_main_external(monkeypatch: pytest.MonkeyPatch) -> Callable[[], None]:
-    def arm() -> None:
-        def denied(*_args, **_kwargs):
-            pytest.fail("Main runtime attempted external process or network access")
+    def denied(*_args, **_kwargs):
+        pytest.fail("Main runtime attempted external process or network access")
 
+    monkeypatch.setattr(socket, "socket", denied)
+    monkeypatch.setattr(socket, "getaddrinfo", denied)
+    monkeypatch.setattr(httpx.Client, "send", denied)
+    monkeypatch.setattr(httpx.AsyncClient, "send", denied)
+    monkeypatch.setattr(OpenAI, "__init__", denied)
+    monkeypatch.setattr(AsyncOpenAI, "__init__", denied)
+
+    def arm() -> None:
         popen = subprocess.Popen
         def controlled_popen(args, *rest, **kwargs):
             if args[0] == "git" and args[1] == "--no-replace-objects":
                 return popen(args, *rest, **kwargs)
             return denied(args, *rest, **kwargs)
 
-        monkeypatch.setattr(socket, "socket", denied)
-        monkeypatch.setattr(socket, "getaddrinfo", denied)
         monkeypatch.setattr(subprocess, "Popen", controlled_popen)
         monkeypatch.setattr(os, "system", denied)
         monkeypatch.setattr(os, "popen", denied)
@@ -165,7 +173,7 @@ def test_terminal_ordinary_preserves_only_real_trials_and_reopens(
             assert partial["schema_version"] == "phase13_main_terminal_partial_parent_v1"
             assert len(partial["archive"]["records"]) == (0 if failure == "zero_prefix" else 2 if failure == "late_provider" else 1)
             assert partial["whole_unit_cost_krw"] is None
-            assert partial["observation_cost_krw"] == (0 if failure == "zero_prefix" else 2 if failure == "late_provider" else 1)
+            assert partial["observation_cost_krw"] == (0 if failure == "zero_prefix" else 6 if failure == "late_provider" else 3)
             assert partial["terminal_key"]["ordinal"] == (0 if failure == "zero_prefix" else 2 if failure == "late_provider" else 1)
             if failure == "late_provider":
                 parsed = TerminalPartialParent.model_validate_json(raw)
