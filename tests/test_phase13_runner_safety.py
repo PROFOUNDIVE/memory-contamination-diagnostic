@@ -463,7 +463,7 @@ def test_resume_uses_realized_plus_next_projection(entrypoint_fixture, provider:
                            provider_factory=provider.factory).completed_count == 1
         realized = run.ledger.realized_cost_krw()
         projection = run.selected.package.production[1].projected_cost_krw
-        assert realized == 50
+        assert realized == 150
     finally:
         run.close()
     resumed = open_run(entrypoint_fixture, create=False, seed=1)

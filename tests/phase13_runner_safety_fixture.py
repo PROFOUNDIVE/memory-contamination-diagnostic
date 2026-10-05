@@ -7,16 +7,26 @@ from memcontam.clients.base import LLMResponse
 from memcontam.readiness.phase13_main_v3_runner import V3MainRun
 from memcontam.readiness.phase13_v3_entrypoint import SelectedExecutionV3, SelectionRequest, select_execution
 from memcontam.readiness.phase13_v3_request import CompiledProviderRequestV3, PackageBindingV3
+from memcontam.readiness.phase13_v3_count import CountReceiptV3
+from .phase13_count_fake import CountedProvider
 
 
-class FakeProvider:
+class FakeProvider(CountedProvider):
     def __init__(self) -> None:
         self.constructors = 0
         self.requests: list[str] = []
+        self.count_requests: list[str] = []
 
     def factory(self, binding: PackageBindingV3) -> FakeProvider:
         self.constructors += 1
         return self
+
+    def count_compiled_v3(
+        self, compiled: CompiledProviderRequestV3, before_count: Callable[[], None],
+    ) -> CountReceiptV3:
+        receipt = super().count_compiled_v3(compiled, before_count)
+        self.count_requests.append(compiled.key.dispatch_id)
+        return receipt
 
     def send_compiled_v3(self, compiled: CompiledProviderRequestV3, before_request: Callable[[], None]) -> LLMResponse:
         before_request()
@@ -73,8 +83,10 @@ def launcher(root: Path, *, execute: bool = False) -> None:
 
             with patch.object(dispatch, "count_prompt_tokens", return_value=1), \
                  patch.object(runtime, "validate_production_archive", side_effect=barrier), \
-                 patch.object(dispatch, "production_provider", side_effect=deny), \
-                 patch("socket.socket.connect", side_effect=deny), patch("socket.create_connection", side_effect=deny):
+                  patch.object(dispatch, "production_provider", side_effect=deny), \
+                  patch("socket.socket.connect", side_effect=deny), patch("socket.create_connection", side_effect=deny), \
+                  patch("httpx.Client.send", side_effect=deny), patch("httpx.AsyncClient.send", side_effect=deny), \
+                  patch("openai.OpenAI.__init__", side_effect=deny), patch("openai.AsyncOpenAI.__init__", side_effect=deny):
                 run.execute(root / "cache", max_units=1, tranche_ceiling_krw=450000, provider_factory=fake.factory)
         else:
             print("OWNED", flush=True)
