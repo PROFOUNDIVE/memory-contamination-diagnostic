@@ -52,6 +52,7 @@ from .phase13_production_observability import (
     validate_production_archive,
 )
 from .phase13_v3_cost_actual import reconcile_actual
+from .phase13_v3_count import count_costs_krw
 from .phase13_v3_cost_models import CostError, ProviderCostEvidence
 from .phase13_v3_entrypoint import EntrypointError, SelectedExecutionV3
 from .phase13_v3_entrypoint_paths import PrivateLedger, private_ledger
@@ -285,10 +286,13 @@ class V3MainRun:
                             keys=dispatch.request_keys[:len(dispatch.observed_calls)])
                         observed_cost = sum(reconcile_actual(cost).realized_krw
                             for call in observed for cost in self.ledger.state(call.dispatch_id).attempt_costs)
+                        observed_cost += count_costs_krw(self.ledger, tuple(call.dispatch_id for call in observed))
                         all_costs = tuple(cost for key in dispatch.request_keys
                             for cost in self.ledger.state(key.dispatch_id).attempt_costs)
                         try:
                             whole_cost = sum(reconcile_actual(cost).realized_krw for cost in all_costs)
+                            whole_cost += count_costs_krw(self.ledger,
+                                tuple(key.dispatch_id for key in dispatch.request_keys))
                         except CostError as error:
                             if error.code != "MAIN_TERMINAL_COST_UNKNOWN":
                                 raise
@@ -347,6 +351,7 @@ class V3MainRun:
                         dispatch.realized_cost_krw,
                         self.selected.costs.resources.phase4.policy,
                         self._attempt_costs(strict_calls),
+                        count_costs_krw(self.ledger, tuple(call.dispatch_id for call in strict_calls)),
                     ),
                 )
                 unit_evidence = MainUnitEvidence(
@@ -489,6 +494,7 @@ class V3MainRun:
                     record.unit_evidence.realized_cost_krw,
                     self.selected.costs.resources.phase4.policy,
                     self._attempt_costs(calls),
+                    count_costs_krw(self.ledger, tuple(call.dispatch_id for call in calls)),
                 ),
             )
             archive = validated.runtime_evidence.production_observability_archive

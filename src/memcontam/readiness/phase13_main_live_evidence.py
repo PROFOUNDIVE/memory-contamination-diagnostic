@@ -145,6 +145,7 @@ class DispatchEvidenceInput:
     claimed_cost_krw: int
     current_policy: ActivatedPolicyV3 | None = None
     attempt_costs: tuple[tuple[str, tuple[ProviderCostEvidence, ...]], ...] = ()
+    count_cost_krw: int = 0
 
 
 class CurrentProviderAuthorityContract(_FrozenModel):
@@ -217,6 +218,9 @@ def validate_dispatch_evidence(
                    or not 1 <= len(by_id[call.dispatch_id]) <= 2 for call in calls)):
             raise MainEvidenceValidationError("MAIN_UNIT_PROVIDER_CALLS_INVALID")
         realized = sum(reconcile_actual(cost).realized_krw for costs in by_id.values() for cost in costs)
+        if type(supplied.count_cost_krw) is not int or supplied.count_cost_krw < 0:
+            raise MainEvidenceValidationError("MAIN_UNIT_REALIZED_COST_MISMATCH")
+        realized += supplied.count_cost_krw
     else:
         realized = sum(int((Decimal(str(call.provider_cost_usd)) * Decimal(1600)).to_integral_value(
             rounding=ROUND_CEILING)) for call in calls)

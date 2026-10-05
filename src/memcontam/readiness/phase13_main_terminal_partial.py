@@ -25,6 +25,7 @@ from memcontam.readiness.phase13_production_observability import (
     validate_production_archive,
 )
 from memcontam.readiness.phase13_v3_cost_actual import reconcile_actual
+from memcontam.readiness.phase13_v3_count import count_costs_krw
 from memcontam.readiness.phase13_v3_cost_models import CostError, digest
 from memcontam.readiness.phase13_v3_request import PackageBindingV3, RequestKeyV3
 from memcontam.readiness.phase13_v3_terminal_models import (
@@ -178,7 +179,7 @@ def validate_terminal_partial(runner: V3MainRun, record: TerminalPartialParent,
                            and digest(event) == record.terminal_event_hash), None)
     if not isinstance(terminal_event, ProviderFailureV3):
         raise TerminalEvidenceError("MAIN_AUTHORIZATION_BINDING_MISMATCH")
-    total = 0
+    total = count_costs_krw(ledger, tuple(row.key.dispatch_id for row in unit_receipts))
     known = True
     for receipt in unit_receipts:
         key = receipt.key
@@ -210,6 +211,7 @@ def validate_terminal_partial(runner: V3MainRun, record: TerminalPartialParent,
     observed = sum(reconcile_actual(cost).realized_krw
                    for call in record.observed_calls
                    for cost in ledger.state(call.dispatch_id).attempt_costs)
+    observed += count_costs_krw(ledger, observed_ids)
     if (
         terminal_event.unit_id != record.terminal_key.dispatch_id
         or terminal_event.compiled != ledger.state(record.terminal_key.dispatch_id).compiled
