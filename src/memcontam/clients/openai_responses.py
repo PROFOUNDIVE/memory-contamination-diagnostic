@@ -5,18 +5,22 @@ import hashlib
 import inspect
 import json
 import os
+import sys
 import time
 from collections.abc import Callable, Mapping
 from typing import Any, cast
 
 import httpx
-from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
+from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI, __version__ as openai_version
 from openai.resources.responses.responses import Responses
 
 from memcontam.clients.base import LLMResponse
 from memcontam.clients.config import ProviderConfig
 from memcontam.clients.cost_guard import CostGuard
 from memcontam.readiness.phase13_readiness0_budget import BudgetedResponses, ResponsesResource
+from memcontam.readiness.phase13_v3_count import (
+    CountIdentityV3, CountReceiptV3, count_operation, count_projection, validate_count_receipt,
+)
 from memcontam.readiness.phase13_v3_request import (
     STAGES,
     CompiledProviderRequestV3,
@@ -100,6 +104,8 @@ class OpenAIResponsesClient:
         bound_v3 = isinstance(compiled_v3, CompiledProviderRequestV3) and (
             self._v3_binding is not None and compiled_v3.binding == self._v3_binding
         )
+        if self._v3_binding is not None and not bound_v3:
+            raise LunaContractError("MAIN_COUNT_RECEIPT_REQUIRED")
         if compiled_v3 is not None and not bound_v3:
             raise LunaContractError("LUNA_RUNTIME_CONTRACT_MISMATCH")
         registered_cost_policy = False
@@ -137,6 +143,7 @@ class OpenAIResponsesClient:
         authority_contract = _authority_contract(config, max_output_tokens)
         if bound_v3:
             assert isinstance(compiled_v3, CompiledProviderRequestV3)
+            self._require_count_receipt(compiled_v3)
             request = json.loads(compiled_v3.request_bytes)
 
         start = time.perf_counter()
@@ -147,7 +154,11 @@ class OpenAIResponsesClient:
         while True:
             attempts += 1
             if bound_v3:
+                assert isinstance(compiled_v3, CompiledProviderRequestV3)
                 config["_phase13_before_request"]()
+                self._require_count_receipt(compiled_v3, started=True)
+                if request != json.loads(compiled_v3.request_bytes):
+                    raise LunaContractError("MAIN_COUNT_REQUEST_BINDING_MISMATCH")
             try:
                 response = self._responses.create(**cast(Any, request))
                 break
@@ -157,6 +168,10 @@ class OpenAIResponsesClient:
                         retry_class = _phase13_retry_class(transport_error)
                         if retry_class is not None:
                             setattr(transport_error, "phase13_retry_class", retry_class)
+                            if (isinstance(transport_error, APIStatusError)
+                                    and (transport_error.response.status_code == 429
+                                         or 500 <= transport_error.response.status_code <= 599)):
+                                setattr(transport_error, "provider_failure_acknowledged", True)
                     setattr(transport_error, "provider_attempts_count", attempts)
                     setattr(transport_error, "provider_latency_ms", int((time.perf_counter() - start) * 1000))
                     setattr(transport_error, "provider_request_contract", request_contract)
@@ -231,11 +246,11 @@ class OpenAIResponsesClient:
     def send_compiled_v3(
         self, compiled: CompiledProviderRequestV3, before_request: Callable[[], None],
     ) -> LLMResponse:
+        self._require_count_receipt(compiled)
         if (
             self._v3_binding is None or compiled.binding != self._v3_binding
             or compiled.request_bytes != compile_request_bytes(compiled.key, compiled.material)
             or type(compiled.token_count) is not int or compiled.token_count < 0
-            or compiled.token_count > STAGES[compiled.key.stage][0]
         ):
             raise LunaContractError("LUNA_RUNTIME_CONTRACT_MISMATCH")
         return self.chat(
@@ -251,6 +266,49 @@ class OpenAIResponsesClient:
                 "_phase13_compiled_v3": compiled, "_phase13_before_request": before_request,
             },
         )
+
+    def count_identity_v3(self) -> CountIdentityV3:
+        from pathlib import Path
+
+        from memcontam.readiness import phase13_v3_count, phase13_v3_request
+
+        source = b"".join(Path(filename).read_bytes()
+                          for filename in (__file__, phase13_v3_count.__file__, phase13_v3_request.__file__))
+        schema = json.dumps(CountReceiptV3.model_json_schema(), sort_keys=True).encode()
+        runtime = json.dumps([sys.executable, sys.version, openai_version,
+                              self._config.timeout_seconds, self._config.retries_after_initial_attempt],
+                             separators=(",", ":")).encode()
+        account = json.dumps([self.client.api_key, self.client.organization, self.client.project],
+                             separators=(",", ":")).encode()
+        return CountIdentityV3(base_url=str(self.client.base_url), sdk_version=openai_version,
+            account_sha256=hashlib.sha256(account).hexdigest(),
+            source_sha256=hashlib.sha256(source).hexdigest(),
+            runtime_sha256=hashlib.sha256(runtime).hexdigest(), schema_sha256=hashlib.sha256(schema).hexdigest())
+
+    def count_compiled_v3(self, compiled: CompiledProviderRequestV3,
+                          before_count: Callable[[], None]) -> CountReceiptV3:
+        self._assert_live_call_authorized()
+        if (self._v3_binding != compiled.binding or self._config.timeout_seconds != 180
+                or self._config.retries_after_initial_attempt != 0):
+            raise LunaContractError("MAIN_COUNT_RUNTIME_CONTRACT_MISMATCH")
+        operation = count_operation(compiled, self.count_identity_v3())
+        projection = json.loads(count_projection(compiled))
+        before_count()
+        if operation != count_operation(compiled, self.count_identity_v3()):
+            raise LunaContractError("MAIN_COUNT_REQUEST_BINDING_MISMATCH")
+        response = self.client.responses.input_tokens.count(**projection)
+        if (getattr(response, "object", None) != "response.input_tokens"
+                or type(getattr(response, "input_tokens", None)) is not int
+                or response.input_tokens < 0):
+            raise LunaContractError("MAIN_COUNT_RESPONSE_INVALID")
+        return CountReceiptV3(operation=operation, object=response.object,
+            input_tokens=response.input_tokens, monetary_cost_usd=getattr(response, "cost_usd", None))
+
+    def _require_count_receipt(self, compiled: CompiledProviderRequestV3, *, started: bool = False) -> None:
+        if compiled.count_receipt is None or compiled.verify_durable_count is None:
+            raise LunaContractError("MAIN_COUNT_RECEIPT_REQUIRED")
+        compiled.verify_durable_count(started)
+        validate_count_receipt(compiled, compiled.count_receipt, self.count_identity_v3())
 
     def _assert_live_call_authorized(self) -> None:
         if not self._config.live_calls_enabled:

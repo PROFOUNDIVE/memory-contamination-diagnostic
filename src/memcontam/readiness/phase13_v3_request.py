@@ -3,13 +3,17 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import Final, Literal
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Final, Literal
 
 from pydantic import Field
 
 from memcontam.readiness.phase13_cost_policy_models import Sha256
 from memcontam.readiness.phase13_v3_authority_models import FrozenModel, V3Identity
 from memcontam.readiness.phase13_v3_terminal_models import CompiledRequestV3
+
+if TYPE_CHECKING:
+    from .phase13_v3_count import CountReceiptV3
 
 
 Stage = Literal["full_history_generate", "rag_generate", "bot_problem_distill",
@@ -68,6 +72,8 @@ class CompiledProviderRequestV3:
     material: RequestMaterialV3
     request_bytes: bytes
     token_count: int
+    count_receipt: CountReceiptV3 | None = None
+    verify_durable_count: Callable[[bool], None] | None = None
 
     @property
     def native_state(self) -> bytes:
