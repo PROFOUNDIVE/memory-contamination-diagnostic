@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Final, Mapping
 
 from memcontam.contamination.phase12.certification import CertificationSuite, certify_triplet
 from memcontam.contamination.phase12.models import (
@@ -23,6 +23,11 @@ from memcontam.contamination.phase13_v2_applicability import (
     G24_APPLICABILITY_SHA256,
     WS_APPLICABILITY_ID,
     WS_APPLICABILITY_SHA256,
+)
+
+
+_CURRENT_REGISTRY_ARTIFACT_HASH: Final = (
+    "dee08b0985c0bec3c9bcd8cf24b4d7e7957a30dd52b4b0f067793c1b902907f0"
 )
 
 
@@ -63,6 +68,8 @@ def validate_current_candidate_registry(registry: CandidateRegistry) -> None:
         != WS_APPLICABILITY_SHA256
     ):
         raise CandidateCertificationError("CURRENT_APPLICABILITY_BINDING_MISMATCH")
+    if registry.artifact_hash != _CURRENT_REGISTRY_ARTIFACT_HASH:
+        raise CandidateCertificationError("CURRENT_CANDIDATE_BINDING_MISMATCH")
 
 
 def load_hidden_audit_registry(path: Path) -> HiddenAuditRegistry:

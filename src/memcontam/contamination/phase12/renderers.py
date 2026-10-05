@@ -107,6 +107,7 @@ def _validate_checkpoint(
 @dataclass(frozen=True)
 class RendererRegistry:
     dc_rs: LegacyDcRsRegistry | None = None
+    candidates: CandidateRegistry | None = None
 
     @classmethod
     def native(cls) -> RendererRegistry:
@@ -119,7 +120,7 @@ class RendererRegistry:
         candidates: CandidateRegistry,
         candidate_registry_sha256: str,
     ) -> RendererRegistry:
-        return cls(load_legacy_dc_rs_registry(raw, candidates, candidate_registry_sha256))
+        return cls(load_legacy_dc_rs_registry(raw, candidates, candidate_registry_sha256), candidates)
 
     def render_false(
         self, beta: str, triplet: CandidateTriplet, checkpoint: Phase12Checkpoint
@@ -143,6 +144,8 @@ class RendererRegistry:
         candidate: CandidateVariant,
         checkpoint: Phase12Checkpoint,
     ) -> NativeEntry:
+        if self.candidates is not None and triplet not in self.candidates.triplets:
+            raise RendererError("GOVERNED_CANDIDATE_BINDING_MISMATCH")
         if beta != "dc_rs":
             return _render(beta, candidate, checkpoint)
         _validate_checkpoint(beta, candidate, checkpoint)

@@ -11,6 +11,7 @@ from memcontam.contamination.phase12.models import (
     CandidateVariant,
     canonical_content_hash,
 )
+from memcontam.contamination.phase12.registry import validate_current_candidate_registry
 from memcontam.memory.checkpoint_v3 import NATIVE_ENTRY_V1, NativeEntry
 
 
@@ -165,6 +166,8 @@ def load_legacy_dc_rs_registry(
         or registry.candidate_registry_sha256 != candidate_registry_sha256
     ):
         raise LegacyDcRsRegistryError()
+    if registry.schema_version == "phase13_legacy_dc_rs_intervention_registry_v2":
+        validate_current_candidate_registry(candidates)
     triplets = {triplet.task: triplet for triplet in candidates.triplets}
     for task_records in registry.tasks:
         triplet = triplets.get(task_records.task)
