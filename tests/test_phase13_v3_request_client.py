@@ -26,6 +26,14 @@ from memcontam.readiness.phase13_v3_terminal_ledger import TerminalLedgerV3
 from memcontam.readiness.phase13_v3_terminal_models import TerminalEvidenceError
 
 from .phase13_corrective_identity import corrective_identity
+from .phase13_count_fake import CountedProvider
+from .test_phase13_v3_entrypoint_integration import deny_external as deny_external
+from .test_phase13_v3_entrypoint_fixture import entrypoint_bytes as entrypoint_bytes
+from .test_phase13_runner_safety import entrypoint_fixture as entrypoint_fixture
+from .test_phase13_runner_safety import local_authority as local_authority
+from .test_phase13_runner_safety import source_selection as source_selection
+
+pytestmark = pytest.mark.usefixtures("deny_external")
 
 ClientFixture = tuple[MainRequestClientV3, TerminalLedgerV3, tuple[RequestKeyV3, ...], dict[str, int]]
 
@@ -40,7 +48,7 @@ def client_fixture(tmp_path, monkeypatch, request):
     keys = tuple(RequestKeyV3(parent_id="a" * 64, stage=stage, ordinal=index) for index in range(2))
     counts = {"constructor": 0, "requests": 0}
 
-    class Provider:
+    class Provider(CountedProvider):
         def send_compiled_v3(self, compiled, before_request):
             assert compiled.native_state == b"immutable native bytes"
             before_request()
@@ -69,6 +77,7 @@ def call(client):
 
 class RetryableTimeout(TimeoutError):
     phase13_retry_class = "TIMEOUT_BEFORE_SEMANTIC_PAYLOAD"
+    provider_failure_acknowledged = True
 
 
 class SimulatedCrash(BaseException):
@@ -78,7 +87,7 @@ class SimulatedCrash(BaseException):
 def test_frozen_entitlement_retries_one_unambiguous_transport_failure(client_fixture):
     client, ledger, keys, counts = client_fixture
 
-    class Provider:
+    class Provider(CountedProvider):
         def send_compiled_v3(self, compiled, before_request):
             before_request()
             counts["requests"] += 1
@@ -114,7 +123,7 @@ def test_successful_retry_keeps_unknown_first_attempt_cost_until_reconciled(clie
 
     client, ledger, keys, counts = client_fixture
 
-    class Provider:
+    class Provider(CountedProvider):
         def send_compiled_v3(self, compiled, before_request):
             before_request()
             counts["requests"] += 1
@@ -153,6 +162,49 @@ def test_successful_retry_keeps_unknown_first_attempt_cost_until_reconciled(clie
         reopened.close()
 
 
+def test_terminal_parent_observed_total_includes_count_after_reopen(entrypoint_fixture, monkeypatch):
+    import json
+    from pathlib import Path
+
+    import memcontam.readiness.phase13_main_request_dispatch as dispatch
+    from .phase13_runner_safety_fixture import FakeProvider, open_run
+
+    class Provider(FakeProvider):
+        def send_compiled_v3(self, compiled, before_request):
+            if compiled.key.ordinal == 1:
+                before_request()
+                self.requests.append(compiled.key.dispatch_id)
+                raise RuntimeError("synthetic generation failure")
+            return super().send_compiled_v3(compiled, before_request)
+
+    monkeypatch.setattr(dispatch, "count_prompt_tokens", lambda *_: 1)
+    provider = Provider()
+    run = open_run(entrypoint_fixture, create=True)
+    parent_id = run.selected.package.production[0].unit_id
+    try:
+        assert run.execute(Path("unused"), max_units=1, tranche_ceiling_krw=450000,
+                           provider_factory=provider.factory).terminal_technical_missing_count == 1
+        raw = run.ledger.read_record(f"{parent_id}.parent.json")
+        parent = json.loads(raw)
+        assert parent["observation_cost_krw"] == 3
+        assert parent["whole_unit_cost_krw"] is None
+    finally:
+        run.close()
+    reopened = open_run(entrypoint_fixture, create=False)
+    try:
+        assert reopened.status().terminal_technical_missing_count == 1
+        assert reopened.ledger.read_record(f"{parent_id}.parent.json") == raw
+        assert len(provider.requests) == 2
+        assert len(reopened.ledger.count_records("count-started")) == 2
+        key = RequestKeyV3(parent_id=parent_id, stage="no_memory_generate", ordinal=1)
+        reopened.ledger.reconcile_cost(key.dispatch_id,
+            {"usage": {"input_tokens": 1, "output_tokens": 0}}, "f" * 64)
+        assert reopened.ledger.realized_cost_krw() == 6
+        assert reopened.status().terminal_technical_missing_count == 1
+    finally:
+        reopened.close()
+
+
 def test_retryable_event_cannot_hide_observed_first_attempt_cost() -> None:
     from memcontam.readiness.phase13_v3_terminal_models import RetryableAttemptFailureV3
 
@@ -173,7 +225,7 @@ def test_retryable_event_cannot_hide_observed_first_attempt_cost() -> None:
 def test_transport_failure_without_frozen_entitlement_is_not_retried(client_fixture):
     client, ledger, keys, counts = client_fixture
 
-    class Provider:
+    class Provider(CountedProvider):
         def send_compiled_v3(self, compiled, before_request):
             before_request()
             counts["requests"] += 1
@@ -196,7 +248,7 @@ def test_transport_failure_without_frozen_entitlement_is_not_retried(client_fixt
 def test_provider_failure_preserves_actual_failed_baseline_result(client_fixture):
     client, ledger, keys, counts = client_fixture
 
-    class Provider:
+    class Provider(CountedProvider):
         def send_compiled_v3(self, compiled, before_request):
             before_request()
             counts["requests"] += 1
@@ -228,7 +280,7 @@ def test_restart_after_durable_retryable_failure_issues_only_second_attempt(
 ):
     client, ledger, keys, counts = client_fixture
 
-    class Provider:
+    class Provider(CountedProvider):
         def send_compiled_v3(self, compiled, before_request):
             before_request()
             counts["requests"] += 1
@@ -293,7 +345,7 @@ def test_entitled_second_failure_exhausts_once_after_first_attempt_crash_and_reo
     assert keys[0].stage == keys[1].stage
     attempted_indices: list[int] = []
 
-    class Provider:
+    class Provider(CountedProvider):
         def send_compiled_v3(self, compiled, before_request):
             before_request()
             counts["requests"] += 1
@@ -401,7 +453,7 @@ def test_next_call_acknowledges_previous_semantic_success(client_fixture):
 def test_invalid_receipt_stops_native_path_before_next_request(client_fixture):
     client, ledger, keys, counts = client_fixture
 
-    class Provider:
+    class Provider(CountedProvider):
         def send_compiled_v3(self, compiled, before_request):
             before_request()
             counts["requests"] += 1
@@ -600,3 +652,90 @@ def test_uncoded_marker_failure_preserves_in_flight_evidence(
     assert ledger.rows() == persisted_rows
     assert ledger.state(keys[0].dispatch_id).kind == point
     assert counts == {"constructor": int(point == "ATTEMPT_STARTED"), "requests": 0}
+
+
+def test_parent_client_total_includes_each_count_once(client_fixture):
+    client, ledger, _keys, _counts = client_fixture
+
+    def execute():
+        call(client)
+        call(client)
+        return RuntimeTrialResult(BaselineExecutionOutcome("succeeded"), NOMEM_SINGLETON)
+
+    client.trial(execute, lambda: b"immutable native bytes")
+    assert client.realized_cost_krw() == ledger.realized_cost_krw() == 6
+
+
+def test_parent_cost_rejects_receipt_for_another_request(client_fixture):
+    import json
+
+    client, ledger, keys, _counts = client_fixture
+    client.trial(lambda: (call(client), RuntimeTrialResult(
+        BaselineExecutionOutcome("succeeded"), NOMEM_SINGLETON))[1],
+        lambda: b"immutable native bytes")
+    raw = ledger.count_record(keys[0].dispatch_id, "count-receipt")
+    assert raw is not None
+    receipt = json.loads(raw)
+    receipt["operation"]["key"]["ordinal"] = 1
+    with ledger.connection() as connection:
+        connection.execute("UPDATE provider_counts_v1 SET raw=? WHERE unit_id=? AND role='count-receipt'",
+                           (json.dumps(receipt).encode(), keys[0].dispatch_id))
+    with pytest.raises(TerminalEvidenceError, match="MAIN_COUNT_REQUEST_BINDING_MISMATCH"):
+        client.realized_cost_krw()
+
+
+def test_count_failure_persists_only_registered_code(client_fixture):
+    import json
+
+    client, ledger, keys, counts = client_fixture
+
+    class UntrustedFailure(TimeoutError):
+        code = "secret-key-and-raw-prompt"
+
+    class Provider(CountedProvider):
+        def count_compiled_v3(self, compiled, before_count):
+            before_count()
+            raise UntrustedFailure("secret-key-and-raw-prompt")
+
+    client.dispatcher._factory = lambda _: Provider()
+    with pytest.raises(TerminalEvidenceError, match="MAIN_COUNT"):
+        client.trial(lambda: (call(client), RuntimeTrialResult(
+            BaselineExecutionOutcome("succeeded"), NOMEM_SINGLETON))[1],
+            lambda: b"immutable native bytes")
+    raw = ledger.count_record(keys[0].dispatch_id, "count-failure")
+    assert raw is not None
+    assert json.loads(raw)["failure_code"] == "MAIN_COUNT_FAILED_RECONCILIATION_REQUIRED"
+    assert b"secret-key-and-raw-prompt" not in raw
+    assert ledger.read_record(f"{keys[0].dispatch_id}.count-failure.json") == raw
+    assert counts["requests"] == 0
+
+
+def test_durable_parent_total_matches_count_and_generation_after_reopen(entrypoint_fixture, monkeypatch):
+    import json
+    from pathlib import Path
+
+    import memcontam.readiness.phase13_main_request_dispatch as dispatch
+    from .phase13_runner_safety_fixture import FakeProvider, open_run
+
+    monkeypatch.setattr(dispatch, "count_prompt_tokens", lambda *_: 1)
+    provider = FakeProvider()
+    run = open_run(entrypoint_fixture, create=True)
+    parent_id = run.selected.package.production[0].unit_id
+    try:
+        assert run.execute(Path("unused"), max_units=1, tranche_ceiling_krw=450000,
+                           provider_factory=provider.factory).completed_count == 1
+        raw = run.ledger.read_record(f"{parent_id}.parent.json")
+        assert json.loads(raw)["unit_evidence"]["realized_cost_krw"] == run.ledger.realized_cost_krw() == 150
+    finally:
+        run.close()
+    reopened = open_run(entrypoint_fixture, create=False)
+    try:
+        assert reopened.status().completed_count == 1
+        assert reopened.ledger.read_record(f"{parent_id}.parent.json") == raw
+        assert reopened.ledger.realized_cost_krw() == 150
+        assert reopened.execute(Path("unused"), max_units=1, tranche_ceiling_krw=450000,
+                                provider_factory=provider.factory).completed_count == 1
+        assert len(provider.requests) == len(set(provider.requests)) == 50
+        assert len(reopened.ledger.count_records("count-started")) == 50
+    finally:
+        reopened.close()

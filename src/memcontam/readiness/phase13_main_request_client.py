@@ -13,6 +13,7 @@ from memcontam.memory.checkpoint_v3 import NativeState, serialize_checkpoint
 from .phase13_main_request_dispatch import DispatchTechnicalFailureV3, ProductionRequestDispatcherV3
 from .phase13_v3_cost_actual import reconcile_actual
 from .phase13_v3_cost_models import CostError
+from .phase13_v3_count import count_costs_krw
 from .phase13_v3_request import MessageV3, RequestKeyV3, RequestMaterialV3, Stage
 from .phase13_v3_terminal_models import TerminalEvidenceError
 
@@ -111,7 +112,8 @@ class MainRequestClientV3:
                     if error.code != "MAIN_TERMINAL_COST_UNKNOWN":
                         raise
                     raise TerminalEvidenceError("MAIN_TERMINAL_COST_UNKNOWN") from error
-        return total
+        return total + count_costs_krw(self.dispatcher.ledger,
+                                      tuple(key.dispatch_id for key in self._seen_keys))
 
     def chat(self, messages: list[dict[str, str]], model: str, config: dict) -> LLMResponse:
         try:
