@@ -133,6 +133,7 @@ class SeedZeroShadowProvider(FakeProvider):
 
 class ShadowPrePayloadTimeout(TimeoutError):
     phase13_retry_class = "TIMEOUT_BEFORE_SEMANTIC_PAYLOAD"
+    provider_failure_acknowledged = True
 
 
 def staging_shadow_request(tmp_path: Path, builder_source) -> SelectionRequest:

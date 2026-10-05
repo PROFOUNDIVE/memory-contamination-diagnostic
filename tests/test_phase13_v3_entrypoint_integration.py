@@ -15,6 +15,7 @@ import pytest
 from memcontam.readiness.phase13_v3_entrypoint import SelectedExecutionV3
 
 from .phase13_corrective_identity import corrective_identity
+from .phase13_count_fake import CountedProvider
 from .test_phase13_v3_entrypoint_fixture import (
     AUTHORITY, build_entrypoint_bytes, entrypoint_bytes, entrypoint_fixture, seal_fixture_closure,
 )
@@ -25,6 +26,8 @@ __all__ = ["entrypoint_bytes", "entrypoint_fixture"]
 @pytest.fixture
 def deny_external(monkeypatch):
     from memcontam.clients.openai_responses import OpenAIResponsesClient
+    import httpx
+    from openai import OpenAI, AsyncOpenAI
 
     counts = {"constructor": 0, "request": 0, "socket": 0, "credential": 0}
 
@@ -36,6 +39,11 @@ def deny_external(monkeypatch):
 
     monkeypatch.setattr(OpenAIResponsesClient, "__init__", deny("constructor"))
     monkeypatch.setattr(OpenAIResponsesClient, "send_compiled_v3", deny("request"))
+    monkeypatch.setattr(OpenAIResponsesClient, "count_compiled_v3", deny("request"))
+    monkeypatch.setattr(httpx.Client, "send", deny("request"))
+    monkeypatch.setattr(httpx.AsyncClient, "send", deny("request"))
+    monkeypatch.setattr(OpenAI, "__init__", deny("constructor"))
+    monkeypatch.setattr(AsyncOpenAI, "__init__", deny("constructor"))
     monkeypatch.setattr(socket, "socket", deny("socket"))
     monkeypatch.setattr(socket, "getaddrinfo", deny("socket"))
     original = type(os.environ).__getitem__
@@ -233,7 +241,7 @@ def test_v3_execution_uses_guarded_requests_and_real_ordinary_runtime(entrypoint
     monkeypatch.setattr(dispatch, "count_prompt_tokens", lambda *_: 1)
     calls = []
 
-    class FakeProvider:
+    class FakeProvider(CountedProvider):
         def send_compiled_v3(self, compiled, before_request):
             assert compiled.native_state == b"{}"
             before_request()
@@ -321,10 +329,13 @@ def test_runner_parent_calls_preserve_sparse_scheduled_request_keys(entrypoint_f
 
     class EligibleTimeout(TimeoutError):
         phase13_retry_class = "TIMEOUT_BEFORE_SEMANTIC_PAYLOAD"
+        provider_failure_acknowledged = True
 
     attempts = 0
 
-    class Provider:
+    from .phase13_count_fake import CountedProvider
+
+    class Provider(CountedProvider):
         def send_compiled_v3(self, compiled, before_request):
             nonlocal attempts
             before_request()
@@ -384,13 +395,16 @@ def test_runner_reconciles_crashed_retry_before_parent_publication(entrypoint_fi
 
     class EligibleTimeout(TimeoutError):
         phase13_retry_class = "TIMEOUT_BEFORE_SEMANTIC_PAYLOAD"
+        provider_failure_acknowledged = True
 
     class Crash(BaseException):
         pass
 
     requests: list[str] = []
 
-    class Provider:
+    from .phase13_count_fake import CountedProvider
+
+    class Provider(CountedProvider):
         def send_compiled_v3(self, compiled, before_request):
             before_request()
             requests.append(compiled.key.dispatch_id)
@@ -536,7 +550,7 @@ def test_live_cli_resume_enforces_cumulative_tranche_then_continues_without_redi
     first, second = package["production"]
     calls: list[str] = []
 
-    class Provider:
+    class Provider(CountedProvider):
         def send_compiled_v3(self, compiled, before_request):
             before_request()
             calls.append(compiled.key.dispatch_id)
