@@ -3,6 +3,8 @@ from __future__ import annotations
 import importlib
 import os
 import subprocess
+from fractions import Fraction
+from math import ceil
 from pathlib import Path
 from types import ModuleType
 from typing import Literal, assert_never
@@ -31,7 +33,12 @@ def test_mr_p5_has_acyclic_proof_and_separate_inventories(staged):
     costs = phase4_costs(manifest)
     assert costs.base.retry_reservations == allocate_retry_reservations(package.production, costs.base)
     proof = build_proof(freeze_complete(costs.base, package.final_order), build_witness(costs.base), package.package_core_hash)
-    assert proof.totals.retry_reserve_krw == sum(row.reservation_krw for row in costs.base.retry_reservations)
+    pricing = costs.base.count_pricing
+    assert pricing is not None
+    count_ceiling = ceil(Fraction(pricing.maximum_usd_per_operation)
+                         * costs.policy.rate_card.fx_planning_ceiling_krw_per_usd)
+    assert proof.totals.retry_reserve_krw == sum(
+        row.reservation_krw + count_ceiling for row in costs.base.retry_reservations)
     assert proof.totals.cmax_main_krw <= 450000
     assert package.governed_source is not None
     assert package.generated_closure is not None
@@ -131,7 +138,10 @@ def test_mr_p5_rebuild_is_byte_deterministic(staged, tmp_path):
     first = module.build_mr_p5(root, authority, output)
     fresh = tmp_path / "fresh"
     fresh.mkdir()
-    module.build_mr_p4(root, authority, fresh, governed_source_commit=first.governed_source.governed_source_commit, identity=first.identity)
+    module.build_mr_p4(root, authority, fresh,
+                       governed_source_commit=first.governed_source.governed_source_commit,
+                       identity=first.identity,
+                       count_pricing=module.validate_mr_p4(root, authority, output).count_pricing)
     second = module.build_mr_p5(root, authority, fresh)
     assert first == second
 

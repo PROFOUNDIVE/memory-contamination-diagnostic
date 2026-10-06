@@ -26,7 +26,7 @@ from memcontam.readiness.phase13_v3_terminal_ledger import TerminalLedgerV3
 
 from .phase13_runner_safety_fixture import FakeProvider, open_run
 from .test_phase13_v3_entrypoint_fixture import REPAIR_ROOT
-from .test_phase13_v3_artifact_builder import builder_source as builder_source
+from .test_phase13_v3_artifact_builder import builder_source as builder_source, synthetic_pricing
 from .phase13_corrective_identity import corrective_identity
 from .test_phase13_v3_entrypoint_integration import deny_external as deny_external
 
@@ -141,7 +141,7 @@ def staging_shadow_request(tmp_path: Path, builder_source) -> SelectionRequest:
     output = tmp_path / "staging-output"
     output.mkdir()
     manifest = build_mr_p4(root, authority, output, governed_source_commit=commit,
-                           identity=corrective_identity())
+                           identity=corrective_identity(), count_pricing=synthetic_pricing(root, authority))
     package = build_mr_p5(root, authority, output)
     assert validate_mr_p5(root, authority, output) == package
     for path in (*P4_PATHS, *P5_PATHS):

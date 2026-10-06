@@ -47,7 +47,9 @@ def test_audit_compares_complete_fresh_rebuild(staged, builder_source, tmp_path)
     module.build_mr_p6(root, authority, output)
     fresh = tmp_path / "fresh"
     fresh.mkdir()
-    module.build_mr_p4(root, authority, fresh, governed_source_commit=builder_source[1], identity=corrective_identity())
+    module.build_mr_p4(root, authority, fresh, governed_source_commit=builder_source[1],
+                       identity=corrective_identity(),
+                       count_pricing=module.validate_mr_p4(root, authority, output).count_pricing)
     module.build_mr_p5(root, authority, fresh)
     module.build_mr_p6(root, authority, fresh)
     module.audit(root, authority, output, compare_output_root=fresh)
