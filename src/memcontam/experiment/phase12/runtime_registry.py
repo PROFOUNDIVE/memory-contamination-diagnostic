@@ -24,6 +24,7 @@ from memcontam.baselines.retrieval_rag_phase12 import (
 )
 from memcontam.experiment.phase12.maturity import evaluate_maturity
 from memcontam.experiment import phase13_dc_rs_runtime as dc_runtime
+from memcontam.experiment.phase13_answer_context import answer_context_event
 from memcontam.memory.cards_v3 import MemoryCardEnvelopeV3, canonical_content_hash
 from memcontam.memory.checkpoint_v3 import NATIVE_ENTRY_V1, NativeEntry, NativeState, serialize_checkpoint
 from memcontam.memory.stores import MemoryEntry, MemoryState
@@ -256,6 +257,7 @@ def _reflexion_execute(context: Any, state: object) -> RuntimeTrialResult:
     return RuntimeTrialResult(
         result.outcome,
         state,
+        context_event=answer_context_event(result.outcome, context.identities),
         native_entries=result.native_reflections,
         write_envelopes=result.write_envelopes,
     )
@@ -307,6 +309,7 @@ def _dc_execute(context: Any, state: object) -> RuntimeTrialResult:
         result.outcome,
         execution.state,
         retrieval_event=retrieval,
+        context_event=answer_context_event(result.outcome, context.identities, retrieval.event_seq + 1),
         native_entries=native_entries,
         write_envelopes=envelopes,
     )

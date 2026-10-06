@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from typing import Any, Literal, Mapping
 
 
@@ -54,6 +54,8 @@ class NativeEntry:
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> NativeEntry:
+        if set(value) - {field.name for field in fields(cls)}:
+            raise CheckpointError("UNKNOWN_NATIVE_ENTRY_FIELD")
         if value.get("lineage_status", "exact") not in {"exact", "approximate", "unavailable"}:
             raise CheckpointError("INVALID_LINEAGE_STATUS")
         return cls(
@@ -81,6 +83,8 @@ class NativeState:
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> NativeState:
+        if set(value) - {field.name for field in fields(cls)}:
+            raise CheckpointError("UNKNOWN_NATIVE_STATE_FIELD")
         entries = tuple(
             NativeEntry.from_mapping(entry) if isinstance(entry, dict) else entry
             for entry in value["entries"]
