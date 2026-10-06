@@ -143,9 +143,13 @@ def phase4_costs(manifest: MRP4Manifest) -> MRP4Costs:
         serializer_hash=source_hash(("src/memcontam/readiness/phase13_v3_cost_models.py",)),
         tokenizer_hash=hashlib.sha256((dict(manifest.runtime_identity.versions)["tiktoken"] + runtime).encode()).hexdigest())
     policy = activate_policy(manifest.authority)
-    initial = freeze_base(policy, bindings, cost_units)
+    initial = freeze_base(policy, bindings, cost_units,
+                          count_pricing=manifest.count_pricing.model_copy(update={
+                              "maximum_count_operations": sum(group.calls for unit in cost_units for group in unit.stages),
+                          }))
     base = freeze_base(policy, bindings, cost_units,
-                       retry_reservations=allocate_retry_reservations(units, initial))
+                        retry_reservations=allocate_retry_reservations(units, initial),
+                        count_pricing=manifest.count_pricing)
     return MRP4Costs(policy=policy, base=base, witness=build_witness(base))
 
 
