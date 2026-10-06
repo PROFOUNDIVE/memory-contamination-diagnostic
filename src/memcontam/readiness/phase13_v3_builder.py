@@ -13,7 +13,7 @@ from .phase13_v3_builder_inputs import (
 from .phase13_v3_builder_models import MRP4Manifest
 from .phase13_v3_conformance import ConformanceV3, evaluate_conformance
 from .phase13_v3_cost_binding import bind_package_costs
-from .phase13_v3_cost_models import FinalOrder, canonical_bytes, digest
+from .phase13_v3_cost_models import CountPricingV1, FinalOrder, canonical_bytes, digest
 from .phase13_v3_entrypoint_models import ExecutionResourceV3, MainAuthorizationV3, MainExecutionPackageV3, MainLiveContractV3
 from .phase13_main_resource_contract import RESOURCE_PATHS
 from .phase13_v3_publication import ArtifactError, P4_PATHS, P5_PATHS, P6_PATHS, publish_artifacts
@@ -33,9 +33,11 @@ def _phase4_artifacts(manifest: MRP4Manifest, conformance: ConformanceV3) -> tup
     return (*predecessors, (P4_PATHS[-1], canonical_bytes(frozen)))
 
 
-def build_mr_p4(repository: Path, authority_root: Path, output: Path, *, governed_source_commit: str, identity: V3Identity) -> MRP4Manifest:
+def build_mr_p4(repository: Path, authority_root: Path, output: Path, *, governed_source_commit: str,
+                identity: V3Identity, count_pricing: CountPricingV1) -> MRP4Manifest:
     manifest = MRP4Manifest(identity=identity, authority=load_authority_v3(authority_root, identity=identity),
         governed_source=freeze_governed(repository, governed_source_commit), runtime_identity=freeze_runtime_identity(),
+        count_pricing=count_pricing,
         first_freeze=first_freeze(repository), resources=tuple(row.binding for row in read_files(repository, STATIC_PATHS)), artifacts=())
     artifacts = _phase4_artifacts(manifest, evaluate_conformance(repository, authority_root, identity))
     publish_artifacts(output, artifacts)

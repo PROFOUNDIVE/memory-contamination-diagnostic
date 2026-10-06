@@ -10,6 +10,7 @@ from pydantic import TypeAdapter
 
 from memcontam.readiness.phase13_authority_files import read_regular_nofollow
 from memcontam.readiness.phase13_v3_authority_models import V3Identity
+from memcontam.readiness.phase13_v3_cost_models import CountPricingV1
 
 from memcontam.readiness.phase13_v3_builder import (
     audit, build_mr_p4, build_mr_p5, build_mr_p6,
@@ -36,6 +37,7 @@ def main() -> int:
         command.add_argument("--authority-root", type=Path, required=True)
         if name == "mr-p4":
             command.add_argument("--identity-file", type=Path, required=True)
+            command.add_argument("--count-pricing-file", type=Path, required=True)
             command.add_argument("--governed-source-commit", required=True)
             command.add_argument("--output-root", type=Path, required=True)
         elif name == "mr-p5":
@@ -65,8 +67,10 @@ def main() -> int:
         match command_name:
             case "mr-p4":
                 identity = V3Identity.model_validate_json(read_regular_nofollow(args.identity_file))
+                pricing = CountPricingV1.model_validate_json(read_regular_nofollow(args.count_pricing_file))
                 result = build_mr_p4(repository, authority, args.output_root,
-                    governed_source_commit=args.governed_source_commit, identity=identity)
+                    governed_source_commit=args.governed_source_commit, identity=identity,
+                    count_pricing=pricing)
             case "mr-p5":
                 output = _root(args.mr_p4, P4_PATHS[-1])
                 if _root(args.output, P5_PATHS[-1]) != output or (args.output_root is not None and args.output_root.absolute() != output):
