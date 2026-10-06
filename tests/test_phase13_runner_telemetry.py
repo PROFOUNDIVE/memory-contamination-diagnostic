@@ -166,7 +166,9 @@ def test_direct_archive_validation_failure_is_sanitized_after_completion(
     import memcontam.readiness.phase13_main_live_runtime as runtime
 
     def reject(*_args, **_kwargs):
-        raise ProductionObservabilityError("PRODUCTION_REGISTRATION_PACKET_MISMATCH")
+        error = ProductionObservabilityError("PRODUCTION_REGISTRATION_PACKET_MISMATCH")
+        error.args = ("SECRET-provider-response",)
+        raise error
 
     monkeypatch.setattr(runtime, "validate_production_archive", reject)
     run = open_run(entrypoint_fixture, create=True)
@@ -184,8 +186,9 @@ def test_direct_archive_validation_failure_is_sanitized_after_completion(
                 "SELECT raw FROM run_journal ORDER BY sequence DESC LIMIT 1"
             ).fetchone()[0]
         payload = json.loads(raw)
-        assert payload["inner_code"] == "UNREGISTERED_RECONSTRUCTION_CAUSE"
+        assert payload["inner_code"] == "PRODUCTION_REGISTRATION_PACKET_MISMATCH"
         assert payload["provider_completed"] is True
+        assert b"SECRET" not in raw
     finally:
         run.close()
     reopened = open_run(entrypoint_fixture, create=False)
