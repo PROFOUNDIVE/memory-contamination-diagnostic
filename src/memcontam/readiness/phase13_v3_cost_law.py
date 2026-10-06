@@ -9,6 +9,7 @@ from memcontam.readiness.phase13_cost_policy_models import RateCard
 from .phase13_v3_cost_models import (
     RATE_CARD,
     BaseCostInputsV3,
+    CostError,
     CostTotals,
     ExactStageCost,
     RequestTokens,
@@ -39,6 +40,13 @@ def exact_request_cost(tokens: RequestTokens, rate: RateCard = RATE_CARD) -> tup
 
 
 def calculate(base: BaseCostInputsV3, order: tuple[str, ...] | None = None) -> tuple[CostTotals, tuple[UnitProjection, ...]]:
+    if base.count_pricing is None:
+        raise CostError("RECLOSURE_BLOCKED:COUNT_PRICING_PROOF_UNBOUND")
+    count_cost = (Fraction(base.count_pricing.maximum_usd_per_operation)
+                  * base.policy.rate_card.fx_planning_ceiling_krw_per_usd)
+    operations = sum(group.calls for unit in base.units for group in unit.stages) + len(base.retry_reservations)
+    if count_cost <= 0 or base.count_pricing.maximum_count_operations != operations:
+        raise CostError("RECLOSURE_BLOCKED:COUNT_PRICING_PROOF_UNBOUND")
     envelopes = {stage.stage_id: stage for stage in base.policy.authority.registry.stages}
     units = {unit.unit_id: unit for unit in base.units}
     sums: dict[str, tuple[Fraction, Fraction]] = {}
@@ -46,7 +54,7 @@ def calculate(base: BaseCostInputsV3, order: tuple[str, ...] | None = None) -> t
     projections: list[UnitProjection] = []
     retries_by_unit: Counter[str] = Counter()
     for retry in base.retry_reservations:
-        retries_by_unit[retry.unit_id] += retry.reservation_krw
+        retries_by_unit[retry.unit_id] += retry.reservation_krw + ceil(count_cost)
     for unit_id in units if order is None else order:
         projected = 0
         for group in units[unit_id].stages:
@@ -56,12 +64,14 @@ def calculate(base: BaseCostInputsV3, order: tuple[str, ...] | None = None) -> t
                                    cache_write_tokens=group.cache_write_tokens)
             input_cost, output_cost = exact_request_cost(tokens, base.policy.rate_card)
             before_in, before_out = sums.get(group.stage_id, (Fraction(0), Fraction(0)))
+            before_count = count_cost * counts[group.stage_id]
             after_in = before_in + input_cost * group.calls
             after_out = before_out + output_cost * group.calls
             sums[group.stage_id] = after_in, after_out
             counts[group.stage_id] += group.calls
             if order is not None:
                 projected += ceil(after_in) - ceil(before_in) + ceil(after_out) - ceil(before_out)
+                projected += ceil(count_cost * counts[group.stage_id]) - ceil(before_count)
         if order is not None:
             projected += retries_by_unit[unit_id]
             projections.append(UnitProjection(unit_id=unit_id, projected_krw=projected))
@@ -69,10 +79,19 @@ def calculate(base: BaseCostInputsV3, order: tuple[str, ...] | None = None) -> t
                                  input_exact_krw=decimal_string(sums[stage][0]),
                                  output_exact_krw=decimal_string(sums[stage][1]),
                                  input_krw_ceiling=ceil(sums[stage][0]),
-                                 output_krw_ceiling=ceil(sums[stage][1])) for stage in sorted(sums))
+                                  output_krw_ceiling=ceil(sums[stage][1]),
+                                  count_operations=counts[stage],
+                                  count_exact_krw=decimal_string(count_cost * counts[stage]),
+                                  count_krw_ceiling=ceil(count_cost * counts[stage])) for stage in sorted(sums))
     reserved = sum(retries_by_unit.values())
-    total = ceil(sum(stage.input_krw_ceiling + stage.output_krw_ceiling for stage in stages)) + reserved
+    if reserved > base.policy.authority.retry.retry_budget_krw:
+        raise CostError("MAIN_COST_PROOF_MISMATCH")
+    count_ceiling = sum(stage.count_krw_ceiling for stage in stages) + len(base.retry_reservations) * ceil(count_cost)
+    total = ceil(sum(stage.input_krw_ceiling + stage.output_krw_ceiling + stage.count_krw_ceiling
+                     for stage in stages)) + reserved
     margin = base.policy.budget.core_authorization_gate_krw - total
     return CostTotals(stage_costs=stages, semantic_calls=sum(counts.values()), retry_reserve_krw=reserved,
+                      count_operations=operations, count_exact_krw=decimal_string(count_cost * operations),
+                      count_krw_ceiling=count_ceiling,
                       cmax_main_krw=total, gate_margin_krw=margin,
                       gate_result="PASS" if margin >= 0 else "FAIL"), tuple(projections)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from fractions import Fraction
 from typing import Annotated, ClassVar, Final, Literal, Self, TypeVar
 
 from pydantic import BaseModel, Field, model_validator
@@ -124,6 +125,24 @@ class RetryReservation(FrozenModel):
     reservation_krw: int = Field(gt=0)
 
 
+class CountPricingV1(FrozenModel):
+    schema_version: Literal["phase13_count_pricing_v1"] = "phase13_count_pricing_v1"
+    endpoint: str = Field(pattern=r"^https://[^\s]+$")
+    deployment_sha256: Sha256
+    billing_evidence_sha256: Sha256
+    compatibility_evidence_sha256: Sha256
+    billing_basis: Literal["PER_OPERATION_USD_UPPER_BOUND"] = "PER_OPERATION_USD_UPPER_BOUND"
+    currency: Literal["USD"] = "USD"
+    maximum_usd_per_operation: DecimalString
+    maximum_count_operations: int = Field(gt=0)
+
+    @model_validator(mode="after")
+    def check_positive_rate(self) -> Self:
+        if Fraction(self.maximum_usd_per_operation) <= 0:
+            raise CostError("RECLOSURE_BLOCKED:COUNT_PRICING_PROOF_UNBOUND")
+        return self
+
+
 class BaseCostInputsV3(CostArtifact):
     hash_field: ClassVar[str] = "base_inputs_hash"
     schema_version: Literal["phase13_main_base_cost_inputs_v3"] = "phase13_main_base_cost_inputs_v3"
@@ -131,6 +150,7 @@ class BaseCostInputsV3(CostArtifact):
     bindings: PrefreezeBindings
     units: tuple[CostUnit, ...] = Field(min_length=1)
     retry_reservations: tuple[RetryReservation, ...] = ()
+    count_pricing: CountPricingV1 | None = None
     base_inputs_hash: Sha256
 
 
@@ -158,12 +178,18 @@ class ExactStageCost(FrozenModel):
     output_exact_krw: DecimalString
     input_krw_ceiling: NonnegativeInt
     output_krw_ceiling: NonnegativeInt
+    count_operations: NonnegativeInt
+    count_exact_krw: DecimalString
+    count_krw_ceiling: NonnegativeInt
 
 
 class CostTotals(FrozenModel):
     stage_costs: tuple[ExactStageCost, ...]
     semantic_calls: NonnegativeInt
     retry_reserve_krw: NonnegativeInt = 0
+    count_operations: NonnegativeInt
+    count_exact_krw: DecimalString
+    count_krw_ceiling: NonnegativeInt
     cmax_main_krw: NonnegativeInt
     core_authorization_gate_krw: Literal[450000] = 450000
     gate_margin_krw: int
