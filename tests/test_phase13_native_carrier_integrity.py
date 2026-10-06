@@ -7,6 +7,7 @@ from typing import Literal, assert_never
 
 import pytest
 
+from memcontam.contamination.phase12 import renderers as native_renderers
 from memcontam.contamination.phase12.models import (
     CandidateCertificationError,
     CandidateTriplet,
@@ -18,6 +19,8 @@ from memcontam.contamination.phase12.registry import (
 )
 from memcontam.contamination.phase12.renderers import RendererError, RendererRegistry
 from memcontam.evaluation.phase13_observability_registration import registered_failure_class
+from memcontam.experiment.phase12.branching import build_matched_branches
+from memcontam.memory.admission import AdmissionContext
 from memcontam.memory.checkpoint_v3 import NativeState, serialize_checkpoint
 from memcontam.readiness.phase13_main_live_runtime import ProductionMainRuntime
 from memcontam.tasks.base import TaskInstance
@@ -31,6 +34,38 @@ pytestmark = pytest.mark.usefixtures("deny_external")
 ROLES = ("false_candidate", "correct_twin", "irrelevant_control")
 BASELINES = ("fh_bounded", "rag_frozen", "bot_style", "reflexion_style", "dc_rs")
 Mutation = Literal["content_hash", "render_id", "rule_id", "rehashed_content"]
+
+
+@pytest.mark.parametrize("baseline", BASELINES)
+@pytest.mark.parametrize("task_index", (0, 2))
+def test_current_branch_rejects_ungoverned_native_renderer(
+    baseline: str, task_index: int,
+) -> None:
+    registry = load_current_candidate_registry(
+        ROOT / "data/phase12/registries/candidate_registry_v2.json"
+    )
+    prefix = serialize_checkpoint(NativeState(baseline, (), {}))
+
+    with pytest.raises(RendererError, match="CURRENT_RENDERER_REGISTRY_REQUIRED"):
+        build_matched_branches(
+            prefix, registry.triplets[task_index], RendererRegistry.native(), AdmissionContext()
+        )
+
+
+@pytest.mark.parametrize("baseline", BASELINES)
+@pytest.mark.parametrize("task_index", (0, 2))
+@pytest.mark.parametrize("role", ("false", "correct", "irrelevant"))
+def test_current_direct_carrier_rejects_ungoverned_renderer(
+    baseline: str, task_index: int, role: str,
+) -> None:
+    registry = load_current_candidate_registry(
+        ROOT / "data/phase12/registries/candidate_registry_v2.json"
+    )
+    prefix = serialize_checkpoint(NativeState(baseline, (), {}))
+    render = getattr(native_renderers, f"render_{role}")
+
+    with pytest.raises(RendererError, match="CURRENT_RENDERER_REGISTRY_REQUIRED"):
+        render(baseline, registry.triplets[task_index], prefix)
 
 
 def _tamper(triplet: CandidateTriplet, role: str, mutation: Mutation) -> CandidateTriplet:

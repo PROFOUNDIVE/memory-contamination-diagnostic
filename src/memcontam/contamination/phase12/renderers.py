@@ -38,19 +38,19 @@ class RendererError(ValueError):
 def render_false(
     beta: str, triplet: CandidateTriplet, checkpoint: Phase12Checkpoint
 ) -> NativeEntry:
-    return _render(beta, triplet.false_candidate, checkpoint)
+    return RendererRegistry.native().render_false(beta, triplet, checkpoint)
 
 
 def render_correct(
     beta: str, triplet: CandidateTriplet, checkpoint: Phase12Checkpoint
 ) -> NativeEntry:
-    return _render(beta, triplet.correct_twin, checkpoint)
+    return RendererRegistry.native().render_correct(beta, triplet, checkpoint)
 
 
 def render_irrelevant(
     beta: str, triplet: CandidateTriplet, checkpoint: Phase12Checkpoint
 ) -> NativeEntry:
-    return _render(beta, triplet.irrelevant_control, checkpoint)
+    return RendererRegistry.native().render_irrelevant(beta, triplet, checkpoint)
 
 
 def _render(beta: str, candidate: CandidateVariant, checkpoint: Phase12Checkpoint) -> NativeEntry:
@@ -144,6 +144,8 @@ class RendererRegistry:
         candidate: CandidateVariant,
         checkpoint: Phase12Checkpoint,
     ) -> NativeEntry:
+        if self.candidates is None and triplet.applicability_id is not None:
+            raise RendererError("CURRENT_RENDERER_REGISTRY_REQUIRED")
         if self.candidates is not None and triplet not in self.candidates.triplets:
             raise RendererError("GOVERNED_CANDIDATE_BINDING_MISMATCH")
         if beta != "dc_rs":

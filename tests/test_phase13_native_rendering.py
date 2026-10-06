@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import hashlib
 from pathlib import Path
 from typing import assert_never, cast
 
@@ -13,6 +14,7 @@ from memcontam.baselines.reflexion_phase12 import ReflexionStateV3
 from memcontam.baselines.retrieval_rag_phase12 import RagFrozenStateV3
 from memcontam.contamination.phase12.models import CandidateVariant, canonical_content_hash
 from memcontam.contamination.phase12.registry import load_candidate_registry
+from memcontam.contamination.phase12.renderers import RendererRegistry
 from memcontam.experiment.phase12.game24_runner import Game24RuntimeContext, RuntimeIdentities
 from memcontam.experiment.phase12.live_branch import Arm, build_live_reduced_main_branches
 from memcontam.experiment.phase12.runtime_registry import PHASE13_CORE_BASELINE_REGISTRY
@@ -24,6 +26,14 @@ from memcontam.tasks.base import TaskInstance
 
 REGISTRY_PATH = Path("data/phase12/registries/candidate_registry_v2.json")
 LiveState = FullHistoryStateV3 | RagFrozenStateV3 | BoTStateV3 | ReflexionStateV3 | dc.DcRsStateV3
+
+
+def _governed_renderers() -> RendererRegistry:
+    return RendererRegistry.governed(
+        Path("data/phase13/main/legacy_dc_rs_intervention_registry_v2.json").read_bytes(),
+        load_candidate_registry(REGISTRY_PATH),
+        hashlib.sha256(REGISTRY_PATH.read_bytes()).hexdigest(),
+    )
 
 
 class _Client:
@@ -137,6 +147,7 @@ def test_reduced_main_materializes_native_roots_through_live_state_surface(
         context=context,
         candidate_registry=registry,
         registry=PHASE13_CORE_BASELINE_REGISTRY,
+        renderers=_governed_renderers(),
     )
 
     assert len({id(branch.state) for branch in branches.arms.values()}) == 4
@@ -167,7 +178,10 @@ def test_reduced_main_materializes_native_roots_through_live_state_surface(
                 assert isinstance(root, NativeEntry)
                 consumed_content = root.content
             case dc.DcRsStateV3(archive=archive):
-                consumed_content = dc._archive_native(archive[-1]).content
+                root = archive[-1]
+                consumed_content = (
+                    root.content if isinstance(root, NativeEntry) else dc._archive_native(root).content
+                )
             case unreachable:
                 assert_never(unreachable)
         checkpoint_root = branch.checkpoint.state.entries[-1]
