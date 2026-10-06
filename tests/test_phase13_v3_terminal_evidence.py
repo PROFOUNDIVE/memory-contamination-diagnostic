@@ -12,6 +12,8 @@ from types import ModuleType
 
 import pytest
 
+from memcontam.readiness.phase13_v3_terminal_models import attempt_identity
+
 
 def test_v3_durable_contract_is_available() -> None:
     assert importlib.util.find_spec("memcontam.readiness.phase13_v3_terminal_ledger") is not None
@@ -65,6 +67,8 @@ def event(ledger, kind: str, unit: str = "a" * 64) -> dict:
            "kind": kind, "compiled": state.compiled.model_dump() if state.compiled else None}
     if kind == "REQUEST_COMPILED":
         raw["compiled"] = COMPILED.copy()
+    if kind == "ATTEMPT_STARTED":
+        raw.update(attempt_index=0, attempt_id=attempt_identity(unit, 0))
     if kind in ("INPUT_ENVELOPE_OVERFLOW", "TERMINAL_TECHNICAL_MISSING"):
         raw.update(failure_code="MAIN_INPUT_ENVELOPE_EXCEEDED", transport_attempts=0, realized_cost_krw=0)
     if kind in ("COMPLETED", "ATTEMPTED_PROVIDER_FAILURE", "AMBIGUOUS_ATTEMPT"):

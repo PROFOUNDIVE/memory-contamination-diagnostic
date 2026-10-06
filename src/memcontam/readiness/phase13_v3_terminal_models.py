@@ -66,11 +66,11 @@ class AttemptStartedV3(DispatchIdentity):
     kind: Literal["ATTEMPT_STARTED"]
     compiled: CompiledRequestV3
     attempt_index: Annotated[int, Field(ge=0, le=1)] = 0
-    attempt_id: Sha256 | None = None
+    attempt_id: Sha256
 
     @model_validator(mode="after")
     def bind_attempt_id(self) -> Self:
-        if self.attempt_id is not None and self.attempt_id != attempt_identity(self.unit_id, self.attempt_index):
+        if self.attempt_id != attempt_identity(self.unit_id, self.attempt_index):
             raise TerminalEvidenceError("MAIN_RETRY_ATTEMPT_IDENTITY_MISMATCH")
         return self
 
