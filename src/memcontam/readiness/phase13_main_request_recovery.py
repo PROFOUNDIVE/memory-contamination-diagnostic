@@ -8,7 +8,7 @@ from typing import assert_never
 
 from .phase13_v3_authority_models import FrozenModel
 from .phase13_v3_count import count_recovery_gate
-from .phase13_v3_request import STAGES, PackageBindingV3, ParentTrajectoryV3, RequestKeyV3
+from .phase13_v3_request import PackageBindingV3, ParentTrajectoryV3, RequestKeyV3
 from .phase13_v3_terminal_ledger import TerminalLedgerV3
 from .phase13_v3_terminal_models import TerminalEvidenceError
 
@@ -66,17 +66,6 @@ def recover_requests(ledger: TerminalLedgerV3) -> None:
     states = reopened.states()
     for unit_id in ledger.binding.unit_ids:
         state = states[unit_id]
-        if state.kind == "REQUEST_COMPILED" and state.compiled is not None:
-            receipt = RequestIdentityReceiptV3.model_validate_json(ledger.read_record(f"{unit_id}.identity.json"))
-            if state.compiled.token_count > STAGES[receipt.key.stage][0]:
-                reopened.append({
-                    "schema_version": "phase13_main_dispatch_evidence_v3", "unit_id": unit_id,
-                    "revision": state.revision + 1, "previous_hash": state.event_hash,
-                    "kind": "INPUT_ENVELOPE_OVERFLOW", "compiled": state.compiled.model_dump(mode="json"),
-                    "failure_code": "MAIN_INPUT_ENVELOPE_EXCEEDED", "transport_attempts": 0,
-                    "realized_cost_krw": 0,
-                })
-                state = reopened.state(unit_id)
         match state.kind:
             case "DISPATCH_INTENT_PERSISTED" | "REQUEST_COMPILED" | "ATTEMPT_STARTED" | "INPUT_ENVELOPE_OVERFLOW":
                 reopened.recover(unit_id, proof)

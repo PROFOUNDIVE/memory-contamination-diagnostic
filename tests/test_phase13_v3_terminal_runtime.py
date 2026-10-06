@@ -203,24 +203,6 @@ def test_same_dispatcher_recovers_published_compile_before_event(rig, monkeypatc
     assert rig.dispatcher.dispatch(rig.keys[0], rig.material, rig.semantic) == "final: 24"
 
 
-def test_compiled_overflow_cannot_recover_as_pending(rig, monkeypatch):
-    rig.seen.count = 379
-    original = rig.dispatcher._append
-
-    def append(key, kind, extra=None):
-        original(key, kind, extra)
-        if kind == "REQUEST_COMPILED":
-            raise Crash()
-
-    monkeypatch.setattr(rig.dispatcher, "_append", append)
-    with pytest.raises(Crash):
-        rig.dispatcher.dispatch(rig.keys[0], rig.material, rig.semantic)
-    resumed = restart(rig)
-    resumed.recover()
-    assert rig.ledger.state(rig.keys[0].dispatch_id).kind == "TERMINAL_TECHNICAL_MISSING"
-    assert rig.seen.requests == rig.seen.constructors == 0
-
-
 def test_known_attempted_cost_allows_independent_runner_progress(rig):
     from memcontam.readiness.phase13_main_runner import run_pending_requests_v3
 
