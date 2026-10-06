@@ -37,7 +37,7 @@ from memcontam.tasks.word_sorting import build_instance as build_words
 from memcontam.verifiers.game24 import verify_expression
 from memcontam.verifiers.word_sorting import verify_words
 
-from .test_phase13_native_rendering import _clean_state, _Embedder
+from .test_phase13_native_rendering import _clean_state, _Embedder, _governed_renderers
 from .test_phase13_readiness0_production_dry_run import _ContractFakeEmbeddingProvider
 
 
@@ -246,6 +246,7 @@ def test_reflexion_multiple_native_writes_select_final_actor_in_archive(
             Path("data/phase12/registries/candidate_registry_v2.json")
         ),
         registry=PHASE13_CORE_BASELINE_REGISTRY,
+        renderers=_governed_renderers(),
     ).arms["contam"]
     run = ProspectiveOrdinaryRun(
         task_name="game24",
@@ -353,8 +354,6 @@ def test_native_trial_reaches_current_archive_validator(
             registry,
             hashlib.sha256(registry_raw).hexdigest(),
         )
-        if baseline == "dc_rs"
-        else None
     )
     prefix = serialize_checkpoint(snapshot, checkpoint_index=0)
     if baseline == "dc_rs":

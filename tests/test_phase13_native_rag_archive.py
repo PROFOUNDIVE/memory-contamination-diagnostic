@@ -39,6 +39,7 @@ from memcontam.tasks.game24 import build_instance as build_game24
 from memcontam.verifiers.game24 import verify_expression
 
 from .test_phase13_native_production_archive import NativeResponses
+from .test_phase13_native_rendering import _governed_renderers
 
 
 def test_frozen_rag_carrier_stays_stable_across_current_seed0_50_row_archive(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -68,7 +69,7 @@ def test_frozen_rag_carrier_stays_stable_across_current_seed0_50_row_archive(mon
         embedding_provider=embedder, initial_states={"rag_frozen": state})
     branch = build_live_reduced_main_branches(prefix=serialize_checkpoint(snapshot, checkpoint_index=0),
         context=context, candidate_registry=load_candidate_registry(Path("data/phase12/registries/candidate_registry_v2.json")),
-        registry=PHASE13_CORE_BASELINE_REGISTRY).arms["contam"]
+        registry=PHASE13_CORE_BASELINE_REGISTRY, renderers=_governed_renderers()).arms["contam"]
     run = ProspectiveOrdinaryRun(task_name="game24", baseline="rag_frozen", run_id="native-frozen-rag",
         model="gpt-5.6-luna", client=client, allow_test_client=True,
         verifier=lambda answer, row: verify_expression(answer, row.input["numbers"]),
