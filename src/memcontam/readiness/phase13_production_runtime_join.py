@@ -71,8 +71,6 @@ def _archive_from_ordinary(
         raise ProductionRuntimeJoinError("PRODUCTION_CHECKPOINT_REQUIRED")
     if run.baseline == "nomem" and run.branch is not None:
         raise ProductionRuntimeJoinError("PRODUCTION_NOMEM_CHECKPOINT_FORBIDDEN")
-    if identity.scientific_result is not True:
-        raise ProductionRuntimeJoinError("PRODUCTION_SCIENTIFIC_RESULT_REQUIRED")
     if run.trajectory_seed is None or run.trajectory_seed != identity.trajectory_seed:
         raise ProductionRuntimeJoinError("PRODUCTION_TRAJECTORY_SEED_MISMATCH")
     ordered_sample_ids_sha256 = hashlib.sha256(
@@ -151,7 +149,8 @@ def _archive_from_ordinary(
         )
     )
     return ProductionObservabilityArchive(
-        schema_version="phase13_production_observability_archive_v2",
+        schema_version=("phase13_production_observability_archive_v2" if identity.scientific_result
+                        else "phase13_production_observability_archive_v1"),
         registration_packet_sha256=identity.registration_packet_sha256,
         u_t_status="NOT_REGISTERED_FOR_CURRENT_MAIN",
         records=records,
@@ -175,7 +174,9 @@ def validate_classifier_joins(
 ) -> None:
     from .phase13_production_observability import ProductionObservabilityError
 
-    if packet.authority_hashes != AUTHORITY_HASHES or archive.schema_version != "phase13_production_observability_archive_v2":
+    if packet.authority_hashes != AUTHORITY_HASHES or (
+        archive.schema_version == "phase13_production_observability_archive_v1" and frozen_tasks is None
+    ):
         return
     if frozen_tasks is None:
         raise ProductionObservabilityError("PRODUCTION_CLASSIFIER_JOIN_MISMATCH")

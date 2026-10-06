@@ -87,7 +87,7 @@ def verifier(task: OrdinaryTask) -> Callable[[str, TaskInstance], bool | Verifie
             assert_never(unreachable)
 
 
-def production_identity(unit: ProductionObject) -> ProductionOrdinaryRunIdentity:
+def production_identity(unit: ProductionObject, *, scientific_result: bool = True) -> ProductionOrdinaryRunIdentity:
     execution_template_id = unit.execution_template_id
     ordered_sample_ids_sha256 = unit.ordered_sample_ids_sha256
     registration_packet_sha256 = unit.registration_packet_sha256
@@ -105,7 +105,7 @@ def production_identity(unit: ProductionObject) -> ProductionOrdinaryRunIdentity
         concrete_seed_id=str(unit.seed),
         ordered_sample_ids_sha256=ordered_sample_ids_sha256,
         registration_packet_sha256=registration_packet_sha256,
-        scientific_result=unit.kind != "CLEAN_PREFIX",
+        scientific_result=scientific_result and unit.kind != "CLEAN_PREFIX",
         checkpoint_registry_sha256=checkpoint_registry_sha256,
     )
 

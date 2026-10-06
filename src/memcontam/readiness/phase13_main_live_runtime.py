@@ -85,12 +85,14 @@ class ProductionMainRuntime:
         *,
         client: LLMClient | None = None,
         resources: PreloadedMainResources | None = None,
+        scientific_result: bool = True,
     ) -> None:
         self._root = repository_root
         self._core = repository_root / "data/phase13/core/materialized"
         self._cache = cache_root
         self._embedder_instance: BgeM3EmbeddingProvider | None = None
         self._resources = resources
+        self._scientific_result = scientific_result
         if resources is not None:
             if client is None:
                 raise MainLiveRuntimeError("MAIN_AUTHORIZATION_BINDING_MISMATCH")
@@ -180,7 +182,7 @@ class ProductionMainRuntime:
         if not isinstance(snapshot, NativeState):
             raise MainLiveRuntimeError("MAIN_PREFIX_CHECKPOINT_INVALID")
         checkpoint = serialize_checkpoint(snapshot, checkpoint_index=1)
-        return PrefixRuntimeOutput(checkpoint, dispatch_output(unit, (result,), production_identity(unit),
+        return PrefixRuntimeOutput(checkpoint, dispatch_output(unit, (result,), production_identity(unit, scientific_result=self._scientific_result),
             realized_cost_krw=self._client.realized_cost_krw() if isinstance(self._client, MainRequestClientV3) else None))
 
     def _prefix_context(
@@ -205,7 +207,7 @@ class ProductionMainRuntime:
     def execute_ordinary(self, request: OrdinaryRuntimeRequest) -> MainUnitDispatchOutput | TerminalPartialDispatch:
         unit = request.unit
         tasks = self._tasks(unit.task, unit.seed, prefix=False)
-        identity = production_identity(unit)
+        identity = production_identity(unit, scientific_result=self._scientific_result)
         branch = None
         if request.checkpoint is not None:
             if unit.task in _CORE_TASKS:
