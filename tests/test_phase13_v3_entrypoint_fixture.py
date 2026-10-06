@@ -43,6 +43,7 @@ from memcontam.readiness.phase13_v3_source_closure import (
 )
 
 from .phase13_corrective_identity import corrective_identity
+from .phase13_count_fake import fake_count_pricing
 
 AUTHORITY = Path("/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts")
 REPAIR_ROOT = Path(__file__).resolve().parents[1]
@@ -88,8 +89,10 @@ def build_entrypoint_bytes(
     )) for unit in units)
     from memcontam.readiness.phase13_v3_retry import allocate_retry_reservations
     initial = freeze_base(policy, bindings, cost_units)
+    retries = allocate_retry_reservations(units, initial)
+    count_operations = sum(stage.calls for unit in cost_units for stage in unit.stages) + len(retries)
     base = freeze_base(policy, bindings, cost_units,
-                       retry_reservations=allocate_retry_reservations(units, initial))
+                       retry_reservations=retries, count_pricing=fake_count_pricing(count_operations, "0.001"))
     phase4 = MRP4Costs(policy=base.policy, base=base, witness=build_witness(base))
     for role, model in (("activated_policy", base.policy), ("base_inputs", base), ("cost_witness", phase4.witness)):
         resources[RESOURCE_PATHS[role]] = canonical_bytes(model)
