@@ -1,5 +1,6 @@
 from __future__ import annotations
 from .phase13_corrective_identity import corrective_identity
+from .phase13_count_fake import CountedProvider, fake_count_pricing
 
 import hashlib
 import importlib
@@ -41,7 +42,7 @@ def base():
     units = tuple(CostUnit(unit_id=name * 64, stages=(StageOccurrences(
         stage_id="RAG_generation", calls=1, cache_write_tokens=378,
     ),)) for name in ("a", "b", "c"))
-    return freeze_base(activate_policy(authority), bindings, units)
+    return freeze_base(activate_policy(authority), bindings, units, count_pricing=fake_count_pricing(3, "0.001"))
 
 
 @pytest.fixture
@@ -61,11 +62,11 @@ def dispatch_fake(api, tmp_path, monkeypatch):
 
     counts = {"constructors": 0, "requests": 0}
 
-    class Provider:
+    class Provider(CountedProvider):
         def send_compiled_v3(self, compiled, before_request):
             before_request()
             counts["requests"] += 1
-            return LLMResponse("answer", {"usage": {"input_tokens": 0, "output_tokens": 0}}, {}, 0)
+            return LLMResponse("answer", {"status": "completed", "model": "gpt-5.6-luna", "service_tier": "default", "usage": {"input_tokens": 0, "output_tokens": 0}}, {}, 0)
 
     def factory(binding):
         counts["constructors"] += 1
@@ -122,8 +123,8 @@ def test_production_live_projection_uses_ordered_bound_table(api, bound):
                   for index, name in enumerate(("c", "a", "b")))
     costs = api.LiveCosts(bound.package, bound.resources)
     actual = attribute_v3_projected_cost(units, costs, bound.package.package_hash)
-    assert [unit.projected_cost_krw for unit in actual] == [2, 1, 1]
-    assert sum(unit.projected_cost_krw for unit in actual) == 4
+    assert [unit.projected_cost_krw for unit in actual] == [4, 3, 2]
+    assert sum(unit.projected_cost_krw for unit in actual) == 9
 
 
 @pytest.mark.parametrize("field", ["runtime_hash", "request_hash", "tokenizer_hash"])
@@ -159,7 +160,7 @@ def test_live_rejects_self_rehashed_table_from_other_package(api, bound, dispatc
 def test_cost_bound_dispatch_reaches_one_fake_request(api, bound, dispatch_fake):
     base = bound.resources.phase4.base
     unit = base.units[0].model_copy(update={"unit_id": "a" * 64})
-    base = freeze_base(base.policy, base.bindings, (unit,))
+    base = freeze_base(base.policy, base.bindings, (unit,), count_pricing=fake_count_pricing(1, "0.001"))
     phase4 = api.MRP4Costs(policy=base.policy, base=base, witness=build_witness(base))
     order = bound.package.final_order.model_copy(update={"unit_ids": ("a" * 64,)})
     package = api.bind_package_costs(bound.package.model_copy(update={"final_order": order}), phase4)
@@ -267,7 +268,7 @@ def test_over_budget_witness_cannot_supply_live_costs(api, bound):
     base = bound.resources.phase4.base
     stage = base.units[0].stages[0].model_copy(update={"calls": 1_000_000})
     unit = base.units[0].model_copy(update={"stages": (stage,)})
-    base = freeze_base(base.policy, base.bindings, (unit,))
+    base = freeze_base(base.policy, base.bindings, (unit,), count_pricing=fake_count_pricing(1_000_000, "0.001"))
     phase4 = api.MRP4Costs(policy=base.policy, base=base, witness=build_witness(base))
     order = bound.package.final_order.model_copy(update={"unit_ids": (unit.unit_id,)})
     over = api.bind_package_costs(bound.package.model_copy(update={"final_order": order}), phase4)

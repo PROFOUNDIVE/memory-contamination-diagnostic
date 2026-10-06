@@ -15,6 +15,7 @@ from memcontam.readiness.phase13_authority_files import load_authority_v3
 from memcontam.readiness.phase13_cost_policy import _ceil, load_cost_policy_bundle
 
 from .phase13_corrective_identity import corrective_identity
+from .phase13_count_fake import fake_count_pricing
 
 
 def test_baseline_historical_stage_costs() -> None:
@@ -55,7 +56,7 @@ def base(cost, authority):
     policy = cost.activate_policy(authority)
     bindings = cost.PrefreezeBindings(**{name: hashlib.sha256(name.encode()).hexdigest() for name in cost.PrefreezeBindings.model_fields})
     units = tuple(cost.CostUnit(unit_id=name, stages=(cost.StageOccurrences(stage_id="RAG_generation", calls=1, cache_write_tokens=378),)) for name in ("a", "b", "c"))
-    return cost.freeze_base(policy, bindings, units)
+    return cost.freeze_base(policy, bindings, units, count_pricing=fake_count_pricing(3))
 
 
 def _complete(cost, base):
@@ -68,15 +69,15 @@ def test_entitled_retry_reservation_increases_prospective_witness_and_unit_proof
     with_retry = cost.freeze_base(base.policy, base.bindings, base.units, retry_reservations=(
         cost.RetryReservation(unit_id="a", dispatch_id="0" * 64,
                               stage_id="RAG_generation", reservation_krw=2),
-    ))
+    ), count_pricing=fake_count_pricing(4))
 
     witness = cost.build_witness(with_retry)
     complete = _complete(cost, with_retry)
     proof = cost.build_proof(complete, witness, "a" * 64)
 
     assert witness.totals.semantic_calls == initial.semantic_calls
-    assert witness.totals.retry_reserve_krw == 2
-    assert witness.totals.cmax_main_krw == initial.cmax_main_krw + 2
+    assert witness.totals.retry_reserve_krw == 3
+    assert witness.totals.cmax_main_krw == initial.cmax_main_krw + 3
     assert sum(row.projected_krw for row in proof.projected_krw) == witness.totals.cmax_main_krw
     assert next(row.projected_krw for row in proof.projected_krw if row.unit_id == "a") > 0
 
@@ -97,10 +98,10 @@ def test_each_stage_known_answer(cost, authority, stage, tokens, calls, expected
     policy = cost.activate_policy(authority)
     unit = cost.CostUnit(unit_id="one", stages=(cost.StageOccurrences(stage_id=stage, calls=calls, cache_write_tokens=tokens[0]),))
     bindings = cost.PrefreezeBindings(**{name: "a" * 64 for name in cost.PrefreezeBindings.model_fields})
-    witness = cost.build_witness(cost.freeze_base(policy, bindings, (unit,)))
+    witness = cost.build_witness(cost.freeze_base(policy, bindings, (unit,), count_pricing=fake_count_pricing(calls)))
     row = witness.totals.stage_costs[0]
     assert (row.input_exact_krw, row.output_exact_krw, row.input_krw_ceiling, row.output_krw_ceiling) == expected
-    assert witness.totals.cmax_main_krw == expected[2] + expected[3]
+    assert witness.totals.cmax_main_krw == expected[2] + expected[3] + 1
     assert witness.totals.semantic_calls == calls
 
 
@@ -123,9 +124,9 @@ def test_two_phase_boundaries_and_telescoping(cost, base):
     witness = cost.build_witness(base)
     complete = _complete(cost, base)
     proof = cost.build_proof(complete, witness, "4" * 64)
-    assert [(row.unit_id, row.projected_krw) for row in proof.projected_krw] == [("c", 2), ("a", 1), ("b", 1)]
+    assert [(row.unit_id, row.projected_krw) for row in proof.projected_krw] == [("c", 3), ("a", 1), ("b", 1)]
     assert proof.totals == witness.totals
-    assert (proof.totals.cmax_main_krw, proof.totals.gate_margin_krw, proof.totals.gate_result) == (4, 449996, "PASS")
+    assert (proof.totals.cmax_main_krw, proof.totals.gate_margin_krw, proof.totals.gate_result) == (5, 449995, "PASS")
     assert not {"final_order", "projected_krw", "proof_id"} & witness.model_dump().keys()
     assert complete.base_inputs_hash == base.base_inputs_hash
     assert complete.final_order_hash == hashlib.sha256(cost.canonical_bytes(complete.final_order)).hexdigest()
@@ -261,7 +262,7 @@ def test_reordered_units_change_attribution_not_stage_totals(cost, base):
     complete = _complete(cost, base)
     reordered = cost.freeze_complete(base, complete.final_order.model_copy(update={"unit_ids": ("a", "b", "c")}))
     proof = cost.build_proof(reordered, cost.build_witness(base), "4" * 64)
-    assert [(row.unit_id, row.projected_krw) for row in proof.projected_krw] == [("a", 2), ("b", 1), ("c", 1)]
+    assert [(row.unit_id, row.projected_krw) for row in proof.projected_krw] == [("a", 3), ("b", 1), ("c", 1)]
     assert reordered.complete_inputs_hash != complete.complete_inputs_hash
     with pytest.raises(cost.CostError, match="MAIN_COST_PROOF_MISMATCH"):
         cost.validate_proof(cost.canonical_bytes(proof), complete, "4" * 64)
@@ -269,24 +270,24 @@ def test_reordered_units_change_attribution_not_stage_totals(cost, base):
 
 def test_stage_occurrences_with_distinct_cache_plans(cost, base):
     groups = (cost.StageOccurrences(stage_id="RAG_generation", calls=1), cost.StageOccurrences(stage_id="RAG_generation", calls=1, cache_write_tokens=378))
-    inputs = cost.freeze_base(base.policy, base.bindings, (cost.CostUnit(unit_id="synthetic", stages=groups),))
+    inputs = cost.freeze_base(base.policy, base.bindings, (cost.CostUnit(unit_id="synthetic", stages=groups),), count_pricing=fake_count_pricing(2))
     witness = cost.build_witness(inputs)
     row = witness.totals.stage_costs[0]
-    assert (row.semantic_calls, row.input_exact_krw, row.output_exact_krw, witness.totals.cmax_main_krw) == (2, "0.27216", "1.96608", 3)
+    assert (row.semantic_calls, row.input_exact_krw, row.output_exact_krw, witness.totals.cmax_main_krw) == (2, "0.27216", "1.96608", 4)
 
 
 def test_all_stage_final_ceiling_from_explicit_multiplicities(cost, base):
     counts = (10050, 6030, 10050, 10050, 10050, 20050, 20050, 10050, 10050, 2500)
     groups = tuple(cost.StageOccurrences(stage_id=stage.stage_id, calls=count, cache_write_tokens=stage.maximum_input_tokens) for stage, count in zip(base.policy.authority.registry.stages, counts, strict=True))
-    inputs = cost.freeze_base(base.policy, base.bindings, (cost.CostUnit(unit_id="synthetic", stages=groups),))
+    inputs = cost.freeze_base(base.policy, base.bindings, (cost.CostUnit(unit_id="synthetic", stages=groups),), count_pricing=fake_count_pricing(sum(counts)))
     totals = cost.build_witness(inputs).totals
-    assert (totals.semantic_calls, totals.cmax_main_krw, totals.gate_margin_krw) == (108930, 444338, 5662)
+    assert (totals.semantic_calls, totals.cmax_main_krw, totals.gate_margin_krw) == (108930, 444348, 5652)
 
 
-@pytest.mark.parametrize("count,expected", [(250000, (283560, "PASS")), (400000, (453696, "FAIL"))])
+@pytest.mark.parametrize("count,expected", [(250000, (283561, "PASS")), (400000, (453697, "FAIL"))])
 def test_gate_uses_core_not_total_budget(cost, base, count, expected):
     group = cost.StageOccurrences(stage_id="RAG_generation", calls=count, cache_write_tokens=378)
-    inputs = cost.freeze_base(base.policy, base.bindings, (cost.CostUnit(unit_id="synthetic", stages=(group,)),))
+    inputs = cost.freeze_base(base.policy, base.bindings, (cost.CostUnit(unit_id="synthetic", stages=(group,)),), count_pricing=fake_count_pricing(count))
     totals = cost.build_witness(inputs).totals
     assert (totals.cmax_main_krw, totals.gate_result) == expected
 

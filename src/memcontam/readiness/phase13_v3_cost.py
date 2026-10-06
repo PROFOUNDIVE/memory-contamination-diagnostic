@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pydantic import ValidationError
+from fractions import Fraction
+from math import ceil
 
 from memcontam.readiness.phase13_v3_authority_models import AuthoritySnapshotV3
 
@@ -10,6 +12,7 @@ from .phase13_v3_cost_models import (
     ActivatedPolicyV3,
     BaseCostInputsV3,
     CompleteCostInputsV3,
+    CountPricingV1,
     CostError,
     CostProofV3,
     CostUnit,
@@ -31,6 +34,7 @@ __all__ = [
     "ActivatedPolicyV3",
     "BaseCostInputsV3",
     "CompleteCostInputsV3",
+    "CountPricingV1",
     "CostError",
     "CostProofV3",
     "CostUnit",
@@ -83,11 +87,13 @@ def validate_policy_bytes(raw: bytes, authority: AuthoritySnapshotV3) -> Activat
 
 
 def freeze_base(policy: ActivatedPolicyV3, bindings: PrefreezeBindings, units: tuple[CostUnit, ...],
-                *, retry_reservations: tuple[RetryReservation, ...] = ()) -> BaseCostInputsV3:
+                *, retry_reservations: tuple[RetryReservation, ...] = (),
+                count_pricing: CountPricingV1 | None = None) -> BaseCostInputsV3:
     validate_policy(policy, policy.authority)
     result = seal(BaseCostInputsV3(policy=policy, bindings=bindings,
                                   units=tuple(sorted(units, key=lambda unit: unit.unit_id)),
                                   retry_reservations=tuple(sorted(retry_reservations, key=lambda row: row.dispatch_id)),
+                                  count_pricing=count_pricing,
                                   base_inputs_hash="0" * 64))
     _validate_base(result)
     return result
@@ -105,11 +111,18 @@ def _validate_base(base: BaseCostInputsV3) -> None:
         if not set(used) <= stage_ids:
             raise CostError("MAIN_COST_PROOF_MISMATCH")
     retries = base.retry_reservations
+    retry_count_cost = 0
+    if base.count_pricing is not None:
+        pricing = CountPricingV1.model_validate(base.count_pricing.model_dump())
+        operations = sum(group.calls for unit in base.units for group in unit.stages) + len(retries)
+        if pricing.maximum_count_operations != operations:
+            raise CostError("MAIN_COST_PROOF_MISMATCH")
+        retry_count_cost = ceil(Fraction(pricing.maximum_usd_per_operation)
+                                * base.policy.rate_card.fx_planning_ceiling_krw_per_usd)
     if (tuple(row.dispatch_id for row in retries) != tuple(sorted({row.dispatch_id for row in retries}))
-        or sum(row.reservation_krw for row in retries) > base.policy.authority.retry.retry_budget_krw):
+        or sum(row.reservation_krw + retry_count_cost for row in retries) > base.policy.authority.retry.retry_budget_krw):
         raise CostError("MAIN_COST_PROOF_MISMATCH")
     by_unit = {unit.unit_id: {stage.stage_id for stage in unit.stages} for unit in base.units}
-    from math import ceil
     for row in retries:
         if row.stage_id not in by_unit.get(row.unit_id, set()):
             raise CostError("MAIN_COST_PROOF_MISMATCH")

@@ -1,7 +1,19 @@
 from collections.abc import Callable
 
 from memcontam.readiness.phase13_v3_count import CountIdentityV3, CountReceiptV3, count_operation
+from memcontam.readiness.phase13_v3_cost_models import CountPricingV1
 from memcontam.readiness.phase13_v3_request import CompiledProviderRequestV3
+
+
+def fake_count_pricing(operations: int, rate: str = "0.000000001") -> CountPricingV1:
+    return CountPricingV1(
+        endpoint="https://fake.invalid/v1/responses/input_tokens",
+        deployment_sha256="1" * 64,
+        billing_evidence_sha256="2" * 64,
+        compatibility_evidence_sha256="3" * 64,
+        maximum_usd_per_operation=rate,
+        maximum_count_operations=operations,
+    )
 
 
 class CountedProvider:
