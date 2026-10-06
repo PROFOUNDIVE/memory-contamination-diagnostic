@@ -251,7 +251,8 @@ class V3MainRun:
             journal.pause(unit, "MAIN_DISPATCH_ADMITTED")
             client = MainRequestClientV3(dispatcher, unit.unit_id, lambda: self.selected.preflight(self.selected.repository_root))
             runtime = ProductionMainRuntime(self.selected.repository_root, cache, client=client,
-                                            resources=PreloadedMainResources(self.selected))
+                                             resources=PreloadedMainResources(self.selected),
+                                             scientific_result=provider_factory is production_provider)
             runtime.preflight((unit,))
             try:
                 dispatch: MainUnitDispatchOutput | TerminalPartialDispatch
@@ -528,7 +529,11 @@ class V3MainRun:
                     "provider_authority_contract",
                 }
                 if (
-                    archive.schema_version != "phase13_production_observability_archive_v2"
+                    archive.schema_version != (
+                        "phase13_production_observability_archive_v2"
+                        if validated.runtime_evidence.production_identity.scientific_result
+                        else "phase13_production_observability_archive_v1"
+                    )
                     or archive.u_t_status != "NOT_REGISTERED_FOR_CURRENT_MAIN"
                     or len(archive.records) > len(seed_order)
                     or (len(archive.records) != len(seed_order) and (

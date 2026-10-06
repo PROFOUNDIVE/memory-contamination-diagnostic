@@ -85,7 +85,9 @@ def validate_terminal_partial(runner: V3MainRun, record: TerminalPartialParent,
     resources = runner.selected.package
     seed_order = loaded.checkpoint_registry.tasks[unit.task].seeds[unit.seed].suffix_sample_ids
     archive = ProductionObservabilityArchive(
-        schema_version="phase13_production_observability_archive_v2",
+        schema_version=("phase13_production_observability_archive_v2" if not record.archive.records
+                        or record.archive.records[0].scientific_result
+                        else "phase13_production_observability_archive_v1"),
         registration_packet_sha256=record.archive.registration_packet_sha256,
         u_t_status="NOT_REGISTERED_FOR_CURRENT_MAIN", records=record.archive.records,
     )

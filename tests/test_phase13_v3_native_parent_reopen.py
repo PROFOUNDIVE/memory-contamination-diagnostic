@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 import httpx
+from pydantic import ValidationError
 from openai import OpenAI, AsyncOpenAI
 
 from memcontam.clients.base import LLMResponse
@@ -19,7 +20,9 @@ from memcontam.experiment.phase12.runtime_registry import PHASE13_CORE_BASELINE_
 from memcontam.readiness.phase13_main_checkpoint import CommonCheckpointRegistry
 from memcontam.readiness.phase13_main_live_evidence import MemoryUnitEvidence
 from memcontam.readiness.phase13_main_live_runtime import ProductionMainRuntime
+from memcontam.readiness.phase13_main_live_runtime_support import production_identity
 from memcontam.readiness.phase13_main_production import ProductionObject, UnitKind
+from memcontam.readiness.phase13_production_observability import ProductionObservabilityArchive
 from memcontam.readiness.phase13_main_resource_contract import RESOURCE_PATHS
 from memcontam.readiness.phase13_main_terminal_partial import TerminalPartialParent, validate_terminal_partial
 from memcontam.readiness.phase13_main_v3_runner import DurableParentRecordV3, V3MainRun
@@ -404,11 +407,23 @@ def test_dc_rs_memory_suffix_archive_and_prefix_ancestry_survive_recursive_reope
         assert parent.unit_evidence.kind == "MEMORY_BEARING"
         evidence = parent.unit_evidence.evidence
         assert isinstance(evidence, MemoryUnitEvidence)
+        assert evidence.runtime_evidence.production_identity.scientific_result is False
         checkpoint = reopened.checkpoint(suffix)
         assert checkpoint is not None
         assert evidence.consumed_checkpoint_canonical_sha256 == checkpoint.canonical_sha256
         archive = evidence.runtime_evidence.production_observability_archive
         assert archive is not None and len(archive.records) == 50
+        assert archive.schema_version == "phase13_production_observability_archive_v1"
+        assert all(row.scientific_result is False for row in archive.records)
+        assert production_identity(suffix).scientific_result is True
+        with pytest.raises(ValidationError, match="PRODUCTION_SCIENTIFIC_RESULT_MISMATCH"):
+            ProductionObservabilityArchive.model_validate(archive.model_dump() | {
+                "records": (archive.records[0].model_copy(update={"scientific_result": True}),)
+            })
+        with pytest.raises(ValidationError, match="PRODUCTION_SCIENTIFIC_RESULT_MISMATCH"):
+            ProductionObservabilityArchive.model_validate(archive.model_dump() | {
+                "schema_version": "phase13_production_observability_archive_v2",
+            })
         first = archive.records[0].evidence
         second = archive.records[1].evidence
         assert isinstance(first, Phase13TrialEvidence)
