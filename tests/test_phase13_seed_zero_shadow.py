@@ -4,7 +4,8 @@ import hashlib
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import assert_never
+from types import SimpleNamespace
+from typing import assert_never, cast
 
 import pytest
 
@@ -40,9 +41,11 @@ def local_embedder() -> EmbeddingProvider:
 
 
 class SeedZeroShadowProvider(FakeProvider):
-    target_dispatch_id: str | None = None
-    failed_once = False
-    target_request_hash: str | None = None
+    def __init__(self) -> None:
+        super().__init__()
+        self.target_dispatch_ids: frozenset[str] = frozenset()
+        self.failed_dispatch_ids: set[str] = set()
+        self.target_request_hashes: dict[str, str] = {}
 
     def factory(self, binding: PackageBindingV3) -> SeedZeroShadowProvider:
         super().factory(binding)
@@ -55,13 +58,13 @@ class SeedZeroShadowProvider(FakeProvider):
     ) -> LLMResponse:
         before_request()
         self.requests.append(compiled.key.dispatch_id)
-        if compiled.key.dispatch_id == self.target_dispatch_id:
+        if compiled.key.dispatch_id in self.target_dispatch_ids:
             request_hash = hashlib.sha256(compiled.request_bytes).hexdigest()
-            if not self.failed_once:
-                self.failed_once = True
-                self.target_request_hash = request_hash
+            if compiled.key.dispatch_id not in self.failed_dispatch_ids:
+                self.failed_dispatch_ids.add(compiled.key.dispatch_id)
+                self.target_request_hashes[compiled.key.dispatch_id] = request_hash
                 raise ShadowPrePayloadTimeout()
-            assert request_hash == self.target_request_hash
+            assert request_hash == self.target_request_hashes[compiled.key.dispatch_id]
         match compiled.key.stage:
             case "bot_problem_distill":
                 content = json.dumps(
@@ -134,6 +137,22 @@ class SeedZeroShadowProvider(FakeProvider):
 class ShadowPrePayloadTimeout(TimeoutError):
     phase13_retry_class = "TIMEOUT_BEFORE_SEMANTIC_PAYLOAD"
     provider_failure_acknowledged = True
+
+
+def test_shadow_provider_retries_each_selected_dispatch_once() -> None:
+    provider = SeedZeroShadowProvider()
+    provider.target_dispatch_ids = frozenset({"first", "second"})
+    for dispatch_id in ("first", "second", "unselected"):
+        compiled = cast(CompiledProviderRequestV3, SimpleNamespace(
+            key=SimpleNamespace(dispatch_id=dispatch_id, stage="no_memory_generate"),
+            request_bytes=dispatch_id.encode(),
+        ))
+        if dispatch_id != "unselected":
+            with pytest.raises(ShadowPrePayloadTimeout):
+                provider.send_compiled_v3(compiled, lambda: None)
+        assert provider.send_compiled_v3(compiled, lambda: None).content == "final: 0"
+    assert provider.failed_dispatch_ids == {"first", "second"}
+    assert provider.requests == ["first", "first", "second", "second", "unselected"]
 
 
 def staging_shadow_request(tmp_path: Path, builder_source) -> SelectionRequest:
@@ -225,10 +244,17 @@ def test_seed_zero_shadow_commits_every_production_unit_without_external_access(
         )
     )
     limit = target_unit_index + 1 if bounded else None
-    provider.target_dispatch_id = next(
+    provider.target_dispatch_ids = frozenset(
         row.dispatch_id
         for row in run.selected.costs.resources.phase4.base.retry_reservations
-        if row.unit_id == target_unit.unit_id and row.dispatch_id in entitlements
+        if row.unit_id in {unit.unit_id for unit in seed_zero_units[:limit]}
+        and row.dispatch_id in entitlements
+    )
+    assert provider.target_dispatch_ids
+    assert provider.target_dispatch_ids == frozenset(
+        row.dispatch_id
+        for row in run.selected.costs.resources.phase4.base.retry_reservations
+        if row.unit_id in {unit.unit_id for unit in seed_zero_units[:limit]}
     )
     append = TerminalLedgerV3.append
 
@@ -237,7 +263,7 @@ def test_seed_zero_shadow_commits_every_production_unit_without_external_access(
         if (
             ledger is run.ledger
             and event["kind"] == "COMPLETED"
-            and event["unit_id"] == provider.target_dispatch_id
+            and event["unit_id"] in provider.target_dispatch_ids
         ):
             # The fake transport's first, pre-payload timeout consumed zero tokens.
             ledger.reconcile_cost(
@@ -264,21 +290,21 @@ def test_seed_zero_shadow_commits_every_production_unit_without_external_access(
         assert status.completed_count == (limit or len(seed_zero_units))
         assert status.terminal_technical_missing_count == 0
         assert status.pending_count == len(production_units) - (limit or len(seed_zero_units))
-        assert len(provider.requests) == expected_dispatches + 1
+        assert len(provider.requests) == expected_dispatches + len(provider.target_dispatch_ids)
         assert len(set(provider.requests)) == expected_dispatches
         assert status.provider_calls_issued == len(provider.requests)
         events = tuple(json.loads(raw) for raw in run.ledger.rows())
-        assert sum(row["kind"] == "RETRYABLE_ATTEMPT_FAILURE" for row in events) == 1
-        target_events = [row for row in events if row["unit_id"] == provider.target_dispatch_id]
-        assert [
-            row["attempt_index"] for row in target_events if row["kind"] == "ATTEMPT_STARTED"
-        ] == [0, 1]
-        assert (
-            next(row for row in target_events if row["kind"] == "COMPLETED")["transport_attempts"]
-            == 2
-        )
-        assert sum(row["kind"] == "REQUEST_COMPILED" for row in target_events) == 1
-        assert provider.requests.count(provider.target_dispatch_id) == 2
+        assert provider.failed_dispatch_ids == provider.target_dispatch_ids
+        assert sum(row["kind"] == "RETRYABLE_ATTEMPT_FAILURE" for row in events) == len(provider.target_dispatch_ids)
+        for dispatch_id in provider.target_dispatch_ids:
+            target_events = [row for row in events if row["unit_id"] == dispatch_id]
+            attempts = [row for row in target_events if row["kind"] == "ATTEMPT_STARTED"]
+            assert [row["attempt_index"] for row in attempts] == [0, 1]
+            assert len({row["attempt_id"] for row in attempts}) == 2
+            assert sum(row["kind"] == "RETRYABLE_ATTEMPT_FAILURE" for row in target_events) == 1
+            assert next(row for row in target_events if row["kind"] == "COMPLETED")["transport_attempts"] == 2
+            assert sum(row["kind"] == "REQUEST_COMPILED" for row in target_events) == 1
+            assert provider.requests.count(dispatch_id) == 2
         with run.private.connect() as connection:
             parents = tuple(
                 connection.execute("SELECT unit_id, raw, sha256 FROM parents WHERE raw IS NOT NULL")
@@ -296,7 +322,7 @@ def test_seed_zero_shadow_commits_every_production_unit_without_external_access(
                     "physical_attempts": len(provider.requests),
                     "completed_parents": len(parents),
                     "terminal_technical_missing": status.terminal_technical_missing_count,
-                    "retry_dispatch_id": provider.target_dispatch_id,
+                    "retry_dispatch_count": len(provider.target_dispatch_ids),
                 },
                 sort_keys=True,
             )
@@ -307,6 +333,8 @@ def test_seed_zero_shadow_commits_every_production_unit_without_external_access(
     try:
         before_resume = tuple(provider.requests)
         assert reopened.status() == status
+        reopened_events = tuple(json.loads(raw) for raw in reopened.ledger.rows())
+        assert reopened_events == events
         if not bounded:
             resumed = reopened.execute(
                 tmp_path / "cache",
