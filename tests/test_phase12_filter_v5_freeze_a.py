@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import TypeAlias
 
 import pytest
+from memcontam.memory.cards_v3 import canonical_content_hash
 from memcontam.tasks.base import TaskInstance
 from memcontam.experiment.phase12.filter_challenge import ordinary_authority
 
@@ -69,6 +70,10 @@ def test_freeze_a_builds_exact_disjoint_pool_and_native_construction_artifacts(t
     assert freeze["provider_calls_issued"] == 0
     assert _json_object(tmp_path / "candidate_triplets_v1.json")["render_count"] == 36
     assert _json_object(tmp_path / "checkpoint_manifest_v1.json")["checkpoint_count"] == 12
+    for row in _array(_json_object(tmp_path / "checkpoint_manifest_v1.json")["checkpoints"]):
+        for entry in _array(_object(_object(row)["state"])["entries"]):
+            native = _object(entry)
+            assert native["content_hash"] == canonical_content_hash(str(native["content"]))
     ordinary = _json_object(tmp_path / "ordinary_route_false_manifest_v1.json")
     assert ordinary["schema_version"] == "phase13_fv5_ordinary_route_false_manifest_v2"
     assert ordinary["realization_count"] == 12

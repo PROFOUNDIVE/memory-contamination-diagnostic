@@ -9,6 +9,7 @@ from typing import Final
 
 from memcontam.contamination.phase12.registry import load_candidate_registry
 from memcontam.contamination.phase12.renderers import render_false
+from memcontam.memory.cards_v3 import canonical_content_hash
 from memcontam.experiment.phase12.filter_challenge.calibration_laws import (
     game24_certificate,
     meb_certificate,
@@ -118,7 +119,7 @@ def _state(task: str, baseline: str) -> NativeState:
             schema_version="phase12_native_entry_v1",
             native_component=schema.native_component,
             content=f"calibration construction {task} position {position}",
-            content_hash=hashlib.sha256(f"{task}:{baseline}:{position}".encode()).hexdigest(),
+            content_hash=canonical_content_hash(f"calibration construction {task} position {position}"),
         )
         for position in (7, 8)
     )
