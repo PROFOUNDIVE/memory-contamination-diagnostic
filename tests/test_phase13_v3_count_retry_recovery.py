@@ -5,13 +5,14 @@ import json
 from typing import Literal, assert_never
 
 import pytest
-from pydantic import JsonValue
+from pydantic import JsonValue, ValidationError
 
 from memcontam.clients.base import LLMResponse
 from memcontam.readiness.phase13_main_request_dispatch import (
     DispatchTechnicalFailureV3,
     ProductionRequestDispatcherV3,
 )
+from memcontam.readiness.phase13_v3_count import count_costs_krw, count_recovery_gate
 from memcontam.readiness.phase13_v3_request import RequestKeyV3
 from memcontam.readiness.phase13_v3_terminal_ledger import TerminalLedgerV3
 from memcontam.readiness.phase13_v3_terminal_models import TerminalEvidenceError
@@ -20,6 +21,86 @@ from .phase13_count_fake import CountedProvider
 from .test_phase13_v3_envelope_gate import api as api, rig as rig
 from .test_phase13_v3_provider_count import CountCrash, counted as counted
 from .test_phase13_v3_request_client import RetryableTimeout
+
+
+def test_count_gate_batches_reads_and_rechecks_external_tamper(
+    counted, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    counted.dispatcher.dispatch(counted.key, lambda: counted.material, lambda result: result.content)
+    ledger = counted.ledger
+    read = TerminalLedgerV3.count_record
+    reads = 0
+
+    def observed(self: TerminalLedgerV3, unit_id: str, role: str) -> bytes | None:
+        nonlocal reads
+        reads += 1
+        return read(self, unit_id, role)
+
+    monkeypatch.setattr(TerminalLedgerV3, "count_record", observed)
+    count_recovery_gate(ledger)
+    count_recovery_gate(ledger)
+    assert reads == 0
+
+    with ledger.connection() as connection:
+        connection.execute("UPDATE provider_counts_v1 SET raw=? WHERE role='count-receipt'",
+                           (b"{}",))
+    with pytest.raises((TerminalEvidenceError, ValidationError)):
+        count_recovery_gate(ledger)
+
+
+def test_count_gate_rejects_tamper_even_after_local_count_write(counted) -> None:
+    counted.dispatcher.dispatch(counted.key, lambda: counted.material, lambda result: result.content)
+    ledger = counted.ledger
+    count_recovery_gate(ledger)
+    count_costs_krw(ledger)
+    with ledger.connection() as connection:
+        connection.execute("UPDATE provider_counts_v1 SET raw=? WHERE role='count-receipt'",
+                           (b"{}",))
+    ledger.append_count_record(counted.key.dispatch_id, "count-failure", b"{}")
+    with pytest.raises((TerminalEvidenceError, ValidationError)):
+        count_recovery_gate(ledger)
+    with pytest.raises((TerminalEvidenceError, ValidationError)):
+        count_costs_krw(ledger)
+
+
+@pytest.mark.parametrize("rowid", [0, -1])
+def test_count_gate_includes_nonpositive_sqlite_rowids(counted, rowid: int) -> None:
+    counted.dispatcher.dispatch(counted.key, lambda: counted.material, lambda result: result.content)
+    ledger = counted.ledger
+    with ledger.connection() as connection:
+        connection.execute("UPDATE provider_counts_v1 SET rowid=? WHERE role='count-started'",
+                           (rowid,))
+        connection.execute("UPDATE provider_counts_v1 SET raw=? WHERE role='count-receipt'",
+                           (b"{}",))
+    with pytest.raises((TerminalEvidenceError, ValidationError)):
+        count_recovery_gate(ledger)
+    with pytest.raises((TerminalEvidenceError, ValidationError)):
+        count_costs_krw(ledger)
+
+
+def test_cumulative_count_cost_batches_reads_without_skipping_tamper(
+    counted, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    counted.dispatcher.dispatch(counted.key, lambda: counted.material, lambda result: result.content)
+    ledger = counted.ledger
+    expected = count_costs_krw(ledger)
+    read = TerminalLedgerV3.count_record
+    reads = 0
+
+    def observed(self: TerminalLedgerV3, unit_id: str, role: str) -> bytes | None:
+        nonlocal reads
+        reads += 1
+        return read(self, unit_id, role)
+
+    monkeypatch.setattr(TerminalLedgerV3, "count_record", observed)
+    assert count_costs_krw(ledger) == expected
+    assert count_costs_krw(ledger) == expected
+    assert reads == 0
+    with ledger.connection() as connection:
+        connection.execute("UPDATE provider_counts_v1 SET raw=? WHERE role='count-receipt'",
+                           (b"{}",))
+    with pytest.raises((TerminalEvidenceError, ValidationError)):
+        count_costs_krw(ledger)
 
 
 def test_uncounted_compile_recovers_pending_before_authoritative_overflow(rig, monkeypatch):

@@ -90,18 +90,18 @@ def read_count_record(ledger: TerminalLedgerV3, unit_id: str, role: str) -> byte
 
 
 def count_costs_krw(ledger: TerminalLedgerV3, unit_ids: tuple[str, ...] | None = None) -> int:
+    states = ledger.states()
+    pairs = (ledger.count_pairs() if unit_ids is None else tuple(
+        (unit_id, read_count_record(ledger, unit_id, "count-started"),
+         read_count_record(ledger, unit_id, "count-receipt")) for unit_id in unit_ids))
     total = 0
-    identifiers = (tuple(unit_id for unit_id, _raw in ledger.count_records("count-started"))
-                   if unit_ids is None else unit_ids)
-    for unit_id in identifiers:
-        receipt_raw = read_count_record(ledger, unit_id, "count-receipt")
-        started = read_count_record(ledger, unit_id, "count-started")
+    for unit_id, started, receipt_raw in pairs:
         if receipt_raw is None or started is None:
             raise TerminalEvidenceError("MAIN_COUNT_COST_UNKNOWN")
         receipt = CountReceiptV3.model_validate_json(receipt_raw)
         operation = CountOperationV3.model_validate_json(started)
         if (receipt.operation != operation or operation.key.dispatch_id != unit_id
-                or operation.compiled != ledger.state(unit_id).compiled
+                or operation.compiled != states[unit_id].compiled
                 or operation.binding.identity != ledger.binding.identity
                 or operation.binding.package_sha256 != ledger.binding.package_sha256
                 or operation.binding.authorization_sha256 != ledger.binding.authorization_sha256):
@@ -111,15 +111,15 @@ def count_costs_krw(ledger: TerminalLedgerV3, unit_ids: tuple[str, ...] | None =
 
 
 def count_recovery_gate(ledger: TerminalLedgerV3) -> None:
-    for unit_id, started in ledger.count_records("count-started"):
-        state = ledger.state(unit_id)
+    states = ledger.states()
+    for unit_id, started, receipt_raw in ledger.count_pairs():
+        state = states[unit_id]
         operation = CountOperationV3.model_validate_json(started)
         if (operation.key.dispatch_id != unit_id or operation.compiled != state.compiled
                 or operation.binding.identity != ledger.binding.identity
                 or operation.binding.package_sha256 != ledger.binding.package_sha256
                 or operation.binding.authorization_sha256 != ledger.binding.authorization_sha256):
             raise TerminalEvidenceError("MAIN_COUNT_REQUEST_BINDING_MISMATCH")
-        receipt_raw = read_count_record(ledger, unit_id, "count-receipt")
         if receipt_raw is None:
             raise TerminalEvidenceError("MAIN_COUNT_AMBIGUOUS_RECONCILIATION_REQUIRED")
         receipt = CountReceiptV3.model_validate_json(receipt_raw)

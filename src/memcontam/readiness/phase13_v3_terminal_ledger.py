@@ -152,6 +152,17 @@ class TerminalLedgerV3:
             return tuple((str(unit_id), bytes(raw)) for unit_id, raw in connection.execute(
                 "SELECT unit_id, raw FROM provider_counts_v1 WHERE role=? ORDER BY unit_id", (role,)))
 
+    def count_pairs(self) -> tuple[tuple[str, bytes, bytes | None], ...]:
+        with self.connection() as connection:
+            if connection.execute("SELECT 1 FROM sqlite_master WHERE name='provider_counts_v1'").fetchone() is None:
+                return ()
+            return tuple((str(unit_id), bytes(started), None if receipt is None else bytes(receipt))
+                         for unit_id, started, receipt in connection.execute(
+                             "SELECT s.unit_id, s.raw, r.raw FROM provider_counts_v1 AS s "
+                             "LEFT JOIN provider_counts_v1 AS r ON r.unit_id=s.unit_id "
+                             "AND r.role='count-receipt' WHERE s.role='count-started' "
+                             "ORDER BY s.unit_id"))
+
     def append_count_record(self, unit_id: str, role: str, raw: bytes) -> None:
         if unit_id not in self.binding.unit_ids or role not in {"count-started", "count-receipt", "count-failure"}:
             raise TerminalEvidenceError("MAIN_COUNT_REQUEST_BINDING_MISMATCH")
