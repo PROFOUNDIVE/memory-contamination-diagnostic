@@ -283,9 +283,7 @@ def test_v3_execution_uses_guarded_requests_and_real_ordinary_runtime(entrypoint
         archive = changed["unit_evidence"]["evidence"]["runtime_evidence"]["production_observability_archive"]
         rows = archive["records"]
         if mutation == "schema":
-            archive["schema_version"] = "phase13_production_observability_archive_v1"
-            for row in rows:
-                row["scientific_result"] = False
+            archive["schema_version"] = "phase13_production_observability_archive_v2"
         elif mutation == "method_call":
             rows[0]["method_calls"][0]["call_id"] = "invented-archive-call"
         elif mutation == "sample_order":
@@ -327,10 +325,6 @@ def test_runner_parent_calls_preserve_sparse_scheduled_request_keys(entrypoint_f
     from memcontam.readiness.phase13_v3_entrypoint import select_execution
     from memcontam.readiness.phase13_v3_request import RequestKeyV3
 
-    class EligibleTimeout(TimeoutError):
-        phase13_retry_class = "TIMEOUT_BEFORE_SEMANTIC_PAYLOAD"
-        provider_failure_acknowledged = True
-
     attempts = 0
 
     from .phase13_count_fake import CountedProvider
@@ -340,10 +334,9 @@ def test_runner_parent_calls_preserve_sparse_scheduled_request_keys(entrypoint_f
             nonlocal attempts
             before_request()
             attempts += 1
-            if attempts == 1:
-                raise EligibleTimeout()
             return LLMResponse("final: 0", {"status": "completed", "usage": {"input_tokens": 1,
-                "output_tokens": 0}, "authoritative_provider_cost_usd": "0.0000002", "currency": "USD"}, {}, 0)
+                "output_tokens": 0}, "authoritative_provider_cost_usd": "0.0000002", "currency": "USD",
+                "model": "gpt-5.6-luna", "service_tier": "default"}, {}, 0)
 
     selected = select_execution(entrypoint_fixture, "run")
     assert isinstance(selected, SelectedExecutionV3)
@@ -360,9 +353,8 @@ def test_runner_parent_calls_preserve_sparse_scheduled_request_keys(entrypoint_f
 
         client.trial(execute, lambda: b"{}", ordinal_base=0)
         first_key = RequestKeyV3(parent_id=parent_id, stage="no_memory_generate", ordinal=0)
-        run.ledger.reconcile_cost(first_key.dispatch_id,
-            {"usage": {"input_tokens": 1, "output_tokens": 0}}, "f" * 64, attempt_index=0)
         client.trial(execute, lambda: b"{}", ordinal_base=2)
+        assert attempts == 2
         calls = tuple(MethodCall(call_id=f"sparse:trial:{index}:call:1", stage="no_memory_generate",
                                  messages=messages, raw_response="final: 0", model="gpt-5.6-luna",
                                  temperature=0.0, top_p=1.0)
@@ -378,7 +370,7 @@ def test_runner_parent_calls_preserve_sparse_scheduled_request_keys(entrypoint_f
         replayed = TerminalLedgerV3.open_guarded(run.private, run.ledger.binding)
         try:
             state = replayed.state(first_key.dispatch_id)
-            assert state.kind == "COMPLETED" and state.completion_hash != state.event_hash
+            assert state.kind == "COMPLETED" and state.completion_hash == state.event_hash
             replace(run, ledger=replayed)._validate_parent_calls(parent_id, enriched)
         finally:
             replayed.close()

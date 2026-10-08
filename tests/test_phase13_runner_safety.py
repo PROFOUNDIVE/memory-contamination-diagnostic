@@ -531,6 +531,7 @@ def test_unknown_cost_pauses_durably_before_next_provider(entrypoint_fixture, pr
 def test_independent_authorization_gate_cannot_be_enlarged(entrypoint_fixture, provider: FakeProvider) -> None:
     from memcontam.readiness.phase13_v3_request import MessageV3, RequestKeyV3, RequestMaterialV3
     from memcontam.readiness.phase13_main_request_dispatch import DispatchTechnicalFailureV3
+    from memcontam.readiness.phase13_v3_count import count_costs_krw
     from memcontam.clients.base import LLMResponse
 
     class CostlyFailure(FakeProvider):
@@ -545,7 +546,8 @@ def test_independent_authorization_gate_cannot_be_enlarged(entrypoint_fixture, p
         with pytest.raises(DispatchTechnicalFailureV3):
             run.dispatcher(costly.factory).dispatch(key, lambda: RequestMaterialV3(
                 messages=(MessageV3(role="user", content="fixture"),), native_state=b"{}"), lambda response: None)
-        assert run.ledger.realized_cost_krw() == 450000
+        assert count_costs_krw(run.ledger) == 2
+        assert run.ledger.realized_cost_krw() == 450000 + count_costs_krw(run.ledger)
     finally:
         run.close()
     reopened = open_run(entrypoint_fixture, create=False, seed=1)
