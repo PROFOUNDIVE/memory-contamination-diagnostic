@@ -82,7 +82,9 @@ def deny_main_external(monkeypatch: pytest.MonkeyPatch) -> Callable[[], None]:
     def denied(*_args, **_kwargs):
         pytest.fail("Main runtime attempted external process or network access")
 
-    monkeypatch.setattr(socket, "socket", denied)
+    monkeypatch.setattr(socket.socket, "connect", denied)
+    monkeypatch.setattr(socket.socket, "connect_ex", denied)
+    monkeypatch.setattr(socket, "create_connection", denied)
     monkeypatch.setattr(socket, "getaddrinfo", denied)
     monkeypatch.setattr(httpx.Client, "send", denied)
     monkeypatch.setattr(httpx.AsyncClient, "send", denied)
