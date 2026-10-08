@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import sys
 import tempfile
 import tomllib
 from importlib.metadata import version
@@ -41,8 +42,17 @@ def _lock_entries(path: Path) -> dict[str, list[str]]:
 
 
 def _run(command: list[str], environment: dict[str, str]) -> None:
-    result = subprocess.run(command, cwd=ROOT, env=environment, capture_output=True, text=True)
+    result = subprocess.run(
+        [sys.executable, *command[1:]], cwd=ROOT, env=environment, capture_output=True, text=True
+    )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_lock_subprocess_uses_the_selected_test_interpreter() -> None:
+    _run(
+        ["python", "-c", f"import sys; assert sys.version_info[:2] == {sys.version_info[:2]!r}"],
+        os.environ | {"PATH": ""},
+    )
 
 
 def _lock_body(path: Path) -> bytes:
