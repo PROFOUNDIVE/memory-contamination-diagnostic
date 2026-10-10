@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import platform
 import re
@@ -15,8 +16,11 @@ from .phase13_v3_authority_models import FrozenModel
 from .phase13_v3_resource_files import read_files
 
 ROOT: Final = Path(__file__).resolve().parents[3]
-PREFIX: Final = "/home/hyunwoo/miniconda3/envs/memcontam"
+PREFIX: Final = "/home/hyunwoo/phase13_artifacts/PeerJ-fast-track/11주차/v11_5_4_6_phase_c_recovery_001/scientific-runtime-locks-001"
+BASE_PREFIX: Final = "/home/hyunwoo/miniconda3/envs/memcontam"
 EXECUTABLE: Final = PREFIX + "/bin/python"
+RESOLVED_EXECUTABLE: Final = BASE_PREFIX + "/bin/python3.11"
+EXECUTABLE_SHA256: Final = "c823d8b1e491d4273ea6d682f4078907a786984524263444004b3b685f6765db"
 LOCK_HASHES: Final = (
     "c644c8f5f9517461f2545e49e3f5f4907c83ad6340d639b54e7bbac15f126465",
     "d4929b7d063b9834e7649c21206e59a360b5db5a73950c323c771185ae8a1446",
@@ -50,7 +54,9 @@ def freeze_runtime_identity() -> RuntimeIdentityV3:
     spec = util.find_spec("memcontam")
     if (
         Path.cwd() != ROOT or sys.executable != EXECUTABLE
-        or sys.prefix != PREFIX or sys.base_prefix != PREFIX
+        or sys.prefix != PREFIX or sys.base_prefix != BASE_PREFIX
+        or str(Path(sys.executable).resolve()) != RESOLVED_EXECUTABLE
+        or hashlib.sha256(Path(sys.executable).read_bytes()).hexdigest() != EXECUTABLE_SHA256
         or platform.python_implementation() != "CPython" or platform.python_version() != "3.11.15"
         or os.environ.get("PYTHONPATH") != source
         or os.environ.get("PYTHONNOUSERSITE") != "1" or site.ENABLE_USER_SITE
@@ -65,12 +71,18 @@ def freeze_runtime_identity() -> RuntimeIdentityV3:
         path = Path(entry or os.getcwd())
         if ".venv" in path.parts:
             raise RuntimeIdentityError()
+        if ({"site-packages", "dist-packages"} & set(path.parts)
+                and not path.is_relative_to(PREFIX)):
+            raise RuntimeIdentityError()
         if (str(path).startswith(str(ROOT.parent / "memory-contamination-diagnostic"))
                 and not path.is_relative_to(ROOT) and position < source_position):
             raise RuntimeIdentityError()
     for name, module in tuple(sys.modules.items()):
+        filename = getattr(module, "__file__", None)
+        if (filename is not None and {"site-packages", "dist-packages"} & set(Path(filename).parts)
+                and not Path(filename).resolve().is_relative_to(PREFIX)):
+            raise RuntimeIdentityError()
         if name == "memcontam" or name.startswith("memcontam."):
-            filename = getattr(module, "__file__", None)
             if filename is not None and not Path(filename).resolve().is_relative_to(ROOT / "src"):
                 raise RuntimeIdentityError()
     resources = read_files(ROOT, ("requirements.lock", "requirements-dev.lock"))
@@ -80,13 +92,23 @@ def freeze_runtime_identity() -> RuntimeIdentityV3:
         raise RuntimeIdentityError()
     versions: dict[str, str] = {}
     for resource in resources:
-        for name, version in re.findall(r"^([A-Za-z0-9_.-]+)==([^\s;\\]+)", resource.raw.decode(), re.MULTILINE):
+        for name, version in re.findall(r"^([A-Za-z0-9_.-]+)(?:\[[^\]\n]+\])?==([^\s;\\]+)", resource.raw.decode(), re.MULTILINE):
             normalized = re.sub(r"[-_.]+", "-", name).lower()
             if normalized in versions and versions[normalized] != version:
                 raise RuntimeIdentityError()
             versions[normalized] = version
     try:
-        if len(versions) != 102 or any(metadata.version(name) != version for name, version in versions.items()):
+        installed: dict[str, str] = {}
+        for distribution in metadata.distributions(path=[PREFIX + "/lib/python3.11/site-packages"]):
+            name = distribution.metadata["Name"]
+            if not name:
+                raise RuntimeIdentityError()
+            normalized = re.sub(r"[-_.]+", "-", name).lower()
+            if normalized in installed:
+                raise RuntimeIdentityError()
+            installed[normalized] = distribution.version
+        if (len(versions) != 104 or installed != versions
+                or any(metadata.version(name) != version for name, version in versions.items())):
             raise RuntimeIdentityError()
     except metadata.PackageNotFoundError as error:
         raise RuntimeIdentityError() from error

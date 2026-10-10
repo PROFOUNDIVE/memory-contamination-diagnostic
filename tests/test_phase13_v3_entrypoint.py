@@ -79,9 +79,13 @@ def test_sidecar_rejects_unsafe_path(path_api, tmp_path, kind):
 
 def test_runtime_freezes_actual_canonical_inventory(identity_api):
     identity = identity_api.freeze_runtime_identity()
-    assert identity.executable == "/home/hyunwoo/miniconda3/envs/memcontam/bin/python"
+    assert identity.executable == "/home/hyunwoo/phase13_artifacts/PeerJ-fast-track/11주차/v11_5_4_6_phase_c_recovery_001/scientific-runtime-locks-001/bin/python"
+    assert identity.prefix != identity.base_prefix
+    assert identity.base_prefix == "/home/hyunwoo/miniconda3/envs/memcontam"
     assert identity.version == "3.11.15"
-    assert len(identity.versions) == 102
+    assert len(identity.versions) == 104
+    assert dict(identity.versions)["cuda-toolkit"] == "13.0.3.0"
+    assert dict(identity.versions)["fsspec"] == "2025.3.0"
     identity_api.validate_runtime_identity(identity)
 
 
