@@ -215,6 +215,7 @@ class ProductionRequestDispatcherV3:
                 observed = response or LLMResponse("", {
                     "usage": getattr(error, "provider_usage", None),
                     "authoritative_provider_cost_usd": getattr(error, "authoritative_provider_cost_usd", None),
+                    "currency": getattr(error, "provider_currency", None),
                 }, {}, 0)
                 try:
                     cost = _response_cost(observed)
@@ -248,7 +249,7 @@ class ProductionRequestDispatcherV3:
                 self._append(key, "ATTEMPTED_PROVIDER_FAILURE", {
                     "transport_attempts": attempt_index + 1, "cost": cost.model_dump(mode="json"),
                     "realized_cost_krw": realized,
-                    "failure_code": str(getattr(error, "code", type(error).__name__)),
+                    "failure_code": _safe_failure_code(error),
                     "observation_hash": hashlib.sha256(observation).hexdigest(),
                 })
                 raise DispatchTechnicalFailureV3("MAIN_ATTEMPTED_PROVIDER_FAILURE", key.parent_id, realized,
@@ -270,8 +271,15 @@ class ProductionRequestDispatcherV3:
 
     def acknowledge(self, key: RequestKeyV3, response: LLMResponse, *, semantic_success: bool) -> None:
         with request_lock(self.ledger):
-            cost = _response_cost(response)
-            realized = _realized(cost)
+            failure_code = "MAIN_SEMANTIC_RESULT_UNAVAILABLE"
+            try:
+                _validate_received_response(response, key.stage)
+                cost = _response_cost(response)
+                realized = _realized(cost)
+            except (TerminalEvidenceError, CostError, KeyError, TypeError, ValueError) as error:
+                failure_code = _safe_failure_code(error)
+                semantic_success = False
+                cost, realized = ProviderCostEvidence(), None
             fields: dict[str, JsonValue] = {
                 "transport_attempts": self._attempt_counts.pop(key.dispatch_id, 1),
                 "cost": cost.model_dump(mode="json"), "realized_cost_krw": realized,
@@ -279,10 +287,11 @@ class ProductionRequestDispatcherV3:
             if semantic_success and realized is not None:
                 self._append(key, "COMPLETED", {**fields, "result_hash": hashlib.sha256(response.content.encode()).hexdigest()})
                 return
-            raw = json.dumps({"response": response.content, "semantic_success": semantic_success}, sort_keys=True).encode()
+            raw = json.dumps({"response_sha256": hashlib.sha256(response.content.encode()).hexdigest(),
+                "semantic_success": semantic_success, "failure_code": failure_code}, sort_keys=True).encode()
             self._publish_bytes(key, "observation", raw)
             self._append(key, "ATTEMPTED_PROVIDER_FAILURE", {**fields,
-                "failure_code": "MAIN_SEMANTIC_RESULT_UNAVAILABLE",
+                "failure_code": failure_code,
                 "observation_hash": hashlib.sha256(raw).hexdigest()})
             raise DispatchTechnicalFailureV3("MAIN_ATTEMPTED_PROVIDER_FAILURE", key.parent_id, realized,
                 evidence_sha256=self.ledger.state(key.dispatch_id).event_hash)
@@ -368,12 +377,20 @@ def _response_cost(response: LLMResponse | None) -> ProviderCostEvidence:
         return ProviderCostEvidence()
     usage = response.raw.get("usage")
     monetary = response.raw.get("authoritative_provider_cost_usd")
+    if usage is not None and not isinstance(usage, dict):
+        raise TerminalEvidenceError("MAIN_PROVIDER_USAGE_UNAVAILABLE")
+    details = {} if usage is None else usage.get("input_tokens_details", {})
+    if not isinstance(details, dict):
+        raise TerminalEvidenceError("MAIN_PROVIDER_USAGE_UNAVAILABLE")
+    cached = details.get("cached_tokens", 0)
+    if type(cached) is not int or cached < 0:
+        raise TerminalEvidenceError("MAIN_PROVIDER_USAGE_UNAVAILABLE")
     return ProviderCostEvidence.model_validate({
         "monetary_cost": None if monetary is None else str(monetary),
         "currency": response.raw.get("currency"),
         "usage": None if usage is None else {
         "input_tokens": usage["input_tokens"], "output_tokens": usage["output_tokens"],
-        "cached_input_tokens": usage.get("input_tokens_details", {}).get("cached_tokens", 0),
+        "cached_input_tokens": cached,
     }})
 
 
@@ -410,6 +427,17 @@ def _eligible_retry(error: Exception, response: LLMResponse | None) -> bool:
         and getattr(error, "provider_status", None) is None
         and getattr(error, "provider_failure_acknowledged", False) is True
     )
+
+
+def _safe_failure_code(error: Exception) -> str:
+    code = getattr(error, "code", None)
+    return code if isinstance(code, str) and code in {
+        "MAIN_PROVIDER_INCOMPLETE", "LUNA_PROVIDER_INCOMPLETE",
+        "MAIN_PROVIDER_RESPONSE_CONTRACT_MISMATCH", "MAIN_PROVIDER_USAGE_UNAVAILABLE",
+        "MAIN_PROVIDER_ENVELOPE_EXCEEDED", "MAIN_SEMANTIC_RESULT_UNAVAILABLE",
+        "MAIN_COST_CURRENCY_INVALID", "MAIN_COST_NUMERIC_INVALID",
+        "MAIN_COST_RECONCILIATION_REQUIRED", "MAIN_TERMINAL_COST_UNKNOWN",
+    } else "MAIN_ATTEMPTED_PROVIDER_FAILURE"
 
 
 def _realized(cost: ProviderCostEvidence) -> int | None:

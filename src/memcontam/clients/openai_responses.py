@@ -188,11 +188,11 @@ class OpenAIResponsesClient:
             else self.cost_guard.record_usage(usage)
         )
         authoritative_cost = getattr(response, "cost_usd", None)
-        if not isinstance(authoritative_cost, (int, float)) or isinstance(
+        if not bound_v3 and (not isinstance(authoritative_cost, (int, float)) or isinstance(
             authoritative_cost, bool
-        ):
+        )):
             authoritative_cost = None
-        selected_cost = float(authoritative_cost) if authoritative_cost is not None else cost_usd
+        selected_cost = (authoritative_cost if bound_v3 else float(authoritative_cost)) if authoritative_cost is not None else cost_usd
         cost_source = (
             "AUTHORITATIVE_PROVIDER"
             if authoritative_cost is not None
@@ -212,12 +212,13 @@ class OpenAIResponsesClient:
             setattr(error, "provider_token_usage", token_usage)
             setattr(error, "provider_cost_usd", selected_cost)
             setattr(error, "provider_response_id", getattr(response, "id", None))
-            setattr(error, "provider_service_tier", getattr(response, "service_tier", self._config.service_tier))
-            setattr(error, "provider_returned_model", getattr(response, "model", model))
+            setattr(error, "provider_service_tier", getattr(response, "service_tier", None if bound_v3 else self._config.service_tier))
+            setattr(error, "provider_returned_model", getattr(response, "model", None if bound_v3 else model))
             setattr(error, "provider_response_status", getattr(response, "status", None))
             setattr(error, "provider_request_contract", request_contract)
             setattr(error, "provider_authority_contract", authority_contract)
             setattr(error, "authoritative_provider_cost_usd", authoritative_cost)
+            setattr(error, "provider_currency", getattr(response, "currency", None))
             setattr(error, "derived_cost_usd", cost_usd)
             setattr(error, "provider_cost_source", cost_source)
             raise error
@@ -225,14 +226,15 @@ class OpenAIResponsesClient:
             content=_output_text(response),
             raw={
                 "response_id": getattr(response, "id", None),
-                "model": getattr(response, "model", model),
+                "model": getattr(response, "model", None if bound_v3 else model),
                 "status": getattr(response, "status", None),
                 "usage": usage,
                 "latency_ms": latency_ms,
                 "attempts": attempts,
-                "service_tier": getattr(response, "service_tier", self._config.service_tier),
+                "service_tier": getattr(response, "service_tier", None if bound_v3 else self._config.service_tier),
                 "cost_usd": selected_cost,
                 "authoritative_provider_cost_usd": authoritative_cost,
+                "currency": getattr(response, "currency", None),
                 "derived_cost_usd": cost_usd,
                 "cost_source": cost_source,
                 "request_contract": request_contract,
