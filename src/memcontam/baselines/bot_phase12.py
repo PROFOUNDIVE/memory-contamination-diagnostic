@@ -167,7 +167,7 @@ class BoTPhase12Adapter:
                 lineage_status,
             )
 
-        state.entries.append(normalized_candidate)
+        state.entries.append(native_entry)
         transition = _route_filter_write(state, native_entry, envelope, trial)
         return BaselineStepResultV3(
             _replace_candidate(outcome, normalized_candidate),
@@ -230,6 +230,10 @@ def _as_memory_entry(entry: MemoryEntry | NativeEntry) -> MemoryEntry:
         metadata={
             "description": entry.retrieval_description or entry.content,
             "category": entry.category or "procedure-based",
+            "direct_parent_ids": list(entry.direct_parent_ids),
+            "source_entry_ids": list(entry.direct_parent_ids),
+            "source_lineage_status": entry.lineage_status,
+            "lineage_status": entry.lineage_status,
         },
     )
 
@@ -344,6 +348,7 @@ def _native_write(
                 "source_entry_ids": list(exact_parents),
                 "lineage_basis": "explicitly_used_memory_ids" if exact_parents else "unavailable",
                 "lineage_status": lineage_status,
+                "source_lineage_status": lineage_status,
                 "source_outcome": None,
             }
         }
@@ -365,6 +370,7 @@ def _native_write(
         retrieval_description=description,
         template_body=normalized.content,
         category=category,
+        lineage_status=lineage_status,
     )
     envelope = MemoryCardEnvelopeV3(
         entry_id=native.entry_id,
@@ -385,6 +391,7 @@ def _native_write(
         native_component="buffer",
         content=native.content,
         content_hash=native.content_hash,
+        lineage_status=lineage_status,
     )
     return native, envelope, lineage_status, normalized
 
