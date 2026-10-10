@@ -24,6 +24,7 @@ from memcontam.readiness.phase13_v3_request import (
 )
 from memcontam.readiness.phase13_v3_resource_files import read_files
 from memcontam.readiness.phase13_v3_terminal_ledger import TerminalLedgerV3
+from memcontam.readiness.phase13_main_v3_runner import DurableParentRecordV3
 
 from .phase13_runner_safety_fixture import FakeProvider, open_run
 from .test_phase13_v3_entrypoint_fixture import REPAIR_ROOT
@@ -333,6 +334,15 @@ def test_seed_zero_shadow_commits_every_production_unit_without_external_access(
     try:
         before_resume = tuple(provider.requests)
         assert reopened.status() == status
+        with reopened.private.connect() as connection:
+            durable_parents = tuple(connection.execute(
+                "SELECT unit_id, raw, sha256 FROM parents WHERE raw IS NOT NULL"
+            ))
+        assert len(durable_parents) == status.completed_count
+        for unit_id, raw, checksum in durable_parents:
+            parent = reopened._load_parent(unit_id, raw, checksum)
+            assert isinstance(parent, DurableParentRecordV3)
+            assert parent.unit_evidence.unit_id == unit_id
         reopened_events = tuple(json.loads(raw) for raw in reopened.ledger.rows())
         assert reopened_events == events
         if not bounded:

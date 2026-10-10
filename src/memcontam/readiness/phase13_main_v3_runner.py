@@ -644,13 +644,18 @@ class V3MainRun:
                 ).fetchone()
             completion = None if event_row is None else parse_event(event_row[0])
             terminal_observation_valid = False
-            if terminal and isinstance(completion, ProviderFailureV3):
+            response_text = call.raw_response
+            if terminal and isinstance(completion, ProviderFailureV3) and response_text is not None:
                 observation = self.ledger.read_record(f"{call.dispatch_id}.observation.json")
                 terminal_observation_valid = (
                     completion.failure_code == "MAIN_SEMANTIC_RESULT_UNAVAILABLE"
                     and hashlib.sha256(observation).hexdigest() == completion.observation_hash
-                    and observation == json.dumps({"response": call.raw_response, "semantic_success": False},
-                                                  sort_keys=True).encode()
+                    and observation == json.dumps({
+                        "response_sha256": hashlib.sha256(response_text.encode()).hexdigest(),
+                        "semantic_success": False,
+                        "failure_code": completion.failure_code,
+                    },
+                                                   sort_keys=True).encode()
                 )
             cost_evidence = state.attempted_cost
             terminal_cost = None if cost_evidence is None else reconcile_actual(cost_evidence)
