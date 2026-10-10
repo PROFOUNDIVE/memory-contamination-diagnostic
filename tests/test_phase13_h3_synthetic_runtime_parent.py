@@ -19,6 +19,7 @@ from .test_phase13_v3_entrypoint_fixture import (
     AUTHORITY, build_entrypoint_bytes, seal_fixture_closure,
 )
 from memcontam.readiness.phase13_v3_entrypoint import SelectionRequest
+from memcontam.readiness.phase13_v3_entrypoint import EntrypointError
 from .phase13_corrective_identity import corrective_identity
 
 
@@ -102,3 +103,20 @@ def test_published_parent_orphan_reopens_without_redispatch(
         assert len(provider.requests) == prior_attempts
     finally:
         reopened.close()
+
+    second_selected = select_execution(request, "status")
+    assert isinstance(second_selected, SelectedExecutionV3)
+    second = V3MainRun.open(second_selected, directory, create=False, seed=0)
+    try:
+        assert second.status().completed_count == 1
+        second.execute(tmp_path / "cache", max_units=1, tranche_ceiling_krw=450000,
+                       provider_factory=provider.factory)
+        assert len(provider.requests) == prior_attempts
+    finally:
+        second.close()
+
+    (directory / f"{unit_id}.parent.json").write_bytes(b"{\"schema_version\":\"foreign\"}")
+    corrupt_selected = select_execution(request, "status")
+    assert isinstance(corrupt_selected, SelectedExecutionV3)
+    with pytest.raises(EntrypointError, match="MAIN_AUTHORIZATION_BINDING_MISMATCH"):
+        V3MainRun.open(corrupt_selected, directory, create=False, seed=0)
