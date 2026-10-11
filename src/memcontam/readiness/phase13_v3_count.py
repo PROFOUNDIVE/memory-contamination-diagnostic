@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from typing import TYPE_CHECKING, Annotated, Final, Literal
+from urllib.parse import urlsplit
 
 from pydantic import Field, JsonValue
 
@@ -71,6 +72,10 @@ def count_projection(compiled: CompiledProviderRequestV3) -> bytes:
 
 
 def count_operation(compiled: CompiledProviderRequestV3, provider: CountIdentityV3) -> CountOperationV3:
+    """Permit only offline fixtures until a complete-request bound is qualified."""
+    hostname = urlsplit(provider.base_url).hostname
+    if hostname is None or not hostname.endswith(".invalid"):
+        raise TerminalEvidenceError("MAIN_COMPLETE_REQUEST_BOUND_UNPROVEN")
     return CountOperationV3(binding=compiled.binding, key=compiled.key, compiled=compiled.evidence,
         provider=provider, projection_sha256=hashlib.sha256(count_projection(compiled)).hexdigest(),
         maximum_input_tokens=STAGES[compiled.key.stage][0])

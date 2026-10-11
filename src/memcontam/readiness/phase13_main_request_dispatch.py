@@ -272,14 +272,16 @@ class ProductionRequestDispatcherV3:
     def acknowledge(self, key: RequestKeyV3, response: LLMResponse, *, semantic_success: bool) -> None:
         with request_lock(self.ledger):
             failure_code = "MAIN_SEMANTIC_RESULT_UNAVAILABLE"
+            cost, realized = ProviderCostEvidence(), None
             try:
-                _validate_received_response(response, key.stage)
                 cost = _response_cost(response)
                 realized = _realized(cost)
+                _validate_received_response(response, key.stage)
             except (TerminalEvidenceError, CostError, KeyError, TypeError, ValueError) as error:
                 failure_code = _safe_failure_code(error)
                 semantic_success = False
-                cost, realized = ProviderCostEvidence(), None
+                if realized is None:
+                    cost = ProviderCostEvidence()
             fields: dict[str, JsonValue] = {
                 "transport_attempts": self._attempt_counts.pop(key.dispatch_id, 1),
                 "cost": cost.model_dump(mode="json"), "realized_cost_krw": realized,
@@ -287,8 +289,13 @@ class ProductionRequestDispatcherV3:
             if semantic_success and realized is not None:
                 self._append(key, "COMPLETED", {**fields, "result_hash": hashlib.sha256(response.content.encode()).hexdigest()})
                 return
-            raw = json.dumps({"response_sha256": hashlib.sha256(response.content.encode()).hexdigest(),
-                "semantic_success": semantic_success, "failure_code": failure_code}, sort_keys=True).encode()
+            observation = {"response_sha256": hashlib.sha256(response.content.encode()).hexdigest(),
+                "semantic_success": semantic_success, "failure_code": failure_code}
+            if realized is None:
+                observation.update(usage=response.raw.get("usage"),
+                    provider_cost_usd=response.raw.get("authoritative_provider_cost_usd"),
+                    currency=response.raw.get("currency"))
+            raw = json.dumps(observation, sort_keys=True).encode()
             self._publish_bytes(key, "observation", raw)
             self._append(key, "ATTEMPTED_PROVIDER_FAILURE", {**fields,
                 "failure_code": failure_code,
