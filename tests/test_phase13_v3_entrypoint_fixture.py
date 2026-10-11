@@ -45,7 +45,7 @@ from memcontam.readiness.phase13_v3_source_closure import (
 from .phase13_corrective_identity import corrective_identity
 from .phase13_count_fake import fake_count_pricing
 
-AUTHORITY = Path("/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts")
+AUTHORITY = Path("/home/hyunwoo/phase13_artifacts/PeerJ-fast-track/11주차/h3_authority_recovery_20261010_001/authority")
 REPAIR_ROOT = Path(__file__).resolve().parents[1]
 # Historical v2 tests read frozen artifacts; current disposable packages use REPAIR_ROOT.
 RESOURCE_ROOT = Path("/home/hyunwoo/git/memory-contamination-diagnostic-phase13-main-execution-entrypoint-closure")
