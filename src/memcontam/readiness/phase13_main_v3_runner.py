@@ -6,7 +6,7 @@ import json
 import sqlite3
 from collections.abc import Callable
 from contextlib import ExitStack
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal
 
@@ -38,7 +38,7 @@ from .phase13_main_request_dispatch import (
     ProductionRequestDispatcherV3,
     production_provider,
 )
-from .phase13_main_request_recovery import require_known_costs
+from .phase13_main_request_recovery import RequestIdentityReceiptV3, require_known_costs
 from .phase13_main_terminal_partial import (
     TerminalPartialArchive,
     TerminalPartialDispatch,
@@ -136,9 +136,9 @@ class V3MainRun:
                 if {row[0] for row in connection.execute("SELECT unit_id FROM parents")} != set(selected.package.final_order.unit_ids):
                     raise EntrypointError("MAIN_AUTHORIZATION_BINDING_MISMATCH")
             RunJournalV3(ledger, selected.package.production).rows()
-            run = cls(selected, private, ledger, lease.pop_all(), seed)
+            run = cls(selected, private, ledger, lease, seed)
             run.status()
-            return run
+            return replace(run, lease=lease.pop_all())
 
     def dispatcher(self, factory: Callable[[PackageBindingV3], CompiledProvider] = production_provider) -> ProductionRequestDispatcherV3:
         def checked_factory(binding: PackageBindingV3) -> CompiledProvider:
@@ -187,6 +187,13 @@ class V3MainRun:
             if receipt is not None:
                 self.private.finish_parent_receipt(name, receipt)
             published.add(unit_id)
+        for dispatch_id, state in self.ledger.states().items():
+            if state.kind == "COMPLETED":
+                identity_receipt = RequestIdentityReceiptV3.model_validate_json(
+                    self.ledger.read_record(f"{dispatch_id}.identity.json")
+                )
+                if identity_receipt.key.parent_id not in published | failed:
+                    raise EntrypointError("MAIN_RUN_IN_FLIGHT_RECONCILIATION_REQUIRED")
         attempts = sum(json.loads(raw)["kind"] == "ATTEMPT_STARTED" for raw in self.ledger.rows())
         completed = len(published - failed)
         pending = len(self.selected.package.production) - len(published | failed)
@@ -233,14 +240,6 @@ class V3MainRun:
                     raise
                 journal.pause(unit, "MAIN_TERMINAL_COST_UNKNOWN")
                 break
-            for cost_unit in self.selected.costs.resources.phase4.base.units:
-                if cost_unit.unit_id != unit.unit_id:
-                    continue
-                for group in cost_unit.stages:
-                    for ordinal in range(group.calls):
-                        key = RequestKeyV3(parent_id=unit.unit_id, stage=STAGE_NAMES[group.stage_id], ordinal=ordinal)
-                        if self.ledger.state(key.dispatch_id).kind == "COMPLETED":
-                            raise EntrypointError("MAIN_RUN_IN_FLIGHT_RECONCILIATION_REQUIRED")
             realized = self.ledger.realized_cost_krw()
             if realized + unit.projected_cost_krw > tranche_ceiling_krw:
                 journal.pause(unit, "MAIN_TRANCHE_CEILING_EXCEEDED")

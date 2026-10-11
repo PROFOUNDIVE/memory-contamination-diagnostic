@@ -38,17 +38,17 @@ def test_owner_covers_completed_requests_through_parent_commit(entrypoint_fixtur
             owner.kill()
         stdout, stderr = owner.communicate(input=None if crash else "\n", timeout=120)
         assert owner.returncode == (-9 if crash else 0), (stdout, stderr)
+        if crash:
+            with pytest.raises(ValueError, match="MAIN_RUN_IN_FLIGHT_RECONCILIATION_REQUIRED"):
+                open_run(entrypoint_fixture, create=False)
+            assert (provider.constructors, len(provider.requests)) == (0, 0)
+            return
         recovered = open_run(entrypoint_fixture, create=False)
         try:
-            assert recovered.status().completed_count == (0 if crash else 1)
+            assert recovered.status().completed_count == 1
             assert recovered.status().provider_calls_issued == 50
-            if crash:
-                with pytest.raises(ValueError, match="MAIN_RUN_IN_FLIGHT_RECONCILIATION_REQUIRED"):
-                    recovered.execute(Path("unused"), max_units=1, tranche_ceiling_krw=450000,
-                                      provider_factory=provider.factory)
-            else:
-                assert recovered.execute(Path("unused"), max_units=1, tranche_ceiling_krw=450000,
-                    provider_factory=provider.factory).provider_calls_issued == 50
+            assert recovered.execute(Path("unused"), max_units=1, tranche_ceiling_krw=450000,
+                provider_factory=provider.factory).provider_calls_issued == 50
             assert (provider.constructors, len(provider.requests)) == (0, 0)
         finally:
             recovered.close()
