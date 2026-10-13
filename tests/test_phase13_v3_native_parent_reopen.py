@@ -16,6 +16,10 @@ from openai import OpenAI, AsyncOpenAI
 
 from memcontam.clients.base import LLMResponse
 from memcontam.evaluation.phase13_observability_models import Phase13TrialEvidence
+from memcontam.evaluation.phase13_observability_registration import ObservabilityRegistrationPacket
+from memcontam.evaluation.phase13_seed_response import (
+    SeedResponseError, extract_seed_response, producer_joined_parent,
+)
 from memcontam.experiment.phase12.runtime_registry import PHASE13_CORE_BASELINE_REGISTRY
 from memcontam.readiness.phase13_main_checkpoint import CommonCheckpointRegistry
 from memcontam.readiness.phase13_main_live_evidence import MemoryUnitEvidence
@@ -24,6 +28,7 @@ from memcontam.readiness.phase13_main_live_runtime_support import production_ide
 from memcontam.readiness.phase13_main_production import ProductionObject, UnitKind
 from memcontam.readiness.phase13_production_observability import ProductionObservabilityArchive
 from memcontam.readiness.phase13_main_resource_contract import RESOURCE_PATHS
+from memcontam.readiness.phase13_production_runtime_join import production_archive_from_completed_prefix
 from memcontam.readiness.phase13_main_terminal_partial import TerminalPartialParent, validate_terminal_partial
 from memcontam.readiness.phase13_main_v3_runner import DurableParentRecordV3, V3MainRun
 from memcontam.readiness.phase13_v3_entrypoint import SelectedExecutionV3, SelectionRequest, select_execution
@@ -117,6 +122,16 @@ def test_terminal_ordinary_preserves_only_real_trials_and_reopens(
     seal_fixture_closure(tmp_path)
     request = SelectionRequest(tmp_path, tmp_path / "package.json", tmp_path / "authorization.json",
         AUTHORITY, tmp_path / "authorization.sha256", corrective_identity().run_id)
+    from memcontam.readiness import phase13_main_live_runtime
+    actual_execute = phase13_main_live_runtime.execute_prospective_ordinary
+    captured = []
+
+    def capture_ordinary(ordinary_run):
+        result = actual_execute(ordinary_run)
+        captured.append((ordinary_run, result))
+        return result
+
+    monkeypatch.setattr(phase13_main_live_runtime, "execute_prospective_ordinary", capture_ordinary)
     calls: list[int] = []
     if failure == "pre_result":
         entry = PHASE13_CORE_BASELINE_REGISTRY["nomem"]
@@ -250,6 +265,45 @@ def test_terminal_ordinary_preserves_only_real_trials_and_reopens(
     try:
         assert reopened.status().completed_count == 0
         assert reopened.status().terminal_technical_missing_count == 1
+        if failure in {"provider", "zero_prefix", "late_provider"}:
+            assert len(captured) == 1
+            ordinary_run, result = captured[0]
+            assert ordinary_run.production_identity is not None
+            identity = ordinary_run.production_identity
+            partial = TerminalPartialParent.model_validate_json(raw)
+            prefix = replace(result, trials=result.trials[:len(partial.archive.records)])
+            archive = production_archive_from_completed_prefix(ordinary_run, prefix, identity)
+            parent = producer_joined_parent(ordinary_run, prefix, identity, archive)
+            packet = ObservabilityRegistrationPacket.model_validate_json(
+                (REPAIR_ROOT / RESOURCE_PATHS["observability_packet"]).read_bytes())
+            response = extract_seed_response(archive, packet, identity.registration_packet_sha256,
+                ordinary_run.tasks, parent, run=ordinary_run, result=prefix, identity=identity,
+                terminal_ledger=reopened.ledger, terminal_key=partial.terminal_key)
+            assert response.status == "terminal_technical_missing"
+            assert response.observed_count == len(partial.archive.records)
+            assert response.event_times == tuple(range(response.observed_count))
+            assert response.exact_mean is None
+            original_read = reopened.ledger.read_record
+            with monkeypatch.context() as tamper:
+                tamper.setattr(type(reopened.ledger), "read_record", lambda _ledger, name: (
+                    b"tampered" if name == f"{partial.terminal_key.dispatch_id}.observation.json"
+                    else original_read(name)))
+                with pytest.raises(SeedResponseError, match="TERMINAL_LEDGER_EVIDENCE_REQUIRED"):
+                    extract_seed_response(archive, packet, identity.registration_packet_sha256,
+                        ordinary_run.tasks, parent, run=ordinary_run, result=prefix, identity=identity,
+                        terminal_ledger=reopened.ledger, terminal_key=partial.terminal_key)
+            with pytest.raises(SeedResponseError, match="TERMINAL_LEDGER_EVIDENCE_REQUIRED"):
+                extract_seed_response(archive, packet, identity.registration_packet_sha256,
+                    ordinary_run.tasks, parent, run=ordinary_run, result=prefix, identity=identity,
+                    terminal_ledger=reopened.ledger, terminal_key=RequestKeyV3(
+                        parent_id=unit.unit_id, stage="no_memory_generate",
+                        ordinal=partial.terminal_key.ordinal + 1))
+            if failure == "late_provider":
+                with pytest.raises(SeedResponseError, match="TERMINAL_LEDGER_EVIDENCE_REQUIRED"):
+                    extract_seed_response(archive, packet, identity.registration_packet_sha256,
+                        ordinary_run.tasks, parent, run=ordinary_run, result=prefix, identity=identity,
+                        terminal_ledger=reopened.ledger, terminal_key=RequestKeyV3(
+                            parent_id=unit.unit_id, stage="no_memory_generate", ordinal=1))
         if failure == "provider":
             terminal_key = RequestKeyV3(parent_id=unit.unit_id, stage="no_memory_generate", ordinal=1)
             reopened.ledger.reconcile_cost(terminal_key.dispatch_id,
