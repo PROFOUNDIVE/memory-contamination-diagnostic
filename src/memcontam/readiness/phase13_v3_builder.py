@@ -20,8 +20,17 @@ from .phase13_v3_publication import ArtifactError, P4_PATHS, P5_PATHS, P6_PATHS,
 from .phase13_v3_resource_files import read_files
 from .phase13_v3_runtime_identity import freeze_runtime_identity, validate_runtime_identity
 from .phase13_v3_source_closure import freeze_governed, validate_governed
+from .phase13_structural_qualification import generate_native_qualification, qualification_subject
 
 Stage = Literal["mr-p4", "mr-p5", "mr-p6"]
+
+
+def _structural_conformance(manifest: MRP4Manifest, conformance: ConformanceV3,
+                            repository: Path) -> ConformanceV3:
+    subject = qualification_subject(manifest.authority, manifest.governed_source,
+        manifest.runtime_identity, manifest.resources)
+    qualified = conformance.model_copy(update={"structural": generate_native_qualification(subject, resource_root=repository)})
+    return qualified.model_copy(update={"conformance_hash": digest(qualified, "conformance_hash")})
 
 
 def _phase4_artifacts(manifest: MRP4Manifest, conformance: ConformanceV3) -> tuple[tuple[str, bytes], ...]:
@@ -39,7 +48,8 @@ def build_mr_p4(repository: Path, authority_root: Path, output: Path, *, governe
         governed_source=freeze_governed(repository, governed_source_commit), runtime_identity=freeze_runtime_identity(),
         count_pricing=count_pricing,
         first_freeze=first_freeze(repository), resources=tuple(row.binding for row in read_files(repository, STATIC_PATHS)), artifacts=())
-    artifacts = _phase4_artifacts(manifest, evaluate_conformance(repository, authority_root, identity))
+    artifacts = _phase4_artifacts(manifest, _structural_conformance(manifest,
+        evaluate_conformance(repository, authority_root, identity), repository))
     publish_artifacts(output, artifacts)
     return parse_artifact(artifacts[-1][1], MRP4Manifest)
 
@@ -56,7 +66,7 @@ def validate_mr_p4(repository: Path, authority_root: Path, output: Path) -> MRP4
         raise ArtifactError("MAIN_ARTIFACT_BINDING_MISMATCH")
     if manifest.identity != manifest.authority.identity:
         raise ArtifactError("MAIN_ARTIFACT_BINDING_MISMATCH")
-    conformance = evaluate_conformance(repository, authority_root, manifest.identity)
+    conformance = _structural_conformance(manifest, evaluate_conformance(repository, authority_root, manifest.identity), repository)
     actual = parse_artifact(artifact_raw(output, P4_PATHS[-2]), ConformanceV3)
     if actual != conformance:
         raise ArtifactError("MAIN_PROVIDER_FREE_CONFORMANCE_FAILED")

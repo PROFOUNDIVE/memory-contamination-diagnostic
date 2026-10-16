@@ -14,10 +14,9 @@ import pytest
 
 from .phase13_corrective_identity import corrective_identity
 from .phase13_count_fake import fake_count_pricing
-from .test_phase13_v3_entrypoint_fixture import REPAIR_ROOT, RESOURCE_ROOT
+from .test_phase13_v3_entrypoint_fixture import REPAIR_ROOT, RESOURCE_ROOT, AUTHORITY
 
 ROOT = Path(__file__).resolve().parents[1]
-AUTHORITY = Path("/home/hyunwoo/gdrive_undergrad_research/PeerJ fast-track/References/Theoretical Artifacts")
 
 
 def synthetic_pricing(root: Path, authority: Path, identity=None):
@@ -53,13 +52,14 @@ def builder_source(tmp_path_factory):
     from memcontam.readiness.phase13_v3_builder_inputs import STATIC_PATHS
     from memcontam.readiness.phase13_v3_resource_files import read_files
     root = tmp_path_factory.mktemp("builder-source")
-    subprocess.run(("git", "clone", "--local", "--quiet", str(ROOT), str(root)), check=True,
+    subprocess.run(("git", "clone", "--local", "--no-hardlinks", "--quiet", str(ROOT), str(root)), check=True,
                    env={**os.environ, "GIT_MASTER": "1"})
     shutil.copytree(ROOT / "src", root / "src", dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"))
     for name in ("build_phase13_corrected_main_closure.py", "diagnose_phase13_mr_p5_closure.py", "build_phase13_main_registries.py"):
         shutil.copyfile(ROOT / "scripts" / name, root / "scripts" / name)
     for name in ("artifact_builder", "mr_p4", "mr_p5", "mr_p6"):
         shutil.copyfile(ROOT / f"tests/test_phase13_v3_{name}.py", root / f"tests/test_phase13_v3_{name}.py")
+    shutil.copyfile(ROOT / "tests/test_phase13_structural_qualification.py", root / "tests/test_phase13_structural_qualification.py")
     repair_paths = (
         "data/phase13/observability/registration_packet_v2.json",
         "data/phase13/main/track1_authority_state_sync_checkpoint_v1.json",

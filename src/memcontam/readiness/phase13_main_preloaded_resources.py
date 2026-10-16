@@ -116,7 +116,7 @@ class PreloadedMainResources:
     def ordinary(self, client: LLMClient) -> ValidatedOrdinaryResources:
         raw = self.selected.resource("common_checkpoint_registry")
         return ValidatedOrdinaryResources(client, 8192, raw, self.selected.resource_binding("common_checkpoint_registry").sha256, self.selected.costs,
-            client if isinstance(client, MainRequestClientV3) else None)
+            client if isinstance(client, MainRequestClientV3) else None, self.selected)
 
     def legacy_bundles(self, task: str) -> tuple[CorpusBundle, IndexBundle]:
         return (

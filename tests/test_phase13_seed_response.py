@@ -35,6 +35,7 @@ from memcontam.readiness.phase13_main_request_dispatch import DispatchTechnicalF
 from memcontam.readiness.phase13_production_runtime_models import ProductionOrdinaryRunIdentity
 from memcontam.tasks.base import TaskInstance
 from memcontam.verifiers.game24 import verify_expression
+from .test_phase13_native_production_archive import NativeResponses, NoveltyEmbedder
 
 
 class Answers:
@@ -47,6 +48,26 @@ class Answers:
         answer = "6/(1-3/4)" if self.calls <= self.early_correct or self.calls == 50 else "1+3+4+6"
         return LLMResponse(f"final: {answer}", {"replay": True, "attempts": 1},
                            {"prompt_tokens": 1, "completion_tokens": 1}, 0)
+
+
+class LateFailureAnswers(Answers):
+    def chat(self, messages, model, config):
+        if self.calls == 3:
+            raise ValueError("synthetic later resource failure")
+        return super().chat(messages, model, config)
+
+
+class ReachableBotResponses(NativeResponses):
+    def chat(self, messages, model, config):
+        response = super().chat(messages, model, config)
+        if config["method_stage"] != "bot_instantiate_solve":
+            return response
+        payload = json.loads(response.content)
+        payload["selected_structure"] = (
+            "retrieved-template" if "Set selected_structure to retrieved-template" in messages[-1]["content"]
+            else "procedure-based"
+        )
+        return LLMResponse(json.dumps(payload), response.raw, response.token_usage, response.latency_ms)
 
 
 def _producer(early_correct, monkeypatch):
@@ -185,32 +206,168 @@ def test_native_structural_certificate_rebuilds_branches_and_binds_extraction(mo
             separators=(",", ":")).encode()).hexdigest(),
         registration_packet_sha256=packet_sha, source_package_manifest_sha256="a" * 64,
         scientific_result=False)
-    inputs = StructuralSupportInputs(prefix, context, candidates, run, identity)
+    fixture_bytes = tuple(task.model_dump_json().encode() for task in tasks)
+    inputs = StructuralSupportInputs(prefix, context, candidates, run, identity, fixture_bytes)
     proof = certify_structural_support(inputs)
-    assert proof.supported and len(proof.branch_checkpoint_sha256) == 4
+    assert proof.supported and len(proof.branch_checkpoint_sha256) == 4, proof.unsupported_reason
+    assert len(proof.conformance_trace) == 200
+    assert all(proof.conformance_trace[i][5] == proof.conformance_trace[i + 1][4]
+               for i in range(49))
+    assert client.calls == 0
+    from memcontam.evaluation.phase13_seed_response import validate_structural_support
+    validate_structural_support(proof, inputs)
+    assert client.calls == 0
+    from memcontam.evaluation.phase13_seed_response import (
+        StructuralSupportValidationContext, validate_qualified_structural_support,
+    )
+    qualified_bytes = proof.model_dump_json().encode()
+    expected_branches = tuple(branches.arms[arm].checkpoint.canonical_sha256
+                              for arm in ("clean", "correct", "irrelevant", "contam"))
+    expected_fixture = hashlib.sha256(json.dumps({
+        "task_bytes_sha256": [hashlib.sha256(raw).hexdigest() for raw in fixture_bytes],
+        "capacity": 8192, "config": run.baseline_configs, "model": "gpt-5.6-luna",
+        "decoding": {"temperature": 0.0}, "run_id": "structural",
+        "arm_checkpoints": expected_branches,
+    }, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    validation_context = StructuralSupportValidationContext(
+        qualified_evidence_bytes=qualified_bytes,
+        qualified_evidence_sha256=hashlib.sha256(qualified_bytes).hexdigest(),
+        identity=identity, package_sha256=None, prefix=prefix,
+        fixture_contract_sha256=expected_fixture,
+        branch_checkpoint_sha256=(expected_branches[0], expected_branches[1],
+                                  expected_branches[2], expected_branches[3]),
+        candidate_registry_sha256=hashlib.sha256(
+            Path("data/phase12/registries/candidate_registry_v2.json").read_bytes()).hexdigest())
+    class ForbiddenClient:
+        def chat(self, *_args, **_kwargs):
+            pytest.fail("data-only validation called the execution client")
+
+        def __deepcopy__(self, _memo):
+            pytest.fail("data-only validation copied the execution client")
+
+    with monkeypatch.context() as no_execution:
+        no_execution.setattr("memcontam.evaluation.phase13_seed_response.execute_prospective_ordinary",
+                             lambda *_args: pytest.fail("data-only validation executed qualification"))
+        no_execution.setattr(client, "chat", ForbiddenClient().chat)
+        no_execution.setattr(Answers, "__deepcopy__", ForbiddenClient.__deepcopy__, raising=False)
+        validate_structural_support(proof, validation_context)
+        with pytest.raises(SeedResponseError, match="STRUCTURAL_QUALIFICATION_ORIGIN_REQUIRED"):
+            validate_qualified_structural_support(proof, replace(validation_context,
+                identity=identity.model_copy(update={"scientific_result": True})))
+        package_forgery = proof.model_copy(update={"package_sha256": "f" * 64})
+        package_forgery = package_forgery.model_copy(update={
+            "evidence_sha256": hashlib.sha256(json.dumps(
+                package_forgery.model_dump(mode="json", exclude={"evidence_sha256"}),
+                sort_keys=True, separators=(",", ":")).encode()).hexdigest()})
+        package_bytes = package_forgery.model_dump_json().encode()
+        with pytest.raises(SeedResponseError, match="STRUCTURAL_QUALIFICATION_ORIGIN_REQUIRED"):
+            validate_qualified_structural_support(package_forgery, replace(validation_context,
+                package_sha256="f" * 64, qualified_evidence_bytes=package_bytes,
+                qualified_evidence_sha256=hashlib.sha256(package_bytes).hexdigest()))
+        for field in ("fixture_contract_sha256", "candidate_registry_sha256", "package_sha256"):
+            with pytest.raises(SeedResponseError, match="STRUCTURAL_QUALIFIED_CONTEXT_MISMATCH"):
+                validate_qualified_structural_support(proof, replace(validation_context, **{field: "f" * 64}))
+        with pytest.raises(SeedResponseError, match="STRUCTURAL_QUALIFICATION_BINDING_MISMATCH"):
+            validate_qualified_structural_support(proof, replace(validation_context,
+                qualified_evidence_bytes=qualified_bytes + b" "))
+        with pytest.raises(SeedResponseError, match="STRUCTURAL_QUALIFIED_CONTEXT_MISMATCH"):
+            validate_qualified_structural_support(proof.model_copy(update={"supported": False}), validation_context)
+        for changes in ({"supported": False}, {"conformance_trace": ()},
+                        {"suffix_contract_sha256": "f" * 64}):
+            forged_qualification = proof.model_copy(update=changes)
+            forged_qualification = forged_qualification.model_copy(update={
+                "evidence_sha256": hashlib.sha256(json.dumps(
+                    forged_qualification.model_dump(mode="json", exclude={"evidence_sha256"}),
+                    sort_keys=True, separators=(",", ":")).encode()).hexdigest()})
+            forged_bytes = forged_qualification.model_dump_json().encode()
+            with pytest.raises(SeedResponseError, match="STRUCTURAL_QUALIFIED_TRACE_MISMATCH"):
+                validate_qualified_structural_support(forged_qualification, replace(validation_context,
+                    qualified_evidence_bytes=forged_bytes,
+                    qualified_evidence_sha256=hashlib.sha256(forged_bytes).hexdigest()))
+    with pytest.raises(SeedResponseError, match="STRUCTURAL_INPUT_BINDING_MISMATCH"):
+        certify_structural_support(replace(inputs, fixture_task_bytes=()))
+    altered_tasks = (tasks[0].model_copy(update={"input": {"numbers": [2, 3, 4, 6], "target": 24}}), *tasks[1:])
+    with pytest.raises(SeedResponseError, match="STRUCTURAL_INPUT_BINDING_MISMATCH"):
+        certify_structural_support(replace(inputs, run=replace(run, tasks=altered_tasks)))
+    broken_trace = proof.model_copy(update={"conformance_trace":
+        proof.conformance_trace[:1] + (proof.conformance_trace[1][:4] +
+        ("0" * 64, proof.conformance_trace[1][5]),) + proof.conformance_trace[2:]})
+    with pytest.raises(SeedResponseError, match="STRUCTURAL_TRACE_CHAIN_MISMATCH"):
+        validate_structural_support(broken_trace, inputs)
+    forged_rows = list(proof.conformance_trace)
+    changed = "f" * 64
+    forged_rows[0] = (*forged_rows[0][:5], changed)
+    forged_rows[1] = (*forged_rows[1][:4], changed, forged_rows[1][5])
+    forged = proof.model_copy(update={"conformance_trace": tuple(forged_rows),
+        "suffix_contract_sha256": hashlib.sha256(json.dumps(forged_rows,
+            separators=(",", ":")).encode()).hexdigest()})
+    forged = forged.model_copy(update={"evidence_sha256": hashlib.sha256(json.dumps(
+        forged.model_dump(mode="json", exclude={"evidence_sha256"}),
+        sort_keys=True, separators=(",", ":")).encode()).hexdigest()})
+    with pytest.raises(SeedResponseError, match="STRUCTURAL_FROZEN_REPLAY_MISMATCH"):
+        validate_structural_support(forged, inputs)
+    unbound = proof.model_copy(update={"replay_witness": ()})
+    unbound = unbound.model_copy(update={"evidence_sha256": hashlib.sha256(json.dumps(
+        unbound.model_dump(mode="json", exclude={"evidence_sha256"}),
+        sort_keys=True, separators=(",", ":")).encode()).hexdigest()})
+    with pytest.raises(SeedResponseError, match="STRUCTURAL_FROZEN_REPLAY_UNBOUND"):
+        validate_structural_support(unbound, inputs)
+    assert client.calls == 0
+    late_tasks = (*tasks[:3], tasks[3].model_copy(update={"input": {"target": 24}}), *tasks[4:])
+    late_run = replace(run, tasks=late_tasks)
+    with pytest.raises(SeedResponseError, match="STRUCTURAL_INPUT_OR_STATE_UNAVAILABLE"):
+        certify_structural_support(replace(inputs, run=late_run,
+            fixture_task_bytes=tuple(task.model_dump_json().encode() for task in late_tasks)))
+    with pytest.raises(SeedResponseError, match="STRUCTURAL_(CLIENT|TRIAL)_FAILURE_UNAVAILABLE"):
+        certify_structural_support(replace(inputs, run=replace(run, client=LateFailureAnswers(2))))
+    fake_failure = proof.model_copy(update={
+        "supported": False,
+        "unsupported_reason": "clean:4:FullHistoryContractError:FALSE_EXACT_LABEL",
+        "conformance_trace": proof.conformance_trace[:3],
+        "suffix_contract_sha256": hashlib.sha256(json.dumps(
+            proof.conformance_trace[:3], separators=(",", ":")).encode()).hexdigest(),
+        "replay_witness": proof.replay_witness[:3],
+    })
+    fake_failure = fake_failure.model_copy(update={"evidence_sha256": hashlib.sha256(json.dumps(
+        fake_failure.model_dump(mode="json", exclude={"evidence_sha256"}),
+        sort_keys=True, separators=(",", ":")).encode()).hexdigest()})
+    with pytest.raises(SeedResponseError, match="STRUCTURAL_(FAILURE|TRIAL_FAILURE)_UNAVAILABLE"):
+        validate_structural_support(fake_failure, inputs)
+    completed_failure = proof.model_copy(update={
+        "supported": False,
+        "unsupported_reason": "contam:50:FullHistoryContractError:FALSE_EXACT_LABEL",
+    })
+    completed_failure = completed_failure.model_copy(update={"evidence_sha256": hashlib.sha256(json.dumps(
+        completed_failure.model_dump(mode="json", exclude={"evidence_sha256"}),
+        sort_keys=True, separators=(",", ":")).encode()).hexdigest()})
+    with pytest.raises(SeedResponseError, match="STRUCTURAL_FAILURE_SLOT_MISMATCH"):
+        validate_structural_support(completed_failure, inputs)
+    missing_witness = fake_failure.model_copy(update={"replay_witness": ()})
+    missing_witness = missing_witness.model_copy(update={"evidence_sha256": hashlib.sha256(json.dumps(
+        missing_witness.model_dump(mode="json", exclude={"evidence_sha256"}),
+        sort_keys=True, separators=(",", ":")).encode()).hexdigest()})
+    with pytest.raises(SeedResponseError, match="STRUCTURAL_FROZEN_REPLAY_UNBOUND"):
+        validate_structural_support(missing_witness, inputs)
     broken_tasks = (*tasks[:49], tasks[49].model_copy(update={"input": {"target": 24}}))
     broken_run = replace(run, tasks=broken_tasks)
     broken_identity = identity.model_copy(update={"ordered_sample_ids_sha256":
         hashlib.sha256(json.dumps([t.sample_id for t in broken_tasks],
             separators=(",", ":")).encode()).hexdigest()})
-    broken_inputs = StructuralSupportInputs(prefix, context, candidates, broken_run, broken_identity)
-    broken_proof = certify_structural_support(broken_inputs)
-    assert broken_proof.supported is False and broken_proof.unsupported_reason == "clean:50:KeyError"
-    assert broken_proof.suffix_contract_sha256 != proof.suffix_contract_sha256
-    from memcontam.evaluation.phase13_seed_response import validate_structural_support
-    validate_structural_support(broken_proof, broken_inputs)
+    broken_inputs = StructuralSupportInputs(prefix, context, candidates, broken_run, broken_identity,
+        tuple(task.model_dump_json().encode() for task in broken_tasks))
+    with pytest.raises(SeedResponseError, match="STRUCTURAL_INPUT_OR_STATE_UNAVAILABLE"):
+        certify_structural_support(broken_inputs)
     false_rows = tuple(AttemptedSeed(task="game24", baseline="fh_bounded", arm=arm,
         trajectory_seed=seed, concrete_seed_id=str(seed), status="unattempted",
         reason="PROSPECTIVE_SEED_NOT_YET_ATTEMPTED",
         structural_support=False if seed == 0 else None,
-        structural_support_evidence_sha256=broken_proof.evidence_sha256 if seed == 0 else None,
-        structural_support_evidence=broken_proof if seed == 0 else None)
+        structural_support_evidence_sha256=fake_failure.evidence_sha256 if seed == 0 else None,
+        structural_support_evidence=fake_failure if seed == 0 else None)
         for seed in range(10) for arm in ("clean", "correct", "irrelevant", "contam"))
-    assert assemble_seed_response_table(false_rows, support_inputs={0: broken_inputs}).rows[0].structural_support is False
     with pytest.raises(SeedResponseError, match="ATTEMPTED_SEED_BLOCK_MISMATCH"):
         assemble_seed_response_table(false_rows, support_inputs={0: inputs})
     with pytest.raises(SeedResponseError, match="STRUCTURAL_CERTIFICATE_MISMATCH"):
-        validate_structural_support(broken_proof.model_copy(update={"supported": True}), broken_inputs)
+        validate_structural_support(fake_failure.model_copy(update={"supported": True}), inputs)
     with pytest.raises(SeedResponseError, match="STRUCTURAL_CERTIFICATE_MISMATCH"):
         validate_structural_support(proof.model_copy(update={"checkpoint_sha256": "f" * 64}), inputs)
     with pytest.raises(SeedResponseError, match="UNREGISTERED_OR_MISMATCHED_LEVEL2_PAIR"):
@@ -224,13 +381,23 @@ def test_native_structural_certificate_rebuilds_branches_and_binds_extraction(mo
                                        identities=context.identities)
     bot_branches = build_live_reduced_main_branches(prefix=bot_prefix, context=bot_context,
         candidate_registry=candidates, registry=PHASE13_CORE_BASELINE_REGISTRY, renderers=renderers)
-    bot_run = replace(run, baseline="bot_style", branch=bot_branches.arms["clean"])
+    bot_run = replace(run, baseline="bot_style", branch=bot_branches.arms["clean"],
+                      client=ReachableBotResponses(), embedding_provider=NoveltyEmbedder())
     bot_identity = identity.model_copy(update={"execution_template_id": "game24:bot_style:clean"})
-    bot_inputs = StructuralSupportInputs(bot_prefix, bot_context, candidates, bot_run, bot_identity)
+    bot_inputs = StructuralSupportInputs(bot_prefix, bot_context, candidates, bot_run, bot_identity, fixture_bytes)
     bot_proof = certify_structural_support(bot_inputs)
-    assert registered_pair_support(proof, bot_proof, inputs, bot_inputs)
+    assert bot_proof.supported, bot_proof.unsupported_reason
+    validate_structural_support(bot_proof, bot_inputs)
+    assert registered_pair_support(proof, bot_proof, inputs, bot_inputs) is True
     with pytest.raises(SeedResponseError, match="UNREGISTERED_OR_MISMATCHED_LEVEL2_PAIR"):
         registered_pair_support(bot_proof, proof, bot_inputs, inputs)
+    with pytest.raises(SeedResponseError, match="STRUCTURAL_FAILURE_SLOT_MISMATCH"):
+        validate_structural_support(bot_proof.model_copy(update={"unsupported_reason":
+            "correct:3:SeedResponseError"}), bot_inputs)
+    with pytest.raises(SeedResponseError, match="STRUCTURAL_CERTIFICATE_MISMATCH"):
+        validate_structural_support(proof.model_copy(update={"handler_contract_sha256": "f" * 64}), inputs)
+    with pytest.raises(SeedResponseError, match="STRUCTURAL_CERTIFICATE_MISMATCH"):
+        validate_structural_support(proof.model_copy(update={"fixture_contract_sha256": "f" * 64}), inputs)
     result = execute_prospective_ordinary(run)
     archive = production_archive_from_ordinary(run, result, identity)
     path = tmp_path / "archive.json"
@@ -243,6 +410,17 @@ def test_native_structural_certificate_rebuilds_branches_and_binds_extraction(mo
                                      run=run, result=result, identity=identity,
                                      structural_support_inputs=inputs)
     assert response.observed_count == 50 and response.parent.structural_support is True
+    with monkeypatch.context() as no_execution:
+        no_execution.setattr("memcontam.evaluation.phase13_seed_response.execute_prospective_ordinary",
+                             lambda *_args: pytest.fail("parent validation executed qualification"))
+        no_execution.setattr(Answers, "__deepcopy__", ForbiddenClient.__deepcopy__, raising=False)
+        client_free_run = replace(run, client=ForbiddenClient())
+        client_free_parent = producer_joined_parent(client_free_run, result, identity, reopened,
+            structural_support_evidence=proof, structural_support_inputs=validation_context)
+        assert client_free_parent == parent
+        assert extract_seed_response(reopened, packet, packet_sha, tasks, parent,
+            run=client_free_run, result=result, identity=identity,
+            structural_support_inputs=validation_context) == response
     with pytest.raises(SeedResponseError, match="STRUCTURAL_INPUTS_REQUIRED"):
         extract_seed_response(reopened, packet, packet_sha, tasks, parent,
                               run=run, result=result, identity=identity)
@@ -258,3 +436,39 @@ def test_native_structural_certificate_rebuilds_branches_and_binds_extraction(mo
     assert len(assemble_seed_response_table(rows, support_inputs={0: inputs}).rows) == 40
     with pytest.raises(SeedResponseError, match="ATTEMPTED_SEED_BLOCK_MISMATCH"):
         assemble_seed_response_table(rows)
+
+
+def test_native_transition_properties_reject_mutable_store_pruning_and_nonfifo():
+    from memcontam.evaluation.phase13_seed_response import _validate_native_transition
+    from memcontam.memory.checkpoint_v3 import NativeEntry
+
+    def entry(name):
+        return NativeEntry(name, "verbal_reflection", "native_entry_v1", "reflections",
+                           name, hashlib.sha256(name.encode()).hexdigest())
+
+    old = (entry("a"), entry("b"))
+    new = entry("c")
+    rag = NativeState("rag_frozen", old, {"read_only": True})
+    _validate_native_transition(rag, rag, ("rag_generate",))
+    with pytest.raises(SeedResponseError, match="RAG_IMMUTABILITY"):
+        _validate_native_transition(rag, replace(rag, entries=(*old, new)), ("rag_generate",))
+    bot = NativeState("bot_style", old, {"active_capacity": None})
+    _validate_native_transition(bot, replace(bot, entries=(*old, new)), ())
+    _validate_native_transition(bot, bot, ())
+    with pytest.raises(SeedResponseError, match="BOT_INSERTION"):
+        _validate_native_transition(bot, replace(bot, entries=(old[1], new)), ())
+    fh = NativeState("fh_bounded", old, {})
+    _validate_native_transition(fh, replace(fh, entries=(old[1], new)), ())
+    with pytest.raises(SeedResponseError, match="FH_FIFO"):
+        _validate_native_transition(fh, replace(fh, entries=(old[0], new)), ())
+    reflexion = NativeState("reflexion_style", old, {})
+    _validate_native_transition(reflexion, reflexion, ("reflexion_generate",))
+    _validate_native_transition(reflexion, replace(reflexion, entries=(old[1], new)),
+                                ("reflexion_generate", "reflexion_reflect"))
+    with pytest.raises(SeedResponseError, match="REFLEXION_SUCCESS_WRITE"):
+        _validate_native_transition(reflexion, replace(reflexion, entries=(*old, new)),
+                                    ("reflexion_generate",))
+    dc = NativeState("dc_rs", (), {"archive": ["old"]})
+    _validate_native_transition(dc, replace(dc, native_state={"archive": ["old", "new"]}), ())
+    with pytest.raises(SeedResponseError, match="DC_ARCHIVE_APPEND"):
+        _validate_native_transition(dc, replace(dc, native_state={"archive": ["new"]}), ())

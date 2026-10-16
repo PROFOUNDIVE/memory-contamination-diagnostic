@@ -280,6 +280,7 @@ def test_production_prefix_binds_baseline_specific_arm_free_condition(
         checkpoint_registry_sha256="3" * 64,
     )
     runtime = ProductionMainRuntime.__new__(ProductionMainRuntime)
+    runtime._scientific_result = False
     runtime._root = ROOT
     runtime._resources = None
     monkeypatch.setattr(runtime, "_client", ReplayClient(), raising=False)

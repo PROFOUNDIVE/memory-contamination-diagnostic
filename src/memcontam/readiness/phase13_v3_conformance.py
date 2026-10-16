@@ -28,9 +28,11 @@ from .phase13_v3_authority_models import FrozenModel, ROUTED_DOCUMENTS, V3Identi
 from .phase13_v3_cost_models import digest
 from .phase13_v3_publication import ArtifactError
 from .phase13_v3_resource_files import FileBinding, read_files
+from .phase13_structural_qualification import NativeQualification
 
 TASKS: Final = ("game24", "math_equation_balancer", "word_sorting", "mmlu_pro_engineering", "mmlu_pro_physics")
-TEST_PATHS: Final = tuple(f"tests/test_phase13_v3_{name}.py" for name in ("artifact_builder", "mr_p4", "mr_p5", "mr_p6"))
+TEST_PATHS: Final = (*tuple(f"tests/test_phase13_v3_{name}.py" for name in ("artifact_builder", "mr_p4", "mr_p5", "mr_p6")),
+                     "tests/test_phase13_structural_qualification.py")
 
 
 class Predicate(FrozenModel):
@@ -48,6 +50,7 @@ class ConformanceV3(FrozenModel):
     measured_trajectories: int = 0
     real_provider_calls: int = 0
     conformance_hash: Sha256 = "0" * 64
+    structural: NativeQualification | None = None
 
 
 class CaptureClient:

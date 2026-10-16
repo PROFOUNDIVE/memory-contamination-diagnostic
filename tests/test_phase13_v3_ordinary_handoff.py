@@ -1,5 +1,6 @@
 from __future__ import annotations
 from .phase13_corrective_identity import corrective_identity
+from .phase13_count_fake import fake_count_pricing
 
 import hashlib
 import json
@@ -47,7 +48,7 @@ def costs():
         name: "a" * 64 for name in PrefreezeBindings.model_fields
     }), (CostUnit(unit_id="a" * 64, stages=(StageOccurrences(
         stage_id="NoMem_generation", calls=50,
-    ),)),))
+    ),)),), count_pricing=fake_count_pricing(50))
     bound = bind_package_costs(CostBoundPackageV3(package_id=authority.identity.package_id, final_order=FinalOrder(
         unit_ids=("a" * 64,), runtime_hash="b" * 64, request_hash="c" * 64, tokenizer_hash="d" * 64,
     )), MRP4Costs(policy=base.policy, base=base, witness=build_witness(base)))

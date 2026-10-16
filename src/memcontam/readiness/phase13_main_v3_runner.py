@@ -44,12 +44,10 @@ from .phase13_main_terminal_partial import (
     TerminalPartialDispatch,
     TerminalPartialParent,
     validate_terminal_partial,
-    _archived_trial_identity_valid,
 )
 from .phase13_main_run_journal import ReconstructionFailureV3, RunJournalV3, RunPauseV3
 from .phase13_production_observability import (
     ProductionObservabilityError,
-    validate_production_archive,
 )
 from .phase13_v3_cost_actual import reconcile_actual
 from .phase13_v3_count import count_costs_krw
@@ -137,7 +135,7 @@ class V3MainRun:
                     raise EntrypointError("MAIN_AUTHORIZATION_BINDING_MISMATCH")
             RunJournalV3(ledger, selected.package.production).rows()
             run = cls(selected, private, ledger, lease, seed)
-            run.status()
+            run.status(require_reconciled=True)
             return replace(run, lease=lease.pop_all())
 
     def dispatcher(self, factory: Callable[[PackageBindingV3], CompiledProvider] = production_provider) -> ProductionRequestDispatcherV3:
@@ -154,8 +152,14 @@ class V3MainRun:
                 row.dispatch_id for row in self.selected.costs.resources.phase4.base.retry_reservations
             ))
 
-    def status(self) -> V3RunStatus:
+    def status(self, *, require_reconciled: bool = False) -> V3RunStatus:
         failed = self.dispatcher().terminal_parents
+        events = RunJournalV3(self.ledger, self.selected.package.production).rows()
+        reconstructed = {
+            reference.key.dispatch_id: event.parent_id
+            for event in events if isinstance(event, ReconstructionFailureV3)
+            for reference in event.completions
+        }
         with self.private.connect() as connection:
             parent_rows = tuple(connection.execute("SELECT * FROM parents"))
         receipts = self.private.parent_receipts({f"{unit_id}.parent.json" for unit_id, _, _ in parent_rows})
@@ -192,29 +196,28 @@ class V3MainRun:
                 identity_receipt = RequestIdentityReceiptV3.model_validate_json(
                     self.ledger.read_record(f"{dispatch_id}.identity.json")
                 )
-                if identity_receipt.key.parent_id not in published | failed:
+                if (require_reconciled and identity_receipt.key.parent_id not in published | failed
+                    and reconstructed.get(dispatch_id) != identity_receipt.key.parent_id):
                     raise EntrypointError("MAIN_RUN_IN_FLIGHT_RECONCILIATION_REQUIRED")
         attempts = sum(json.loads(raw)["kind"] == "ATTEMPT_STARTED" for raw in self.ledger.rows())
         completed = len(published - failed)
         pending = len(self.selected.package.production) - len(published | failed)
-        with self.private.connect() as connection:
-            journal_rows = tuple(connection.execute("SELECT raw FROM run_journal ORDER BY sequence"))
         session = "COMPLETED" if pending == 0 else "READY"
-        if journal_rows:
-            events = RunJournalV3(self.ledger, self.selected.package.production).rows()
-            if pending:
-                match events[-1]:
-                    case ReconstructionFailureV3():
-                        session = "RECONSTRUCTION_FAILED"
-                    case RunPauseV3():
-                        session = events[-1].kind
+        if events and pending:
+            match events[-1]:
+                case ReconstructionFailureV3():
+                    session = "RECONSTRUCTION_FAILED"
+                case RunPauseV3():
+                    session = events[-1].kind
         return V3RunStatus(session, completed, len(failed), pending, attempts)
 
     def execute(self, cache: Path, *, max_units: int | None, tranche_ceiling_krw: int,
                 provider_factory: Callable[[PackageBindingV3], CompiledProvider] = production_provider) -> V3RunStatus:
         self.selected.preflight(self.selected.repository_root)
         dispatcher = self.dispatcher(provider_factory)
-        self.status()
+        status = self.status(require_reconciled=True)
+        if status.session_state == "RECONSTRUCTION_FAILED":
+            raise EntrypointError("MAIN_RUN_IN_FLIGHT_RECONCILIATION_REQUIRED")
         dispatcher.recover()
         preceding = {unit.unit_id for unit in self.selected.package.production if unit.seed < self.seed}
         if preceding:
@@ -484,26 +487,37 @@ class V3MainRun:
                 for call in record.unit_evidence.provider_calls
                 if isinstance(call, MainMethodCall)
             )
+            if unit.kind != "CLEAN_PREFIX":
+                from .phase13_durable_call_join import validate_durable_parent_data
+                validate_durable_parent_data(self.selected, self.ledger, record, unit)
             if len(calls) != len(record.unit_evidence.provider_calls):
                 raise MainEvidenceValidationError("MAIN_UNIT_EVIDENCE_JOIN_INVALID")
-            validated, realized_cost = validate_dispatch_evidence(
-                unit,
-                DispatchEvidenceInput(
-                    record.unit_evidence.evidence.model_dump(mode="json"),
-                    calls,
-                    record.unit_evidence.realized_cost_krw,
-                    self.selected.costs.resources.phase4.policy,
-                    self._attempt_costs(calls),
-                    count_costs_krw(self.ledger, tuple(call.dispatch_id for call in calls)),
-                ),
-            )
+            if unit.kind == "CLEAN_PREFIX":
+                validated, realized_cost = validate_dispatch_evidence(
+                    unit,
+                    DispatchEvidenceInput(
+                        record.unit_evidence.evidence.model_dump(mode="json"), calls,
+                        record.unit_evidence.realized_cost_krw,
+                        self.selected.costs.resources.phase4.policy, self._attempt_costs(calls),
+                        count_costs_krw(self.ledger, tuple(call.dispatch_id for call in calls)),
+                    ),
+                )
+            else:
+                validated = record.unit_evidence.evidence
+                realized_cost = record.unit_evidence.realized_cost_krw
             archive = validated.runtime_evidence.production_observability_archive
             terminal_call_id = (
                 archive.records[-1].terminal_method_call.call_id
                 if archive is not None and archive.records and archive.records[-1].terminal_method_call is not None
                 else None
             )
-            self._validate_parent_calls(unit_id, calls, terminal_call_id=terminal_call_id)
+            if unit.kind == "CLEAN_PREFIX":
+                cost_unit = next(row for row in self.selected.costs.resources.phase4.base.units
+                                 if row.unit_id == unit_id)
+                from .phase13_v3_retry import schedule_unit
+                expected_keys = tuple(key for key, _ in schedule_unit(unit, cost_unit))[:len(calls)]
+                self._validate_parent_calls(unit_id, calls, terminal_call_id=terminal_call_id,
+                                            expected_keys=expected_keys)
             if self.private.read_record(f"{unit_id}.parent.json", receipt=receipt) != raw:
                 raise MainEvidenceValidationError("MAIN_UNIT_EVIDENCE_JOIN_INVALID")
             if isinstance(validated, PrefixUnitEvidence):
@@ -513,47 +527,6 @@ class V3MainRun:
                     raise MainEvidenceValidationError(
                         "MAIN_UNIT_EVIDENCE_JOIN_INVALID"
                     )
-                preloaded = PreloadedMainResources(self.selected)
-                validate_production_archive(
-                    archive,
-                    preloaded.packet,
-                    validated.runtime_evidence.production_identity.registration_packet_sha256,
-                    frozen_tasks=preloaded.tasks(unit.task),
-                )
-                seed_order = preloaded.checkpoint_registry.tasks[unit.task].seeds[unit.seed].suffix_sample_ids
-                archived_calls = tuple(call for row in archive.records for call in row.method_calls)
-                enriched_fields = {
-                    "dispatch_id", "provider_cost_usd", "authoritative_provider_cost_usd",
-                    "derived_cost_usd", "provider_cost_source", "provider_request_contract",
-                    "provider_authority_contract",
-                }
-                if (
-                    archive.schema_version != (
-                        "phase13_production_observability_archive_v2"
-                        if validated.runtime_evidence.production_identity.scientific_result
-                        else "phase13_production_observability_archive_v1"
-                    )
-                    or archive.u_t_status != "NOT_REGISTERED_FOR_CURRENT_MAIN"
-                    or len(archive.records) > len(seed_order)
-                    or (len(archive.records) != len(seed_order) and (
-                        not archive.records or archive.records[-1].evidence.trial.execution_status != "failed"
-                    ))
-                    or tuple(row.task_instance.sample_id for row in archive.records if row.task_instance is not None)
-                    != seed_order[:len(archive.records)]
-                    or not _archived_trial_identity_valid(archive.records, unit, seed_order,
-                                                          allow_terminal=True)
-                    or any(
-                        row.execution_template_id != unit.execution_template_id
-                        or row.run_id != f"main-a-{unit.prefix_unit_id or unit.unit_id}"
-                        or row.session_id != f"{row.evidence.trial_id}:session"
-                        or row.ordered_sample_ids_sha256 != unit.ordered_sample_ids_sha256
-                        or row.request != validated.runtime_evidence.request
-                        for row in archive.records
-                    )
-                    or tuple(call.model_dump(mode="json", exclude=enriched_fields) for call in archived_calls)
-                    != tuple(call.model_dump(mode="json", exclude=enriched_fields) for call in calls)
-                ):
-                    raise MainEvidenceValidationError("MAIN_UNIT_EVIDENCE_JOIN_INVALID")
                 if isinstance(validated, MemoryUnitEvidence):
                     prefix_id = validated.prefix_unit_id
                     with self.private.connect() as connection:
@@ -612,84 +585,18 @@ class V3MainRun:
                      for call in calls)
 
     def _validate_parent_calls(
-        self, parent_id: str, calls: tuple[MainMethodCall, ...], *, terminal_call_id: str | None = None
+        self, parent_id: str, calls: tuple[MainMethodCall, ...], *, terminal_call_id: str | None = None,
+        expected_keys: tuple[RequestKeyV3, ...] | None = None,
     ) -> None:
-        expected_binding = PackageBindingV3(
-            identity=self.selected.package.identity,
-            package_sha256=self.selected.package_sha256,
-            authorization_sha256=self.selected.authorization_sha256,
-        ).model_dump(mode="json")
-        for call in calls:
-            stage = _STAGE_ADAPTER.validate_python(call.stage, strict=True)
-            state = self.ledger.state(call.dispatch_id)
-            receipt = json.loads(
-                self.ledger.read_record(f"{call.dispatch_id}.compiled.json")
-            )
-            request_key = RequestKeyV3.model_validate(receipt["key"])
-            request_bytes = bytes.fromhex(receipt["request_hex"])
-            input_bytes = bytes.fromhex(receipt["input_hex"])
-            native_state = bytes.fromhex(receipt["native_state_hex"])
-            expected_input = json.dumps(
-                call.messages,
-                sort_keys=True,
-                separators=(",", ":"),
-                ensure_ascii=False,
-            ).encode()
-            terminal = state.kind == "ATTEMPTED_PROVIDER_FAILURE" and call.call_id == terminal_call_id
-            with self.ledger.connection() as connection:
-                event_row = connection.execute(
-                    "SELECT raw FROM events WHERE event_hash=?",
-                    (state.event_hash if terminal else state.completion_hash,),
-                ).fetchone()
-            completion = None if event_row is None else parse_event(event_row[0])
-            terminal_observation_valid = False
-            response_text = call.raw_response
-            if terminal and isinstance(completion, ProviderFailureV3) and response_text is not None:
-                observation = self.ledger.read_record(f"{call.dispatch_id}.observation.json")
-                terminal_observation_valid = (
-                    completion.failure_code == "MAIN_SEMANTIC_RESULT_UNAVAILABLE"
-                    and hashlib.sha256(observation).hexdigest() == completion.observation_hash
-                    and observation == json.dumps({
-                        "response_sha256": hashlib.sha256(response_text.encode()).hexdigest(),
-                        "semantic_success": False,
-                        "failure_code": completion.failure_code,
-                    },
-                                                   sort_keys=True).encode()
-                )
-            cost_evidence = state.attempted_cost
-            terminal_cost = None if cost_evidence is None else reconcile_actual(cost_evidence)
-            if (
-                (state.kind != "COMPLETED" and not terminal)
-                or state.compiled is None
-                or (not isinstance(completion, CompletedV3) and not terminal_observation_valid)
-                or terminal_cost is None
-                or call.provider_cost_usd != float(terminal_cost.selected_usd)
-                or call.provider_cost_source != terminal_cost.source
-                or call.authoritative_provider_cost_usd != (
-                    None if cost_evidence is None or cost_evidence.monetary_cost is None
-                    else float(cost_evidence.monetary_cost)
-                )
-                or call.derived_cost_usd != (
-                    None if terminal_cost.derived_usd is None else float(terminal_cost.derived_usd)
-                )
-                or call.raw_response is None
-                or (not terminal and call.raw_response is not None and isinstance(completion, CompletedV3)
-                    and hashlib.sha256(call.raw_response.encode()).hexdigest() != completion.result_hash)
-                or receipt.get("binding") != expected_binding
-                or request_key.parent_id != parent_id
-                or request_key.stage != stage
-                or request_key.dispatch_id != call.dispatch_id
-                or receipt.get("key") != request_key.model_dump(mode="json")
-                or receipt.get("compiled") != state.compiled.model_dump(mode="json")
-                or input_bytes != expected_input
-                or hashlib.sha256(request_bytes).hexdigest()
-                != state.compiled.compiled_request_hash
-                or hashlib.sha256(input_bytes).hexdigest()
-                != state.compiled.immutable_input_hash
-                or hashlib.sha256(native_state).hexdigest()
-                != state.compiled.native_state_hash
-            ):
-                raise EntrypointError("MAIN_AUTHORIZATION_BINDING_MISMATCH")
+        from .phase13_durable_call_join import validate_parent_calls, validated_parent_context
+
+        unit = next(row for row in self.selected.package.production if row.unit_id == parent_id)
+        cost_unit = next(row for row in self.selected.costs.resources.phase4.base.units
+                         if row.unit_id == parent_id)
+        binding, parents = validated_parent_context(self.selected, self.ledger, unit, cost_unit)
+        validate_parent_calls(self.ledger, binding, parent_id, calls,
+                              terminal_call_id=terminal_call_id, expected_keys=expected_keys,
+                              expected_parents=parents)
 
     def _strict_calls(
         self, client: MainRequestClientV3, calls: tuple[MethodCall, ...],

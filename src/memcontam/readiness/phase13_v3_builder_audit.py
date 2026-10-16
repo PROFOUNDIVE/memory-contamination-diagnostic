@@ -76,8 +76,10 @@ ALLOW: Final = (
     "src/memcontam/evaluation/phase13_observability_lineage.py",
     "src/memcontam/evaluation/phase13_observability_registration.py",
     "src/memcontam/evaluation/phase13_observability_sequence.py",
+    "src/memcontam/evaluation/phase13_seed_response.py",
     "src/memcontam/experiment/phase12/branching.py",
     "src/memcontam/experiment/phase12/filter_challenge/adapters/bot_style.py",
+    "src/memcontam/experiment/phase12/filter_challenge/freeze_a.py",
     "src/memcontam/experiment/phase12/game24_runner.py",
     "src/memcontam/experiment/phase12/runtime_registry.py",
     "src/memcontam/experiment/phase13_dc_rs_runtime.py",
@@ -99,6 +101,7 @@ ALLOW: Final = (
     "tests/test_phase12_reflexion.py",
     "tests/test_bot_style.py",
     "tests/test_openai_responses_client.py",
+    "tests/test_dependency_lock.py",
     "tests/provider_denial/sitecustomize.py",
 )
 

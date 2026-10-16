@@ -70,6 +70,7 @@ class SelectedExecutionV3:
     costs: LiveCosts
     lease: ExitStack
     repository_root: Path
+    structural_qualification_sha256: str | None = None
 
     def close(self) -> None:
         self.lease.close()
@@ -250,4 +251,12 @@ def _select_v3(request: SelectionRequest, package_resource: ValidatedResource, l
     except (KeyError, IndexError, ValueError) as error:
         raise EntrypointError("MAIN_AUTHORIZATION_BINDING_MISMATCH") from error
     selected.preflight(request.repository_root)
+    from dataclasses import replace
+    from .phase13_structural_qualification import CARRIER, NativeQualification, validate_selected_qualification
+    validate_selected_qualification(selected)
+    raw_structural = json.loads(next(
+        row.raw for row in selected.resources if row.binding.path == CARRIER)).get("structural")
+    structural = None if raw_structural is None else NativeQualification.model_validate_json(json.dumps(raw_structural))
+    if structural is not None:
+        selected = replace(selected, structural_qualification_sha256=digest(structural))
     return selected

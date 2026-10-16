@@ -152,7 +152,7 @@ def entrypoint_fixture(tmp_path, entrypoint_bytes):
         AUTHORITY, tmp_path / "authorization.sha256", corrective_identity().run_id)
 
 
-def seal_fixture_closure(root: Path) -> None:
+def seal_fixture_closure(root: Path, *, structural_qualification: bool = False) -> None:
     packet = json.loads((ROOT / RESOURCE_PATHS["observability_packet"]).read_bytes())
     identities = (*packet["implementation_identities"].values(), *packet["verifier_identities"].values(),
                   *packet["applicability_identities"].values())
@@ -162,6 +162,11 @@ def seal_fixture_closure(root: Path) -> None:
         "scripts/diagnose_phase13_mr_p5_closure.py",
         "scripts/build_phase13_main_registries.py",
         "src/memcontam/__init__.py",
+        "src/memcontam/readiness/phase13_structural_qualification.py",
+        "src/memcontam/readiness/phase13_v3_conformance.py",
+        "src/memcontam/readiness/phase13_v3_entrypoint.py",
+        "src/memcontam/readiness/phase13_v3_builder.py",
+        "src/memcontam/evaluation/phase13_seed_response.py",
         *(row["path"] for row in identities if row["path"].startswith("src/memcontam/")),
     )
     for path in set(governed):
@@ -186,6 +191,20 @@ def seal_fixture_closure(root: Path) -> None:
         source = REPAIR_ROOT / path
         target.write_bytes(source.read_bytes())
     inventory = freeze_governed(root, commit)
+    if structural_qualification:
+        from memcontam.readiness.phase13_structural_qualification import (
+            CARRIER, generate_native_qualification, qualification_subject,
+        )
+        from memcontam.readiness.phase13_v3_conformance import ConformanceV3
+        provisional = MainExecutionPackageV3.model_validate_json((root / "package.json").read_bytes())
+        subject = qualification_subject(provisional.authority, inventory, provisional.runtime_identity,
+            tuple(row.binding for row in read_files(root, STATIC_PATHS)))
+        raw_conformance = json.loads((root / CARRIER).read_bytes())
+        raw_conformance["identity"] = provisional.identity.model_dump(mode="json")
+        conformance = ConformanceV3.model_validate_json(json.dumps(raw_conformance))
+        conformance = conformance.model_copy(update={"structural": generate_native_qualification(subject, resource_root=root)})
+        conformance = conformance.model_copy(update={"conformance_hash": digest(conformance, "conformance_hash")})
+        (root / CARRIER).write_bytes(canonical_bytes(conformance))
     manifest_path = PREFIX + P4_PATHS[-1]
     manifest, = tuple(row for row in freeze_resources(root, expected).rows if row.path == manifest_path)
     package = MainExecutionPackageV3.model_validate_json((root / "package.json").read_bytes())

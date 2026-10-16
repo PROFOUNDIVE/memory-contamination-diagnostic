@@ -1,22 +1,32 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
+import hmac
+import secrets
+from collections.abc import Callable
+from copy import deepcopy
 from dataclasses import dataclass, replace
 from fractions import Fraction
+from pathlib import Path
 from typing import Literal
+from unittest.mock import patch
+from uuid import NAMESPACE_URL, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from memcontam.evaluation.phase13_observability_registration import AUTHORITY_HASHES, ObservabilityRegistrationPacket
-from memcontam.experiment.phase13_ordinary_runtime import REPOSITORY_ROOT, ProspectiveOrdinaryResult, ProspectiveOrdinaryRun, _context, _ordered_tasks
+from memcontam.experiment.phase13_ordinary_runtime import REPOSITORY_ROOT, ProspectiveOrdinaryResult, ProspectiveOrdinaryRun, _context, _ordered_tasks, execute_prospective_ordinary
 from memcontam.experiment.phase12.game24_runner import Game24RuntimeContext
+from memcontam.experiment.phase12.game24_runner import RuntimeWriterCallbacks
 from memcontam.experiment.phase12.live_branch import build_live_reduced_main_branches
 from memcontam.experiment.phase12.runtime_registry import PHASE13_CORE_BASELINE_REGISTRY
+from memcontam.experiment.phase12.runtime_registry import RuntimeTrialResult
 from memcontam.contamination.phase12.models import CandidateRegistry
 from memcontam.contamination.phase12.registry import load_current_candidate_registry, validate_current_candidate_registry
 from memcontam.contamination.phase12.renderers import RendererRegistry
-from memcontam.memory.checkpoint_v3 import NativeState, Phase12Checkpoint, deserialize_checkpoint, serialize_checkpoint
+from memcontam.memory.checkpoint_v3 import NativeEntry, NativeState, Phase12Checkpoint, deserialize_checkpoint, serialize_checkpoint
 from memcontam.readiness.phase13_capacity_realization import validated_common_capacity_tokens
 from memcontam.readiness.phase13_main_new_mcq_runtime import (
     build_new_mcq_live_branches, load_new_mcq_runtime_registry,
@@ -34,13 +44,27 @@ from memcontam.readiness.phase13_v3_terminal_ledger import TerminalLedgerV3
 from memcontam.readiness.phase13_v3_terminal_models import parse_event
 from memcontam.readiness.phase13_v3_request import RequestKeyV3
 from memcontam.readiness.phase13_v3_request import STAGES
+from memcontam.readiness.phase13_main_production import ProductionObject
+from memcontam.readiness.phase13_v3_cost_models import CostUnit
+from memcontam.readiness.phase13_v3_cost_models import ActivatedPolicyV3
+from memcontam.readiness.phase13_v3_retry import schedule_unit
+from memcontam.readiness.phase13_v3_entrypoint import SelectedExecutionV3
 from memcontam.readiness.phase13_main_live_evidence import _BASELINE_STAGES
 from memcontam.tasks.dispatch import render_model_visible_task
 from memcontam.tasks.base import TaskInstance
+from memcontam.clients.base import LLMClient, LLMResponse
 
 
 class SeedResponseError(ValueError):
     pass
+
+
+_PRODUCTION_ORIGIN_KEY = secrets.token_bytes(32)
+
+
+def _production_origin_signature(parts: tuple[bytes, ...]) -> bytes:
+    return hmac.digest(_PRODUCTION_ORIGIN_KEY, b"".join(
+        len(part).to_bytes(8, "big") + part for part in parts), "sha256")
 
 
 class _Frozen(BaseModel):
@@ -66,7 +90,14 @@ class StructuralSupportEvidence(_Frozen):
     branch_checkpoint_sha256: tuple[str, str, str, str]
     candidate_registry_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     suffix_contract_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    handler_contract_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    fixture_contract_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    native_properties_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    conformance_trace: tuple[tuple[str, int, str, str, str, str], ...] = ()
+    replay_witness: tuple[tuple[str, str, str, str, str, int | None], ...] = ()
     unsupported_reason: str | None = None
+    qualification_sha256: str | None = None
+    subject_contract_sha256: str | None = None
 
 
 @dataclass(frozen=True)
@@ -76,9 +107,226 @@ class StructuralSupportInputs:
     candidates: CandidateRegistry
     run: ProspectiveOrdinaryRun
     identity: ProductionOrdinaryRunIdentity
+    fixture_task_bytes: tuple[bytes, ...] = ()
+    qualification_observer: Callable[[str, int, RuntimeTrialResult], None] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class StructuralSupportValidationContext:
+    """Client-free fixture qualification bindings.
+
+    Expected identities must not be populated from the submitted proof.
+    This value does not authenticate production qualification origin.
+    """
+    qualified_evidence_bytes: bytes
+    qualified_evidence_sha256: str
+    identity: ProductionOrdinaryRunIdentity
+    package_sha256: str | None
+    prefix: Phase12Checkpoint
+    fixture_contract_sha256: str
+    branch_checkpoint_sha256: tuple[str, str, str, str]
+    candidate_registry_sha256: str
+    production_origin: _ProductionStructuralOrigin | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _ProductionStructuralOrigin:
+    """Constructor-owned authenticated bytes, never caller-supplied expectations.
+
+    The qualification is a bounded native capability contract. Its fixture traces
+    are deliberately not copied into the production subject's future trajectory.
+    """
+    proof_bytes: bytes
+    prefix_bytes: bytes
+    identity_bytes: bytes
+    package_sha256: str
+    qualification_bytes: bytes
+    subject_bytes: bytes
+    constructor_seal: bytes = b""
+
+
+def structural_support_context(selected: SelectedExecutionV3, unit: ProductionObject,
+                               ledger: TerminalLedgerV3, *, scientific_result: bool = True) -> StructuralSupportValidationContext | None:
+    from memcontam.readiness.phase13_structural_qualification import production_structural_context
+    return production_structural_context(selected, unit, ledger, scientific_result=scientific_result)
+
+
+def validate_qualified_structural_support(proof: StructuralSupportEvidence,
+                                         context: StructuralSupportValidationContext) -> None:
+    if hashlib.sha256(context.qualified_evidence_bytes).hexdigest() != context.qualified_evidence_sha256:
+        raise SeedResponseError("STRUCTURAL_QUALIFICATION_BINDING_MISMATCH")
+    qualified = StructuralSupportEvidence.model_validate_json(context.qualified_evidence_bytes)
+    identity = context.identity
+    if context.production_origin is not None:
+        origin = context.production_origin
+        expected_seal = _production_origin_signature((origin.proof_bytes, origin.prefix_bytes,
+            origin.identity_bytes, origin.package_sha256.encode(), origin.qualification_bytes, origin.subject_bytes))
+        if not hmac.compare_digest(origin.constructor_seal, expected_seal):
+            raise SeedResponseError("STRUCTURAL_QUALIFICATION_ORIGIN_REQUIRED")
+        from memcontam.readiness.phase13_structural_qualification import validate_production_context
+        validate_production_context(proof, context, origin)
+        return
+    if identity.scientific_result:
+        raise SeedResponseError("STRUCTURAL_QUALIFICATION_ORIGIN_REQUIRED")
+    deserialize_checkpoint(context.prefix)
+    evidence_hash = hashlib.sha256(json.dumps(
+        qualified.model_dump(mode="json", exclude={"evidence_sha256"}),
+        sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    if (proof != qualified
+        or qualified.evidence_sha256 != evidence_hash
+        or (context.package_sha256 is None and identity.source_package_manifest_sha256 is None)
+        or proof.baseline != context.prefix.state.baseline
+        or proof.source_package_manifest_sha256 != identity.source_package_manifest_sha256
+        or proof.package_sha256 != context.package_sha256
+        or proof.registration_packet_sha256 != identity.registration_packet_sha256
+        or proof.execution_template_id != identity.execution_template_id
+        or proof.trajectory_seed != identity.trajectory_seed
+        or proof.concrete_seed_id != identity.concrete_seed_id
+        or proof.ordered_sample_ids_sha256 != identity.ordered_sample_ids_sha256
+        or proof.checkpoint_id != context.prefix.identity.checkpoint_id
+        or proof.checkpoint_sha256 != context.prefix.canonical_sha256
+        or proof.checkpoint_index != context.prefix.checkpoint_index
+        or proof.fixture_contract_sha256 != context.fixture_contract_sha256
+        or proof.branch_checkpoint_sha256 != context.branch_checkpoint_sha256
+        or proof.candidate_registry_sha256 != context.candidate_registry_sha256
+        or proof.handler_contract_sha256 != _handler_contract(proof.baseline)
+        or proof.native_properties_sha256 != _native_properties_contract()):
+        raise SeedResponseError("STRUCTURAL_QUALIFIED_CONTEXT_MISMATCH")
+    if context.package_sha256 is not None:
+        raise SeedResponseError("STRUCTURAL_QUALIFICATION_ORIGIN_REQUIRED")
+    trace = proof.conformance_trace
+    slots = tuple((arm, index) for arm in ("clean", "correct", "irrelevant", "contam")
+                  for index in range(1, 51))
+    if (proof.supported != (proof.unsupported_reason is None)
+        or len(trace) > len(slots)
+        or (proof.supported and len(trace) != len(slots))
+        or hashlib.sha256(json.dumps(trace, separators=(",", ":")).encode()).hexdigest()
+           != proof.suffix_contract_sha256
+        or any(row[:2] != slot for row, slot in zip(trace, slots))
+        or any(row[0] == previous[0] and row[4] != previous[5]
+               for previous, row in zip(trace, trace[1:]))):
+        raise SeedResponseError("STRUCTURAL_QUALIFIED_TRACE_MISMATCH")
+
+
+def _native_digest(state: NativeState, index: int | None) -> str:
+    return serialize_checkpoint(state, checkpoint_index=index).canonical_sha256
+
+
+def _validate_native_transition(before: NativeState, after: NativeState,
+                                stages: tuple[str, ...]) -> None:
+    if before.baseline != after.baseline:
+        raise SeedResponseError("STRUCTURAL_NATIVE_BASELINE_CHANGED")
+    baseline = before.baseline
+    if baseline == "rag_frozen":
+        if before != after or before.native_state.get("read_only") is not True:
+            raise SeedResponseError("STRUCTURAL_RAG_IMMUTABILITY_VIOLATION")
+    elif baseline == "bot_style":
+        if (before.native_state.get("active_capacity") is not None
+            or after.native_state.get("active_capacity") is not None
+            or after.entries[:len(before.entries)] != before.entries
+            or len(after.entries) not in (len(before.entries), len(before.entries) + 1)):
+            raise SeedResponseError("STRUCTURAL_BOT_INSERTION_VIOLATION")
+    elif baseline == "fh_bounded":
+        retained = after.entries[:-1]
+        if (not after.entries or len(retained) > len(before.entries)
+            or (retained and retained != before.entries[-len(retained):])
+            or after.entries[-1] in before.entries):
+            raise SeedResponseError("STRUCTURAL_FH_FIFO_VIOLATION")
+    elif baseline == "reflexion_style":
+        reflections = stages.count("reflexion_reflect")
+        if reflections == 0:
+            if before != after:
+                raise SeedResponseError("STRUCTURAL_REFLEXION_SUCCESS_WRITE")
+        else:
+            old_ids = {entry.entry_id for entry in before.entries if isinstance(entry, NativeEntry)}
+            retained = tuple(entry for entry in after.entries
+                             if isinstance(entry, NativeEntry) and entry.entry_id in old_ids)
+            inserted = len(after.entries) - len(retained)
+            if (not 1 <= inserted <= reflections
+                or (retained and retained != before.entries[-len(retained):])
+                or after.entries[:len(retained)] != retained):
+                raise SeedResponseError("STRUCTURAL_REFLEXION_RETENTION_VIOLATION")
+    elif baseline == "dc_rs":
+        before_archive = before.native_state.get("archive")
+        after_archive = after.native_state.get("archive")
+        if (not isinstance(before_archive, list) or not isinstance(after_archive, list)
+            or len(after_archive) != len(before_archive) + 1
+            or after_archive[:-1] != before_archive):
+            raise SeedResponseError("STRUCTURAL_DC_ARCHIVE_APPEND_VIOLATION")
+    else:
+        raise SeedResponseError("STRUCTURAL_NATIVE_PROPERTIES_UNAVAILABLE")
+
+
+def _native_properties_contract() -> str:
+    return hashlib.sha256(inspect.getsource(_validate_native_transition).encode()).hexdigest()
+
+
+def _handler_contract(baseline: str) -> str:
+    entry = PHASE13_CORE_BASELINE_REGISTRY[baseline]
+    handlers = (entry.initial_state, entry.restore_state, entry.execute_trial,
+                entry.serialize_state)
+    files = sorted({str(inspect.getsourcefile(handler)) for handler in handlers})
+    from memcontam.baselines import (bot_phase12, full_history_phase12,
+                                     reflexion_phase12, retrieval_rag_phase12)
+    from memcontam.experiment import phase13_dc_rs_runtime
+    from memcontam.memory import checkpoint_v3
+    modules = (bot_phase12, full_history_phase12, reflexion_phase12,
+               retrieval_rag_phase12, phase13_dc_rs_runtime, checkpoint_v3)
+    files.extend(str(inspect.getsourcefile(module)) for module in modules)
+    return hashlib.sha256(json.dumps(
+        [(name, hashlib.sha256(Path(name).read_bytes()).hexdigest())
+         for name in sorted(set(files))], separators=(",", ":")).encode()).hexdigest()
+
+
+def _request_digest(messages: list[dict[str, str]], model: str, config: dict) -> str:
+    return hashlib.sha256(json.dumps([messages, model, config], sort_keys=True,
+        separators=(",", ":"), ensure_ascii=False, default=str).encode()).hexdigest()
+
+
+class _RecordingClient:
+    def __init__(self, client: LLMClient, arm: str,
+                 witness: list[tuple[str, str, str, str, str, int | None]]) -> None:
+        self.client = client
+        self.arm = arm
+        self.witness = witness
+
+    def chat(self, messages: list[dict[str, str]], model: str, config: dict) -> LLMResponse:
+        try:
+            response = self.client.chat(messages, model, config)
+        except Exception as error:
+            raise SeedResponseError("STRUCTURAL_CLIENT_FAILURE_UNAVAILABLE") from error
+        self.witness.append((self.arm, _request_digest(messages, model, config),
+            response.content, json.dumps(response.raw, sort_keys=True, default=str),
+            json.dumps(response.token_usage, sort_keys=True), response.latency_ms))
+        return response
+
+
+class _ReplayClient:
+    def __init__(self, arm: str,
+                 witness: tuple[tuple[str, str, str, str, str, int | None], ...]) -> None:
+        self.arm = arm
+        self.witness = witness
+        self.position = 0
+
+    def chat(self, messages: list[dict[str, str]], model: str, config: dict) -> LLMResponse:
+        if self.position >= len(self.witness):
+            raise SeedResponseError("STRUCTURAL_REPLAY_EXHAUSTED")
+        arm, request, content, raw, usage, latency = self.witness[self.position]
+        if arm != self.arm or request != _request_digest(messages, model, config):
+            raise SeedResponseError("STRUCTURAL_REPLAY_REQUEST_MISMATCH")
+        self.position += 1
+        return LLMResponse(content, json.loads(raw), json.loads(usage), latency)
 
 
 def certify_structural_support(inputs: StructuralSupportInputs) -> StructuralSupportEvidence:
+    return _structural_support(inputs, execute=True)
+
+
+def _structural_support(inputs: StructuralSupportInputs, *, execute: bool,
+                         trace: tuple[tuple[str, int, str, str, str, str], ...] = (),
+                         failure_reason: str | None = None,
+                         replay_witness: tuple[tuple[str, str, str, str, str, int | None], ...] = (),
+                         replay: bool = False) -> StructuralSupportEvidence:
     prefix, context, run, identity = inputs.prefix, inputs.context, inputs.run, inputs.identity
     tasks = _ordered_tasks(run)
     if (run.baseline == "nomem" or run.baseline not in CORE_MAIN_REGISTRY.memory_baselines
@@ -96,6 +344,10 @@ def certify_structural_support(inputs: StructuralSupportInputs) -> StructuralSup
         or hashlib.sha256(json.dumps([task.sample_id for task in tasks], separators=(",", ":")).encode()).hexdigest()
            != identity.ordered_sample_ids_sha256
         or (run.validated_resources is None and not run.allow_test_client)
+        or (run.validated_resources is None and
+            inputs.fixture_task_bytes != tuple(task.model_dump_json().encode() for task in tasks))
+        or (run.validated_resources is not None and inputs.fixture_task_bytes and
+            inputs.fixture_task_bytes != run._task_bytes)
         or (identity.scientific_result and run.validated_resources is None)
         or (run.validated_resources is not None and
             (run.validated_resources.checkpoint_sha256 != identity.checkpoint_registry_sha256
@@ -138,7 +390,9 @@ def certify_structural_support(inputs: StructuralSupportInputs) -> StructuralSup
             candidate_registry=inputs.candidates, registry=PHASE13_CORE_BASELINE_REGISTRY,
             renderers=renderers)
         intervention_sha = hashlib.sha256(candidate_path.read_bytes()).hexdigest()
-    arms = CORE_MAIN_REGISTRY.arms
+    arms = ("clean", "correct", "irrelevant", "contam")
+    if tuple(CORE_MAIN_REGISTRY.arms) != arms:
+        raise SeedResponseError("STRUCTURAL_REGISTERED_ARMS_MISMATCH")
     if (set(branches.arms) != set(arms) or run.branch != branches.arms[run.arm]
         or any(branches.arms[arm].prefix_identity != prefix.identity.checkpoint_id
                for arm in arms)):
@@ -150,39 +404,159 @@ def certify_structural_support(inputs: StructuralSupportInputs) -> StructuralSup
         branches.arms["contam"].checkpoint.canonical_sha256,
     )
     entry = PHASE13_CORE_BASELINE_REGISTRY[run.baseline]
+    fixture_contract = hashlib.sha256(json.dumps({
+        "task_bytes_sha256": [hashlib.sha256(raw).hexdigest() for raw in (
+            inputs.fixture_task_bytes if run.validated_resources is None else run._task_bytes)],
+        "capacity": capacity,
+        "config": run.baseline_configs,
+        "model": run.model,
+        "decoding": run.decoding,
+        "run_id": run.run_id,
+        "arm_checkpoints": branch_hashes,
+    }, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
     route_rows: list[tuple[str, int, str, str]] = []
+    transitions: list[tuple[str, int, str, str, str, str]] = []
+    recorded: list[tuple[str, str, str, str, str, int | None]] = []
+    initial_hashes: dict[str, str] = {}
     unsupported_reason = None
     stages = _BASELINE_STAGES.get(run.baseline)
     if stages is None or any(stage not in STAGES for stage in stages):
         raise SeedResponseError("STRUCTURAL_RUNTIME_ROUTE_UNAVAILABLE")
     for arm in arms:
         branch_run = replace(run, arm=arm, branch=branches.arms[arm])
+        if run.baseline == "rag_frozen":
+            branch_run = replace(branch_run, initial_states={
+                **run.initial_states, "rag_frozen": branches.arms[arm].state})
+        client: _ReplayClient | _RecordingClient | None = None
+        # Never dispatch the caller's client, even for provider-free conformance.
+        # A production-bound client cannot be used to infer suffix capability.
+        if execute and (not run.allow_test_client or run.validated_resources is not None
+                        or identity.scientific_result):
+            raise SeedResponseError("STRUCTURAL_PROSPECTIVE_FIXTURE_REQUIRED")
+        if execute:
+            client = (_ReplayClient(arm, tuple(row for row in replay_witness if row[0] == arm))
+                      if replay else _RecordingClient(deepcopy(run.client), arm, recorded))
+            branch_run = replace(branch_run, client=client)
+        state = deepcopy(branches.arms[arm].state)
+        arm_start = len(transitions)
         for index, task in enumerate(tasks, start=1):
             try:
                 rendered = render_model_visible_task(task)
                 slot = _context(branch_run, task, index)
-                state = entry.restore_state(branches.arms[arm].checkpoint.state, slot)
-                snapshot = entry.serialize_state(state)
-                if not isinstance(snapshot, NativeState):
-                    raise SeedResponseError("STRUCTURAL_RESTORE_ROUNDTRIP_MISMATCH")
-                serialize_checkpoint(snapshot, checkpoint_index=branches.arms[arm].checkpoint.checkpoint_index)
-            except (KeyError, TypeError, ValueError) as error:
-                unsupported_reason = f"{arm}:{index}:{type(error).__name__}"
-                break
-            route_rows.append((arm, index, task.sample_id,
-                hashlib.sha256(json.dumps([rendered, stages, slot.identities.trial_id,
+                if index == 1:
+                    before = entry.serialize_state(state)
+                    if not isinstance(before, NativeState):
+                        raise SeedResponseError("STRUCTURAL_RESTORE_ROUNDTRIP_MISMATCH")
+                    before_hash = _native_digest(before, branches.arms[arm].checkpoint.checkpoint_index)
+                    initial_hashes[arm] = before_hash
+                route_hash = hashlib.sha256(json.dumps([rendered, stages, slot.identities.trial_id,
                     slot.identities.order_key, identity.execution_template_id,
                     branches.arms[arm].checkpoint.canonical_sha256],
-                    separators=(",", ":")).encode()).hexdigest()))
+                    separators=(",", ":")).encode()).hexdigest()
+                route_rows.append((arm, index, task.sample_id, route_hash))
+            except (KeyError, TypeError, ValueError) as error:
+                if isinstance(error, SeedResponseError) and (
+                    str(error).startswith("STRUCTURAL_REPLAY_")
+                    or str(error).startswith("STRUCTURAL_CLIENT_FAILURE_UNAVAILABLE")
+                    or str(error).startswith("STRUCTURAL_TRIAL_FAILURE_UNAVAILABLE")
+                ):
+                    raise
+                raise SeedResponseError("STRUCTURAL_INPUT_OR_STATE_UNAVAILABLE") from error
+        if execute:
+            checkpoint_index = branches.arms[arm].checkpoint.checkpoint_index
+            completed_response_count = 0 if replay else len(recorded)
+            def record_trial(trial: object) -> None:
+                nonlocal completed_response_count
+                from memcontam.experiment.phase12.runtime_registry import RuntimeTrialResult
+                if not isinstance(trial, RuntimeTrialResult):
+                    raise SeedResponseError("STRUCTURAL_TRIAL_EVIDENCE_UNAVAILABLE")
+                position = len(transitions) - arm_start
+                if position >= len(tasks) or trial.state_before is None or trial.state_after is None:
+                    raise SeedResponseError("STRUCTURAL_NATIVE_STATE_UNAVAILABLE")
+                before_hash = _native_digest(trial.state_before, checkpoint_index)
+                after_hash = _native_digest(trial.state_after, checkpoint_index)
+                expected_before = (initial_hashes[arm] if position == 0 else transitions[-1][5])
+                if before_hash != expected_before:
+                    raise SeedResponseError("STRUCTURAL_NATIVE_STATE_CHAIN_MISMATCH")
+                if trial.outcome.status == "succeeded":
+                    _validate_native_transition(trial.state_before, trial.state_after,
+                        tuple(call.stage for call in trial.outcome.method_calls))
+                for native, native_hash in ((trial.state_before, before_hash),
+                                            (trial.state_after, after_hash)):
+                    checkpoint = serialize_checkpoint(native, checkpoint_index=checkpoint_index)
+                    restored_native = deserialize_checkpoint(checkpoint)
+                    restored = entry.restore_state(restored_native, _context(
+                        branch_run, tasks[position], position + 1))
+                    restored_serialized = entry.serialize_state(restored)
+                    if (_native_digest(restored_native, checkpoint_index) != native_hash
+                        or not isinstance(restored_serialized, NativeState)
+                        or _native_digest(restored_serialized, checkpoint_index) != native_hash):
+                        raise SeedResponseError("STRUCTURAL_NATIVE_ROUNDTRIP_MISMATCH")
+                route = route_rows[len(route_rows) - len(tasks) + position]
+                if inputs.qualification_observer is not None:
+                    inputs.qualification_observer(arm, position + 1, trial)
+                transitions.append((*route, before_hash, after_hash))
+                completed_response_count = (client.position if isinstance(client, _ReplayClient)
+                                            else len(recorded))
+            branch_run = replace(branch_run, writer_callbacks=RuntimeWriterCallbacks(on_outcome=record_trial))
+            try:
+                if run.baseline == "fh_bounded":
+                    with patch("memcontam.baselines.full_history_adapter.uuid4",
+                               lambda: uuid5(NAMESPACE_URL, f"{fixture_contract}:{arm}:{len(transitions) - arm_start + 1}")):
+                        result = execute_prospective_ordinary(branch_run)
+                else:
+                    result = execute_prospective_ordinary(branch_run)
+            except (KeyError, TypeError, ValueError) as error:
+                if isinstance(error, SeedResponseError) or isinstance(error, (KeyError, TypeError)):
+                    raise SeedResponseError("STRUCTURAL_FAILURE_UNAVAILABLE") from error
+                from memcontam.baselines.full_history_phase12 import FullHistoryContractError
+                if not (
+                    isinstance(error, FullHistoryContractError)
+                    and error.code == "IMMEDIATE_INJECTED_ROOT_TRUNCATION"
+                    and len(transitions) == arm_start
+                ):
+                    raise SeedResponseError("STRUCTURAL_FAILURE_UNAVAILABLE") from error
+                responses_after = len(recorded) if not replay else client.position if isinstance(client, _ReplayClient) else 0
+                if responses_after != completed_response_count:
+                    raise SeedResponseError("STRUCTURAL_FAILURE_UNAVAILABLE") from error
+                unsupported_reason = f"{arm}:{len(transitions) - arm_start + 1}:{type(error).__name__}:{error}"
+            else:
+                if len(result.trials) != len(tasks) or any(row.outcome.status == "failed" for row in result.trials):
+                    raise SeedResponseError("STRUCTURAL_TRIAL_FAILURE_UNAVAILABLE")
+        if replay and isinstance(client, _ReplayClient) and client.position != len(client.witness):
+            raise SeedResponseError("STRUCTURAL_REPLAY_UNUSED_RESPONSES")
         if unsupported_reason is not None:
             break
-    suffix_contract_sha256 = hashlib.sha256(json.dumps(route_rows, separators=(",", ":")).encode()).hexdigest()
+    if not execute:
+        transitions = list(trace)
+        if (unsupported_reason is None and failure_reason is not None):
+            if (len(transitions) >= len(route_rows)
+                or not any(failure_reason.startswith(
+                    f"{route_rows[len(transitions)][0]}:{route_rows[len(transitions)][1]}:{name}:")
+                    for name in ("DcRsRuntimeError", "FullHistoryContractError"))):
+                raise SeedResponseError("STRUCTURAL_FAILURE_SLOT_MISMATCH")
+            unsupported_reason = failure_reason
+        if (len(transitions) > len(route_rows)
+            or (unsupported_reason is None and len(transitions) != len(route_rows))
+            or (unsupported_reason is not None and (
+                len(transitions) >= len(route_rows) or failure_reason != unsupported_reason))
+            or any(row[:4] != route or (pos > 0 and row[0] == transitions[pos - 1][0]
+                        and row[4] != transitions[pos - 1][5])
+                   for pos, (row, route) in enumerate(zip(transitions, route_rows)))
+            or any(row[4] != initial_hashes[row[0]]
+                   for row in transitions if row[1] == 1)):
+            raise SeedResponseError("STRUCTURAL_TRACE_CHAIN_MISMATCH")
+    suffix_contract_sha256 = hashlib.sha256(json.dumps(transitions, separators=(",", ":")).encode()).hexdigest()
     request_client = None if run.validated_resources is None else run.validated_resources.request_client
     package_sha256 = None if request_client is None else request_client.dispatcher.binding.package_sha256
-    payload = dict(task=run.task_name, baseline=run.baseline,
+    if identity.source_package_manifest_sha256 is None and package_sha256 is None:
+        raise SeedResponseError("STRUCTURAL_SOURCE_BINDING_REQUIRED")
+    proof = StructuralSupportEvidence(
+        task=run.task_name, baseline=run.baseline,
         trajectory_seed=identity.trajectory_seed, concrete_seed_id=identity.concrete_seed_id,
         registered_pair=None, supported=unsupported_reason is None,
         source_package_manifest_sha256=identity.source_package_manifest_sha256,
+        evidence_sha256="0" * 64,
         checkpoint_id=prefix.identity.checkpoint_id, checkpoint_sha256=prefix.canonical_sha256,
         checkpoint_index=prefix.checkpoint_index,
         ordered_sample_ids_sha256=identity.ordered_sample_ids_sha256,
@@ -190,22 +564,39 @@ def certify_structural_support(inputs: StructuralSupportInputs) -> StructuralSup
         registration_packet_sha256=identity.registration_packet_sha256,
         package_sha256=package_sha256, branch_checkpoint_sha256=branch_hashes,
         candidate_registry_sha256=intervention_sha, suffix_contract_sha256=suffix_contract_sha256,
+        handler_contract_sha256=_handler_contract(run.baseline),
+        fixture_contract_sha256=fixture_contract,
+        native_properties_sha256=_native_properties_contract(),
+        conformance_trace=tuple(transitions),
+        replay_witness=tuple(recorded) if execute and not replay else replay_witness,
         unsupported_reason=unsupported_reason)
-    if payload["source_package_manifest_sha256"] is None and package_sha256 is None:
-        raise SeedResponseError("STRUCTURAL_SOURCE_BINDING_REQUIRED")
-    evidence_sha256 = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-    return StructuralSupportEvidence(**payload, evidence_sha256=evidence_sha256)
+    evidence_sha256 = hashlib.sha256(json.dumps(
+        proof.model_dump(mode="json", exclude={"evidence_sha256"}),
+        sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return proof.model_copy(update={"evidence_sha256": evidence_sha256})
 
 
 def validate_structural_support(proof: StructuralSupportEvidence,
-                                inputs: StructuralSupportInputs) -> None:
-    if proof != certify_structural_support(inputs):
+                                 inputs: StructuralSupportInputs | StructuralSupportValidationContext) -> None:
+    if isinstance(inputs, StructuralSupportValidationContext):
+        validate_qualified_structural_support(proof, inputs)
+        return
+    if proof != _structural_support(inputs, execute=False, trace=proof.conformance_trace,
+                                    failure_reason=proof.unsupported_reason,
+                                    replay_witness=proof.replay_witness):
         raise SeedResponseError("STRUCTURAL_CERTIFICATE_MISMATCH")
+    if (not proof.replay_witness and (proof.supported or proof.conformance_trace)
+        or inputs.identity.scientific_result or inputs.run.validated_resources is not None):
+        raise SeedResponseError("STRUCTURAL_FROZEN_REPLAY_UNBOUND")
+    reproduced = _structural_support(inputs, execute=True, replay=True,
+                                      replay_witness=proof.replay_witness)
+    if reproduced != proof:
+        raise SeedResponseError("STRUCTURAL_FROZEN_REPLAY_MISMATCH")
 
 
 def registered_pair_support(left: StructuralSupportEvidence, right: StructuralSupportEvidence,
-                            left_inputs: StructuralSupportInputs,
-                            right_inputs: StructuralSupportInputs) -> bool:
+                             left_inputs: StructuralSupportInputs | StructuralSupportValidationContext,
+                             right_inputs: StructuralSupportInputs | StructuralSupportValidationContext) -> bool:
     validate_structural_support(left, left_inputs)
     validate_structural_support(right, right_inputs)
     if (left.baseline != "fh_bounded" or right.baseline not in CORE_MAIN_REGISTRY.memory_baselines
@@ -301,7 +692,7 @@ class SeedResponseTable(_Frozen):
 
 def assemble_seed_response_table(
     rows: tuple[AttemptedSeed, ...], *,
-    support_inputs: dict[int, StructuralSupportInputs] | None = None,
+    support_inputs: dict[int, StructuralSupportInputs | StructuralSupportValidationContext] | None = None,
 ) -> SeedResponseTable:
     if not rows:
         raise SeedResponseError("EMPTY_SEED_RESPONSE_TABLE")
@@ -362,10 +753,12 @@ def producer_joined_parent(
     archive: ProductionObservabilityArchive,
     *,
     structural_support_evidence: StructuralSupportEvidence | None = None,
-    structural_support_inputs: StructuralSupportInputs | None = None,
+    structural_support_inputs: StructuralSupportInputs | StructuralSupportValidationContext | None = None,
 ) -> SeedResponseParent:
     if structural_support_evidence is not None:
-        if structural_support_inputs is None or structural_support_inputs.run is not run or structural_support_inputs.identity != identity:
+        if (structural_support_inputs is None or structural_support_inputs.identity != identity
+            or (isinstance(structural_support_inputs, StructuralSupportInputs)
+                and structural_support_inputs.run is not run)):
             raise SeedResponseError("STRUCTURAL_INPUTS_REQUIRED")
         validate_structural_support(structural_support_evidence, structural_support_inputs)
     if identity.scientific_result and (run.allow_test_client or run.validated_resources is None):
@@ -384,9 +777,17 @@ def producer_joined_parent(
         or structural_support_evidence.registration_packet_sha256 != identity.registration_packet_sha256
         or structural_support_evidence.execution_template_id != identity.execution_template_id
         or (run.branch is not None and (
-            structural_support_evidence.checkpoint_id != run.branch.prefix_identity
-            or structural_support_evidence.checkpoint_index != run.branch.checkpoint.checkpoint_index))):
+             structural_support_evidence.checkpoint_id != run.branch.prefix_identity
+             or structural_support_evidence.checkpoint_index != run.branch.checkpoint.checkpoint_index
+             or run.arm not in ("clean", "correct", "irrelevant", "contam")
+             or structural_support_evidence.branch_checkpoint_sha256[
+                 ("clean", "correct", "irrelevant", "contam").index(run.arm)] != run.branch.checkpoint.canonical_sha256))):
         raise SeedResponseError("STRUCTURAL_PRODUCER_BINDING_MISMATCH")
+    if (isinstance(structural_support_inputs, StructuralSupportValidationContext)
+        and structural_support_inputs.production_origin is not None):
+        subject = json.loads(structural_support_inputs.production_origin.subject_bytes)
+        if tuple(subject["ordered_task_bytes"]) != tuple(task.model_dump_json() for task in _ordered_tasks(run)):
+            raise SeedResponseError("STRUCTURAL_PRODUCER_BINDING_MISMATCH")
     if (run.production_identity is not None and run.production_identity != identity):
         raise SeedResponseError("PRODUCER_IDENTITY_MISMATCH")
     if identity.source_package_manifest_sha256 is None and package_sha256 is None:
@@ -429,7 +830,9 @@ def extract_seed_response(
     identity: ProductionOrdinaryRunIdentity,
     terminal_ledger: TerminalLedgerV3 | None = None,
     terminal_key: RequestKeyV3 | None = None,
-    structural_support_inputs: StructuralSupportInputs | None = None,
+    structural_support_inputs: StructuralSupportInputs | StructuralSupportValidationContext | None = None,
+    production_unit: ProductionObject | None = None,
+    cost_unit: CostUnit | None = None,
 ) -> ObservedSeedResponse:
     if parent.structural_support is not None and parent.structural_support_evidence is None:
         raise SeedResponseError("REGISTERED_STRUCTURAL_SUPPORT_PROOF_REQUIRED")
@@ -440,13 +843,36 @@ def extract_seed_response(
     if result.terminal_failure is not None:
         failure = result.terminal_failure
         if (terminal_ledger is None or terminal_key is None or failure.evidence_sha256 is None
+            or production_unit is None or cost_unit is None
+            or run.validated_resources is None
+            or run.validated_resources.selected is None
+            or cost_unit not in run.validated_resources.costs.resources.phase4.base.units
+            or production_unit.execution_template_id != identity.execution_template_id
+            or production_unit.registration_packet_sha256 != identity.registration_packet_sha256
+            or production_unit.ordered_sample_ids_sha256 != identity.ordered_sample_ids_sha256
+            or production_unit.checkpoint_registry_sha256 != identity.checkpoint_registry_sha256
+            or production_unit.unit_id != failure.parent_id
+            or cost_unit.unit_id != production_unit.unit_id
+            or (production_unit.task, production_unit.seed, production_unit.memory_baseline,
+                production_unit.arm) != (parent.task, parent.trajectory_seed,
+                None if parent.baseline == "nomem" else parent.baseline,
+                "NOT_APPLICABLE" if parent.baseline == "nomem" else parent.arm)
             or terminal_key.parent_id != failure.parent_id
             or (parent.package_sha256 is not None
                 and parent.package_sha256 != terminal_ledger.binding.package_sha256)
+            or not _completed_prefix_matches(archive, terminal_ledger, terminal_key, parent,
+                                              production_unit, cost_unit,
+                                              selected=run.validated_resources.selected,
+                                             policy=(None if run.validated_resources is None else
+                                                     run.validated_resources.costs.resources.phase4.policy))
             or not _terminal_slot_matches(archive, result, terminal_ledger,
-                                          terminal_key, parent, frozen_tasks)
+                                          terminal_key, parent, frozen_tasks,
+                                          production_unit, cost_unit)
             or not _terminal_event_matches(terminal_ledger, failure.evidence_sha256,
-                                           terminal_key, failure.code)):
+                                           terminal_key, failure.code,
+                                           semantic_failure_code=(archive.records[-1].terminal_failure_code
+                                               if archive.records and archive.records[-1].evidence.trial.execution_status == "failed"
+                                               else None))):
             raise SeedResponseError("TERMINAL_LEDGER_EVIDENCE_REQUIRED")
     if (archive_digest(archive) != parent.archive_sha256
         or archive.registration_packet_sha256 != parent.registration_packet_sha256
@@ -528,8 +954,68 @@ def extract_seed_response(
     )
 
 
+def _completed_prefix_matches(archive: ProductionObservabilityArchive,
+                              ledger: TerminalLedgerV3, terminal_key: RequestKeyV3,
+                              parent: SeedResponseParent, unit: ProductionObject,
+                              cost_unit: CostUnit, *, policy: ActivatedPolicyV3 | None,
+                              selected: SelectedExecutionV3) -> bool:
+    from memcontam.readiness.phase13_main_terminal_partial import (
+        TerminalPartialParent, scheduled_prefix_keys, validate_terminal_partial_data,
+    )
+    from memcontam.readiness.phase13_durable_call_join import (
+        validated_parent_context, validate_durable_parent_data,
+    )
+    from memcontam.readiness.phase13_main_v3_runner import DurableParentRecordV3
+
+    try:
+        if policy is None:
+            return False
+        validated_parent_context(selected, ledger, unit, cost_unit)
+        if policy != selected.costs.resources.phase4.policy:
+            return False
+        raw = ledger.read_record(f"{terminal_key.parent_id}.parent.json")
+        if json.loads(raw).get("schema_version") == "phase13_main_parent_record_v3":
+            persisted_semantic = DurableParentRecordV3.model_validate_json(raw)
+            evidence = persisted_semantic.unit_evidence.evidence
+            semantic_archive = evidence.runtime_evidence.production_observability_archive
+            if (semantic_archive != archive or not archive.records
+                or archive.records[-1].evidence.trial.execution_status != "failed"
+                or persisted_semantic.unit_evidence.unit_id != unit.unit_id
+                or persisted_semantic.identity != ledger.binding.identity.model_dump(mode="json")
+                or persisted_semantic.package_sha256 != ledger.binding.package_sha256
+                or persisted_semantic.authorization_sha256 != ledger.binding.authorization_sha256):
+                return False
+            scheduled_semantic = scheduled_prefix_keys(unit, cost_unit, archive.records)
+            from memcontam.readiness.phase13_main_live_evidence import MainMethodCall
+            semantic_calls = tuple(call for call in persisted_semantic.unit_evidence.provider_calls
+                                   if isinstance(call, MainMethodCall))
+            if (scheduled_semantic is None or not scheduled_semantic or not semantic_calls
+                or len(semantic_calls) != len(persisted_semantic.unit_evidence.provider_calls)
+                or scheduled_semantic[-1] != terminal_key):
+                return False
+            validate_durable_parent_data(selected, ledger, persisted_semantic, unit)
+            return True
+        persisted = TerminalPartialParent.model_validate_json(
+            raw)
+        if (persisted.unit_id != terminal_key.parent_id
+            or persisted.unit_id != unit.unit_id
+            or persisted.terminal_key != terminal_key
+            or persisted.archive.records != archive.records
+            or persisted.archive.registration_packet_sha256 != archive.registration_packet_sha256
+            or persisted.package_sha256 != ledger.binding.package_sha256
+            or persisted.authorization_sha256 != ledger.binding.authorization_sha256
+            or persisted.identity != ledger.binding.identity.model_dump(mode="json")
+            or any(row.run_id != parent.run_id for row in archive.records)):
+            return False
+        validate_terminal_partial_data(selected, ledger, persisted, unit)
+        return True
+    except (ValueError, OSError, KeyError, TypeError, StopIteration):
+        return False
+
+
 def _terminal_event_matches(ledger: TerminalLedgerV3, event_hash: str,
-                            key: RequestKeyV3, failure_code: str) -> bool:
+                             key: RequestKeyV3, failure_code: str, *,
+                             semantic_failure_code: str | None = None) -> bool:
     from memcontam.readiness.phase13_v3_cost_models import digest
     from memcontam.readiness.phase13_main_request_recovery import RequestIdentityReceiptV3
     from memcontam.readiness.phase13_v3_terminal_models import ProviderFailureV3, AmbiguousAttemptV3
@@ -554,7 +1040,9 @@ def _terminal_event_matches(ledger: TerminalLedgerV3, event_hash: str,
         if event.compiled != state.compiled:
             return False
         if isinstance(event, ProviderFailureV3):
-            return (failure_code == "MAIN_ATTEMPTED_PROVIDER_FAILURE"
+            return ((failure_code == "MAIN_ATTEMPTED_PROVIDER_FAILURE"
+                     or (semantic_failure_code is not None and failure_code == semantic_failure_code
+                         and event.failure_code == "MAIN_SEMANTIC_RESULT_UNAVAILABLE"))
                     and state.kind == "ATTEMPTED_PROVIDER_FAILURE"
                     and hashlib.sha256(ledger.read_record(
                         f"{key.dispatch_id}.observation.json")).hexdigest() == event.observation_hash)
@@ -570,25 +1058,32 @@ def _terminal_slot_matches(archive: ProductionObservabilityArchive,
                            result: ProspectiveOrdinaryResult, ledger: TerminalLedgerV3,
                            key: RequestKeyV3,
                            parent: SeedResponseParent,
-                           tasks: tuple[TaskInstance, ...]) -> bool:
+                           tasks: tuple[TaskInstance, ...], unit: ProductionObject,
+                           cost_unit: CostUnit) -> bool:
     from memcontam.readiness.phase13_main_request_recovery import RequestIdentityReceiptV3
+    from memcontam.readiness.phase13_durable_call_join import scheduled_prefix_keys
 
     stages = (("no_memory_generate",) if parent.baseline == "nomem"
               else _BASELINE_STAGES.get(parent.baseline))
-    if stages is None or len(result.trials) >= len(tasks):
+    if stages is None or len(result.trials) > len(tasks):
         return False
-    completed = len(archive.records)
+    semantic = bool(archive.records and archive.records[-1].evidence.trial.execution_status == "failed")
+    completed = len(archive.records) - int(semantic)
+    if semantic:
+        return (len(result.trials) == len(archive.records)
+                and completed < len(tasks)
+                and result.sample_ids[completed] == tasks[completed].sample_id
+                and (scheduled := scheduled_prefix_keys(unit, cost_unit, archive.records)) is not None
+                and bool(scheduled) and scheduled[-1] == key)
     if completed != len(result.trials) or completed >= len(tasks):
         return False
-    stride = 2 if parent.baseline == "reflexion_style" else 1
     if result.sample_ids[completed] != tasks[completed].sample_id:
         return False
-    if any(tuple(call.stage for call in record.method_calls) != stages
-           for record in archive.records):
+    schedule = tuple(slot for slot, _ in schedule_unit(unit, cost_unit))
+    if len(schedule) % len(tasks):
         return False
-    for position, stage in enumerate(stages):
-        scheduled = RequestKeyV3(parent_id=key.parent_id, stage=stage,
-            ordinal=completed * stride + (position if stride == 2 else 0))
+    slots_per_trial = len(schedule) // len(tasks)
+    for scheduled in schedule[completed * slots_per_trial:(completed + 1) * slots_per_trial]:
         if key == scheduled:
             return True
         try:
