@@ -52,6 +52,47 @@ def test_missing_answer_when_retrieval_is_known() -> None:
     }
 
 
+@pytest.mark.parametrize("curator_recorded", [False, True])
+def test_derivation_when_dc_context_is_missing(curator_recorded: bool) -> None:
+    given, calls = fixture(included=True)
+    raw = given.model_dump(mode="json")
+    raw["baseline"] = "dc_rs"
+    raw["context"] = None
+    raw["trial"]["context_event_id_or_none"] = None
+    given = Phase13TrialEvidence.model_validate_json(json.dumps(raw))
+    curator = calls[0].model_copy(update={"call_id": "curator-1", "stage": "dc_rs_synthesize"})
+    calls = (MethodCall.model_validate_json(curator.model_dump_json()),) if curator_recorded else ()
+
+    result = reconstruct_stages(given, calls, ("root-b",))
+
+    assert result["derivation"] == {
+        "status": "unknown", "value": None, "reason": "MISSING_CONTEXT_EVENT",
+        "missing_artifact": "trial-1:context", "eligible": True,
+    }
+    assert result["curator"]["value"] is (True if curator_recorded else None)
+    assert result["actual_answer_context"]["value"] is None
+    assert result["registered_z"]["value"] is None
+
+
+@pytest.mark.parametrize("answer_recorded", [False, True])
+def test_derivation_when_dc_context_is_recorded_empty(answer_recorded: bool) -> None:
+    given, calls = fixture()
+    raw = given.model_dump(mode="json")
+    raw["baseline"] = "dc_rs"
+    given = Phase13TrialEvidence.model_validate_json(json.dumps(raw))
+    calls = tuple(MethodCall.model_validate_json(call.model_dump_json()) for call in calls) if answer_recorded else ()
+    assert given.context is not None
+    assert given.context.final_entry_ids == []
+
+    result = reconstruct_stages(given, calls, ("root-b",))
+
+    assert result["derivation"] == {
+        "status": "known", "value": False, "reason": "EXPLICIT_PARENTAGE",
+        "missing_artifact": None, "eligible": True,
+    }
+    assert result["actual_answer_context"]["value"] is (False if answer_recorded else None)
+
+
 @pytest.mark.parametrize("mutation", ["request", "span", "target-span", "duplicate"])
 def test_reject_integrity_when_call_is_corrupt(mutation: str) -> None:
     given, calls = fixture(included=True)

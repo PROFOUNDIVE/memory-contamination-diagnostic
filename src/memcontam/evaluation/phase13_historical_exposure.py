@@ -123,9 +123,11 @@ def reconstruct_stages(evidence: Phase13TrialEvidence, calls: tuple[MethodCall, 
     if evidence.baseline == "dc_rs":
         curator = next((call for call in calls if call.stage == "dc_rs_synthesize"), None)
         stages["curator"] = observation(bool(targets.intersection(span.entry_id for span in curator.source_spans)), "ACTUAL_CURATOR_REQUEST") if curator else observation(None, "MISSING_CURATOR_REQUEST", evidence.trial_id + ":dc_rs_synthesize")
-        final_ids = evidence.context.final_entry_ids if evidence.context else []
-        derived = _attribution(final_ids, evidence, targets)
-        stages["derivation"] = observation(derived, "EXPLICIT_PARENTAGE" if derived is not None else "UNAVAILABLE_STRATEGY_PARENTAGE", evidence.trial_id + ":lineage" if derived is None else None)
+        if evidence.context is None:
+            stages["derivation"] = observation(None, "MISSING_CONTEXT_EVENT", evidence.trial_id + ":context")
+        else:
+            derived = _attribution(evidence.context.final_entry_ids, evidence, targets)
+            stages["derivation"] = observation(derived, "EXPLICIT_PARENTAGE" if derived is not None else "UNAVAILABLE_STRATEGY_PARENTAGE", evidence.trial_id + ":lineage" if derived is None else None)
         stages["strategy_visible"] = observation(bool(answer and answer.source_spans), "ACTUAL_STRATEGY_REQUEST_SPAN") if answer else observation(None, "MISSING_ACTUAL_ANSWER_CALL", evidence.target_set.answer_call_id)
     if answer is None:
         stages["actual_answer_context"] = observation(None, "MISSING_ACTUAL_ANSWER_CALL", evidence.target_set.answer_call_id)
