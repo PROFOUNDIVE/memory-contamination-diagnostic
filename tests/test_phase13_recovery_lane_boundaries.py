@@ -189,6 +189,23 @@ def test_completed_request_refuses_redispatch_when_restarted(tmp_path: Path) -> 
     result = child(tmp_path, code)
     assert result.returncode == 0, result.stderr
     assert "DURABLE_RESTART_DUPLICATE_RECEIPT_REQUEST_REFUSED" in result.stdout
+    restarted = ("import json, runpy, sys, pytest\nfrom pathlib import Path\n"
+        "from dataclasses import asdict\nfrom tests.test_phase13_snapshot_budget import "
+        "MainRunLedger, MainRunError, SyntheticFixture, _binding, synthetic_evidence_policy\n"
+        f"sys.argv = {[str(PACKET), '--verify-packet', str(E / 'd2/packet')]!r}\n"
+        f"assert runpy.run_path({str(PACKET)!r})['main']() == 0\n"
+        "with pytest.MonkeyPatch.context() as patch:\n"
+        "    synthetic_evidence_policy.__wrapped__(patch)\n"
+        f"    ledger = MainRunLedger.open(Path({str(tmp_path / 'ledger.sqlite3')!r}), _binding(), SyntheticFixture().units())\n"
+        "    before = ledger.status()\n    assert before.completed_count == 1\n"
+        "    try:\n"
+        "        if ledger.claim_dispatch(SyntheticFixture().units()[0].unit_id, 10, 20):\n"
+        f"            Path({str(tmp_path / 'redispatched')!r}).write_text('SIMULATED_ONLY')\n"
+        "    except MainRunError as error:\n        assert error.code == 'MAIN_RUN_DISPATCH_ORDER_INVALID'\n"
+        "    assert ledger.status() == before\n    print(json.dumps(asdict(before)))\n")
+    result = child(tmp_path, restarted)
+    assert result.returncode == 0, result.stderr
+    assert not (tmp_path / "redispatched").exists()
 
 
 def test_real_compatibility_cli_preserves_source_closure_refusal(tmp_path: Path) -> None:
