@@ -260,7 +260,8 @@ class MainRunLedger:
     def _validate_reconciliation_evidence(self, evidence: InFlightEvidence) -> None:
         path = self.path.parent / "reconciliation" / f"{evidence.context.intent_event_hash}.json"
         try:
-            load_durable_reconciliation_evidence(path, evidence)
+            unit = next((row for row in self._units if row.unit_id == evidence.context.unit_id), None)
+            load_durable_reconciliation_evidence(path, evidence, unit)
         except MainEvidenceValidationError as error:
             raise MainRunError("MAIN_RUN_RECONCILIATION_EVIDENCE_INVALID") from error
 
@@ -273,6 +274,11 @@ class MainRunLedger:
         terminal = counts.get("TERMINAL_TECHNICAL_MISSING", 0)
         pending = counts.get("PENDING", 0)
         current_session_state = session_state(last_kind, pending, in_flight, completed, terminal)
+        if current_session_state == "COMPLETED" and any(
+            unit.diagnostic_trial_count is not None and state == "TERMINAL_TECHNICAL_MISSING"
+            for unit, state in zip(self._units, states, strict=True)
+        ):
+            current_session_state = "STOPPED_TERMINAL_TECHNICAL_MISSING"
         return MainRunStatus(
             current_session_state,
             len(states),

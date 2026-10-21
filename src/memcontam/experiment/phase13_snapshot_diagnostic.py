@@ -7,7 +7,7 @@ import json
 from dataclasses import dataclass, replace
 from inspect import getfile
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from memcontam.baselines import bot_phase12, bot_read, bot_runtime, bot_solve, bot_write
 from memcontam.baselines import dynamic_cheatsheet_optional, dynamic_cheatsheet_phase12
@@ -28,6 +28,10 @@ from memcontam.memory.checkpoint_v3 import (
 from memcontam.readiness.phase13_production_observability import ProductionObservabilityArchive
 from memcontam.readiness.phase13_production_runtime_join import production_archive_from_ordinary
 from memcontam.readiness.phase13_production_runtime_models import ProductionOrdinaryRunIdentity
+
+if TYPE_CHECKING:
+    from memcontam.readiness.phase13_main_live_dispatch import MainUnitDispatchOutput
+    from memcontam.readiness.phase13_main_production import ProductionObject
 
 
 class SnapshotError(ValueError):
@@ -67,6 +71,10 @@ class SnapshotUnitResult:
 
 def snapshot_input_sha256(run: ProspectiveOrdinaryRun) -> str:
     """Bind the input, treatment and native configuration, excluding clone IDs."""
+    return hashlib.sha256(snapshot_input_utf8(run).encode()).hexdigest()
+
+
+def snapshot_input_utf8(run: ProspectiveOrdinaryRun) -> str:
     branch = run.branch
     payload = {
         "tasks": [task.model_dump(mode="json") for task in run.tasks],
@@ -88,7 +96,18 @@ def snapshot_input_sha256(run: ProspectiveOrdinaryRun) -> str:
             "native_render_id": branch.native_render_id,
         },
     }
-    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
+
+
+def snapshot_source_paths(baseline: str) -> set[Path]:
+    native_modules = {
+        "bot_style": (bot_phase12, bot_runtime, bot_read, bot_solve, bot_write),
+        "dc_rs": (dynamic_cheatsheet_phase12, dynamic_cheatsheet_optional,
+                  phase13_dc_rs_runtime, phase13_dc_rs_validation),
+    }[baseline]
+    return {Path(getfile(module)).resolve() for module in (
+        runtime_registry, phase13_ordinary_runtime, *native_modules,
+    )} | {Path(__file__).resolve()}
 
 
 def execute_snapshot_unit(
@@ -110,14 +129,7 @@ def execute_snapshot_unit(
         raise SnapshotError("SNAPSHOT_NATIVE_BRANCH_REQUIRED")
     if snapshot_input_sha256(run) != bindings.input_sha256:
         raise SnapshotError("SNAPSHOT_INPUT_BINDING_MISMATCH")
-    native_modules = {
-        "bot_style": (bot_phase12, bot_runtime, bot_read, bot_solve, bot_write),
-        "dc_rs": (dynamic_cheatsheet_phase12, dynamic_cheatsheet_optional,
-                  phase13_dc_rs_runtime, phase13_dc_rs_validation),
-    }[run.baseline]
-    required_sources = {Path(getfile(module)).resolve() for module in (
-        runtime_registry, phase13_ordinary_runtime, *native_modules,
-    )} | {Path(__file__).resolve()}
+    required_sources = snapshot_source_paths(run.baseline)
     if not required_sources <= {source.path.resolve() for source in bindings.source_files}:
         raise SnapshotError("SNAPSHOT_SOURCE_BINDING_REQUIRED")
     for source in bindings.source_files:
@@ -153,3 +165,51 @@ def execute_snapshot_unit(
     result = execute_prospective_ordinary(clone_run)
     archive = production_archive_from_ordinary(clone_run, result, identity)
     return SnapshotUnitResult(clone_run, result, archive, bindings, clone_path)
+
+
+def snapshot_dispatch(snapshot: SnapshotUnitResult) -> tuple[ProductionObject, MainUnitDispatchOutput]:
+    """Bind synthetic native output for the existing durable writer/reconciler."""
+    from memcontam.readiness import phase13_durable_call_join
+    from memcontam.readiness.phase13_durable_call_join import DiagnosticFile, DiagnosticScope
+    from memcontam.readiness.phase13_main_live_dispatch import MainUnitDispatchOutput
+    from memcontam.readiness.phase13_main_live_runtime_support import dispatch_output
+    from memcontam.readiness.phase13_main_production import ProductionObject
+
+    run, bindings = snapshot.run, snapshot.bindings
+    if run.branch is None:
+        raise SnapshotError("SNAPSHOT_NATIVE_BRANCH_REQUIRED")
+    checkpoint = run.branch.checkpoint
+    identity = bindings.archive_identity.model_copy(update={"checkpoint_registry_sha256": bindings.state_sha256})
+    source = Path(phase13_durable_call_join.__file__).resolve()
+    sources = (*bindings.source_files, SnapshotFileBinding(source, hashlib.sha256(source.read_bytes()).hexdigest()))
+    scope = DiagnosticScope(run_id=run.run_id, input_utf8=snapshot_input_utf8(run),
+        input_sha256=bindings.input_sha256, state_utf8=checkpoint.canonical_bytes.decode(),
+        state_sha256=bindings.state_sha256,
+        source_files=tuple(DiagnosticFile(path=str(pin.path.resolve()), sha256=pin.sha256) for pin in sources),
+        candidate=None if bindings.candidate is None else DiagnosticFile(
+            path=str(bindings.candidate.path.resolve()), sha256=bindings.candidate.sha256), archive_identity=identity)
+    unit = ProductionObject(sequence=0, unit_id=hashlib.sha256((run.run_id + scope.sha256()).encode()).hexdigest(),
+        kind="MEMORY_BEARING", seed=identity.trajectory_seed, task=run.task_name,
+        memory_baseline=run.baseline, arm=run.arm,
+        prefix_unit_id=hashlib.sha256(run.branch.prefix_identity.encode()).hexdigest(), projected_cost_krw=0,
+        execution_template_id=identity.execution_template_id, ordered_sample_ids_sha256=identity.ordered_sample_ids_sha256,
+        registration_packet_sha256=identity.registration_packet_sha256, checkpoint_registry_sha256=identity.checkpoint_registry_sha256,
+        diagnostic_trial_count=1, diagnostic_scope_sha256=scope.sha256())
+    output = dispatch_output(unit, snapshot.ordinary.trials, identity, snapshot.archive, realized_cost_krw=0)
+    runtime = output.evidence
+    if not isinstance(runtime, dict):
+        raise SnapshotError("SNAPSHOT_ARCHIVE_BINDING_MISMATCH")
+    state_after = snapshot.ordinary.trials[0].state_after
+    if not isinstance(state_after, NativeState):
+        raise SnapshotError("SNAPSHOT_STATE_BINDING_MISMATCH")
+    runtime = {**runtime, "diagnostic_scope": scope.model_dump(mode="json"),
+               "diagnostic_post_state_utf8": serialize_checkpoint(state_after).canonical_bytes.decode()}
+    if snapshot.ordinary.trials[0].outcome.status == "failed":
+        runtime["verifier_result"] = None
+    return unit, MainUnitDispatchOutput(evidence={
+        "evidence_kind": "MEMORY_BEARING", "prefix_unit_id": unit.prefix_unit_id,
+        "consumed_checkpoint_id": checkpoint.identity.checkpoint_id,
+        "consumed_checkpoint_identity_sha256": checkpoint.identity.sha256,
+        "consumed_checkpoint_canonical_sha256": checkpoint.canonical_sha256,
+        "runtime_evidence": runtime,
+    }, provider_calls=output.provider_calls, realized_cost_krw=0)

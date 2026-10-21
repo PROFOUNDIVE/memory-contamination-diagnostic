@@ -55,6 +55,8 @@ class ProductionObject:
     ordered_sample_ids_sha256: str | None = None
     registration_packet_sha256: str | None = None
     checkpoint_registry_sha256: str | None = None
+    diagnostic_trial_count: int | None = None
+    diagnostic_scope_sha256: str | None = None
 
 
 def build_production_objects(
@@ -153,7 +155,8 @@ def units_sha256(units: tuple[ProductionObject, ...]) -> str:
             unit.arm,
             unit.prefix_unit_id,
             unit.projected_cost_krw,
-        ]
+        ] + ([unit.diagnostic_trial_count, unit.diagnostic_scope_sha256]
+             if unit.diagnostic_trial_count is not None or unit.diagnostic_scope_sha256 is not None else [])
         for unit in units
     ]
     return hashlib.sha256(_canonical(rows)).hexdigest()

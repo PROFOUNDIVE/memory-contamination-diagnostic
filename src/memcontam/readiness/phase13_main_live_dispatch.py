@@ -18,6 +18,7 @@ from memcontam.readiness.phase13_main_live_evidence import (
     MainReconciliationEvidence,
     MainUnitEvidence,
     validate_dispatch_evidence,
+    validate_diagnostic_partial,
 )
 from memcontam.readiness.phase13_main_runner_models import (
     DispatchCompleted,
@@ -128,7 +129,23 @@ def persist_reconciliation_evidence(
     *,
     realized_cost_krw: int = 0,
     failure_code: str | None = None,
+    diagnostic_unit: ExecutionUnit | None = None,
+    diagnostic_output: MainUnitDispatchOutput | None = None,
 ) -> InFlightEvidence:
+    partial = None
+    if diagnostic_unit is not None or diagnostic_output is not None:
+        if (diagnostic_unit is None or diagnostic_output is None or disposition != "TERMINAL_FAILURE"
+            or diagnostic_unit.unit_id != context.unit_id or realized_cost_krw != 0):
+            raise MainLiveDispatchError("MAIN_RECONCILIATION_EVIDENCE_INVALID")
+        joined = validate_diagnostic_partial(diagnostic_unit, DispatchEvidenceInput(
+            diagnostic_output.evidence, diagnostic_output.provider_calls, diagnostic_output.realized_cost_krw))
+        archive = joined.runtime_evidence.production_observability_archive
+        if archive is None or archive.records[0].terminal_failure_code != failure_code:
+            raise MainLiveDispatchError("MAIN_RECONCILIATION_EVIDENCE_INVALID")
+        partial = MainUnitEvidence(schema_version="phase13_main_unit_evidence_v1",
+            sequence=diagnostic_unit.sequence, unit_id=diagnostic_unit.unit_id, kind=diagnostic_unit.kind,
+            seed=diagnostic_unit.seed, task=diagnostic_unit.task, memory_baseline=diagnostic_unit.memory_baseline,
+            arm=diagnostic_unit.arm, evidence=joined, provider_calls=diagnostic_output.provider_calls, realized_cost_krw=0)
     record = MainReconciliationEvidence(
         schema_version="phase13_main_reconciliation_evidence_v1",
         disposition=disposition,
@@ -138,6 +155,7 @@ def persist_reconciliation_evidence(
         authorization_sha256=context.authorization_sha256,
         realized_cost_krw=realized_cost_krw,
         failure_code=failure_code,
+        diagnostic_partial=partial,
     )
     raw = json.dumps(
         record.model_dump(mode="json"),

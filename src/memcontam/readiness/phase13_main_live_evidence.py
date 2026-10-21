@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError, m
 from memcontam.logging.schema import MethodCall
 from memcontam.readiness.phase13_cost_policy import load_cost_policy_bundle
 from memcontam.readiness.phase13_cost_policy_models import Sha256
+from memcontam.readiness.phase13_durable_call_join import DiagnosticScope, validate_diagnostic_join
 from memcontam.readiness.phase13_main_production import ProductionObject
 from memcontam.readiness.phase13_main_runner_models import InFlightEvidence
 from memcontam.readiness.phase13_production_observability import (
@@ -62,6 +63,8 @@ class MainRuntimeEvidence(_FrozenModel):
     verifier_result: bool | None = None
     request: ProviderRequestRecord
     production_observability_archive: ProductionObservabilityArchive | None = None
+    diagnostic_scope: DiagnosticScope | None = None
+    diagnostic_post_state_utf8: str | None = None
 
     @model_validator(mode="after")
     def _observability_identity(self) -> MainRuntimeEvidence:
@@ -136,6 +139,7 @@ class MainReconciliationEvidence(_FrozenModel):
     authorization_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     realized_cost_krw: int = Field(ge=0)
     failure_code: str | None
+    diagnostic_partial: MainUnitEvidence | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -201,6 +205,9 @@ def validate_dispatch_evidence(
     supplied: DispatchEvidenceInput,
 ) -> tuple[UnitEvidence, int]:
     evidence = _parse_evidence(unit, supplied.evidence)
+    if (unit.diagnostic_trial_count is not None or unit.diagnostic_scope_sha256 is not None
+        or evidence.runtime_evidence.diagnostic_scope is not None):
+        _validate_diagnostic(unit, evidence, supplied)
     calls = supplied.provider_calls
     call_ids = tuple(call.call_id for call in calls)
     if (
@@ -227,6 +234,28 @@ def validate_dispatch_evidence(
     if supplied.claimed_cost_krw != realized:
         raise MainEvidenceValidationError("MAIN_UNIT_REALIZED_COST_MISMATCH")
     return evidence, realized
+
+
+def _validate_diagnostic(unit: ProductionObject, evidence: UnitEvidence,
+                         supplied: DispatchEvidenceInput, *, partial: bool = False) -> None:
+    if (not isinstance(evidence, MemoryUnitEvidence) or supplied.current_policy is not None
+        or supplied.claimed_cost_krw != 0 or supplied.count_cost_krw != 0 or supplied.attempt_costs
+        or any(call.provider_cost_usd != 0 for call in (
+            supplied.provider_calls[:-1] if partial else supplied.provider_calls))):
+        raise MainEvidenceValidationError("MAIN_DIAGNOSTIC_SCOPE_INVALID")
+    try:
+        validate_diagnostic_join(unit, evidence, supplied.provider_calls, partial=partial)
+    except (ValueError, OSError, KeyError, IndexError, TypeError) as error:
+        raise MainEvidenceValidationError("MAIN_DIAGNOSTIC_SCOPE_INVALID") from error
+
+
+def validate_diagnostic_partial(unit: ProductionObject, supplied: DispatchEvidenceInput) -> UnitEvidence:
+    evidence = _parse_evidence(unit, supplied.evidence)
+    _validate_diagnostic(unit, evidence, supplied, partial=True)
+    if any(not _completed_call(call, evidence.runtime_evidence.request, None) or not _reconciled_cost(call)
+           for call in supplied.provider_calls[:-1]):
+        raise MainEvidenceValidationError("MAIN_UNIT_PROVIDER_CALLS_INVALID")
+    return evidence
 
 
 def _stages_valid(
@@ -350,6 +379,7 @@ def load_durable_unit_evidence(
 def load_durable_reconciliation_evidence(
     path: Path,
     evidence: InFlightEvidence,
+    unit: ProductionObject | None = None,
 ) -> MainReconciliationEvidence:
     try:
         raw = path.read_bytes()
@@ -373,6 +403,17 @@ def load_durable_reconciliation_evidence(
         or (record.disposition == "TERMINAL_FAILURE" and not record.failure_code)
     ):
         raise MainEvidenceValidationError("MAIN_RECONCILIATION_EVIDENCE_INVALID")
+    diagnostic = unit is not None and (unit.diagnostic_trial_count is not None or unit.diagnostic_scope_sha256 is not None)
+    if record.diagnostic_partial is not None or diagnostic:
+        partial = record.diagnostic_partial
+        if (unit is None or partial is None or record.disposition != "TERMINAL_FAILURE"
+            or not _record_identity_valid(partial, unit) or partial.realized_cost_krw != record.realized_cost_krw):
+            raise MainEvidenceValidationError("MAIN_RECONCILIATION_EVIDENCE_INVALID")
+        validate_diagnostic_partial(unit, DispatchEvidenceInput(
+            partial.evidence.model_dump(mode="json"), partial.provider_calls, partial.realized_cost_krw))
+        archive = partial.evidence.runtime_evidence.production_observability_archive
+        if archive is None or record.failure_code != archive.records[0].terminal_failure_code:
+            raise MainEvidenceValidationError("MAIN_RECONCILIATION_EVIDENCE_INVALID")
     return record
 
 
@@ -548,7 +589,8 @@ def _expected_stages(unit: ProductionObject) -> Counter[str]:
                 stages = _BASELINE_STAGES[baseline]
             except KeyError as error:
                 raise MainEvidenceValidationError("MAIN_UNIT_PROVIDER_CALLS_INVALID") from error
-            repetitions = 1 if kind == "CLEAN_PREFIX" else (100 if baseline == "reflexion_style" else 50)
+            repetitions = (unit.diagnostic_trial_count if unit.diagnostic_trial_count is not None else
+                           1 if kind == "CLEAN_PREFIX" else (100 if baseline == "reflexion_style" else 50))
             return Counter({stage: repetitions for stage in stages})
         case unreachable:
             assert_never(unreachable)
