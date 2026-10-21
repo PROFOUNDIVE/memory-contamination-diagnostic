@@ -157,6 +157,9 @@ def test_native_stages_and_writes_when_treatment_is_separate_from_baseline(task:
 
     assert [call.stage for call in result.outcome.method_calls] == ["dc_rs_synthesize", "dc_rs_generate"]
     assert result.outcome.verifier_result is True
+    analysis = reconstruct_phase13_trial(evidence)
+    assert analysis.theory_exposure.value is (True if arm == "contam" else None)
+    assert analysis.theory_exposure.status == ("supported" if arm == "contam" else "not_applicable")
     assert evidence.baseline == "dc_rs" and evidence.trial.branch_id == arm
     assert evidence.target_set.target_entry_ids == (("qa-target",) if arm == "contam" else ())
     assert [entry.native_component for entry in result.native_entries] == ["archive", "strategy"]
@@ -180,13 +183,35 @@ def test_native_stages_and_writes_when_treatment_is_separate_from_baseline(task:
     ("src01", "supported", True), ("src02", "supported", False), ("", "unavailable", None),
 ])
 def test_target_attribution_when_only_explicit_curator_parents_count(
-    task: TaskInstance, case: tuple[str, str, bool | None],
+    task: TaskInstance, case: tuple[str, str, bool | None], tmp_path: Path,
 ) -> None:
+    from memcontam.experiment.phase13_snapshot_diagnostic import snapshot_dispatch, snapshot_input_sha256
+    from memcontam.readiness.phase13_main_live_dispatch import persist_unit_dispatch
+    from memcontam.readiness.phase13_production_observability import ProductionObservabilityArchive
+    from .phase13_snapshot_durable_fixtures import ContractTransport
+    from .test_phase13_snapshot_durable import _ledger, _reopen
+
     sources, status, included = case
     context = _context(task, sources)
+    assert isinstance(context.client, ReplayClient)
+    context.client.responses[0] = context.client.responses[0].replace("qa-derived-guide", "qa-raw-interaction")
+    run, bindings = _shared_fixture(context)
+    run = replace(run, client=ContractTransport(run.client), decoding={"temperature": 0.0, "top_p": 1.0})
+    bindings = replace(bindings, input_sha256=snapshot_input_sha256(run),
+        archive_identity=bindings.archive_identity.model_copy(update={"checkpoint_registry_sha256": bindings.state_sha256}))
 
-    result, evidence = _execute(context)
-    reopened = Phase13TrialEvidence.model_validate_json(evidence.model_dump_json())
+    snapshot = execute_snapshot_unit(run, bindings, tmp_path)
+    result, evidence = snapshot.ordinary.trials[0], snapshot.archive.records[0].evidence
+    assert isinstance(evidence, Phase13TrialEvidence)
+    unit, output = snapshot_dispatch(snapshot)
+    ledger = _ledger(tmp_path, unit)
+    ledger.persist_completed(unit.unit_id, persist_unit_dispatch(tmp_path, unit, output))
+    child = _reopen(tmp_path)
+    assert child.returncode == 0, child.stderr
+    archive = ProductionObservabilityArchive.model_validate_json(json.dumps(json.loads(child.stdout)["archive"]))
+    assert archive == snapshot.archive
+    reopened = archive.records[0].evidence
+    assert isinstance(reopened, Phase13TrialEvidence)
     analysis = reconstruct_phase13_trial(reopened)
 
     assert analysis.target_present_in_store_before_answer.value is True
@@ -194,6 +219,10 @@ def test_target_attribution_when_only_explicit_curator_parents_count(
     for metric in (analysis.target_final_context_included, analysis.theory_exposure):
         assert (metric.status, metric.value) == (status, included)
     strategy = result.native_entries[1]
+    curator, answer = result.outcome.method_calls
+    assert "qa-target" in {span.entry_id for span in curator.source_spans}
+    assert answer.source_spans[0].entry_id == strategy.entry_id
+    assert strategy.content not in (answer.raw_response or "")
     assert strategy.direct_parent_ids == {"src01": ("qa-target",), "src02": ("qa-unrelated",), "": ()}[sources]
     assert strategy.lineage_status == ("exact" if sources else "unavailable")
     assert result.outcome.method_calls[-1].source_spans[0].lineage_status == strategy.lineage_status
@@ -264,7 +293,13 @@ def test_checkpoint_refuses_unknown_promoted_to_exact_empty(task: TaskInstance) 
 
 
 @pytest.mark.parametrize("status", ["exact", "unavailable"])
-def test_parentless_status_preserved_when_checkpoint_reopened(task: TaskInstance, status: Literal["exact", "unavailable"]) -> None:
+def test_parentless_status_preserved_when_checkpoint_reopened(task: TaskInstance, status: Literal["exact", "unavailable"], tmp_path: Path) -> None:
+    from memcontam.experiment.phase13_snapshot_diagnostic import snapshot_dispatch, snapshot_input_sha256
+    from memcontam.readiness.phase13_main_live_dispatch import persist_unit_dispatch
+    from memcontam.readiness.phase13_production_observability import ProductionObservabilityArchive
+    from .phase13_snapshot_durable_fixtures import ContractTransport
+    from .test_phase13_snapshot_durable import _ledger, _reopen
+
     context = _context(task, "")
     state = context.initial_states["dc_rs"]
     strategy = NativeEntry(entry_id="qa-parentless", semantic_kind="dynamic_cheatsheet",
@@ -279,8 +314,24 @@ def test_parentless_status_preserved_when_checkpoint_reopened(task: TaskInstance
 
     assert isinstance(reopened, dc.DcRsStateV3)
     assert reopened.strategies == [strategy]
-    _, evidence = _execute(context)
+    run, bindings = _shared_fixture(replace(context, initial_states={"dc_rs": reopened}))
+    run = replace(run, client=ContractTransport(run.client), decoding={"temperature": 0.0, "top_p": 1.0})
+    bindings = replace(bindings, input_sha256=snapshot_input_sha256(run),
+        archive_identity=bindings.archive_identity.model_copy(update={"checkpoint_registry_sha256": bindings.state_sha256}))
+    snapshot = execute_snapshot_unit(run, bindings, tmp_path)
+    unit, output = snapshot_dispatch(snapshot)
+    ledger = _ledger(tmp_path, unit)
+    ledger.persist_completed(unit.unit_id, persist_unit_dispatch(tmp_path, unit, output))
+
+    child = _reopen(tmp_path)
+
+    assert child.returncode == 0, child.stderr
+    archive = ProductionObservabilityArchive.model_validate_json(json.dumps(json.loads(child.stdout)["archive"]))
+    assert archive == snapshot.archive
+    evidence = archive.records[0].evidence
+    assert isinstance(evidence, Phase13TrialEvidence)
     assert next(node for node in evidence.lineage if node.entry_id == strategy.entry_id).lineage_status == status
+    assert next(node for node in evidence.lineage if node.entry_id == strategy.entry_id).direct_parent_ids == ()
 
 
 def test_source_binding_refused_when_expected_raw_interaction_changes(task: TaskInstance) -> None:
