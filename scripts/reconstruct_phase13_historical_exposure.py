@@ -107,6 +107,8 @@ def reconstruct(historical: Path, analysis: Path, output: Path):
             for value in row["stages"].values():
                 if value["value"] is None and value["eligible"]:
                     value["missing_artifact"] = binding["path"] + f"#/records/{slot['archive_record_index']}/evidence/lineage"
+                    if value["reason"] == "MISSING_CONTEXT_EVENT":
+                        value["missing_artifact"] = slot["trial"]["path"] + "#/context"
                     if "CALL" in value["reason"] or "CURATOR" in value["reason"] or "RETRIEVAL" in value["reason"]:
                         value["missing_artifact"] = slot["trial"]["path"] + ("#/retrieval" if "RETRIEVAL" in value["reason"] else "#/outcome/method_calls")
             row["native_object_ids"] = list(injected)
