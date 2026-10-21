@@ -19,7 +19,9 @@ CAND: Final = Path(os.environ.get("RECOVERY_CANDIDATE", "/home/hyunwoo/phase13_c
 REPORT: Final = D1 / "scripts/reconstruct_phase13_historical_exposure.py"
 PACKET: Final = D2 / "scripts/prepare_phase13_snapshot_diagnostic.py"
 COMPAT: Final = CAND / "recovery/h1_capture_compat.py"
-LATEST: Final = E / "d1/report-task15-v2"
+LATEST: Final = E / "d1/report-f2-002-v3"
+PACKET_OUTPUT: Final = E / "d2/packet-f2amendment-002"
+PROPOSAL: Final = E / "d2/proposal-f2checkpoint-001.json"
 HIST: Final = Path("/home/hyunwoo/phase13_artifacts/PeerJ-fast-track/11\uC8FC\uCC28/diagnostic-p/diagnostic-p-v3-defect6-native50-20261007-g2")
 ANALYSIS: Final = Path("/home/hyunwoo/phase13_artifacts/diagnostic-p-investigation-20261015")
 JOB: Final = HIST.parent.parent / "h1_readiness_review_source019_20261019_002"
@@ -65,7 +67,7 @@ def test_valid_verification_when_m1_and_q_wait_externally(tmp_path: Path, lane: 
     assert json.loads((E / "m1/task13-resume-002/capture-status.json").read_text())["status"] == "CAPTURE_REQUIRES_EXTERNAL_ACTION"
     assert json.loads((E / "q/pending.json").read_text())["gates"]["human_panel"]["status"] == "UNVERIFIED"
     output, root, argv = (LATEST, D1, report_args(LATEST)) if lane == "D1" else (
-        E / "d2/packet", D2, [str(PACKET), "--verify-packet", str(E / "d2/packet")])
+        PACKET_OUTPUT, D2, [str(PACKET), "--verify-packet", str(PACKET_OUTPUT)])
     before = fingerprint(output)
     result = cli(tmp_path, argv, root)
     assert result.returncode == 0, result.stderr
@@ -86,13 +88,13 @@ def test_native_export_corruption_when_only_m1_consumes_it(tmp_path: Path) -> No
         f"proof = compat.verify_native(gate, review, Path({str(export)!r}))\n"
         "assert proof['sql_identity']['part_count'] == 299\nprint('NATIVE_GRAPH_VERIFIED')\n")
     assert child(tmp_path, code).returncode == 0
-    before = fingerprint(LATEST), fingerprint(E / "d2/packet")
+    before = fingerprint(LATEST), fingerprint(PACKET_OUTPUT)
     export.write_text("{}")
     result = child(tmp_path, code)
     assert result.returncode == 1 and "pin hash/readonly mismatch" in result.stderr, result.stderr
     assert cli(tmp_path, report_args(LATEST), D1).returncode == 0
-    assert cli(tmp_path, [str(PACKET), "--verify-packet", str(E / "d2/packet")]).returncode == 0
-    assert (fingerprint(LATEST), fingerprint(E / "d2/packet")) == before
+    assert cli(tmp_path, [str(PACKET), "--verify-packet", str(PACKET_OUTPUT)]).returncode == 0
+    assert (fingerprint(LATEST), fingerprint(PACKET_OUTPUT)) == before
 
 
 @pytest.fixture
@@ -100,7 +102,7 @@ def rebound(tmp_path: Path) -> tuple[Path, Path, Path]:
     """Explicit scratch amendment of locators only; never historical authentication."""
     parent = tmp_path / "d1"
     (parent / "task4").mkdir(parents=True)
-    proposal = json.loads((E / "d2/proposal.json").read_text())
+    proposal = json.loads(PROPOSAL.read_text())
     authority = tmp_path / "MANIFEST.json"
     shutil.copyfile(proposal["authority_manifest"]["path"], authority)
     proposal["authority_manifest"]["path"] = str(authority)
@@ -131,7 +133,7 @@ def test_all_actual_consumers_refuse_when_shared_manifest_digest_changes(
     tmp_path: Path, rebound: tuple[Path, Path, Path],
 ) -> None:
     authority, report, packet = rebound
-    before = fingerprint(LATEST), fingerprint(E / "d2/packet"), fingerprint(report), fingerprint(packet)
+    before = fingerprint(LATEST), fingerprint(PACKET_OUTPUT), fingerprint(report), fingerprint(packet)
     authority.write_bytes(authority.read_bytes() + b" ")
     for argv, root, reason in ((report_args(report), D1, "INPUT_HASH_MISMATCH"),
         ([str(PACKET), "--verify-packet", str(packet)], D2, "PACKET_BINDING_MISMATCH")):
@@ -144,8 +146,8 @@ def test_all_actual_consumers_refuse_when_shared_manifest_digest_changes(
         assert result.returncode == 1 and reason in result.stderr, result.stderr
         assert not dispatch.exists()
     assert cli(tmp_path, report_args(LATEST), D1).returncode == 0
-    assert cli(tmp_path, [str(PACKET), "--verify-packet", str(E / "d2/packet")]).returncode == 0
-    assert (fingerprint(LATEST), fingerprint(E / "d2/packet"), fingerprint(report), fingerprint(packet)) == before
+    assert cli(tmp_path, [str(PACKET), "--verify-packet", str(PACKET_OUTPUT)]).returncode == 0
+    assert (fingerprint(LATEST), fingerprint(PACKET_OUTPUT), fingerprint(report), fingerprint(packet)) == before
 
 
 @pytest.mark.parametrize("lane", ["D1", "D2", "M1"])
@@ -153,7 +155,7 @@ def test_output_collision_refuses_before_any_write(tmp_path: Path, lane: str) ->
     target = tmp_path / "occupied"
     target.mkdir()
     (target / "sentinel").write_text("preserved")
-    options = {"D1": (report_args(target, False), D1), "D2": ([str(PACKET), "--proposal", str(E / "d2/proposal.json"), "--output-dir", str(target), "--provider-free"], D2),
+    options = {"D1": (report_args(target, False), D1), "D2": ([str(PACKET), "--proposal", str(PROPOSAL), "--output-dir", str(target), "--provider-free"], D2),
         "M1": ([str(COMPAT), "--review-result", str(REVIEW), "--candidate", str(JOB / "CANDIDATE_H1_READINESS.json"), "--candidate-sha256", "e301a463caa38f7f717161884efae42d76c0ce5ebb8db6c67bb27343541501cc", "--export", str(REVIEW.with_name("native-export.json")), "--output", str(target), "--verify-only"], D2)}
     argv, root = options[lane]
     before = fingerprint(target)
@@ -166,7 +168,7 @@ def test_output_collision_refuses_before_any_write(tmp_path: Path, lane: str) ->
 def test_overlapping_input_namespace_refuses_when_output_is_nested(tmp_path: Path, lane: str) -> None:
     inputs = tmp_path / "inputs"
     inputs.mkdir()
-    proposal = json.loads((E / "d2/proposal.json").read_text())
+    proposal = json.loads(PROPOSAL.read_text())
     shutil.copyfile(proposal["handoff"]["path"], inputs / "handoff.md")
     proposal["handoff"]["path"] = str(inputs / "handoff.md")
     proposal_path = tmp_path / "proposal.json"
@@ -192,7 +194,7 @@ def test_completed_request_refuses_redispatch_when_restarted(tmp_path: Path) -> 
     restarted = ("import json, runpy, sys, pytest\nfrom pathlib import Path\n"
         "from dataclasses import asdict\nfrom tests.test_phase13_snapshot_budget import "
         "MainRunLedger, MainRunError, SyntheticFixture, _binding, synthetic_evidence_policy\n"
-        f"sys.argv = {[str(PACKET), '--verify-packet', str(E / 'd2/packet')]!r}\n"
+        f"sys.argv = {[str(PACKET), '--verify-packet', str(PACKET_OUTPUT)]!r}\n"
         f"assert runpy.run_path({str(PACKET)!r})['main']() == 0\n"
         "with pytest.MonkeyPatch.context() as patch:\n"
         "    synthetic_evidence_policy.__wrapped__(patch)\n"
@@ -235,7 +237,7 @@ def test_real_compatibility_cli_preserves_source_closure_refusal(tmp_path: Path)
 
 def test_stale_lane_output_digest_refuses_promotion(tmp_path: Path) -> None:
     packet = tmp_path / "packet"
-    shutil.copytree(E / "d2/packet", packet)
+    shutil.copytree(PACKET_OUTPUT, packet)
     path = packet / "readiness.json"
     path.write_bytes(path.read_bytes() + b" ")
     result = cli(tmp_path, [str(PACKET), "--verify-packet", str(packet)])
