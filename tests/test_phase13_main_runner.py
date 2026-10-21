@@ -346,7 +346,7 @@ def test_ledger_tampering_fails_closed(tmp_path: Path) -> None:
         )
 
     with pytest.raises(MainRunError, match="MAIN_RUN_LEDGER_INTEGRITY_INVALID"):
-        MainRunLedger.open(ledger.path, _binding(), enumerate_execution_units(_package()))
+        MainRunLedger.open(ledger.path, _binding(), enumerate_execution_units(_package(), ROOT))
 
 
 def test_invalid_frozen_projection_leaves_unit_safely_pending(tmp_path: Path) -> None:

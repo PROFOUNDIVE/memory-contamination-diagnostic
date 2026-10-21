@@ -44,6 +44,10 @@ def ledger_genesis(connection: sqlite3.Connection) -> str:
     return hashlib.sha256(canonical(["phase13-main-a-event-genesis-v1", metadata])).hexdigest()
 
 
+def _full_units_identity_sha256(units: tuple[ExecutionUnit, ...]) -> str:
+    return hashlib.sha256(canonical([asdict(unit) for unit in units])).hexdigest()
+
+
 def expected_metadata(
     binding: MainRunBinding,
     units: tuple[ExecutionUnit, ...],
@@ -51,6 +55,7 @@ def expected_metadata(
     return {
         "ledger_schema_id": LEDGER_SCHEMA_ID,
         "units_sha256": units_sha256(units),
+        "full_units_identity_sha256": _full_units_identity_sha256(units),
         **{key: str(value) for key, value in asdict(binding).items()},
     }
 
@@ -169,6 +174,11 @@ def validate_integrity(
     connection: sqlite3.Connection,
     units: tuple[ExecutionUnit, ...],
 ) -> tuple[list[str], str | None, int]:
+    metadata = dict(connection.execute("SELECT key, value FROM metadata"))
+    if "full_units_identity_sha256" not in metadata:
+        raise MainRunError("MAIN_RUN_UNIT_IDENTITY_BINDING_MISSING")
+    if metadata["full_units_identity_sha256"] != _full_units_identity_sha256(units):
+        raise MainRunError("MAIN_RUN_BINDING_MISMATCH")
     rows = connection.execute(
         "SELECT sequence, unit_id, kind, seed, task, memory_baseline, arm, state "
         "FROM execution_units ORDER BY sequence"

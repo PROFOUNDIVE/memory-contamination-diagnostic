@@ -75,6 +75,8 @@ class MainRunLedger:
         ledger = cls(path, units, binding.core_authorization_gate_krw)
         with connect(path) as connection:
             metadata = dict(connection.execute("SELECT key, value FROM metadata"))
+            if "full_units_identity_sha256" not in metadata:
+                raise MainRunError("MAIN_RUN_UNIT_IDENTITY_BINDING_MISSING")
             expected = expected_metadata(binding, units)
             if metadata != expected:
                 raise MainRunError("MAIN_RUN_BINDING_MISMATCH")
