@@ -35,8 +35,11 @@ def fixture(*, included: bool = False) -> tuple[Phase13TrialEvidence, tuple[Meth
 
 def test_context_when_answer_does_not_repeat_target() -> None:
     given, calls = fixture(included=True)
-    result = reconstruct_stages(given, calls, ("root-b",))
+    given = Phase13TrialEvidence.model_validate_json(given.model_dump_json())
+    calls = tuple(MethodCall.model_validate_json(call.model_dump_json()) for call in calls)
+    result = json.loads(json.dumps(reconstruct_stages(given, calls, ("root-b",))))
     assert result["actual_answer_context"]["value"] is True
+    assert result["registered_z"]["value"] is True
 
 
 def test_missing_answer_when_retrieval_is_known() -> None:
@@ -49,7 +52,7 @@ def test_missing_answer_when_retrieval_is_known() -> None:
     }
 
 
-@pytest.mark.parametrize("mutation", ["request", "span", "duplicate"])
+@pytest.mark.parametrize("mutation", ["request", "span", "target-span", "duplicate"])
 def test_reject_integrity_when_call_is_corrupt(mutation: str) -> None:
     given, calls = fixture(included=True)
     call = calls[0]
@@ -57,41 +60,82 @@ def test_reject_integrity_when_call_is_corrupt(mutation: str) -> None:
         calls = (call.model_copy(update={"provider_request_contract": {"input_sha256": "0" * 64}}),)
     elif mutation == "span":
         calls = (call.model_copy(update={"source_spans": [call.source_spans[0].model_copy(update={"rendered_hash": "0" * 64})]}),)
+    elif mutation == "target-span":
+        given = given.model_copy(update={"target_set": given.target_set.model_copy(update={
+            "answer_call_spans": (call.source_spans[0].model_copy(update={"rendered_hash": "0" * 64}),)})})
     else:
         calls = (call, call)
     with pytest.raises(HistoricalIntegrityError):
         reconstruct_stages(given, calls, ("root-b",))
 
 
-@pytest.mark.parametrize("status,expected", [("unavailable", None), ("exact", False), ("approximate", None)])
+@pytest.mark.parametrize("status,expected", [("unavailable", None), ("exact", False), ("approximate", None), ("exact", True)])
 @pytest.mark.parametrize("parent_call", [None, "curator-1"])
 def test_parentage_when_strategy_is_visible(status: str, expected: bool | None, parent_call: str | None) -> None:
     given, calls = fixture(included=True)
     raw = given.model_dump(mode="json")
     raw["baseline"] = "dc_rs"
     raw["context"]["final_entry_ids"] = ["strategy"]
-    raw["lineage"].append({"entry_id": "strategy", "lineage_status": status})
+    parents = ["root-b"] if expected is True else []
+    raw["lineage"].append({"entry_id": "strategy", "lineage_status": status,
+        "direct_parent_ids": parents, "injected_root_ids": parents})
     strategy_span = calls[0].source_spans[0].model_copy(update={
-        "entry_id": "strategy", "injected_root_ids": [], "direct_parent_ids": [],
-        "is_target_contamination": False, "lineage_status": status,
+        "entry_id": "strategy", "injected_root_ids": parents, "direct_parent_ids": parents,
+        "is_target_contamination": expected is True, "lineage_status": status,
         "parent_call_id": parent_call,
     })
-    raw["target_set"]["answer_call_spans"] = []
+    raw["target_set"]["answer_call_spans"] = [strategy_span.model_copy(update={
+        "parent_call_id": "answer-1", "contamination_class": "derived", "lineage_basis": "recorded_source",
+    }).model_dump(mode="json")] if expected is True else []
     given = Phase13TrialEvidence.model_validate_json(json.dumps(raw))
     calls = (calls[0].model_copy(update={"source_spans": [strategy_span]}),)
-    result = reconstruct_stages(given, calls, ("root-b",))
+    curator = calls[0].model_copy(update={"call_id": "curator-1", "stage": "dc_rs_synthesize",
+        "source_spans": [fixture(included=True)[1][0].source_spans[0]]})
+    calls = tuple(MethodCall.model_validate_json(call.model_dump_json()) for call in (curator, *calls))
+    result = json.loads(json.dumps(reconstruct_stages(given, calls, ("root-b",))))
+    assert result["stored"]["value"] is True
+    assert result["retrieved"]["value"] is True
+    assert result["curator"]["value"] is True
     assert result["strategy_visible"]["value"] is True
     assert result["derivation"]["value"] is expected
     assert result["actual_answer_context"]["value"] is expected
     assert result["registered_z"]["value"] is expected
+    assert result["operational_use"]["value"] is None
+    assert given.lineage[-1].lineage_status == status
+    assert given.lineage[-1].direct_parent_ids == tuple(parents)
 
 
 def test_known_zero_when_retrieved_but_absent_from_request() -> None:
     given, calls = fixture()
+    calls = (calls[0].model_copy(update={"raw_response": "root-b x"}),)
     result = reconstruct_stages(given, calls, ("root-b",))
     assert result["retrieved"]["value"] is True
     assert result["actual_answer_context"]["value"] is False
     assert result["registered_z"]["value"] is False
+
+
+def test_correct_inclusion_when_registered_contam_target_is_absent() -> None:
+    given, calls = fixture(included=True)
+    raw = given.model_dump(mode="json")
+    raw["trial"] = helpers.trial(retrieved=True, arm="correct").model_dump(mode="json")
+    raw["target_set"]["target_entry_ids"] = []
+    raw["target_set"]["answer_call_spans"] = []
+    given = Phase13TrialEvidence.model_validate_json(json.dumps(raw))
+
+    result = reconstruct_stages(given, calls, ("root-b",))
+
+    assert result["actual_answer_context"]["value"] is True
+    assert result["registered_z"]["value"] is None
+    assert result["registered_z"]["eligible"] is False
+
+
+def test_predicted_context_when_actual_answer_request_is_missing() -> None:
+    given, _calls = fixture(included=True)
+
+    result = reconstruct_stages(given, (), ("root-b",))
+
+    assert result["actual_answer_context"]["value"] is None
+    assert result["registered_z"]["value"] is None
 
 
 def test_reject_join_when_context_trial_is_wrong() -> None:

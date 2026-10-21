@@ -13,6 +13,7 @@ from memcontam.evaluation.phase13_observability_lineage import validate_evidence
 from memcontam.evaluation.phase13_observability_models import Phase13TrialEvidence
 from memcontam.logging.schema import MethodCall
 from memcontam.memory.cards_v3 import canonical_content_hash
+from memcontam.readiness.phase13_production_runtime_evidence import _target_spans
 
 STAGES: Final = ("stored", "retrieved", "curator", "derivation", "strategy_visible", "actual_answer_context", "registered_z", "operational_use")
 
@@ -132,7 +133,10 @@ def reconstruct_stages(evidence: Phase13TrialEvidence, calls: tuple[MethodCall, 
         final_ids = [span.entry_id for span in answer.source_spans]
         if evidence.context is None or set(final_ids) != set(evidence.context.final_entry_ids):
             raise HistoricalIntegrityError("ACTUAL_REQUEST_CONTEXT_JOIN")
-        if any(span not in answer.source_spans for span in evidence.target_set.answer_call_spans):
+        if evidence.target_set.answer_call_spans != _target_spans(
+            (answer,), answer.call_id, evidence.target_set.target_entry_ids,
+            evidence.target_set.target_set_id, evidence.lineage,
+        ):
             raise HistoricalIntegrityError("TARGET_ANSWER_SPAN_JOIN")
         included = _attribution(final_ids, evidence, targets)
         stages["actual_answer_context"] = observation(included, "ACTUAL_REQUEST_AND_EXACT_LINEAGE" if included is not None else "UNAVAILABLE_STRATEGY_PARENTAGE", evidence.trial_id + ":lineage" if included is None else None)
