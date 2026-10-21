@@ -209,6 +209,8 @@ def validate_diagnostic_join(unit: ProductionObject, evidence: MemoryUnitEvidenc
             or row.terminal_provider_evidence.trigger_class != "provider_call_failure"
             or terminal.raw_response is not None or terminal.transport_attempts != 1 or terminal.retry_count != 0
             or terminal.provider_cost_usd is not None or terminal.token_usage or terminal.provider_usage is not None
+            or terminal.authoritative_provider_cost_usd is not None
+            or terminal.derived_cost_usd is not None or terminal.provider_cost_source is not None
             or trial.verified_outcome is not None or before != after
             or runtime.verifier_result is not None):
             raise DiagnosticJoinError()
