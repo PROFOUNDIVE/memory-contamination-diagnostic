@@ -216,3 +216,44 @@ def test_cli_refuses_live_options_when_invoked(tmp_path: Path, flag: str):
         env=os.environ, capture_output=True, text=True, timeout=30, check=False)
     assert result.returncode == 2
     assert "unrecognized arguments" in result.stderr
+
+
+@pytest.fixture
+def successor_proposal() -> Path:
+    root = Path(os.environ.get("RECOVERY_EVIDENCE", "/home/hyunwoo/phase13_artifacts/phase13-parallel-recovery-20261021-001"))
+    return root / "d2/proposal-f2checkpoint-001.json"
+
+
+def test_actual_successor_claims_create_read_only_packet(successor_proposal: Path, tmp_path: Path):
+    import memcontam.readiness.phase13_snapshot_packet as packet
+    output = tmp_path / "packet"
+    packet.prepare_packet(successor_proposal, output)
+    before = {path.name: (path.read_bytes(), path.stat().st_mtime_ns) for path in output.iterdir()}
+    result = packet.verify_packet(output)
+    assert result["launch_eligible"] is False and result["real_spend_cap_usd"] == 0
+    assert before == {path.name: (path.read_bytes(), path.stat().st_mtime_ns) for path in output.iterdir()}
+    assert len(json.loads((output / "input-manifest.json").read_text())["qa_native_objects"]) == 5
+
+
+@pytest.mark.parametrize("mutation", ["changed", "resealed", "unrecognized", "historical"])
+def test_successor_claim_trust_refuses_substitution(successor_proposal: Path, tmp_path: Path, mutation: str):
+    import memcontam.readiness.phase13_snapshot_packet as packet
+    raw = json.loads(successor_proposal.read_text())
+    receipt = next(row for row in raw["mechanics"] if row["name"] == "durable")
+    claim = tmp_path / "claim.json"
+    original = Path(receipt["claim"]["path"]).read_bytes()
+    claim.write_bytes(original + b" ")
+    receipt["claim"]["path"] = str(claim)
+    reason = "PACKET_BINDING_MISMATCH"
+    if mutation != "changed":
+        reason = "PACKET_QA_CLAIM_PIN_INVALID"
+        if mutation == "unrecognized":
+            claim.write_text(json.dumps({"task_complete": True, "artifacts_sha256": {}}))
+        if mutation == "historical":
+            claim.write_bytes((successor_proposal.parents[1] / "task-14/DoneClaim.json").read_bytes())
+        receipt["claim"] = pin(claim)
+    proposal_path = tmp_path / "proposal.json"
+    proposal_path.write_text(json.dumps(raw))
+    with pytest.raises(packet.PacketError, match=reason):
+        packet.prepare_packet(proposal_path, tmp_path / "packet")
+    assert not (tmp_path / "packet").exists()

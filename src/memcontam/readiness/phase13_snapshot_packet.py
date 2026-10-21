@@ -33,8 +33,8 @@ AUTHORITY_SHA256: Final = "5cf0c3772739aa5124866752a99bcf5dfcbb77bd3e364de438b2e
 FINANCIAL_SHA256: Final = "8ec9ca4c645c3c8a5d972ba4daaa4c78a01cd59cf726ef874bc53a080ab47c6c"
 MECHANICAL_CLAIM_SHA256: Final = {
     "accounting": "768e76ba6a4ced34c3cc4feea0cb456cdcfbc051c1fb2d79e45611021cbc3250",
-    "durable": "f417276c92b9c253bed2713370e63c418cfdf6d022f8e69b7c8874ee12c928f8",
-    "semantics": "25942c82b56e5205c1a2508431e523dd81d1f14b26068a1d077c1320d8285cb4",
+    "durable": "0f93d4f0ed249c201f807e46194129176ea0875270e9d9c5205feea36436417d",
+    "semantics": "37ca0d8a4b4f067f30081d97dd9296a49f63003beaf32477c7f5576ae8c8b068",
 }
 ROOT: Final = Path(__file__).resolve().parents[3]
 FILES: Final = ("proposal.json", "registration-proposal.json", "input-manifest.json",
