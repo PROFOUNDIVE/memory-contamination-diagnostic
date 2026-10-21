@@ -44,9 +44,15 @@ def install_offline_denial(monkeypatch: pytest.MonkeyPatch) -> tuple[str, ...]:
     original_popen = subprocess.Popen
 
     def guarded_popen(args, *positional, **kwargs):
-        if (not isinstance(args, (list, tuple)) or len(args) != 5
-            or list(args[:4]) != [sys.executable, "-B", "-m", "tests.phase13_recovery_offline"]
+        if (not isinstance(args, (list, tuple)) or positional
             or kwargs.get("shell", False) or kwargs.get("executable") is not None):
+            _deny()
+        python_reopen = (len(args) == 5 and list(args[:4]) == [
+            sys.executable, "-B", "-m", "tests.phase13_recovery_offline",
+        ])
+        cache_probe = (list(args) == ["/sbin/ldconfig", "-p"]
+                       and os.path.realpath("/sbin/ldconfig") == "/usr/sbin/ldconfig")
+        if not (python_reopen or cache_probe):
             _deny()
         return original_popen(args, *positional, **kwargs)
 

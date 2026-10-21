@@ -125,3 +125,44 @@ def test_dispatch_output_serializes_existing_ordinary_archive(
     assert MainRuntimeEvidence.model_validate_json(json.dumps(absent.evidence)).production_observability_archive is None
     with pytest.raises(ValidationError):
         ProductionObservabilityArchive.model_validate(None)
+
+
+def test_exact_ldconfig_cache_probe_is_allowed() -> None:
+    import subprocess
+
+    assert Path("/sbin/ldconfig").resolve() == Path("/usr/sbin/ldconfig")
+
+    result = subprocess.run(
+        ["/sbin/ldconfig", "-p"], check=True, capture_output=True,
+        env={"LC_ALL": "C", "LANG": "C"},
+    )
+
+    assert b"libdl.so.2" in result.stdout
+
+
+@pytest.mark.parametrize("argv,shell,executable", [
+    (["/sbin/ldconfig"], False, None),
+    (["/sbin/ldconfig", "-p", "-v"], False, None),
+    (["/sbin/ldconfig", "-p"], True, None),
+    (["/sbin/ldconfig", "-p"], False, "/usr/sbin/ldconfig"),
+    (["/sbin/ldconfig", "-p"], False, "/bin/sh"),
+    (["/usr/sbin/ldconfig", "-p"], False, None),
+    (["ldconfig", "-p"], False, None),
+    ("/sbin/ldconfig -p", True, None),
+])
+def test_ldconfig_probe_near_misses_never_reach_process_transport(
+    monkeypatch: pytest.MonkeyPatch, argv: list[str] | str, shell: bool,
+    executable: str | None,
+) -> None:
+    import subprocess
+
+    plugin = importlib.import_module("tests.phase13_recovery_offline")
+
+    def forbidden_delegate(*_args, **_kwargs) -> None:
+        raise AssertionError("unexpected process delegation")
+
+    monkeypatch.setattr(subprocess, "Popen", forbidden_delegate)
+    plugin.install_offline_denial(monkeypatch)
+
+    with pytest.raises(plugin.OfflineTransportDenied):
+        subprocess.Popen(argv, shell=shell, executable=executable)
