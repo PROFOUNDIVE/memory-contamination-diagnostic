@@ -10,6 +10,8 @@ from dataclasses import asdict
 from pathlib import Path
 from uuid import uuid4
 
+from .phase13_live_diagnostic_models import LiveDiagnosticBinding
+
 from memcontam.readiness.phase13_main_runner_models import (
     LEDGER_SCHEMA_ID,
     ExecutionUnit,
@@ -41,7 +43,10 @@ def canonical(value: list) -> bytes:
 
 def ledger_genesis(connection: sqlite3.Connection) -> str:
     metadata = sorted(connection.execute("SELECT key, value FROM metadata").fetchall())
-    return hashlib.sha256(canonical(["phase13-main-a-event-genesis-v1", metadata])).hexdigest()
+    domain = ("phase13-live-diagnostic-event-genesis-v1" if
+              dict(metadata).get("ledger_schema_id") == "phase13-live-diagnostic-ledger-v1"
+              else "phase13-main-a-event-genesis-v1")
+    return hashlib.sha256(canonical([domain, metadata])).hexdigest()
 
 
 def _full_units_identity_sha256(units: tuple[ExecutionUnit, ...]) -> str:
@@ -49,9 +54,13 @@ def _full_units_identity_sha256(units: tuple[ExecutionUnit, ...]) -> str:
 
 
 def expected_metadata(
-    binding: MainRunBinding,
+    binding: MainRunBinding | LiveDiagnosticBinding,
     units: tuple[ExecutionUnit, ...],
 ) -> dict[str, str]:
+    if isinstance(binding, LiveDiagnosticBinding):
+        return {"ledger_schema_id": "phase13-live-diagnostic-ledger-v1", "currency": "USD",
+                "binding": binding.model_dump_json(), "binding_sha256": binding.sha256(),
+                "full_units_identity_sha256": _full_units_identity_sha256(units)}
     return {
         "ledger_schema_id": LEDGER_SCHEMA_ID,
         "units_sha256": units_sha256(units),
@@ -62,7 +71,7 @@ def expected_metadata(
 
 def create_ledger_file(
     path: Path,
-    binding: MainRunBinding,
+    binding: MainRunBinding | LiveDiagnosticBinding,
     units: tuple[ExecutionUnit, ...],
 ) -> None:
     if path.exists():
@@ -86,12 +95,14 @@ def create_ledger_file(
 
 def _initialize_ledger(
     path: Path,
-    binding: MainRunBinding,
+    binding: MainRunBinding | LiveDiagnosticBinding,
     units: tuple[ExecutionUnit, ...],
 ) -> None:
     with connect(path) as connection:
+        cost_column = ("realized_cost_usd_micros INTEGER" if isinstance(binding, LiveDiagnosticBinding)
+                       else "realized_cost_krw INTEGER NOT NULL")
         connection.executescript(
-            """
+            f"""
             CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
             CREATE TABLE execution_units (
                 sequence INTEGER PRIMARY KEY, unit_id TEXT NOT NULL UNIQUE,
@@ -101,7 +112,7 @@ def _initialize_ledger(
             CREATE TABLE events (
                 event_sequence INTEGER PRIMARY KEY, unit_id TEXT NOT NULL,
                 kind TEXT NOT NULL, evidence_sha256 TEXT, reason TEXT,
-                realized_cost_krw INTEGER NOT NULL, previous_hash TEXT NOT NULL,
+                {cost_column}, previous_hash TEXT NOT NULL,
                 event_hash TEXT NOT NULL UNIQUE
             );
             """
@@ -143,6 +154,8 @@ def transition(current: str, kind: str) -> str:
         ("DISPATCH_INTENT_PERSISTED", "TERMINAL"): "TERMINAL_TECHNICAL_MISSING",
         ("PENDING", "DEPENDENCY_TERMINAL"): "TERMINAL_TECHNICAL_MISSING",
         ("DISPATCH_INTENT_PERSISTED", "NO_REQUEST"): "PENDING",
+        ("DISPATCH_INTENT_PERSISTED", "REQUEST_INTENT"): "DISPATCH_INTENT_PERSISTED",
+        ("DISPATCH_INTENT_PERSISTED", "REQUEST_RECEIPT"): "DISPATCH_INTENT_PERSISTED",
     }
     try:
         return transitions[(current, kind)]
@@ -211,10 +224,32 @@ def validate_integrity(
         if unit_id not in projected:
             raise MainRunError("MAIN_RUN_LEDGER_INTEGRITY_INVALID")
         projected[unit_id] = transition(projected[unit_id], kind)
-        realized_cost += int(event[5])
+        if event[5] is None and metadata.get("currency") != "USD":
+            raise MainRunError("MAIN_RUN_LEDGER_INTEGRITY_INVALID")
+        realized_cost += 0 if event[5] is None else int(event[5])
         previous_hash = str(event[7])
         last_kind = kind
     observed = {str(row[1]): str(row[7]) for row in rows}
     if projected != observed:
         raise MainRunError("MAIN_RUN_LEDGER_INTEGRITY_INVALID")
     return list(projected.values()), last_kind, realized_cost
+
+
+def append_event(connection: sqlite3.Connection, unit_id: str, kind: str,
+                 evidence_sha256: str | None = None, reason: str | None = None,
+                 realized_cost: int | None = 0) -> None:
+    current_row = connection.execute(
+        "SELECT state FROM execution_units WHERE unit_id = ?", (unit_id,)
+    ).fetchone()
+    if current_row is None:
+        raise MainRunError("MAIN_RUN_UNIT_UNKNOWN")
+    target = transition(str(current_row[0]), kind)
+    previous = connection.execute(
+        "SELECT event_hash FROM events ORDER BY event_sequence DESC LIMIT 1"
+    ).fetchone()
+    previous_hash = ledger_genesis(connection) if previous is None else str(previous[0])
+    sequence = int(connection.execute("SELECT COUNT(*) FROM events").fetchone()[0])
+    values = [sequence, unit_id, kind, evidence_sha256, reason, realized_cost, previous_hash]
+    event_hash = hashlib.sha256(canonical(values)).hexdigest()
+    connection.execute("INSERT INTO events VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (*values, event_hash))
+    connection.execute("UPDATE execution_units SET state = ? WHERE unit_id = ?", (target, unit_id))

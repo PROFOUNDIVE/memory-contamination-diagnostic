@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import sqlite3
 from pathlib import Path
 from typing import Literal, assert_never
@@ -21,13 +20,11 @@ from memcontam.readiness.phase13_main_runner_models import (
     MainRunStatus,
 )
 from memcontam.readiness.phase13_main_runner_store import (
-    canonical,
+    append_event,
     connect,
     create_ledger_file,
     expected_metadata,
-    ledger_genesis,
     session_state,
-    transition,
     validate_integrity,
 )
 
@@ -318,34 +315,7 @@ class MainRunLedger:
         reason: str | None = None,
         realized_cost_krw: int = 0,
     ) -> None:
-        current_row = connection.execute(
-            "SELECT state FROM execution_units WHERE unit_id = ?", (unit_id,)
-        ).fetchone()
-        if current_row is None:
-            raise MainRunError("MAIN_RUN_UNIT_UNKNOWN")
-        target = transition(str(current_row[0]), kind)
-        previous = connection.execute(
-            "SELECT event_hash FROM events ORDER BY event_sequence DESC LIMIT 1"
-        ).fetchone()
-        previous_hash = ledger_genesis(connection) if previous is None else str(previous[0])
-        sequence = int(connection.execute("SELECT COUNT(*) FROM events").fetchone()[0])
-        values = [
-            sequence,
-            unit_id,
-            kind,
-            evidence_sha256,
-            reason,
-            realized_cost_krw,
-            previous_hash,
-        ]
-        event_hash = hashlib.sha256(canonical(values)).hexdigest()
-        connection.execute(
-            "INSERT INTO events VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (*values, event_hash),
-        )
-        connection.execute(
-            "UPDATE execution_units SET state = ? WHERE unit_id = ?", (target, unit_id)
-        )
+        append_event(connection, unit_id, kind, evidence_sha256, reason, realized_cost_krw)
 
     def _validate_integrity(
         self,
