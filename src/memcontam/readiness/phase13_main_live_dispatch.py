@@ -106,19 +106,7 @@ def persist_unit_dispatch(
     directory = root / "units"
     directory.mkdir(parents=True, exist_ok=True)
     target = directory / f"{unit.sequence:06d}-{unit.unit_id}.json"
-    temporary = target.with_name(f".{target.name}.{uuid4().hex}.tmp")
-    try:
-        with temporary.open("xb") as evidence_file:
-            evidence_file.write(raw)
-            evidence_file.flush()
-            os.fsync(evidence_file.fileno())
-        try:
-            os.link(temporary, target)
-        except FileExistsError as error:
-            raise MainLiveDispatchError("MAIN_UNIT_EVIDENCE_ALREADY_EXISTS") from error
-        _fsync_directory(directory)
-    finally:
-        temporary.unlink(missing_ok=True)
+    persist_evidence_bytes(target, raw, "MAIN_UNIT_EVIDENCE_ALREADY_EXISTS")
     return DispatchCompleted(hashlib.sha256(raw).hexdigest(), reconciled_cost_krw)
 
 
@@ -165,19 +153,7 @@ def persist_reconciliation_evidence(
     directory = root / "reconciliation"
     directory.mkdir(parents=True, exist_ok=True)
     target = directory / f"{context.intent_event_hash}.json"
-    temporary = target.with_name(f".{target.name}.{uuid4().hex}.tmp")
-    try:
-        with temporary.open("xb") as evidence_file:
-            evidence_file.write(raw)
-            evidence_file.flush()
-            os.fsync(evidence_file.fileno())
-        try:
-            os.link(temporary, target)
-        except FileExistsError as error:
-            raise MainLiveDispatchError("MAIN_RECONCILIATION_EVIDENCE_ALREADY_EXISTS") from error
-        _fsync_directory(directory)
-    finally:
-        temporary.unlink(missing_ok=True)
+    persist_evidence_bytes(target, raw, "MAIN_RECONCILIATION_EVIDENCE_ALREADY_EXISTS")
     digest = hashlib.sha256(raw).hexdigest()
     if disposition == "NO_PROVIDER_REQUEST":
         return InFlightEvidence.no_provider_request(context, digest)
@@ -255,6 +231,24 @@ def _fsync_directory(path: Path) -> None:
         os.fsync(descriptor)
     finally:
         os.close(descriptor)
+
+
+def persist_evidence_bytes(target: Path, raw: bytes, collision_code: str) -> str:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(f".{target.name}.{uuid4().hex}.tmp")
+    try:
+        with temporary.open("xb") as evidence_file:
+            evidence_file.write(raw)
+            evidence_file.flush()
+            os.fsync(evidence_file.fileno())
+        try:
+            os.link(temporary, target)
+        except FileExistsError as error:
+            raise MainLiveDispatchError(collision_code) from error
+        _fsync_directory(target.parent)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return hashlib.sha256(raw).hexdigest()
 
 
 __all__ = [
