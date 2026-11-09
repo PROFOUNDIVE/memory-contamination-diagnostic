@@ -3,6 +3,42 @@ from memcontam.readiness.phase13_v3_cost_models import CostUnit, StageOccurrence
 from memcontam.readiness.phase13_v3_retry import dependency_fanout, schedule_unit
 
 
+def test_entitlement_generation_reservation_is_independent_of_positive_count_price():
+    from math import ceil
+    from fractions import Fraction
+
+    from memcontam.readiness.phase13_authority_files import load_authority_v3
+    from memcontam.readiness.phase13_v3_cost import PrefreezeBindings, activate_policy, freeze_base
+    from memcontam.readiness.phase13_v3_retry import allocate_retry_reservations
+    from .phase13_corrective_identity import corrective_identity
+    from .phase13_count_fake import fake_count_pricing
+    from .test_phase13_v3_entrypoint_fixture import AUTHORITY
+
+    policy = activate_policy(load_authority_v3(AUTHORITY, identity=corrective_identity()))
+    unit = ProductionObject(sequence=0, unit_id="a" * 64, kind="NO_MEMORY_SINGLETON",
+                            seed=0, task="game24", memory_baseline=None, arm="NOT_APPLICABLE",
+                            prefix_unit_id=None, projected_cost_krw=0)
+    costs = CostUnit(unit_id=unit.unit_id, stages=(StageOccurrences(stage_id="NoMem_generation", calls=50),))
+    bindings = PrefreezeBindings(**{name: "b" * 64 for name in PrefreezeBindings.model_fields})
+    base = freeze_base(policy, bindings, (costs,))
+    envelope = next(row for row in policy.authority.registry.stages if row.stage_id == "NoMem_generation")
+    rate = policy.rate_card
+    reservation = (
+        ceil(Fraction(envelope.maximum_input_tokens) * Fraction(rate.input_usd_per_million)
+             * rate.fx_planning_ceiling_krw_per_usd / 1_000_000)
+        + ceil(Fraction(envelope.maximum_output_tokens) * Fraction(rate.output_usd_per_million)
+               * rate.fx_planning_ceiling_krw_per_usd / 1_000_000)
+    )
+    assert reservation * 50 <= policy.authority.retry.retry_budget_krw
+    expected = {key.dispatch_id for key, _ in schedule_unit(unit, costs)}
+    for price in ("0.00000001", "100"):
+        priced = base.model_copy(update={"count_pricing": fake_count_pricing(50).model_copy(
+            update={"maximum_usd_per_operation": price})})
+        actual = allocate_retry_reservations((unit,), priced)
+        assert {row.dispatch_id for row in actual} == expected
+        assert {row.reservation_krw for row in actual} == {reservation}
+
+
 def test_reflexion_scheduled_occurrences_preserve_sparse_trial_slots() -> None:
     unit = ProductionObject(sequence=0, unit_id="a" * 64, kind="MEMORY_BEARING", seed=0,
                             task="game24", memory_baseline="reflexion_style", arm="contam",

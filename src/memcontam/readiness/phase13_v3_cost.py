@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pydantic import ValidationError
-from fractions import Fraction
 from math import ceil
 
 from memcontam.readiness.phase13_v3_authority_models import AuthoritySnapshotV3
@@ -111,16 +110,13 @@ def _validate_base(base: BaseCostInputsV3) -> None:
         if not set(used) <= stage_ids:
             raise CostError("MAIN_COST_PROOF_MISMATCH")
     retries = base.retry_reservations
-    retry_count_cost = 0
     if base.count_pricing is not None:
         pricing = CountPricingV1.model_validate(base.count_pricing.model_dump())
-        operations = sum(group.calls for unit in base.units for group in unit.stages) + len(retries)
+        operations = sum(group.calls for unit in base.units for group in unit.stages)
         if pricing.maximum_count_operations != operations:
             raise CostError("MAIN_COST_PROOF_MISMATCH")
-        retry_count_cost = ceil(Fraction(pricing.maximum_usd_per_operation)
-                                * base.policy.rate_card.fx_planning_ceiling_krw_per_usd)
     if (tuple(row.dispatch_id for row in retries) != tuple(sorted({row.dispatch_id for row in retries}))
-        or sum(row.reservation_krw + retry_count_cost for row in retries) > base.policy.authority.retry.retry_budget_krw):
+        or sum(row.reservation_krw for row in retries) > base.policy.authority.retry.retry_budget_krw):
         raise CostError("MAIN_COST_PROOF_MISMATCH")
     by_unit = {unit.unit_id: {stage.stage_id for stage in unit.stages} for unit in base.units}
     for row in retries:

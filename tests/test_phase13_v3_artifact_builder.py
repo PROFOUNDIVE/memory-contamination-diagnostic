@@ -6,8 +6,6 @@ import os
 import shutil
 import subprocess
 import sys
-from fractions import Fraction
-from math import ceil
 from pathlib import Path
 
 import pytest
@@ -20,30 +18,23 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def synthetic_pricing(root: Path, authority: Path, identity=None):
-    from memcontam.readiness.phase13_authority_files import load_authority_v3
     from memcontam.readiness.phase13_main_production import _stages
     from memcontam.readiness.phase13_v3_builder_inputs import STATIC_PATHS, first_freeze, production, STAGES
     from memcontam.readiness.phase13_v3_cost import (
-        CostUnit, PrefreezeBindings, StageOccurrences, activate_policy, freeze_base,
+        CostUnit, StageOccurrences,
     )
     from memcontam.readiness.phase13_v3_resource_files import read_files
-    from memcontam.readiness.phase13_v3_retry import allocate_retry_reservations
 
     units = production(first_freeze(root), tuple(row.binding for row in read_files(root, STATIC_PATHS)))
     cost_units = tuple(CostUnit(unit_id=unit.unit_id, stages=tuple(
         StageOccurrences(stage_id=STAGES[stage], calls=calls) for stage, calls in _stages(unit)
     )) for unit in units)
-    bindings = PrefreezeBindings(**{name: "a" * 64 for name in PrefreezeBindings.model_fields})
-    policy = activate_policy(load_authority_v3(authority, identity=identity or corrective_identity()))
     initial_calls = sum(group.calls for unit in cost_units for group in unit.stages)
-    initial = freeze_base(policy, bindings, cost_units,
-                          count_pricing=fake_count_pricing(initial_calls))
-    retries = allocate_retry_reservations(units, initial)
-    return fake_count_pricing(initial_calls + len(retries))
+    return fake_count_pricing(initial_calls)
 
 
 @pytest.fixture(scope="session")
-def builder_source(tmp_path_factory):
+def builder_source(tmp_path_factory, offline_resource_root: Path):
     from memcontam.readiness.phase13_v3_authority_models import (
         PROVENANCE_FILENAME,
         REVISION_MANIFEST_FILENAME,
@@ -77,6 +68,15 @@ def builder_source(tmp_path_factory):
     for resource in read_files(RESOURCE_ROOT, tuple(
         path for path in STATIC_PATHS if path not in repair_paths
     )) + read_files(REPAIR_ROOT, repair_paths):
+        target = root / resource.binding.path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(resource.raw)
+    core_paths = tuple(
+        'data/phase13/core/materialized/' + name
+        for name in ('manifest.json', 'seal.json', 'mmlu_pro_engineering.jsonl',
+                     'mmlu_pro_physics.jsonl', 'gpqa_diamond.jsonl')
+    )
+    for resource in read_files(offline_resource_root, core_paths):
         target = root / resource.binding.path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(resource.raw)
@@ -133,12 +133,9 @@ def test_phase4_witness_reserves_frozen_retry_entitlements(staged):
     assert costs.base.retry_reservations
     count_price = costs.base.count_pricing
     assert count_price is not None
-    retry_count_ceiling = ceil(Fraction(count_price.maximum_usd_per_operation)
-                               * costs.policy.rate_card.fx_planning_ceiling_krw_per_usd)
     assert costs.witness.totals.retry_reserve_krw == sum(
-        row.reservation_krw + retry_count_ceiling for row in costs.base.retry_reservations)
-    assert costs.witness.totals.count_operations == (
-        costs.witness.totals.semantic_calls + len(costs.base.retry_reservations))
+        row.reservation_krw for row in costs.base.retry_reservations)
+    assert costs.witness.totals.count_operations == costs.witness.totals.semantic_calls
     assert costs.witness.totals.retry_reserve_krw <= 40000
 
 
@@ -263,13 +260,13 @@ def test_scope_audit_accepts_approved_legacy_contract_correction(staged):
     audit_scope(root, root / "data/phase13/main", None)
 
 
-def test_builder_source_accepts_already_committed_sources(builder_source, tmp_path_factory, monkeypatch):
+def test_builder_source_accepts_already_committed_sources(builder_source, tmp_path_factory, monkeypatch, offline_resource_root):
     root, _, _ = builder_source
     expected = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"],
                                       env={**os.environ, "GIT_MASTER": "1"}).decode().strip()
     module = sys.modules[__name__]
     monkeypatch.setattr(module, "ROOT", root)
 
-    _, actual, _ = module.builder_source.__wrapped__(tmp_path_factory)
+    _, actual, _ = module.builder_source.__wrapped__(tmp_path_factory, offline_resource_root)
 
     assert actual == expected

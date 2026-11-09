@@ -90,7 +90,7 @@ def build_entrypoint_bytes(
     from memcontam.readiness.phase13_v3_retry import allocate_retry_reservations
     initial = freeze_base(policy, bindings, cost_units)
     retries = allocate_retry_reservations(units, initial)
-    count_operations = sum(stage.calls for unit in cost_units for stage in unit.stages) + len(retries)
+    count_operations = sum(stage.calls for unit in cost_units for stage in unit.stages)
     base = freeze_base(policy, bindings, cost_units,
                        retry_reservations=retries, count_pricing=fake_count_pricing(count_operations, "0.001"))
     phase4 = MRP4Costs(policy=base.policy, base=base, witness=build_witness(base))

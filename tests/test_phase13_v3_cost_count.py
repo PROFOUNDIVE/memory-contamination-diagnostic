@@ -28,7 +28,7 @@ def base():
     return cost.freeze_base(cost.activate_policy(authority), bindings, units)
 
 
-def pricing(rate="0.0004", operations=4):
+def pricing(rate="0.0004", operations=3):
     return cost.CountPricingV1(
         endpoint="https://count.invalid/v1/responses/input_tokens",
         deployment_sha256="1" * 64, billing_evidence_sha256="2" * 64,
@@ -37,7 +37,7 @@ def pricing(rate="0.0004", operations=4):
     )
 
 
-def priced_base(base, rate="0.0004", operations=4):
+def priced_base(base, rate="0.0004", operations=3):
     return cost.freeze_base(base.policy, base.bindings, base.units,
         count_pricing=pricing(rate, operations), retry_reservations=(
             cost.RetryReservation(unit_id="a", dispatch_id="4" * 64,
@@ -61,18 +61,17 @@ def test_unbound_count_pricing_cannot_build_current_witness(base):
         cost.build_witness(base)
 
 
-def test_count_reservation_includes_initial_and_entitled_retry_when_bound(base):
-    """Given three initial calls and a retry, when bound, then reserve four counts."""
+def test_count_reservation_reuses_initial_receipt_for_entitled_retry(base):
     inputs = priced_base(base)
     with localcontext() as context:
         context.prec = 2
         bound = bound_package(inputs)
     totals = bound.resources.proof.totals
     assert totals == bound.resources.phase4.witness.totals
-    assert (totals.count_operations, totals.count_exact_krw, totals.count_krw_ceiling) == (4, "2.56", 3)
-    assert (totals.retry_reserve_krw, totals.cmax_main_krw, totals.gate_margin_krw) == (3, 9, 449991)
+    assert (totals.count_operations, totals.count_exact_krw, totals.count_krw_ceiling) == (3, "1.92", 2)
+    assert (totals.retry_reserve_krw, totals.cmax_main_krw, totals.gate_margin_krw) == (2, 8, 449992)
     assert [(row.unit_id, row.projected_krw) for row in bound.resources.proof.projected_krw] == [
-        ("c", 3), ("a", 5), ("b", 1),
+        ("c", 3), ("a", 4), ("b", 1),
     ]
     validate_package_costs(bound.package, bound.resources)
 
@@ -84,7 +83,7 @@ def test_zero_or_unknown_count_rate_rejected_when_parsed(rate):
         pricing(rate)
 
 
-@pytest.mark.parametrize("operations", [0, 3, 5])
+@pytest.mark.parametrize("operations", [0, 2, 4])
 def test_count_operation_cap_rejected_when_not_exact_all_attempt_reservation(base, operations):
     """Given an incorrect count ceiling, when freezing, then reject the proof input."""
     with pytest.raises((ValidationError, cost.CostError)):
@@ -101,8 +100,8 @@ def test_count_evidence_must_be_bound_when_pricing_is_parsed(field):
 
 
 @pytest.mark.parametrize("field,value", [
-    ("count_operations", 3), ("count_exact_krw", "0"), ("count_krw_ceiling", 0),
-    ("cmax_main_krw", 6), ("retry_reserve_krw", 2),
+    ("count_operations", 4), ("count_exact_krw", "0"), ("count_krw_ceiling", 0),
+    ("cmax_main_krw", 6), ("retry_reserve_krw", 3),
 ])
 def test_rehashed_count_proof_tamper_rejected_when_validated(base, field, value):
     """Given a resealed false projection, when recomputed, then reject it."""
@@ -135,10 +134,12 @@ def test_count_cost_can_fail_gate_when_generation_alone_fits(base):
         validate_package_costs(bound.package, bound.resources)
 
 
-def test_retry_count_cost_cannot_escape_40000_reserve_when_generation_fits(base):
-    """Given an excessive retry count price, when freezing, then reject reserve."""
+def test_count_cost_stays_in_complete_gate_not_generation_retry_reserve(base):
+    bound = bound_package(priced_base(base, rate="100"))
+    assert bound.resources.proof.totals.retry_reserve_krw == 2
+    assert bound.resources.proof.totals.gate_result == "FAIL"
     with pytest.raises(cost.CostError, match="MAIN_COST_PROOF_MISMATCH"):
-        priced_base(base, rate="25")
+        validate_package_costs(bound.package, bound.resources)
 
 
 def test_all_stages_count_once_when_calls_and_retry_slots_are_reserved(base):

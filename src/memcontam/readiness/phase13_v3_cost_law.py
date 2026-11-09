@@ -44,7 +44,7 @@ def calculate(base: BaseCostInputsV3, order: tuple[str, ...] | None = None) -> t
         raise CostError("RECLOSURE_BLOCKED:COUNT_PRICING_PROOF_UNBOUND")
     count_cost = (Fraction(base.count_pricing.maximum_usd_per_operation)
                   * base.policy.rate_card.fx_planning_ceiling_krw_per_usd)
-    operations = sum(group.calls for unit in base.units for group in unit.stages) + len(base.retry_reservations)
+    operations = sum(group.calls for unit in base.units for group in unit.stages)
     if count_cost <= 0 or base.count_pricing.maximum_count_operations != operations:
         raise CostError("RECLOSURE_BLOCKED:COUNT_PRICING_PROOF_UNBOUND")
     envelopes = {stage.stage_id: stage for stage in base.policy.authority.registry.stages}
@@ -54,7 +54,7 @@ def calculate(base: BaseCostInputsV3, order: tuple[str, ...] | None = None) -> t
     projections: list[UnitProjection] = []
     retries_by_unit: Counter[str] = Counter()
     for retry in base.retry_reservations:
-        retries_by_unit[retry.unit_id] += retry.reservation_krw + ceil(count_cost)
+        retries_by_unit[retry.unit_id] += retry.reservation_krw
     for unit_id in units if order is None else order:
         projected = 0
         for group in units[unit_id].stages:
@@ -86,7 +86,7 @@ def calculate(base: BaseCostInputsV3, order: tuple[str, ...] | None = None) -> t
     reserved = sum(retries_by_unit.values())
     if reserved > base.policy.authority.retry.retry_budget_krw:
         raise CostError("MAIN_COST_PROOF_MISMATCH")
-    count_ceiling = sum(stage.count_krw_ceiling for stage in stages) + len(base.retry_reservations) * ceil(count_cost)
+    count_ceiling = sum(stage.count_krw_ceiling for stage in stages)
     total = ceil(sum(stage.input_krw_ceiling + stage.output_krw_ceiling + stage.count_krw_ceiling
                      for stage in stages)) + reserved
     margin = base.policy.budget.core_authorization_gate_krw - total

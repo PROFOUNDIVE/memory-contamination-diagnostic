@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from fractions import Fraction
 from math import ceil
 
 from .phase13_execution_contract import CORE_MAIN_REGISTRY
@@ -108,16 +107,12 @@ def allocate_retry_reservations(
     if len({row.rank_hash for row in candidates}) != len(candidates):
         raise ValueError("MAIN_RETRY_ENTITLEMENT_INVALID")
     remaining: int = base.policy.authority.retry.retry_budget_krw
-    count_reserve = (0 if base.count_pricing is None else ceil(
-        Fraction(base.count_pricing.maximum_usd_per_operation)
-        * base.policy.rate_card.fx_planning_ceiling_krw_per_usd
-    ))
     selected: list[RetryReservation] = []
     for candidate in candidates:
-        if candidate.reservation_krw + count_reserve <= remaining:
+        if candidate.reservation_krw <= remaining:
             selected.append(RetryReservation(
                 unit_id=candidate.unit_id, stage_id=candidate.stage_id,
                 dispatch_id=candidate.dispatch_id, reservation_krw=candidate.reservation_krw,
             ))
-            remaining -= candidate.reservation_krw + count_reserve
+            remaining -= candidate.reservation_krw
     return tuple(sorted(selected, key=lambda row: row.dispatch_id))
