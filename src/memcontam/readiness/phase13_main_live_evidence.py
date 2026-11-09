@@ -16,6 +16,7 @@ from memcontam.logging.schema import MethodCall
 from memcontam.readiness.phase13_cost_policy import load_cost_policy_bundle
 from memcontam.readiness.phase13_cost_policy_models import Sha256
 from memcontam.readiness.phase13_durable_call_join import DiagnosticScope, validate_diagnostic_join
+from .phase13_live_diagnostic_models import LiveDiagnosticScope
 from memcontam.readiness.phase13_main_production import ProductionObject
 from memcontam.readiness.phase13_main_runner_models import InFlightEvidence
 from memcontam.readiness.phase13_production_observability import (
@@ -63,7 +64,7 @@ class MainRuntimeEvidence(_FrozenModel):
     verifier_result: bool | None = None
     request: ProviderRequestRecord
     production_observability_archive: ProductionObservabilityArchive | None = None
-    diagnostic_scope: DiagnosticScope | None = None
+    diagnostic_scope: DiagnosticScope | LiveDiagnosticScope | None = None
     diagnostic_post_state_utf8: str | None = None
 
     @model_validator(mode="after")
@@ -239,6 +240,7 @@ def validate_dispatch_evidence(
 def _validate_diagnostic(unit: ProductionObject, evidence: UnitEvidence,
                          supplied: DispatchEvidenceInput, *, partial: bool = False) -> None:
     if (not isinstance(evidence, MemoryUnitEvidence) or supplied.current_policy is not None
+        or not isinstance(evidence.runtime_evidence.diagnostic_scope, DiagnosticScope)
         or supplied.claimed_cost_krw != 0 or supplied.count_cost_krw != 0 or supplied.attempt_costs
         or any(call.provider_cost_usd != 0 for call in (
             supplied.provider_calls[:-1] if partial else supplied.provider_calls))):

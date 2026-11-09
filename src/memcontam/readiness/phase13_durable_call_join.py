@@ -23,6 +23,7 @@ from memcontam.tasks.base import TaskInstance
 from memcontam.tasks.dispatch import render_model_visible_task
 
 if TYPE_CHECKING:
+    from .phase13_live_diagnostic_models import LiveDiagnosticScope
     from .phase13_main_live_evidence import MemoryUnitEvidence
     from .phase13_main_production import ProductionObject
 
@@ -83,10 +84,19 @@ class DiagnosticScope(_Frozen):
 
 def validate_diagnostic_join(unit: ProductionObject, evidence: MemoryUnitEvidence,
                              calls: tuple[MethodCall, ...], *, partial: bool = False) -> None:
+    scope = evidence.runtime_evidence.diagnostic_scope
+    if not isinstance(scope, DiagnosticScope):
+        raise DiagnosticJoinError()
+    validate_native_diagnostic_join(unit, evidence, calls, scope=scope, partial=partial)
+
+
+def validate_native_diagnostic_join(unit: ProductionObject, evidence: MemoryUnitEvidence,
+                                    calls: tuple[MethodCall, ...], *,
+                                    scope: DiagnosticScope | LiveDiagnosticScope,
+                                    partial: bool = False, registered_live: bool = False) -> None:
     from memcontam.experiment.phase13_snapshot_diagnostic import snapshot_source_paths
 
     runtime = evidence.runtime_evidence
-    scope = runtime.diagnostic_scope
     archive = runtime.production_observability_archive
     if (type(unit.diagnostic_trial_count) is not int or unit.diagnostic_trial_count != 1
         or scope is None or scope.sha256() != unit.diagnostic_scope_sha256
@@ -119,6 +129,9 @@ def validate_diagnostic_join(unit: ProductionObject, evidence: MemoryUnitEvidenc
         raise DiagnosticJoinError()
     after = NativeState.from_mapping(json.loads(runtime.diagnostic_post_state_utf8))
     serialize_checkpoint(after)
+    if registered_live:
+        from .phase13_diagnostic_native_join import validate_curator_lineage
+        validate_curator_lineage(calls, before, inputs.tasks[0])
     if (before.baseline != inputs.baseline or after.baseline != inputs.baseline
         or checkpoint.canonical_sha256 != scope.state_sha256
         or (evidence.consumed_checkpoint_id, evidence.consumed_checkpoint_identity_sha256,
@@ -165,7 +178,7 @@ def validate_diagnostic_join(unit: ProductionObject, evidence: MemoryUnitEvidenc
     answer_stage = stages[1]
     answers = tuple(call for call in calls if call.stage == answer_stage)
     expected_answer_id = (answers[0].call_id if answers else None)
-    if partial and inputs.baseline == "dc_rs":
+    if partial and inputs.baseline == "dc_rs" and (not registered_live or not answers or answers[0].error_type is not None):
         expected_answer_id = None
     if trial.target_set.answer_call_id != expected_answer_id:
         raise DiagnosticJoinError()
@@ -182,10 +195,17 @@ def validate_diagnostic_join(unit: ProductionObject, evidence: MemoryUnitEvidenc
         if raw_answer is None and (not partial or answer.error_type is None or row.parsed_answer is not None):
             raise DiagnosticJoinError()
         if raw_answer is not None:
-            if inputs.baseline == "bot_style":
-                raw_answer = parse_bot_solve_result(raw_answer).final_answer
-            if parse_final_answer(raw_answer) != row.parsed_answer:
-                raise DiagnosticJoinError()
+            try:
+                if inputs.baseline == "bot_style":
+                    raw_answer = parse_bot_solve_result(raw_answer).final_answer
+                parsed_answer = parse_final_answer(raw_answer)
+            except ValueError:
+                if not (registered_live and partial and row.parsed_answer is None
+                        and row.terminal_failure_code in {"dc_rs_invalid_final_answer", "bot_invalid_solve_output"}):
+                    raise DiagnosticJoinError() from None
+            else:
+                if parsed_answer != row.parsed_answer:
+                    raise DiagnosticJoinError()
         for span in answer.source_spans:
             content = answer.messages[span.message_index]["content"][span.start:span.end]
             if hashlib.sha256(content.encode()).hexdigest() != span.rendered_hash:
@@ -197,7 +217,15 @@ def validate_diagnostic_join(unit: ProductionObject, evidence: MemoryUnitEvidenc
     packet = ObservabilityRegistrationPacket.model_validate_json(packet_raw)
     validate_production_archive(archive, packet, hashlib.sha256(packet_raw).hexdigest(),
                                 frozen_tasks=None if partial else inputs.tasks)
-    if partial:
+    if partial and registered_live:
+        terminal = calls[-1]
+        failure = next((value for key, value in FAILURE_TAXONOMY.items() if key == row.terminal_failure_code), None)
+        if (row.terminal_method_call != terminal or row.terminal_provider_evidence is None
+            or failure is None or trial.trial.failure_class != failure[0]
+            or terminal.transport_attempts != 1 or terminal.retry_count != 0
+            or trial.verified_outcome is not None or runtime.verifier_result is not None):
+            raise DiagnosticJoinError()
+    elif partial:
         terminal = calls[-1]
         if (row.terminal_method_call != terminal or terminal.error_type is None
             or terminal.model != runtime.request.model
@@ -208,9 +236,10 @@ def validate_diagnostic_join(unit: ProductionObject, evidence: MemoryUnitEvidenc
             or row.terminal_provider_evidence is None
             or row.terminal_provider_evidence.trigger_class != "provider_call_failure"
             or terminal.raw_response is not None or terminal.transport_attempts != 1 or terminal.retry_count != 0
-            or terminal.provider_cost_usd is not None or terminal.token_usage or terminal.provider_usage is not None
-            or terminal.authoritative_provider_cost_usd is not None
-            or terminal.derived_cost_usd is not None or terminal.provider_cost_source is not None
+            or (isinstance(scope, DiagnosticScope) and (
+                terminal.provider_cost_usd is not None or terminal.token_usage or terminal.provider_usage is not None
+                or terminal.authoritative_provider_cost_usd is not None
+                or terminal.derived_cost_usd is not None or terminal.provider_cost_source is not None))
             or trial.verified_outcome is not None or before != after
             or runtime.verifier_result is not None):
             raise DiagnosticJoinError()
