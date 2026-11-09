@@ -63,13 +63,14 @@ class NativeTransport:
 @pytest.mark.parametrize(("task_name", "baseline", "arm"), ROUTES)
 def test_current_package_route_executes_native_consumer(
     task_name: str, baseline: str, arm: Arm, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    offline_resource_root: Path,
 ) -> None:
     from memcontam.readiness import phase13_main_live_runtime
 
     monkeypatch.setattr(phase13_main_live_runtime, "OpenAIResponsesClient", lambda *_args, **_kwargs: pytest.fail(
         "provider construction forbidden in native-consumption matrix"))
     client = NativeTransport()
-    runtime = ProductionMainRuntime(ROOT, tmp_path / "cache", client=client)
+    runtime = ProductionMainRuntime(offline_resource_root, tmp_path / "cache", client=client)
     task = runtime._tasks(task_name, 0, prefix=False)[0]
     embedder = _ContractFakeEmbeddingProvider(vector_dimension=1024) if baseline == "dc_rs" else _Embedder()
     clean_state = (
