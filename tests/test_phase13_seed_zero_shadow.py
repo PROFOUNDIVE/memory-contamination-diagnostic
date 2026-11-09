@@ -34,9 +34,9 @@ from .test_phase13_v3_entrypoint_integration import deny_external as deny_extern
 
 
 @pytest.fixture(scope="session")
-def local_embedder() -> EmbeddingProvider:
+def local_embedder(offline_embedding_cache: Path) -> EmbeddingProvider:
     return BgeM3EmbeddingProvider(
-        cache_folder=Path.home() / ".cache/huggingface/hub",
+        cache_folder=offline_embedding_cache,
         local_files_only=True,
     )
 
