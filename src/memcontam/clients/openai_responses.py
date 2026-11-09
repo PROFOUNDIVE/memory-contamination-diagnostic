@@ -40,6 +40,29 @@ class LunaContractError(ValueError):
         super().__init__(code)
 
 
+class ResponseNormalizationError(RuntimeError):
+    """An SDK response was received; implementation failure is not retryable."""
+
+    code = "MAIN_RESPONSE_NORMALIZATION_FAILED"
+
+    def __init__(self, response: object) -> None:
+        usage = getattr(response, "usage", None)
+        safe_usage = None
+        if isinstance(usage, dict) and all(type(usage.get(name)) is int and usage[name] >= 0
+                                          for name in ("input_tokens", "output_tokens")):
+            safe_usage = {name: usage[name] for name in ("input_tokens", "output_tokens")}
+        self.receipt = {
+            "response_id": getattr(response, "id", None),
+            "model": getattr(response, "model", None),
+            "status": getattr(response, "status", None),
+            "service_tier": getattr(response, "service_tier", None),
+            "authoritative_provider_cost_usd": getattr(response, "cost_usd", None),
+            "currency": getattr(response, "currency", None),
+            "usage": safe_usage,
+        }
+        super().__init__(self.code)
+
+
 class OpenAIResponsesClient:
     def __init__(
         self,
@@ -180,6 +203,20 @@ class OpenAIResponsesClient:
                     raise
                 self._sleep(self._config.retry_delays_seconds[attempts - 1])
 
+        try:
+            return self._normalize_response(response, model, bound_v3, registered_cost_policy,
+                attempts, start, request_contract, authority_contract, seed_parameter_sent)
+        except LunaContractError as error:
+            if error.code == "LUNA_PROVIDER_INCOMPLETE" and getattr(response, "status", None) == "incomplete":
+                raise
+            raise ResponseNormalizationError(response) from error
+        except Exception as error:
+            raise ResponseNormalizationError(response) from error
+
+    def _normalize_response(self, response: Any, model: str, bound_v3: bool,
+                            registered_cost_policy: bool, attempts: int, start: float,
+                            request_contract: dict[str, object], authority_contract: dict[str, object],
+                            seed_parameter_sent: bool) -> LLMResponse:
         latency_ms = int((time.perf_counter() - start) * 1000)
         usage = _usage_dict(getattr(response, "usage", None))
         token_usage = _token_usage(usage)

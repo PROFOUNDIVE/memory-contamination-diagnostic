@@ -174,7 +174,7 @@ def test_terminal_parent_observed_total_includes_count_after_reopen(entrypoint_f
             if compiled.key.ordinal == 1:
                 before_request()
                 self.requests.append(compiled.key.dispatch_id)
-                raise RuntimeError("synthetic generation failure")
+                raise ConnectionError("synthetic generation failure")
             return super().send_compiled_v3(compiled, before_request)
 
     monkeypatch.setattr(dispatch, "count_prompt_tokens", lambda *_: 1)
@@ -252,7 +252,7 @@ def test_provider_failure_preserves_actual_failed_baseline_result(client_fixture
         def send_compiled_v3(self, compiled, before_request):
             before_request()
             counts["requests"] += 1
-            raise RuntimeError("provider unavailable")
+            raise ConnectionError("provider unavailable")
 
     client.dispatcher._factory = lambda _binding: Provider()
 

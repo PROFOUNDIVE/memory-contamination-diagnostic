@@ -9,10 +9,13 @@ from dataclasses import replace
 from tempfile import NamedTemporaryFile
 from typing import Protocol, TypeVar
 
-from pydantic import JsonValue
+import httpx
+from openai import APIConnectionError, APIStatusError
+from pydantic import JsonValue, ValidationError
 
 from memcontam.baselines.prompt_budget import count_prompt_tokens
 from memcontam.clients.base import LLMClient, LLMResponse
+from memcontam.clients.openai_responses import LunaContractError, ResponseNormalizationError
 from memcontam.readiness.phase13_authority_files import read_regular_nofollow
 from memcontam.readiness.phase13_main_request_recovery import (
     RequestIdentityReceiptV3,
@@ -193,6 +196,7 @@ class ProductionRequestDispatcherV3:
             response: LLMResponse | None = None
             cost = ProviderCostEvidence()
             attempt_ready = False
+            parsing_result = False
 
             def start_attempt(index: int = attempt_index) -> None:
                 nonlocal attempt_ready
@@ -206,11 +210,27 @@ class ProductionRequestDispatcherV3:
                 _validate_received_response(response, key.stage)
                 cost = _response_cost(response)
                 realized = _realized(cost)
+                parsing_result = True
                 result = parse_result(response)
+                parsing_result = False
                 if result is None:
                     raise TerminalEvidenceError("MAIN_SEMANTIC_RESULT_UNAVAILABLE")
             except Exception as error:
-                if not attempt_ready:
+                if isinstance(error, ResponseNormalizationError):
+                    self._publish_bytes(key, "implementation-observation", json.dumps({
+                        **error.receipt, "failure_code": error.code,
+                        "parent_id": key.parent_id, "stage": key.stage,
+                        "response_received": True,
+                    }, sort_keys=True).encode())
+                    raise
+                if not attempt_ready or parsing_result:
+                    raise
+                if not (
+                    (isinstance(error, (TerminalEvidenceError, CostError, LunaContractError))
+                     and _safe_failure_code(error) != "MAIN_ATTEMPTED_PROVIDER_FAILURE")
+                    or isinstance(error, (APIConnectionError, APIStatusError, TimeoutError, ConnectionError))
+                    or _eligible_retry(error, response)
+                ):
                     raise
                 observed = response or LLMResponse("", {
                     "usage": getattr(error, "provider_usage", None),
@@ -392,13 +412,17 @@ def _response_cost(response: LLMResponse | None) -> ProviderCostEvidence:
     cached = details.get("cached_tokens", 0)
     if type(cached) is not int or cached < 0:
         raise TerminalEvidenceError("MAIN_PROVIDER_USAGE_UNAVAILABLE")
-    return ProviderCostEvidence.model_validate({
-        "monetary_cost": None if monetary is None else str(monetary),
-        "currency": response.raw.get("currency"),
-        "usage": None if usage is None else {
-        "input_tokens": usage["input_tokens"], "output_tokens": usage["output_tokens"],
-        "cached_input_tokens": cached,
-    }})
+    try:
+        return ProviderCostEvidence.model_validate({
+            "monetary_cost": None if monetary is None else str(monetary),
+            "currency": response.raw.get("currency"),
+            "usage": None if usage is None else {
+                "input_tokens": usage["input_tokens"], "output_tokens": usage["output_tokens"],
+                "cached_input_tokens": cached,
+            },
+        })
+    except (KeyError, ValidationError) as error:
+        raise TerminalEvidenceError("MAIN_PROVIDER_USAGE_UNAVAILABLE") from error
 
 
 def _validate_received_response(response: LLMResponse, stage: Stage) -> None:
@@ -421,7 +445,9 @@ def _validate_received_response(response: LLMResponse, stage: Stage) -> None:
 
 def _eligible_retry(error: Exception, response: LLMResponse | None) -> bool:
     return (
-        response is None
+        isinstance(error, (APIConnectionError, APIStatusError, TimeoutError, ConnectionError,
+                           httpx.TimeoutException, httpx.NetworkError))
+        and response is None
         and getattr(error, "phase13_retry_class", None) in {
             "TIMEOUT_BEFORE_SEMANTIC_PAYLOAD",
             "CONNECTION_FAILURE_BEFORE_SEMANTIC_PAYLOAD",

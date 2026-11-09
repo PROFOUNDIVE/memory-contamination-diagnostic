@@ -70,6 +70,8 @@ class MainRequestClientV3:
                 if isinstance(self._failure, DispatchTechnicalFailureV3):
                     return TerminalTrialV3(self._failure, result)
                 raise self._failure
+            if result.outcome.status == "failed" and result.outcome.error_type != "BaselineOutputError":
+                raise TerminalEvidenceError("MAIN_RUN_POST_INTENT_RUNTIME_FAILURE")
             try:
                 self._acknowledge(result.outcome.status == "succeeded")
             except DispatchTechnicalFailureV3 as error:
@@ -80,12 +82,6 @@ class MainRequestClientV3:
                        for key in self._seen_keys):
                 raise
             return TerminalTrialV3(error, None)
-        except (ValueError, KeyError, TypeError) as error:
-            try:
-                self._acknowledge(False)
-            except DispatchTechnicalFailureV3:
-                raise error from None
-            raise
         finally:
             self._native = None
 
