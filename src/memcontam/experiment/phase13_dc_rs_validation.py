@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from dataclasses import dataclass
 from typing import Any
 
@@ -30,11 +31,19 @@ class DcRsRuntimeError(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
+class BoundOrdinaryPrefix:
+    source_run_id: str
+    checkpoint_index: int
+    archive_entries: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True, slots=True)
 class OrdinaryHistoryIdentity:
     task_name: str
     run_id: str
     trial_id: str
     order_key: int | str
+    prefix: BoundOrdinaryPrefix | None = None
 
 
 def configured_budget(context: Any) -> int:
@@ -140,6 +149,14 @@ def validate_ordinary_history(
             raise DcRsRuntimeError("DC_RS_ORDINARY_HISTORY_UNPROVEN")
         if archive_entry.source_trial_id is None:
             raise DcRsRuntimeError("DC_RS_ORDINARY_HISTORY_UNPROVEN")
+        prefix = identity.prefix
+        if prefix is not None and (archive_entry.entry_id, hashlib.sha256(json.dumps(
+            archive_entry.model_dump(mode="json"), sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        ).encode()).hexdigest()) in prefix.archive_entries:
+            source_index = _trajectory_index(archive_entry.source_trial_id, prefix.source_run_id)
+            if source_index > prefix.checkpoint_index:
+                raise DcRsRuntimeError("DC_RS_ORDINARY_HISTORY_UNPROVEN")
+            continue
         source_index = _trajectory_index(archive_entry.source_trial_id, identity.run_id)
         if source_index > current_index:
             raise DcRsRuntimeError("DC_RS_ORDINARY_HISTORY_UNPROVEN")

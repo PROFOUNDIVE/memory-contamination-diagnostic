@@ -129,6 +129,7 @@ def _ordinary_identity(context: Any) -> OrdinaryHistoryIdentity:
         run_id=context.identities.run_id,
         trial_id=context.identities.trial_id,
         order_key=context.identities.order_key,
+        prefix=getattr(context, "diagnostic_prefix_history", None),
     )
 
 

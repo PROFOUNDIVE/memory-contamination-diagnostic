@@ -7,12 +7,13 @@ from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
-from typing import Any, Literal, TypeAlias, assert_never
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias, assert_never
 
 from memcontam.clients.base import LLMClient
 from memcontam.clients.provider_profile import model_client_binding_error, request_binding_error
 from memcontam.experiment.phase12.game24_runner import RuntimeIdentities, RuntimeWriterCallbacks
 from memcontam.experiment.phase12.live_branch import LiveArmBranch
+from memcontam.experiment.phase13_dc_rs_validation import BoundOrdinaryPrefix
 from memcontam.experiment.phase12.runtime_registry import (
     PHASE13_CORE_BASELINE_REGISTRY,
     RuntimeTrialResult,
@@ -40,6 +41,9 @@ from memcontam.readiness.phase13_route_capacity import (
 )
 from memcontam.readiness.phase13_validated_ordinary_resources import ValidatedOrdinaryResources
 from memcontam.tasks.base import TaskInstance
+
+if TYPE_CHECKING:
+    from memcontam.readiness.phase13_diagnostic_admission import AdmittedDiagnosticExecution
 
 _validated_common_capacity_tokens = capacity_realization.validated_common_capacity_tokens
 
@@ -92,6 +96,7 @@ class ProspectiveOrdinaryContext:
     expected_intervention: NativeEntry | None = None
     condition: Any | None = None
     maturity_horizon: int = 1
+    diagnostic_prefix_history: BoundOrdinaryPrefix | None = None
 
     def for_condition(self, condition_id: str) -> ProspectiveOrdinaryContext:
         return ProspectiveOrdinaryContext(
@@ -114,6 +119,7 @@ class ProspectiveOrdinaryContext:
             expected_intervention=self.expected_intervention,
             condition=self.condition,
             maturity_horizon=self.maturity_horizon,
+            diagnostic_prefix_history=self.diagnostic_prefix_history,
         )
 
 
@@ -138,9 +144,15 @@ class ProspectiveOrdinaryRun:
     allow_test_client: bool = False
     production_identity: ProductionOrdinaryRunIdentity | None = None
     validated_resources: ValidatedOrdinaryResources | None = None
+    diagnostic_context: AdmittedDiagnosticExecution | None = None
     _task_bytes: tuple[bytes, ...] = field(default=(), init=False, repr=False)
 
     def __post_init__(self) -> None:
+        if self.diagnostic_context is not None:
+            from memcontam.readiness.phase13_diagnostic_admission import AdmittedDiagnosticExecution
+            if type(self.diagnostic_context) is not AdmittedDiagnosticExecution:
+                raise ProspectiveOrdinaryError("DIAGNOSTIC_ADMISSION_REQUIRED")
+            self.diagnostic_context.validate_run(self)
         if self.validated_resources is not None:
             object.__setattr__(self, "_task_bytes", tuple(task.model_dump_json().encode() for task in self.tasks))
         if self.task_name not in ORDINARY_TASKS:
@@ -153,7 +165,7 @@ class ProspectiveOrdinaryRun:
             self.model,
             self.client,
             self.allow_test_client,
-        ) if self.validated_resources is None else None) or request_binding_error(
+        ) if self.validated_resources is None and self.diagnostic_context is None else None) or request_binding_error(
             self.decoding.get("service_tier", "default"),
             self.decoding.get("max_output_tokens", 512),
         )
@@ -165,7 +177,7 @@ class ProspectiveOrdinaryRun:
             or self.production_identity is None or type(self.trajectory_seed) is not int
         ):
             raise ProspectiveOrdinaryError("MAIN_AUTHORIZATION_BINDING_MISMATCH")
-        if self.model == "gpt-5.6-luna" and self.validated_resources is None:
+        if self.model == "gpt-5.6-luna" and self.validated_resources is None and self.diagnostic_context is None:
             try:
                 validate_activated_cost_policy(REPOSITORY_ROOT)
             except Phase13CostActivationError as error:
@@ -173,7 +185,8 @@ class ProspectiveOrdinaryRun:
         contract_error = capacity_contract_error(
             self.baseline_configs,
             (self.validated_resources.common_capacity_tokens
-             if self.validated_resources is not None else _validated_common_capacity_tokens()),
+             if self.validated_resources is not None else self.diagnostic_context.common_capacity_tokens
+             if self.diagnostic_context is not None else _validated_common_capacity_tokens()),
         )
         if contract_error is not None:
             raise ProspectiveOrdinaryError(contract_error)
@@ -299,6 +312,9 @@ def _validate_live_dispatch_identity(
     run: ProspectiveOrdinaryRun,
     tasks: tuple[TaskInstance, ...],
 ) -> None:
+    if run.diagnostic_context is not None:
+        run.diagnostic_context.validate_run(run)
+        return
     from memcontam.clients.openai_responses import OpenAIResponsesClient
 
     if run.validated_resources is None and (
@@ -386,7 +402,8 @@ def _context(
 ) -> ProspectiveOrdinaryContext:
     return ProspectiveOrdinaryContext(
         task=task,
-        client=(run.validated_resources.execution_client if run.validated_resources is not None
+        client=(run.diagnostic_context.execution_client if run.diagnostic_context is not None
+                else run.validated_resources.execution_client if run.validated_resources is not None
                 else bind_cost_policy_client(run.client, REPOSITORY_ROOT, historical=True)),
         model=run.model,
         verifier=run.verifier,
@@ -407,10 +424,12 @@ def _context(
         baseline_configs=bind_capacity_configs(
             run.baseline_configs,
             (run.validated_resources.common_capacity_tokens if run.validated_resources is not None
+             else run.diagnostic_context.common_capacity_tokens if run.diagnostic_context is not None
              else _validated_common_capacity_tokens()),
         ),
         initial_states=run.initial_states,
         expected_intervention=_expected_intervention(run),
+        diagnostic_prefix_history=None if run.diagnostic_context is None else run.diagnostic_context.prefix_history,
     )
 
 
