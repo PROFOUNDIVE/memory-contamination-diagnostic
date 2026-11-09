@@ -42,7 +42,9 @@ from .test_phase13_native_production_archive import NativeResponses
 from .test_phase13_native_rendering import _governed_renderers
 
 
-def test_frozen_rag_carrier_stays_stable_across_current_seed0_50_row_archive(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_frozen_rag_carrier_stays_stable_across_current_seed0_50_row_archive(
+    monkeypatch: pytest.MonkeyPatch, offline_embedding_cache: Path,
+) -> None:
     from memcontam.experiment import phase13_ordinary_runtime
     monkeypatch.setattr(phase13_ordinary_runtime, "_validated_common_capacity_tokens", lambda: 8192)
     monkeypatch.setenv("HF_HUB_OFFLINE", "1")
@@ -54,7 +56,7 @@ def test_frozen_rag_carrier_stays_stable_across_current_seed0_50_row_archive(mon
     by_id = {row.sample_id: row for row in (
         build_game24(json.loads(line)) for line in (root / "data/phase13/main/game24_main_v1.jsonl").read_text().splitlines())}
     tasks = tuple(by_id[sample_id] for sample_id in sample_ids)
-    embedder = BgeM3EmbeddingProvider()
+    embedder = BgeM3EmbeddingProvider(cache_folder=offline_embedding_cache, local_files_only=True)
     seal = json.loads((root / "data/phase13/rag/legacy_seal_v2.json").read_bytes())
     state = load_legacy_rag_state(LegacyRagRuntimeRequest(
         root / "data/phase13/rag/legacy_v2", root, "game24", "clean", embedder,

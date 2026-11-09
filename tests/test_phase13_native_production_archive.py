@@ -302,6 +302,7 @@ def test_native_trial_reaches_current_archive_validator(
     baseline: OrdinaryBaseline,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    offline_embedding_cache: Path,
 ) -> None:
     from memcontam.experiment import phase13_ordinary_runtime
 
@@ -321,7 +322,7 @@ def test_native_trial_reaches_current_archive_validator(
         monkeypatch.setenv("HF_HUB_OFFLINE", "1")
         monkeypatch.setenv("TRANSFORMERS_OFFLINE", "1")
     local_embedder = NoveltyEmbedder() if baseline == "bot_style" else _Embedder()
-    embedder = BgeM3EmbeddingProvider() if baseline == "dc_rs" else local_embedder
+    embedder = BgeM3EmbeddingProvider(cache_folder=offline_embedding_cache, local_files_only=True) if baseline == "dc_rs" else local_embedder
     state = (
         DcRsStateV3(archive=[], allow_unparented_strategies=True)
         if baseline == "dc_rs"
